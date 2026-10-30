@@ -128,7 +128,7 @@ final class UiSourceHit {
   /// A server's item may have a picture to fetch; a share's file has none
   /// of its own.
   bool get hasArtwork =>
-      source.kind == UiSourceKind.jellyfin || source.kind == UiSourceKind.emby;
+      source.kind == UiSourceKind.jellyfin || source.kind == UiSourceKind.emby || source.sourceId.startsWith('dandanplay_remote:');
 }
 
 /// The real searches, invoked as the interface (`origin: gui`):
@@ -153,6 +153,7 @@ final class CoreSearch implements NextSearchData {
     'emby': UiSourceKind.emby,
     'smb': UiSourceKind.smb,
     'webdav': UiSourceKind.webdav,
+    'dandanplay_remote': UiSourceKind.other,
   };
 
   Future<JsonMap> _call(String action, JsonMap input) async {

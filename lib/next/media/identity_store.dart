@@ -16,6 +16,8 @@ import 'presentation.dart';
 import 'presentation_store.dart';
 import 'file_identity_merge.dart';
 
+part 'source_catalog_store.dart';
+
 String stableMediaId(String prefix, Object value) =>
     '$prefix-${sha256.convert(utf8.encode(jsonEncode(_canonical(value))))}';
 Object? _canonical(Object? value) {
@@ -92,7 +94,8 @@ final class IdentityStore {
           [workId, workId]))
         row['object_type']
     };
-    return types.contains('movie') && !types.contains('tv');
+    if (types.isNotEmpty) return types.contains('movie') && !types.contains('tv');
+    return ((await entity(workId))['attributes'] as Map)['film'] == true;
   }
 
   Future<void> closeEvents() => _fileChanges.close();
@@ -535,6 +538,9 @@ final class IdentityStore {
       final sources = <JsonMap>[];
       if (link['relation'] == 'local_catalog') {
         sources.add({'source': 'local_catalog'});
+      }
+      if (link['relation'] == 'source_catalog') {
+        sources.add({'source': 'source_catalog'});
       }
       for (final binding in await executor.rawQuery(
           'SELECT f.id,f.source,f.bound_by FROM media_bindings f '

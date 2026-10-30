@@ -105,6 +105,9 @@
 | `discover.trending` | read | 读取排行 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/discover_capability.dart) |
 | `discover.trending_batch` | read | 批量读取排行 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/discover_capability.dart) |
 | `download.add` | write | 添加下载并返回任务，支持多个后端 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/download_capability.dart) |
+| `download.backends.list` | read | 读取下载后端配置，可探测连接状态 | GUI/Headless | 允许 | [源码](../../../lib/next/capabilities/download_backends.dart) |
+| `download.backends.save` | write | 用户明确授权后添加或修改 qBittorrent，凭据存入保险库 | GUI/Headless | 允许 | [源码](../../../lib/next/capabilities/download_backends.dart) |
+| `download.backends.remove` | write | 用户明确授权后移除后端配置及凭据，保留远端种子和文件 | GUI/Headless | 允许 | [源码](../../../lib/next/capabilities/download_backends.dart) |
 | `download.delete` | destructive | 删除下载数据，先预览并遵循用户确认 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/download_capability.dart) |
 | `download.delete.request` | destructive | 请求删除预览中的下载文件 | 通用/组合 | 允许 | [源码](../../../lib/next/tasks/user_consent.dart) |
 | `download.directories` | read | 读取默认及最近下载目录 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/download_metadata_capability.dart) |

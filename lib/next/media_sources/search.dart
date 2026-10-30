@@ -18,7 +18,7 @@ Future<JsonMap> searchSources(MediaSourcesService service, String query,
   final ids = sourceIds?.toSet().toList() ??
       [
         for (final row in rows)
-          if ({'jellyfin', 'emby', 'smb', 'webdav'}.contains(row['type']))
+          if ({'jellyfin', 'emby', 'smb', 'webdav', 'dandanplay_remote'}.contains(row['type']))
             row['sourceId'] as String
       ];
   return {
@@ -101,6 +101,26 @@ Future<JsonMap> searchSources(MediaSourcesService service, String query,
               }
               summary['connectionState'] = 'connected';
               page = {'entries': entries, 'total': result['TotalRecordCount']};
+            } else if (type == 'dandanplay_remote') {
+              await service.dandanRemote.refreshLibrary();
+              final episodes = service.dandanRemote.cachedEpisodes;
+              final serverId = row['url'] as String?;
+              final all = [
+                ...dandanCatalogEntries(episodes, null, serverId: serverId),
+                ...dandanCatalogEntries(episodes, null, itemIds: episodes.map((e) => e.entryId).toList(), serverId: serverId),
+              ].where((e) => e['kind'] != 'Folder' && '${e['name']}'.toLowerCase().contains(term.toLowerCase())).toList();
+              page = {'total': all.length, 'entries': [
+                for (final e in all.take(limit)) {
+                  'itemId': e['id'], 'title': e['name'], 'kind': e['kind'],
+                  'metadata': e['metadata'], 'playable': e['isDirectory'] != true,
+                  'workId': null, 'episodeId': null, 'fileId': null,
+                  'sourceWorkId': sourceEntityId('work', id, e['kind'] == 'Series' ? e['id'] as String : (e['metadata'] as Map)['SeriesId'] as String, serverId: serverId),
+                  if (e['kind'] == 'Episode') 'sourceEpisodeId': sourceEntityId('episode', id, e['id'] as String, serverId: serverId),
+                  'poster': await service.cachedPoster?.call(id, e),
+                  'provenance': sourceProvenance(row, e['id'] as String, DateTime.now().toUtc().toIso8601String()),
+                },
+              ]};
+              summary['connectionState'] = 'connected';
             } else if (type == 'smb' || type == 'webdav') {
               page = await _indexed(service, row, term, limit);
               if (row['connectionState'] == 'failed') {

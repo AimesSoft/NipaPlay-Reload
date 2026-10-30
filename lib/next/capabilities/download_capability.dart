@@ -6,7 +6,9 @@ import '../downloads/download_source.dart';
 import '../downloads/download_paths.dart';
 import '../downloads/http_download_backend.dart';
 import '../downloads/qbittorrent_download_backend.dart';
+import '../downloads/qbittorrent_hub.dart';
 import 'classic_action.dart';
+import 'download_backends.dart';
 
 final _downloadJobSchema = ObjectSchema({
   ...jobSnapshotSchema.properties,
@@ -88,8 +90,10 @@ final class DownloadCapability implements Capability {
   DownloadCapability(
       {required DownloadService downloads,
       required DownloadSources sources,
+      QbittorrentHub? qbittorrent,
       InvocationObserver? deleteAudit})
       : actions = [
+          if (qbittorrent != null) ...downloadBackendActions(qbittorrent),
           for (final operation in ['get', 'set'])
             ClassicAction(ActionSpec(id: 'download.limits.$operation', title: '下载会话限速 $operation',
               description: '真实原生内置会话的上传/下载字节预算。0 移除限制，正值至少 16384 字节/秒；省略方向保持现值。返回原生读回值。尚未初始化会话时 applied=false；不自动启动下载器，不改变网关限流。会话重建恢复无限制。可选 backend {kind: "qbittorrent", id} 改为读写那个 qBittorrent 的全局限速（0 不限速，正值任意字节/秒；它开着备用限速时实际生效的是备用值，alternativeLimitsActive 会说明）。',

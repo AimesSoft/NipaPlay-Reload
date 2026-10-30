@@ -236,6 +236,15 @@ class DandanplayRemoteService {
     return _appendToken('$_baseUrl/api/v1/image/$hash');
   }
 
+  Future<List<int>?> imageBytes(String hash) async {
+    final url = buildImageUrl(hash);
+    if (url == null) return null;
+    final response = await _getClient().get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) throw StateError('Dandanplay image returned HTTP ${response.statusCode}.');
+    return response.bodyBytes;
+  }
+
   String? buildEpisodeStreamUrl({String? hash, String? entryId}) {
     if (_baseUrl == null) return null;
     if (hash != null && hash.isNotEmpty) {

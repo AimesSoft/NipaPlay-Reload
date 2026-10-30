@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../media_sources/service.dart';
+import '../media/identity_store.dart';
 import '../media_sources/metadata.dart';
 import '../harness_redaction.dart';
 import 'library_service.dart';
@@ -29,11 +30,12 @@ final class ClassicLibrarySources implements LibrarySourcePort {
     final prefs = await SharedPreferences.getInstance();
     return [
       for (final r in await service.list())
-        if (const {'smb', 'webdav', 'jellyfin', 'emby'}.contains(r['type']))
+        if (const {'smb', 'webdav', 'jellyfin', 'emby', 'dandanplay_remote'}.contains(r['type']))
           {
             ...r,
             'sortSettings':
                 prefs.getString('${r['type']}_library_sort_settings'),
+            if (r['type'] == 'dandanplay_remote') 'serverId': r['url'],
             if (r['type'] == 'jellyfin' || r['type'] == 'emby')
               'serverId': service.profiles
                   .getProfileById(service.key(r['sourceId'] as String))!
@@ -45,6 +47,12 @@ final class ClassicLibrarySources implements LibrarySourcePort {
   @override
   Future<List<JsonMap>> roots(String sourceId) async {
     final row = await service.source(sourceId);
+    if (const {'jellyfin', 'emby', 'dandanplay_remote'}.contains(row['type'])) {
+      await service.ensureCatalogue(sourceId);
+    }
+    if (row['type'] == 'dandanplay_remote') {
+      return [{'id': '/', 'name': '全部作品', 'serverId': row['url']}];
+    }
     if (row['type'] == 'smb' || row['type'] == 'webdav') {
       await browse(sourceId, '/', limit: 1);
       return [
@@ -55,7 +63,7 @@ final class ClassicLibrarySources implements LibrarySourcePort {
     final selected = (result['selectedLibraries'] as List).cast<String>();
     return [
       for (final l in result['libraries'] as List<JsonMap>)
-        if (selected.contains(l['id']))
+        if (selected.isEmpty || selected.contains(l['id']))
           {
             ...l,
             'sort': await _sort(sourceId, l['id'] as String),
@@ -67,6 +75,7 @@ final class ClassicLibrarySources implements LibrarySourcePort {
 
   Future<String> _sort(String sourceId, String parentId) async {
     final type = sourceId.split(':').first;
+    if (type == 'dandanplay_remote') return 'SortName:Ascending';
     final prefs = await SharedPreferences.getInstance();
     final settings =
         jsonDecode(prefs.getString('${type}_library_sort_settings') ?? '{}')
@@ -105,6 +114,13 @@ final class ClassicLibrarySources implements LibrarySourcePort {
       String? filters}) async {
     final row = await service.source(sourceId);
     final type = row['type'] as String;
+    if (type == 'dandanplay_remote') {
+      final result = await service.browse(sourceId, parentId == '/' ? null : parentId);
+      var entries = (result['entries'] as List).cast<JsonMap>();
+      if (filters == 'IsResumable') entries = [];
+      if (sort == 'SortName:Ascending') entries.sort((a, b) => '${a['name']}'.compareTo('${b['name']}'));
+      return {'entries': entries.skip(offset).take(limit).toList(), 'total': entries.length};
+    }
     if (type == 'smb' || type == 'webdav') {
       final db = service.store.database;
       final prefix =
@@ -213,6 +229,9 @@ final class ClassicLibrarySources implements LibrarySourcePort {
           });
         projected.add(entry);
       }
+      await service.store.observeSourceCatalog([
+        for (final entry in projected) ...sourceCatalogRecords(sourceId, entry),
+      ]);
       return {'entries': projected, 'total': result['TotalRecordCount']};
     });
   }
@@ -220,6 +239,13 @@ final class ClassicLibrarySources implements LibrarySourcePort {
   @override
   Future<JsonMap> item(String sourceId, String itemId) async {
     final row = await service.source(sourceId);
+    if (row['type'] == 'dandanplay_remote') {
+      await service.dandanRemote.refreshLibrary();
+      final episodes = service.dandanRemote.cachedEpisodes;
+      final serverId = row['url'] as String?;
+      final series = dandanCatalogEntries(episodes, null, serverId: serverId).where((e) => e['id'] == itemId).firstOrNull;
+      return series ?? dandanCatalogEntries(episodes, null, itemIds: [itemId], serverId: serverId).single;
+    }
     if (row['type'] == 'smb' || row['type'] == 'webdav') {
       final slash = itemId.lastIndexOf('/');
       final result = await service.browse(
@@ -234,17 +260,24 @@ final class ClassicLibrarySources implements LibrarySourcePort {
       final items = result['Items'] as List;
       if (items.isEmpty)
         throw const Failure(FailureCode.notFound, 'Server item was removed.');
-      return {
+      final entry = {
         ..._entry(items.single as Map<String, dynamic>),
-        'serverId':
-            service.server(row['type'] as String).currentProfile!.serverId
+        'serverId': service.server(row['type'] as String).currentProfile!.serverId
       };
+      return entry;
     });
   }
 
   @override
   Future<String?> image(String sourceId, JsonMap item, String kind) async {
-    return _image(sourceId, item, kind, cachedOnly: false);
+    final path = await _image(sourceId, item, kind, cachedOnly: false);
+    if (path != null && const {'Series', 'Movie', 'Episode', 'Video'}.contains(item['kind'])) {
+      final episode = item['kind'] == 'Episode' || item['kind'] == 'Video';
+      await service.store.observeSourceArtwork(
+          sourceCatalogId(episode ? 'episode' : 'work', sourceId, item['id'] as String, serverId: item['serverId'] as String?),
+          kind == 'Primary' ? (episode ? 'still' : 'poster') : kind == 'Backdrop' ? 'backdrop' : 'logo', path);
+    }
+    return path;
   }
 
   Future<String?> cachedImage(String sourceId, JsonMap item, String kind) =>
@@ -253,6 +286,22 @@ final class ClassicLibrarySources implements LibrarySourcePort {
   Future<String?> _image(String sourceId, JsonMap item, String kind,
       {required bool cachedOnly}) async {
     final type = sourceId.split(':').first;
+    if (type == 'dandanplay_remote') {
+      if (kind != 'Primary') return null;
+      final m = item['metadata'] as Map;
+      final hash = m['hash'] as String? ?? '';
+      if (hash.isEmpty) return null;
+      final key = sha256.convert(utf8.encode(jsonEncode([sourceId, item['serverId'], hash])));
+      final file = File('${root.path}/source-artwork/$key');
+      if (await file.exists()) return file.path;
+      if (cachedOnly) return null;
+      final bytes = await service.dandanRemote.imageBytes(hash);
+      if (bytes == null) return null;
+      await validateRaster(bytes);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes, flush: true);
+      return file.path;
+    }
     if (type != 'jellyfin' && type != 'emby') return null;
     final m = item['metadata'] as Map;
     final tag = kind == 'Backdrop'

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart';
+import 'package:nipaplay/security/secret_redactor.dart';
 
 import 'download_backend.dart';
 import 'qbittorrent_download_backend.dart';
@@ -178,6 +179,7 @@ final class QbittorrentHub {
             await vault.delete(reference(entryId));
             hasLogin = false;
           } else if (password != null) {
+            SecretRedactor.remember(reference(entryId), secret);
             await vault.write(reference(entryId),
                 jsonEncode({'username': user, 'password': secret}));
             hasLogin = true;

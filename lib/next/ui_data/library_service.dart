@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../media/identity_store.dart';
+import '../media_sources/metadata.dart';
 import '../harness_redaction.dart';
 import '../mesh/library_codec.dart';
 import '../state/query.dart';
@@ -27,11 +28,7 @@ abstract interface class LibrarySourcePort {
 
 String sourceEntityId(String kind, String sourceId, String itemId,
         {String? serverId}) =>
-    'source-$kind:${base64Url.encode(utf8.encode(jsonEncode([
-          sourceId,
-          itemId,
-          if (serverId != null) serverId
-        ])))}';
+    sourceCatalogId(kind, sourceId, itemId, serverId: serverId);
 List<String>? sourceEntityRef(String id, String kind) {
   if (!id.startsWith('source-$kind:')) return null;
   try {
@@ -90,7 +87,7 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
         UiLibrarySource(
             sourceId: row['sourceId'] as String,
             name: row['name'] as String,
-            kind: UiSourceKind.values.byName(row['type'] as String),
+            kind: UiSourceKind.values.where((k) => k.name == row['type']).firstOrNull ?? UiSourceKind.other,
             online: row['connected'] == true)
     ];
   }
@@ -549,6 +546,13 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
           count: (item['metadata'] as Map?)?['ChildCount'] as int?,
           posters: poster == null ? [] : [poster]);
     }
+    if (item['kind'] == 'Episode' || item['kind'] == 'Video') {
+      final workId = sourceCatalogRecords(sourceId, item).first['id'] as String;
+      final episode = await _sourceEpisode(sourceId, workId, item);
+      return UiWorkItem(UiWork(
+          workId: workId, title: episode.title ?? item['name'] as String,
+          artwork: UiArtwork(poster: episode.still), next: episode));
+    }
     final id = sourceEntityId('work', sourceId, item['id'] as String,
         serverId: item['serverId'] as String?);
     await _cacheItem(id, item);
@@ -568,10 +572,15 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
   Future<JsonMap> _sourceRecord(String id, List<String> ref) async {
     await _validateRef(ref);
     final rows = await db.query('ui_cache', where: 'id=?', whereArgs: [id]);
-    if (rows.isNotEmpty) return decodeMediaJson(rows.single['payload']);
+    if (rows.isNotEmpty) {
+      final item = decodeMediaJson(rows.single['payload']);
+      await ui.media.store.observeSourceCatalog(sourceCatalogRecords(ref[0], item));
+      return item;
+    }
     final item =
         publicHarnessFacts(await _sourcePort!.item(ref[0], ref[1])) as JsonMap;
     await _cacheItem(id, item);
+    await ui.media.store.observeSourceCatalog(sourceCatalogRecords(ref[0], item));
     return item;
   }
 
@@ -579,7 +588,10 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
     final ref = sourceEntityRef(id, 'work');
     if (ref == null) return null;
     final item = await _sourceRecord(id, ref);
-    final m = item['metadata'] as Map? ?? {};
+    final native = sourceCatalogRecords(ref[0], item);
+    if (native.isNotEmpty && native.first['id'] != id) {
+      return sourceWork(native.first['id'] as String);
+    }
     // The server's own word for it; the movie is its own episode.
     final film = item['kind'] == 'Movie';
     UiEpisode? next;
@@ -599,23 +611,30 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
     } else {
       next = await _sourceEpisode(ref[0], id, item);
     }
+    final metadata = await ui.media.store.mergedMetadata(id);
+    final fields = metadata['fields'] as Map;
+    final sourcePoster = await _sourcePort!.image(ref[0], item, 'Primary');
+    final sourceBackdrop = await _sourcePort!.image(ref[0], item, 'Backdrop');
+    final art = await ui.artwork.load(id);
     return _availableWork(UiWork(
         workId: id,
-        title: item['name'] as String,
-        originalTitle: m['OriginalTitle'] as String?,
-        year: m['ProductionYear'] as int?,
-        overview: m['Overview'] as String?,
-        genres: (m['Genres'] as List? ?? []).cast<String>(),
-        episodeCount: m['EpisodeCount'] as int?,
+        title: fields['title'] as String? ?? item['name'] as String,
+        originalTitle: fields['originalTitle'] as String?,
+        year: fields['year'] as int?,
+        overview: fields['overview'] as String?,
+        studio: fields['studio'] as String?,
+        genres: (fields['genres'] as List? ?? []).cast<String>(),
+        episodeCount: fields['episodeCount'] as int?,
         film: film,
         runtime: film ? next?.runtime : null,
         ratings: [
-          if (m['CommunityRating'] case final num r)
-            UiRating('服务器', r.toDouble())
+          for (final r in (metadata['ratings'] as List).cast<Map>())
+            UiRating(r['label'] as String? ?? r['source'] as String, (r['value'] as num).toDouble())
         ],
         artwork: UiArtwork(
-            poster: await _sourcePort!.image(ref[0], item, 'Primary'),
-            backdrop: await _sourcePort!.image(ref[0], item, 'Backdrop')),
+            poster: art['poster'] as String? ?? sourcePoster,
+            backdrop: art['backdrop'] as String? ?? sourceBackdrop,
+            logo: art['logo'] as String?, tint: art['tint'] as int?),
         next: next));
   }
 
@@ -624,19 +643,23 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
     final episodeId = sourceEntityId('episode', sourceId, item['id'] as String,
         serverId: item['serverId'] as String?);
     await _cacheItem(episodeId, {...item, 'workId': workId});
+    await ui.media.store.observeSourceCatalog(sourceCatalogRecords(sourceId, item));
+    final fields = (await ui.media.store.mergedMetadata(episodeId))['fields'] as Map;
+    final sourceStill = await _sourcePort!.image(sourceId, item, 'Primary');
+    final art = await ui.artwork.load(episodeId);
     final m = item['metadata'] as Map? ?? {};
     final user = m['UserData'] as Map? ?? {};
     final duration = (m['RunTimeTicks'] as num?)?.toInt();
     return UiEpisode(
         episodeId: episodeId,
         workId: workId,
-        number: m['IndexNumber'] as int?,
-        season: m['ParentIndexNumber'] as int?,
-        title: item['name'] as String,
+        number: int.tryParse('${fields['number'] ?? ''}'),
+        season: fields['season'] as int?,
+        title: fields['title'] as String? ?? item['name'] as String,
         runtime: duration == null || duration <= 0
             ? null
             : Duration(microseconds: duration ~/ 10),
-        still: await _sourcePort!.image(sourceId, item, 'Primary'),
+        still: art['still'] as String? ?? sourceStill,
         playable: (await _sources())
             .any((s) => s['sourceId'] == sourceId && s['connected'] == true),
         progress: user['Played'] == true

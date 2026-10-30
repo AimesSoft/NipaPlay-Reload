@@ -272,6 +272,8 @@ final class HeadlessCore {
         file: File(p.join(root.path, 'qbittorrent.json')), vault: vault);
     await qbittorrent.load();
     final backends = DownloadBackends([backend, ...qbittorrent.backends]);
+    qbittorrent.onRegistered = backends.register;
+    qbittorrent.onRemoved = backends.unregister;
     downloadExecutor = DownloadExecutor(
         backends: backends, library: library, isEnabled: () async => true);
     _executors.addAll([
@@ -416,6 +418,7 @@ final class HeadlessCore {
         HeadlessDownloadMetadata(backend, downloadSources),
         DownloadCapability(
             downloads: downloads,
+            qbittorrent: qbittorrent,
             deleteAudit:
                 JsonlJournal(File('${root.path}/download-audit.jsonl')),
             sources: downloadSources),

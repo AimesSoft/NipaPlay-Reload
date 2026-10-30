@@ -7,6 +7,7 @@ import 'package:nipaplay/services/bangumi_sync_service.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import '../media/identity_store.dart';
+import '../capabilities/user_authorization.dart';
 
 final class AccountsService {
   late TaskEngine engine;
@@ -68,6 +69,7 @@ final class AccountsService {
           FailureCode.invalidInput, 'Secret belongs to a different provider.');
     }
     final supplied = input[secretKey] != null;
+    if (supplied) requireUserAuthorization(input);
     if (supplied && provider == 'dandanplay' && input['username'] == null) {
       throw const Failure(FailureCode.invalidInput,
           'A username is required with the password.');

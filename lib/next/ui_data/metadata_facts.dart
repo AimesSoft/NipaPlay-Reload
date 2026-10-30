@@ -14,7 +14,7 @@ extension UiMetadataFacts on UiDataService {
       throw const Failure(
           FailureCode.notFound, 'workId must identify a library work.');
     }
-    final evidence = await meshLibrary?.evidence(workId);
+    final evidence = workId.startsWith('source-work:') ? null : await meshLibrary?.evidence(workId);
     final metadata = evidence == null ? await media.store.mergedMetadata(workId) : evidence['metadata'] as JsonMap;
     final fields = metadata['fields'] as JsonMap;
     final provenance = metadata['provenance'] as JsonMap;
@@ -89,7 +89,7 @@ extension UiMetadataFacts on UiDataService {
     // Whether the episode's own number is stored.
     final numbered = <String, bool>{};
     for (final e in episodes) {
-      final episodeEvidence = await meshLibrary?.evidence(e.episodeId);
+      final episodeEvidence = e.episodeId.startsWith('source-episode:') ? null : await meshLibrary?.evidence(e.episodeId);
       final stored = (episodeEvidence == null
           ? (await media.store.entity(e.episodeId))['attributes']
           : episodeEvidence['attributes']) as Map?;

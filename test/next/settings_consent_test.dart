@@ -131,6 +131,33 @@ void main() {
     return (result['job'] as Map)['jobId'] as String;
   }
 
+  test(
+      'explicit authorization applies settings without a second prompt and keeps validation',
+      () async {
+    final outcome = await invoke('settings.set', {
+      'key': 'network.httpProxy',
+      'value': 'http://localhost:8080',
+      'userAuthorization':
+          'User requested sending application traffic through this proxy',
+    });
+    await completed(outcome);
+    expect(store['network.httpProxy'], 'http://localhost:8080');
+    expect(asked, isEmpty);
+    final invalid = await invoke('settings.set', {
+      'key': 'network.allowInvalidCertificates',
+      'value': 'not-a-boolean',
+      'userAuthorization': 'User requested changing certificate trust',
+    });
+    expect(invalid, isA<harness.Failed>());
+    expect(store['network.allowInvalidCertificates'], false);
+    final missing = await invoke('settings.set', {
+      'key': 'network.httpProxy',
+      'value': 'http://localhost:9999',
+    });
+    expect(missing, isA<harness.NeedsDecision>());
+    expect(store['network.httpProxy'], 'http://localhost:8080');
+  });
+
   test('an Agent setting an address that receives keys asks first and changes nothing',
       () async {
     final outcome = await invoke('settings.set', {

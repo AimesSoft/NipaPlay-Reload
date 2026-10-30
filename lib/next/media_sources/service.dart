@@ -1,3 +1,4 @@
+import '../capabilities/user_authorization.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -84,6 +85,36 @@ final class MediaSourcesService {
   Future<void> _tail = Future.value();
   Future<void>? _ready;
   Future<void> ensureInitialized() => _ready ??= initialize();
+
+  Future<List<String>> syncRoots(String id) async {
+    final selected = await selection(id);
+    if (selected.isNotEmpty) return selected;
+    final row = await source(id);
+    if (row['type'] != 'jellyfin' && row['type'] != 'emby') return ['/'];
+    return [for (final library in (await libraries(id))['libraries'] as List)
+      (library as Map)['id'] as String];
+  }
+
+  final _catalogueStarts = <String, Future<void>>{};
+  /// The first library visit starts discovery in the existing task engine;
+  /// showing the first page does not wait for the whole server to be indexed.
+  Future<void> ensureCatalogue(String id) async {
+    final row = await source(id);
+    final scope = jsonEncode([id, endpointOf(row)]);
+    return _catalogueStarts.putIfAbsent(scope, () async {
+      try {
+        final roots = await syncRoots(id);
+        if (roots.isEmpty) return;
+        await engine.submit(type: 'media.sources.sync',
+            title: '同步来源目录与资料', input: {
+              'sourceId': id, 'libraries': roots, ...endpointOf(row),
+            });
+      } catch (_) {
+        _catalogueStarts.remove(scope);
+        rethrow;
+      }
+    });
+  }
 
   Future<T> serial<T>(Future<T> Function() run) {
     final result = _tail.then((_) => run());
@@ -173,6 +204,7 @@ final class MediaSourcesService {
   Future<List<String>> selection(String sourceId) async {
     final prefs = await SharedPreferences.getInstance();
     final type = sourceId.split(':').first;
+    if (type == 'dandanplay_remote') return ['/'];
     if (type == 'jellyfin' || type == 'emby') {
       final service = server(type);
       if (service.currentProfile?.id == key(sourceId)) {
@@ -744,7 +776,8 @@ final class MediaSourcesService {
   Future<JsonMap> play(String sourceId, String itemId,
       {int? startPositionMs, String? expectedServerId}) => serial(() async {
     final row = await source(sourceId);
-    if (expectedServerId != null && profiles.getProfileById(key(sourceId))!.serverId != expectedServerId) {
+    if (expectedServerId != null &&
+        (row['type'] == 'dandanplay_remote' ? row['url'] : profiles.getProfileById(key(sourceId))?.serverId) != expectedServerId) {
       throw const Failure(FailureCode.conflict, 'Source now points to a different server.');
     }
     await activate(row);
@@ -1084,42 +1117,9 @@ final class MediaSourcesService {
         });
       }
     } else if (type == 'dandanplay_remote') {
-      await refreshDandanRemote();
-      if (parent == null && itemIds == null) {
-        for (final animeId
-            in dandanRemote.cachedEpisodes.map((e) => e.animeId).toSet()) {
-          final episode = dandanRemote.cachedEpisodes
-              .firstWhere((e) => e.animeId == animeId);
-          result.add({
-            'id': '${animeId ?? 'unmatched'}',
-            'name': episode.animeTitle,
-            'kind': 'Series',
-            'isDirectory': true,
-            'size': null,
-            'path': null,
-            'metadata': {'animeId': animeId}
-          });
-        }
-      } else {
-        for (final episode in dandanRemote.cachedEpisodes) {
-          if (itemIds != null
-              ? !itemIds.contains(episode.entryId)
-              : '${episode.animeId ?? 'unmatched'}' != parent) {
-            continue;
-          }
-          result.add({
-            'id': episode.entryId,
-            'name': episode.episodeTitle,
-            'kind': 'Episode',
-            'isDirectory': false,
-            'size': episode.size,
-            'path': episode.hasHash
-                ? 'dandanplay://${episode.hash}'
-                : 'dandanplay://id/${episode.entryId}',
-            'metadata': episode.toJson()
-          });
-        }
-      }
+      await dandanRemote.refreshLibrary();
+      result.addAll(dandanCatalogEntries(dandanRemote.cachedEpisodes, parent,
+          itemIds: itemIds, serverId: row['url'] as String?));
     } else if (type == 'nipaplay') {
       if (parent == null) {
         for (final anime in sharing.animeSummaries) {
@@ -1256,20 +1256,35 @@ final class MediaSourcesService {
     }
     final observedAt = DateTime.now().toUtc().toIso8601String();
     for (final entry in result) {
+      if (type == 'jellyfin' || type == 'emby') entry['serverId'] = server(type).currentProfile?.serverId;
+      if (type == 'dandanplay_remote') entry['serverId'] = row['url'];
       entry['provenance'] =
           sourceProvenance(row, entry['id'] as String, observedAt);
       entry['fileId'] = entry['path'] == null || !indexFiles
           ? null
           : await store.ensureRemoteFile(entry['path'] as String, id, {
               'type': type,
-              if (type == 'jellyfin' || type == 'emby')
-                'serverId': server(type).currentProfile?.serverId,
+              if (entry['serverId'] != null) 'serverId': entry['serverId'],
               'itemId': entry['id'],
               'seriesId': entry['seriesId'],
               'seasonId': entry['seasonId'],
               'number': entry['number'],
               'name': entry['name'],
             });
+    }
+    if (indexFiles) {
+      final records = <JsonMap>[];
+      for (final entry in result) {
+        if (entry['kind'] == 'File' &&
+            (type == 'smb' ? !smb.isVideoFile(entry['name'] as String) :
+             type == 'webdav' && !webdav.isVideoFile(entry['name'] as String))) continue;
+        final native = sourceCatalogRecords(id, entry);
+        records.addAll(native);
+        if (native.isNotEmpty) entry['workId'] = native.first['id'];
+        final episode = native.where((r) => r['kind'] == 'episode').firstOrNull;
+        if (episode != null) entry['episodeId'] = episode['id'];
+      }
+      if (records.isNotEmpty) await store.observeSourceCatalog(records);
     }
     return result;
   }
@@ -1378,6 +1393,7 @@ final class MediaSourcesService {
     final row = await source(input['sourceId'] as String);
     var method = input['method'] as String? ?? 'auto';
     final password = input['password'] as String?;
+    if (password != null) requireUserAuthorization(input);
     if (password != null) method = 'password';
     if (method == 'password' && password == null) {
       throw const Failure(FailureCode.invalidInput,
@@ -1715,8 +1731,7 @@ final class MediaSourcesService {
       if (!seen.add(parent)) {
         continue;
       }
-      final row = await source(id);
-      final recursive = row['type'] == 'jellyfin' || row['type'] == 'emby';
+      const recursive = false;
       final entries = (await browse(id, parent,
           recursive: recursive,
           expected: context.job.input))['entries'] as List<JsonMap>;

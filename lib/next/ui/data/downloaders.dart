@@ -35,9 +35,8 @@ final class UiDownloader {
   }
 }
 
-/// The qBittorrents of 设置 › 下载. Only the person at this window reaches
-/// this: the login goes from the field into the credential vault and is
-/// never read back, and none of it is an Action Nipa can call.
+/// The qBittorrents of 设置 › 下载. The GUI and authorized download.backends
+/// actions share the same hub; passwords are never returned by the Actions.
 abstract interface class NextDownloaders {
   Stream<void> get changes;
 

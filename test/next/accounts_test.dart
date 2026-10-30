@@ -70,7 +70,7 @@ void main() {
       () async {
     const secret = 'x14-conversation-secret-never-persist';
     final result = await call('accounts.login',
-        {'provider': 'dandanplay', 'username': 'fixture', 'password': secret});
+        {'provider': 'dandanplay', 'username': 'fixture', 'password': secret, 'userAuthorization': 'Test user requested this login'});
     final stored = await engine.get(result['jobId'] as String);
     expect(jsonEncode(stored.toStorageJson()).contains(secret), false);
     expect(
@@ -162,7 +162,7 @@ void main() {
     });
     await engine.start();
     final login = await call('accounts.login',
-        {'provider': 'bangumi', 'accessToken': 'fixture-bangumi-secret'});
+        {'provider': 'bangumi', 'accessToken': 'fixture-bangumi-secret', 'userAuthorization': 'Test user requested this login'});
     final logged = await terminal(login['jobId'] as String);
     expect(logged.state, JobState.succeeded,
         reason: jsonEncode(logged.toJson()));

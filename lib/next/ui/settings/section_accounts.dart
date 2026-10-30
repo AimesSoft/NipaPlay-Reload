@@ -822,10 +822,11 @@ class _SourceRowState extends State<_SourceRow> {
   @override
   void initState() {
     super.initState();
-    if (widget.open) _loadLibraries();
+    if (widget.open && widget.source.type != 'dandanplay_remote') _loadLibraries();
   }
 
   Future<void> _loadLibraries() async {
+    if (widget.source.type == 'dandanplay_remote') return;
     try {
       final libraries = await widget.data.libraries(widget.source.sourceId);
       if (mounted) setState(() => _libraries = libraries);
@@ -934,7 +935,7 @@ class _SourceRowState extends State<_SourceRow> {
                             height: 30,
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: Text('显示',
+                              child: Text('媒体库',
                                   style: NextText.sans(12.5,
                                       color: NextColors.p3)),
                             ),

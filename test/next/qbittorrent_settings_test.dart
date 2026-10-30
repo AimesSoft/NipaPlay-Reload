@@ -77,6 +77,53 @@ void main() {
     return ((envelope['result'] as Map)['rows'] as List).cast<Map>();
   }
 
+  test(
+      'explicit authorization configures, probes and removes a backend without leaking secrets',
+      () async {
+    final next = await core();
+    addTearDown(next.close);
+    final journal = File('${root.path}/backend-actions.jsonl');
+    final api = Harness(next.capabilities, observers: [JsonlJournal(journal)]);
+    Future<Map<String, Object?>> call(String id, JsonMap input) async =>
+        (await api.invokeJson(id, input, Invocation(origin: 'test')))
+            .toEnvelope();
+    final input = <String, Object?>{
+      'name': 'Seedbox',
+      'address': fake.address.toString(),
+      'local': false,
+      'username': fake.username,
+      'password': fake.password,
+    };
+    expect((await call('download.backends.save', input))['status'], 'failed');
+    expect(next.downloads.qbittorrent!.entries, isEmpty);
+    input['userAuthorization'] =
+        'User requested this seedbox and authorized its login';
+    final saved = await call('download.backends.save', input);
+    expect(saved['status'], 'completed', reason: jsonEncode(saved));
+    expect((saved['result'] as Map)['id'], 'seedbox');
+    final listed = await call('download.backends.list', {'probe': true});
+    final entry = ((listed['result'] as Map)['backends'] as List).single as Map;
+    expect(entry['hasLogin'], true);
+    expect(entry['status'], containsPair('online', true));
+    expect(jsonEncode([saved, listed]), isNot(contains(fake.password)));
+    final updated = await call('download.backends.save', {
+      'id': 'seedbox',
+      'name': 'Renamed',
+      'address': fake.address.toString(),
+      'local': false,
+      'userAuthorization': 'User requested a new label',
+    });
+    expect((updated['result'] as Map)['hasLogin'], true);
+    final removed = await call('download.backends.remove', {
+      'id': 'seedbox',
+      'userAuthorization': 'User requested removing the saved connection',
+    });
+    expect(removed['status'], 'completed');
+    expect(next.downloads.qbittorrent!.entries, isEmpty);
+    expect(memory.values.values.any((v) => v.contains(fake.password)), false);
+    expect(await journal.readAsString(), isNot(contains(fake.password)));
+  });
+
   test('a configured qBittorrent: its login in the vault only, its facts for Nipa',
       () async {
     final next = await core();

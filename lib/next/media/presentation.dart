@@ -18,7 +18,7 @@ final class PresentationRule {
       this.sections,
       this.limits = const {}});
 
-  static const providers = ['tmdb', 'bangumi', 'dandanplay'];
+  static const providers = ['tmdb', 'bangumi', 'dandanplay', 'https://sources.nipaplay.app'];
 
   /// Where each field whose source can be chosen is shown.
   static const fields = {
@@ -144,7 +144,7 @@ final class PresentationRule {
           bad('sources may name only ${fields.keys.join(', ')}; not $field.');
         }
         final allowed =
-            field == 'people' ? const ['tmdb', 'bangumi'] : providers;
+            field == 'people' ? const ['tmdb', 'bangumi', 'https://sources.nipaplay.app'] : providers;
         final order = names(entry.value, allowed, 'sources.$field');
         if (order.isEmpty) bad('sources.$field names no provider.');
         sources[field] = order;

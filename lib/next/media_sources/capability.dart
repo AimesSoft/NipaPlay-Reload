@@ -2,6 +2,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 
 import 'service.dart';
+import '../capabilities/user_authorization.dart';
 
 const _text = StringSchema(minLength: 1);
 const _sourceId = ObjectSchema({'sourceId': _text}, required: ['sourceId']);
@@ -121,6 +122,9 @@ const _entry = ObjectSchema({
   'size': IntegerSchema(nullable: true),
   'path': StringSchema(nullable: true),
   'fileId': StringSchema(nullable: true),
+  'workId': StringSchema(nullable: true),
+  'episodeId': StringSchema(nullable: true),
+  'serverId': StringSchema(nullable: true),
   'parentId': StringSchema(nullable: true),
   'seriesId': StringSchema(nullable: true),
   'seasonId': StringSchema(nullable: true),
@@ -150,7 +154,7 @@ final _specs = [
   const ActionSpec(
       id: 'media.sources.artwork',
       title: '读取来源海报',
-      description: 'Lazily load a Jellyfin/Emby item poster using the X48 source image provider. '
+      description: 'Lazily load a Jellyfin/Emby or Dandanplay remote item poster using the X48 source image provider. '
           'Returns only a cached local poster path or null. Authentication stays in the Classic client; '
           'does not register files or identity. SMB/WebDAV have no server posters.',
       effect: Effect.read,
@@ -159,7 +163,7 @@ final _specs = [
   const ActionSpec(
       id: 'media.sources.search',
       title: '只读搜索媒体来源',
-      description: 'Read-only search, independently reported per source. Jellyfin/Emby use bounded server SearchTerm across all libraries (Series/Movie/Episode/Video). SMB/WebDAV search only previously discovered file names and paths in the existing unified index; never enumerate, browse, register files, create identities or write discovery journal. sourceIds selects a batch; omitted selects configured supported sources; limit bounds each source (default 12). Returns sources[] with sourceId/name/type, basis server/indexed, connectionState, entries, total (null on error), optional error. A failed source does not discard other results. Indexed connectionState is the last known observation, unverified means unknown connectivity, not proven offline. Entries expose itemId, nullable accepted workId/episodeId, fileId, playable; server sourceWorkId/sourceEpisodeId open original Next pages. Unbound shared files play with media.sources.play {sourceId,itemId}. Searches activate the requested saved server session, using existing Classic clients. Call with one sourceId per GUI group to render independently.',
+      description: 'Read-only search, independently reported per source. Dandanplay remote searches its refreshed native series/episode catalogue without creating identities. Jellyfin/Emby use bounded server SearchTerm across all libraries (Series/Movie/Episode/Video). SMB/WebDAV search only previously discovered file names and paths in the existing unified index; never enumerate, browse, register files, create identities or write discovery journal. sourceIds selects a batch; omitted selects configured supported sources; limit bounds each source (default 12). Returns sources[] with sourceId/name/type, basis server/indexed, connectionState, entries, total (null on error), optional error. A failed source does not discard other results. Indexed connectionState is the last known observation, unverified means unknown connectivity, not proven offline. Entries expose itemId, nullable accepted workId/episodeId, fileId, playable; server sourceWorkId/sourceEpisodeId open original Next pages. Unbound shared files play with media.sources.play {sourceId,itemId}. Searches activate the requested saved server session, using existing Classic clients. Call with one sourceId per GUI group to render independently.',
       effect: Effect.read,
       input: ObjectSchema({
         'query': _text,
@@ -193,7 +197,7 @@ final _specs = [
       id: 'media.sources.scrape',
       title: '识别远程媒体',
       description:
-          'Submit Classic WebDAV/SMB recursive video recognition from explicit paths[]. Uses Classic remote byte/hash matching, saved credentials and history. Requires the Classic Dandanplay matching account to be logged in. Preserves existing progress and migrates only previously cleared episode progress. Returns jobId; task.wait returns per-directory total/matched/failed counts. Cancellation stops between directories. This writes Classic matching/history; media.sources.sync only discovers files.',
+          'Submit Classic WebDAV/SMB recursive video recognition from explicit paths[]. Uses Classic remote byte/hash matching, saved credentials and history. Requires the Classic Dandanplay matching account to be logged in. Preserves existing progress and migrates only previously cleared episode progress. Returns jobId; task.wait returns per-directory total/matched/failed counts. Cancellation stops between directories. This writes Classic matching/history; media.sources.sync discovers files and persists source-native catalogue metadata without Classic matching.',
       effect: Effect.write,
       input: ObjectSchema({'sourceId': _text, 'paths': ArraySchema(_text)},
           required: ['sourceId', 'paths']),
@@ -304,11 +308,13 @@ final _specs = [
       id: 'media.sources.login',
       title: 'Initiate media source login',
       description:
-          'Auto uses Jellyfin Quick Connect when enabled, otherwise opens NipaPlay with address and username prefilled. Only the user enters the password or dandanplay_remote API token in that window. A quickConnect result contains a code to give the user and jobId for task.wait. When the person finishes in NipaPlay (logged in, closed the window or the code expired), the outcome comes back to the asking conversation. Approval expires after ten minutes. No secrets are accepted as tool inputs. An unauthenticated NipaPlay shared source can connect directly.',
+          'With explicit user authorization, pass password (or the dandanplay_remote API token in password) and userAuthorization to authenticate without a manual window. Use credentials supplied by the user or from a location they explicitly authorize; never search unrelated credentials. Secrets are redacted from application audit and kept out of job inputs and receipts. Without a password, auto uses Jellyfin Quick Connect when enabled, otherwise opens NipaPlay with address and username prefilled. A quickConnect result contains a code to give the user and jobId for task.wait. User-completed window/Quick Connect outcomes return to the asking conversation; direct password login is observed through task.wait. Login expires after ten minutes. An unauthenticated NipaPlay shared source can connect directly.',
       effect: Effect.write,
       input: ObjectSchema({
         'sourceId': _text,
-        'method': StringSchema(values: ['auto', 'quickConnect', 'window']),
+        'method': StringSchema(values: ['auto', 'quickConnect', 'window', 'password']),
+        'password': StringSchema(secret: true),
+        'userAuthorization': userAuthorizationSchema,
       }, required: [
         'sourceId'
       ]),
@@ -361,7 +367,7 @@ final _specs = [
       id: 'media.sources.select',
       title: 'Select source libraries',
       description:
-          'Replace sync selection with library IDs from libraries. Empty selection stops source sync. Jellyfin/Emby selection uses the Classic service preferences. Does not remove files or change identities.',
+          'Replace sync selection with library IDs from libraries. Empty selection uses all libraries. Dandanplay remote exposes the complete catalogue without per-series display selection. Jellyfin/Emby selection uses the Classic service preferences. Does not remove files or change identities.',
       effect: Effect.write,
       input: ObjectSchema({'sourceId': _text, 'libraries': ArraySchema(_text)},
           required: ['sourceId', 'libraries']),
@@ -372,7 +378,7 @@ final _specs = [
       id: 'media.sources.browse',
       title: 'Browse remote content',
       description:
-          'Discover a source root or parentId (library/folder/series/season) including never-played items. Jellyfin/Emby searchTerm is server-side and can span all libraries; use recursive=true for playable results. sortBy (server field names, comma separated) and sortOrder Ascending/Descending control that request. Other source types filter names in the requested directory or series. Dandanplay remote root returns series; parentId is animeId or unmatched. Returns complete metadata and source provenance using Classic pagination. Directory recursion uses sync. Play with media.sources.play {sourceId,itemId}. Each playable result enters the unified file index. No inferred identity or watch history.',
+          'Discover a source root or parentId (library/folder/series/season) including never-played items. Jellyfin/Emby searchTerm is server-side and can span all libraries; use recursive=true for playable results. sortBy (server field names, comma separated) and sortOrder Ascending/Descending control that request. Other source types filter names in the requested directory or series. Dandanplay remote root returns series; parentId is animeId or unmatched. Returns complete metadata and source provenance using Classic pagination. Directory recursion uses sync. Play with media.sources.play {sourceId,itemId}. Each playable result enters the unified file index. Jellyfin/Emby/Dandanplay native works, seasons and episodes are persisted with source-scoped identities and metadata snapshots; workId/episodeId address standard management tools. Server ProviderIds remain evidence, not automatically accepted cross-provider matches. Existing file assignments and edits are preserved. No Classic recognition or watch-history creation.',
       effect: Effect.write,
       input: ObjectSchema({
         'sourceId': _text,
@@ -416,7 +422,7 @@ final _specs = [
       id: 'media.sources.sync',
       title: 'Synchronize source discovery',
       description:
-          'Submit a cancellable task to recursively discover libraries and register playable files in the unified index. Optional parentIds[] starts from explicit library/series IDs or SMB/WebDAV directories; otherwise uses select. Empty selections are invalid. Repeated sync preserves file IDs and bindings; missing items are not deleted. Use task.wait for completion. Recognition is media.sources.scrape.',
+          'Submit a cancellable task to discover source hierarchy, register files and persist native server metadata for standard identity/metadata/artwork management. Optional parentIds narrows discovery; otherwise use selected libraries, or all roots when no selection exists. Dandanplay remote defaults to its entire catalogue. This refreshes server facts, not TMDB/Bangumi. Existing assignments and overrides survive refresh; missing items are not deleted. Wait for the task receipt.',
       effect: Effect.write,
       input: ObjectSchema({'sourceId': _text, 'parentIds': ArraySchema(_text)},
           required: ['sourceId']),
@@ -501,7 +507,7 @@ final class _SourceAction extends Action<_Json, _Json> {
           final id = json['sourceId'] as String;
           final source = await service.source(id);
           final selected = json['parentIds'] == null
-              ? await service.selection(id)
+              ? await service.syncRoots(id)
               : (json['parentIds'] as List).cast<String>();
           if (selected.isEmpty) {
             throw const Failure(FailureCode.invalidInput,

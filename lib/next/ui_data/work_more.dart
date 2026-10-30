@@ -180,6 +180,7 @@ JsonMap buildWorkMore(Map metadata, {bool film = false}) {
   final tmdb = source('tmdb');
   final bangumi = source('bangumi');
   final dandanplay = source('dandanplay');
+  final nativeSource = source('https://sources.nipaplay.app');
   // Fields of a single found record live in its one source.
   Object? field(String name) =>
       fields[name] ??
@@ -193,15 +194,17 @@ JsonMap buildWorkMore(Map metadata, {bool film = false}) {
   List<JsonMap> castOf(String provider) => switch (provider) {
         'tmdb' => _tmdbCast(tmdb),
         'bangumi' => _bangumiVoices(bangumi),
+        'https://sources.nipaplay.app' => _sourceCredits(nativeSource, 'cast'),
         _ => const [],
       };
   List<JsonMap> crewOf(String provider) => switch (provider) {
         'tmdb' => _tmdbCrew(tmdb, fields['creators'] ?? tmdb?['creators']),
         'bangumi' => _bangumiStaff(bangumi),
+        'https://sources.nipaplay.app' => _sourceCredits(nativeSource, 'crew'),
         _ => const [],
       };
   List<JsonMap> first(List<JsonMap> Function(String) of) {
-    for (final provider in [...peopleOrder, 'tmdb', 'bangumi']) {
+    for (final provider in [...peopleOrder, 'tmdb', 'bangumi', 'https://sources.nipaplay.app']) {
       final list = of(provider);
       if (list.isNotEmpty) return list;
     }
@@ -250,6 +253,12 @@ String? _bangumiImage(Object? images) => images is Map
 
 JsonMap? _person(String provider, Object? id) =>
     id == null ? null : {'provider': provider, 'id': '$id'};
+
+List<JsonMap> _sourceCredits(Map? fields, String kind) => [
+  for (final p in (((fields?['credits'] as Map?)?[kind]) as List? ?? const []).whereType<Map>())
+    if (_text(p['name']) case final name?)
+      {'name': name, if (_text(p['role']) case final role?) 'role': role},
+];
 
 List<JsonMap> _tmdbCast(Map? fields) {
   final cast = (fields?['credits'] as Map?)?['cast'];

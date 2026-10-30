@@ -23,10 +23,10 @@ final class WorkDetailsReader {
 
   Future<UiWorkMore> workMore(String workId) async {
     // A found work's page builds this from the record it already read.
-    if (Found.isFoundId(workId) || workId.startsWith('source-work:')) {
+    if (Found.isFoundId(workId)) {
       return UiWorkMore.empty;
     }
-    if (meshLibrary() case final mesh?) {
+    if (meshLibrary() case final mesh? when !workId.startsWith('source-work:')) {
       try {
         return UiWorkMore.fromJson(await mesh.workMore(workId));
       } on Failure catch (error) {

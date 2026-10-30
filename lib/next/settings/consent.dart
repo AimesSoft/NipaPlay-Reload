@@ -1,3 +1,4 @@
+import '../capabilities/user_authorization.dart';
 import 'dart:convert';
 
 import 'package:nipa_harness/nipa_harness.dart';
@@ -289,22 +290,32 @@ final class _GuardedSet extends Action<_Json, _Json> {
       id: original.id,
       title: original.title,
       effect: original.effect,
-      input: original.input,
+      input: ObjectSchema({
+        ...original.input.properties,
+        'userAuthorization': userAuthorizationSchema,
+      },
+          required: original.input.required,
+          oneOfRequired: original.input.oneOfRequired,
+          additionalProperties: original.input.additionalProperties),
       description: '${original.description} '
           'These settings can send a key or traffic to another host: danmaku.spoilerAiApiUrl, network.httpProxy, plugins.githubProxyUrl, network.bangumiServerUrl, network.allowInvalidCertificates. '
           'Setting one of them to a value other than empty text (or off) returns NeedsDecision and changes nothing, including the other changes in the same call; an invalid value for one of them in the same call rejects the whole call. '
           'Its option settings.set.request creates a setting_consent task, asks the user in NipaPlay, and only after the user agrees applies the original call with the original reason and expectedRevision. '
           'waiting_user means nothing has changed; task.wait and followup.register can observe it. A refusal fails with 用户没有同意修改设置. When the user answers (change or cancel, or closing the window) the outcome returns to the requesting conversation. '
-          'Setting them to empty text or off, settings.reset, and the settings page need no question. No confirmation argument bypasses this.',
+          'If the user already explicitly authorized the exact changes and their network/credential consequences in conversation, record that instruction in userAuthorization to apply directly without another window. Never invent consent. Setting them to empty text or off, settings.reset, and the settings page need no question.',
       output: original.output);
   @override
   _Json decodeInput(JsonMap json) => _Json(json);
   @override
   Future<Outcome<_Json>> run(_Json input, Invocation invocation) async {
-    final plan = await consent.gate(input.value, invocation);
-    if (plan == null) {
+    final arguments = {...input.value}..remove('userAuthorization');
+    final plan = await consent.gate(arguments, invocation);
+    if (input.value.containsKey('userAuthorization')) {
+      requireUserAuthorization(input.value);
+    }
+    if (plan == null || input.value.containsKey('userAuthorization')) {
       final outcome = await consent._execution
-          .invokeJson(original.id, input.value, invocation);
+          .invokeJson(original.id, arguments, invocation);
       return switch (outcome) {
         Completed(:final value) => Completed(_Json(value.toJson())),
         Failed(:final failure) => Failed(failure),

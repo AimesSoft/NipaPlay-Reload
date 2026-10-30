@@ -6,6 +6,8 @@ import 'package:nipaplay/services/backup_category.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 import '../settings/registry.dart';
+import '../capabilities/user_authorization.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 import 'service.dart';
 
 const syncConfigurationSchema = ObjectSchema({
@@ -53,7 +55,7 @@ final class SyncService {
             key: 'sync.configuration',
             title: '多端同步',
             description:
-                'Classic WebDAV incremental sync configuration. No password; use sync.login in NipaPlay. Omitted fields are retained by sync.configure.',
+                'Classic WebDAV incremental sync configuration. No password in configuration; use sync.login with authorized credentials or its login window. Omitted fields are retained by sync.configure.',
             schema: syncConfigurationSchema,
             defaultValue: {
               'url': '',
@@ -151,6 +153,29 @@ final class SyncService {
   }
 
   Future<JsonMap> submit(String operation, JsonMap input) async {
+    if (operation == 'login' && input['password'] != null) {
+      requireUserAuthorization(input);
+      final password = input['password'] as String;
+      SecretRedactor.remember(const CredentialRef('sync', 'login'), password);
+      return sources.serial(() async {
+        final c = await configuration();
+        if ((c['url'] as String).isEmpty) {
+          throw const Failure(FailureCode.invalidInput,
+              'Configure sync.url before connecting.');
+        }
+        final connected = await classic.testConnection(
+            serverUrl: c['url'] as String,
+            username: c['username'] as String,
+            password: password,
+            remotePath: c['remotePath'] as String);
+        if (!connected) {
+          throw const Failure(FailureCode.unavailable,
+              'Sync server did not accept the connection; login was not saved.');
+        }
+        await save(c, password);
+        return {'connected': true, 'method': 'password'};
+      });
+    }
     final c = await configuration();
     if ((c['url'] as String).isEmpty && operation != 'enable') {
       throw const Failure(
@@ -273,7 +298,7 @@ final class _SyncAction extends Action<_Json, _Json> {
         'configure' =>
           'Patch Classic incremental sync configuration. url is HTTP(S), remotePath is a directory on that server, intervalMinutes >= 5, categories is nonempty. Omitted fields stay unchanged. Changing url or username clears the old password; use sync.login. Does not enable synchronization.',
         'login' =>
-          'Open NipaPlay for the user to enter the sync server password. No secret input is accepted. Test before saving. Returns a jobId; use task.wait. task.cancel closes the password window.',
+          'With explicit user authorization, pass password and userAuthorization to test and save the configured sync login directly, returning connected and method without a job. Credentials may be supplied by the user or from a location they authorize. Passwords are never returned or stored in task inputs. Omit password to open the NipaPlay login window; that mode returns jobId for task.wait/cancel.',
         'enable' =>
           'Set enabled true or false. Enable immediately syncs like Classic. Returns jobId; use task.wait for its result. Disabling stops scheduled runs; an already active run completes.',
         'test' =>
@@ -287,7 +312,12 @@ final class _SyncAction extends Action<_Json, _Json> {
           : op == 'enable'
               ? const ObjectSchema({'enabled': BooleanSchema()},
                   required: ['enabled'])
-              : const ObjectSchema({}),
+              : op == 'login'
+                  ? const ObjectSchema({
+                      'password': StringSchema(secret: true),
+                      'userAuthorization': userAuthorizationSchema,
+                    })
+                  : const ObjectSchema({}),
       output: const ObjectSchema({}, additionalProperties: true));
   @override
   _Json decodeInput(JsonMap json) => _Json(json);

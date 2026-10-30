@@ -454,7 +454,7 @@ void main() {
   });
 
   test(
-      'login accepts no password and restart cannot replay a legacy supplied password',
+      'login exposes secret input with authorization and restart cannot replay a supplied password',
       () async {
     expect(
         harness
@@ -463,7 +463,9 @@ void main() {
             .input
             .properties
             .containsKey('password'),
-        false);
+        true);
+    expect(harness.lookup('media.sources.login')!.spec.input.properties['password']!.secret, true);
+    expect(harness.lookup('media.sources.login')!.spec.input.properties.containsKey('userAuthorization'), true);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
         'webdav_connections',

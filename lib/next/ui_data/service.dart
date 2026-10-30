@@ -1486,6 +1486,7 @@ String _ratingSource(String source) => switch (source) {
       'bangumi' => 'Bangumi',
       'dandanplay' => '弹弹play',
       'https://movie.douban.com' => '豆瓣',
+      'https://sources.nipaplay.app' => '服务器',
       _ => Uri.tryParse(source)?.host ?? '评分'
     };
 String _taskVerb(String type) => switch (type) {

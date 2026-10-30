@@ -15,15 +15,15 @@ sourceEpisodeId，共享未绑定文件用 media.sources.play {sourceId,itemId}�
 `add/update` 配置地址与用户名，`login` 独立发起登录。
 
 登录默认选择 Jellyfin Quick Connect（启用时），否则打开应用内密码窗口。
-密码只在 NipaPlay 的登录窗口输入；能力不接受密码。回执只返回方法和 jobId。
+`media.sources.login` 支持用户授权后的密码或 API token 登录：传 `password` 和记录实际用户指令的 `userAuthorization`；凭据可由用户提供或从其明确授权的位置取得。应用审计脱敏，任务与回执不保存密码；用 `task.wait` 确认结果。不传密码时仍可使用窗口或 Quick Connect。
 Quick Connect 另返回 code，批准等待、同步都使用现有 tasks.wait/cancel。
 验证码批准期限十分钟；窗口取消也会取消任务。
 
-`libraries/select` 管理同步选择，`browse` 完整发现服务器新内容。
+`libraries/select` 管理媒体库范围，未选择时默认全部。弹弹play 远程直接展示全部作品，不提供逐作品显示开关。首次进入原生服务器来源会登记后台目录同步，前台按页浏览。
 Jellyfin/Emby parentId 为远端库/文件夹/系列/季 ID；recursive=true 返回可播放条目。
 SMB/WebDAV parentId 为来源内目录路径。共享来源省略 parentId 列作品，
 整数为作品 ID，其他值为远端宿主目录路径（包括 Windows 路径）。
-`sync` 递归发现所选库，登记统一文件索引，保留缺失文件和所有绑定。
+`browse/sync` 发现并登记文件，同时保存 Jellyfin/Emby/弹弹play 的原生作品、季、集和丰富资料快照。原生身份命名空间为 `https://sources.nipaplay.app`，scope 隔离设备、来源连接与实际服务器；ProviderIds 只作为服务器证据保留。返回的 workId/episodeId 可直接用于 Next 的身份、资料、封面与完整度能力。刷新保留人工覆盖和已有文件关联，不删除缺失文件、不调用 Classic 自动识别。原生资料通过 `media.sources.sync` 刷新，修改留在 Next，不回写服务器。
 传 `parentIds` 可从指定库或目录开始；`scrape` 则调用 Classic 的 WebDAV/SMB
 远程字节识别，保留进度，并迁移已解除匹配记录的进度。
 
@@ -36,7 +36,7 @@ SMB/WebDAV parentId 为来源内目录路径。共享来源省略 parentId 列�
 
 `sync.status/configure/login/enable/test/run` 是 WebDAV 多端增量同步原语，
 与来源文件发现的 `media.sources.sync` 分开。配置采用 patch，修改地址或用户名
-会清除旧凭据。启用、停用、登录、立即同步返回任务回执，设置历史记录调用来源。
+会清除旧凭据。启用、停用、窗口登录、立即同步返回任务回执，设置历史记录调用来源；授权密码登录直接返回验证与保存结果。
 `sync.status.hasPassword` 只说明是否有已保存密码，不读回秘密。
 
 文件定位与 Classic 一致；发现不创建观看历史或推断作品身份。
