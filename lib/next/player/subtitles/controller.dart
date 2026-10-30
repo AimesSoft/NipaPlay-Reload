@@ -814,7 +814,8 @@ final class SubtitleController {
           'placement': _placement.toJson(),
           'line': _overlay.value?.text,
         },
-      'look': _look.toJson(),
+      'look': _look.toJson(
+          kernelStyle: _driver?.capabilities.subtitleStyle ?? const {}),
       'notes': List.of(_notes),
     };
   }

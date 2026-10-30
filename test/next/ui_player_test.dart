@@ -854,12 +854,13 @@ void main() {
     expect(await second, 'from-window');
   });
 
-  testWidgets('while it opens: the title and a pulse, no controls',
+  testWidgets('while it opens: the title and a pulse, only the way back',
       (tester) async {
     await pumpPlayer(tester, status: PlayerStatus.loading);
     expect(find.text('葬送的芙莉莲'), findsOneWidget);
     expect(button('暂停'), findsNothing);
-    expect(button('返回'), findsNothing);
+    // Back gives up the open.
+    expect(button('返回'), findsOneWidget);
   });
 
   testWidgets('Next off: Classic alone, and its own controls', (tester) async {

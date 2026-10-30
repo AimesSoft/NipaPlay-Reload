@@ -505,4 +505,60 @@ void main() {
     expect(find.text('二'), findsOneWidget);
     debugOnRebuildDirtyWidget = previous;
   });
+
+  group('the kernel\'s subtitle style', () {
+    test('Classic\'s stored style reaches the kernel\'s properties', () async {
+      SharedPreferences.setMockInitialValues({
+        'subtitle_position': 80.0,
+        'subtitle_align_x': 0,
+        'subtitle_align_y': 0,
+        'subtitle_margin_x': 40.0,
+        'subtitle_margin_y': 500.0,
+        'subtitle_border_size': 2.5,
+        'subtitle_shadow_offset': 1.0,
+        'subtitle_shadow_color': 0xFF112233,
+        'subtitle_font_name': 'Noto Sans CJK SC',
+        'subtitle_override_mode': 3,
+        'subtitle_opacity': 0.5,
+        'subtitle_color': 0xFFFFFFFF,
+      });
+      final look = SubtitleLook.read(await SharedPreferences.getInstance());
+      final p = look.kernelProperties();
+      expect(p['subtitle.position'], '80');
+      expect(p['subtitle.align.x'], 'left');
+      expect(p['subtitle.align.y'], 'top');
+      expect(p['subtitle.margin.x'], '40');
+      expect(p['subtitle.border.size'], '2.5');
+      expect(p['subtitle.shadow.offset'], '1.0');
+      expect(p['subtitle.font'], 'Noto Sans CJK SC');
+      expect(p['subtitle.override'], 'force');
+      // The opacity is the colours' alpha (MDK: 0xRRGGBBAA).
+      expect(p['subtitle.color'], '0xffffff80');
+      expect(p['subtitle.color.shadow'], '0x11223380');
+    });
+
+    test('auto keeps an ASS file\'s own style until the size is changed', () {
+      expect(const SubtitleLook().kernelProperties()['subtitle.override'], 'no');
+      expect(
+          const SubtitleLook(kernelScale: 1.2)
+              .kernelProperties()['subtitle.override'],
+          'scale');
+      expect(
+          const SubtitleLook(overrideMode: 1, kernelScale: 1.2)
+              .kernelProperties()['subtitle.override'],
+          'no');
+    });
+
+    test('the facts say what the kernel playing draws with', () {
+      final mdk = const SubtitleLook().toJson(
+          kernelStyle: {'subtitle.color', 'subtitle.bold'})['kernel'] as Map;
+      expect(mdk['applied'], containsAll(['subtitle.color', 'subtitle.bold']));
+      expect((mdk['notApplied'] as Map).keys, contains('subtitle.position'));
+      final all = const SubtitleLook().toJson(
+          kernelStyle: SubtitleLook.kernelStyleKeys.keys.toSet())['kernel']
+          as Map;
+      expect((all['notApplied'] as Map).keys,
+          isNot(contains('subtitle.position')));
+    });
+  });
 }

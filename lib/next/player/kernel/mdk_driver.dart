@@ -124,6 +124,12 @@ final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
     subtitleFiles: {'ass', 'ssa', 'sup', 'idx'},
     subtitleScale: true,
     subtitleText: true,
+    subtitleStyle: {
+      'subtitle.color',
+      'subtitle.borderColor',
+      'subtitle.bold',
+      'subtitle.italic',
+    },
   );
 
   late final mdk.Player _player;
@@ -583,7 +589,7 @@ final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
   void _plan(KernelTrackPlan plan) {
     final p = _player;
     for (final e in plan.subtitleProperties.entries) {
-      if (_mdkCannot.contains(e.key)) continue;
+      if (!_mdkTakes.contains(e.key)) continue;
       p.setProperty(e.key, e.value);
       _subtitleProperties[e.key] = e.value;
     }
@@ -782,14 +788,22 @@ final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
     _sample(at, advancing: playing);
   }
 
-  /// What the subtitle look asks that MDK cannot do: it has no subtitle delay.
-  static const _mdkCannot = {'subtitle.delay'};
+  /// What of the subtitle look MDK takes: its own `subtitle.*` properties
+  /// (it has no subtitle delay, and places subtitles itself).
+  static const _mdkTakes = {
+    'subtitle.scale',
+    'subtitle.font.size',
+    'subtitle.color',
+    'subtitle.color.outline',
+    'subtitle.bold',
+    'subtitle.italic',
+  };
 
   @override
   Future<void> setSubtitleProperties(Map<String, String> properties) =>
       _queue.run(() async {
         for (final e in properties.entries) {
-          if (_mdkCannot.contains(e.key)) continue;
+          if (!_mdkTakes.contains(e.key)) continue;
           if (_subtitleProperties[e.key] == e.value) continue;
           _player.setProperty(e.key, e.value);
           _subtitleProperties[e.key] = e.value;

@@ -74,6 +74,7 @@ final class KernelCapabilities {
     this.subtitleScale = false,
     this.subtitleDelay = false,
     this.subtitleText = false,
+    this.subtitleStyle = const {},
   });
 
   /// Play and pause are told by the kernel (not inferred from the clock).
@@ -107,6 +108,11 @@ final class KernelCapabilities {
   /// The kernel tells the text of the subtitle it draws now.
   final bool subtitleText;
 
+  /// The registry's subtitle style settings the kernel draws its own
+  /// subtitles with, beyond their size and delay (the keys of
+  /// `SubtitleLook.kernelStyleKeys`).
+  final Set<String> subtitleStyle;
+
   JsonMap toJson() => {
         'transportEvents': transportEvents,
         'seekConfirm': seekConfirm,
@@ -118,6 +124,7 @@ final class KernelCapabilities {
         'subtitleScale': subtitleScale,
         'subtitleDelay': subtitleDelay,
         'subtitleText': subtitleText,
+        'subtitleStyle': subtitleStyle.toList()..sort(),
       };
 }
 

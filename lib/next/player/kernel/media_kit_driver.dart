@@ -77,6 +77,23 @@ final class MediaKitDriver extends AdapterDriver
     subtitleScale: true,
     subtitleDelay: true,
     subtitleText: true,
+    subtitleStyle: {
+      'subtitle.color',
+      'subtitle.borderColor',
+      'subtitle.bold',
+      'subtitle.italic',
+      'subtitle.opacity',
+      'subtitle.position',
+      'subtitle.alignX',
+      'subtitle.alignY',
+      'subtitle.marginX',
+      'subtitle.marginY',
+      'subtitle.borderSize',
+      'subtitle.shadowOffset',
+      'subtitle.shadowColor',
+      'subtitle.fontName',
+      'subtitle.overrideMode',
+    },
   );
 
   /// The tracks mpv has on, as indices of the media's own lists (null: none
@@ -288,21 +305,33 @@ final class MediaKitDriver extends AdapterDriver
           : '#${hex.substring(6)}${hex.substring(0, 6)}';
     }
 
+    String? yesNo(String? flag) =>
+        flag == null ? null : (flag == '1' ? 'yes' : 'no');
+    // mpv refuses margins outside 0…300 (Classic clamps alike).
+    String? margin(String? v) {
+      final n = int.tryParse(v ?? '');
+      return n?.clamp(0, 300).toString();
+    }
+
+    final font = properties['subtitle.font'];
     final options = <String, String?>{
       'sub-scale': properties['subtitle.scale'],
       'sub-color': color(properties['subtitle.color']),
       'sub-border-color': color(properties['subtitle.color.outline']),
-      'sub-bold': properties['subtitle.bold'] == null
-          ? null
-          : properties['subtitle.bold'] == '1'
-              ? 'yes'
-              : 'no',
-      'sub-italic': properties['subtitle.italic'] == null
-          ? null
-          : properties['subtitle.italic'] == '1'
-              ? 'yes'
-              : 'no',
+      'sub-shadow-color': color(properties['subtitle.color.shadow']),
+      'sub-bold': yesNo(properties['subtitle.bold']),
+      'sub-italic': yesNo(properties['subtitle.italic']),
       'sub-delay': properties['subtitle.delay'],
+      'sub-pos': properties['subtitle.position'],
+      'sub-align-x': properties['subtitle.align.x'],
+      'sub-align-y': properties['subtitle.align.y'],
+      'sub-margin-x': margin(properties['subtitle.margin.x']),
+      'sub-margin-y': margin(properties['subtitle.margin.y']),
+      'sub-border-size': properties['subtitle.border.size'],
+      'sub-shadow-offset': properties['subtitle.shadow.offset'],
+      // mpv's own default when none is chosen.
+      'sub-font': font == null ? null : (font.isEmpty ? 'sans-serif' : font),
+      'sub-ass-override': properties['subtitle.override'],
     };
     for (final entry in options.entries) {
       final value = entry.value;

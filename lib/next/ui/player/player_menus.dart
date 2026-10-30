@@ -13,29 +13,50 @@ import '../widgets/icons.dart';
 import '../widgets/menu.dart';
 import '../widgets/progress.dart';
 import '../widgets/words.dart';
+import '../../player/ports/session_playback.dart';
+import '../../player/subtitles/look.dart';
+import '../data/settings_data.dart';
 import 'menu_controls.dart';
 import 'playback.dart';
+import 'player_settings.dart';
 
 /// Off, the video's own tracks, and subtitle files; the one on is ticked.
 /// Choosing one turns the others off. With one on, how early or late it
-/// comes and how large it is.
+/// comes and how large it is, and the pages Classic's menu has: its style,
+/// its lines.
 class SubtitleMenu extends StatefulWidget {
-  const SubtitleMenu({super.key, required this.playback, required this.onDone});
+  const SubtitleMenu({
+    super.key,
+    required this.playback,
+    required this.settings,
+    required this.onDone,
+  });
   final NextPlayback playback;
+  final NextSettingsData settings;
   final VoidCallback onDone;
 
   @override
-  State<SubtitleMenu> createState() => _SubtitleMenuState();
+  State<SubtitleMenu> createState() => SubtitleMenuState();
 }
 
-class _SubtitleMenuState extends State<SubtitleMenu> {
+enum _SubtitlePage { root, style, lines }
+
+class SubtitleMenuState extends State<SubtitleMenu> {
   List<SubtitleChoice>? _choices;
   bool _failed = false;
+  _SubtitlePage _page = _SubtitlePage.root;
 
   @override
   void initState() {
     super.initState();
     unawaited(_load());
+  }
+
+  /// Esc on a page goes back to the list; false on the list itself.
+  bool back() {
+    if (_page == _SubtitlePage.root) return false;
+    setState(() => _page = _SubtitlePage.root);
+    return true;
   }
 
   Future<void> _load() async {
@@ -68,9 +89,34 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
   Widget build(BuildContext context) {
     final choices = _choices;
     final on = choices?.where((c) => c.selected && !c.off).firstOrNull;
+    final reduced = NextMotion.reduced(context);
+    final Widget page;
+    switch (_page) {
+      case _SubtitlePage.style when on != null:
+        page = SubtitleStylePage(
+            playback: widget.playback,
+            settings: widget.settings,
+            on: on,
+            onBack: back);
+      case _SubtitlePage.lines when on != null:
+        page = SubtitleLinesPage(
+            playback: widget.playback, onBack: back, onDone: widget.onDone);
+      default:
+        page = _root(choices, on);
+    }
     return PlayerMenuSurface(
-      width: 248,
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
+      width: _page == _SubtitlePage.root ? 248 : 320,
+      child: AnimatedSize(
+        duration: reduced ? Duration.zero : const Duration(milliseconds: 220),
+        curve: NextMotion.ease,
+        alignment: Alignment.topCenter,
+        child: KeyedSubtree(key: ValueKey(_page), child: page),
+      ),
+    );
+  }
+
+  Widget _root(List<SubtitleChoice>? choices, SubtitleChoice? on) =>
+      Column(mainAxisSize: MainAxisSize.min, children: [
         const Align(
             alignment: Alignment.centerLeft, child: PlayerMenuHeading('字幕')),
         if (choices == null)
@@ -96,15 +142,19 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
         if (on != null) ...[
           const PlayerMenuDivider(),
           _SubtitleLook(playback: widget.playback, on: on),
+          PlayerMenuLink(
+              label: '样式',
+              onTap: () => setState(() => _page = _SubtitlePage.style)),
+          PlayerMenuLink(
+              label: '字幕列表',
+              onTap: () => setState(() => _page = _SubtitlePage.lines)),
         ],
         const PlayerMenuDivider(),
         MenuItem(
           label: _failed ? '这个文件用不了' : '添加字幕文件…',
           onTap: () => unawaited(_add()),
         ),
-      ]),
-    );
-  }
+      ]);
 }
 
 /// The subtitle on: earlier or later, smaller or larger.
@@ -153,6 +203,434 @@ class _SubtitleLook extends StatelessWidget {
               ),
             ),
         ]),
+      );
+}
+
+/// How the subtitle on looks, as Classic's 字幕设置 sets it: a file
+/// NipaPlay draws over the video takes its own colour, font, place and
+/// outline; one the kernel draws takes what that kernel can draw (all of
+/// it with mpv, colours and weight with MDK), and nothing else is shown.
+class SubtitleStylePage extends StatelessWidget {
+  const SubtitleStylePage({
+    super.key,
+    required this.playback,
+    required this.settings,
+    required this.on,
+    required this.onBack,
+  });
+  final NextPlayback playback;
+  final NextSettingsData settings;
+  final SubtitleChoice on;
+  final VoidCallback onBack;
+
+  static const _text = [
+    0xFFFFFFFF,
+    0xFFFFF3B0,
+    0xFFFFD84D,
+    0xFF8FE3FF,
+    0xFFFFA8C8,
+  ];
+  static const _dark = [0xFF000000, 0xFF2B2B33, 0xFF1B2A4A, 0xFFFFFFFF];
+
+  @override
+  Widget build(BuildContext context) {
+    final p = playback;
+    final session = p is SessionPlayback ? p : null;
+    final overlay = p.drawnOver(on) != null;
+    final kernel = overlay
+        ? const <String>{}
+        : session?.kernelSubtitleStyle ?? const <String>{};
+    bool has(String key) => overlay
+        ? const {
+            'subtitle.bold',
+            'subtitle.italic',
+            'subtitle.opacity',
+            'subtitle.alignX',
+            'subtitle.borderSize',
+            'subtitle.shadowOffset',
+          }.contains(key)
+        : kernel.contains(key);
+    return PlayerSettings(
+      data: settings,
+      builder: (context, m) {
+        final rows = <Widget>[
+          if (overlay) ...[
+            PlayerSettingColor(
+                model: m,
+                setting: 'subtitle.externalColor',
+                label: '颜色',
+                swatches: _text),
+            PlayerSettingField(
+                model: m,
+                setting: 'subtitle.externalFontName',
+                label: '字体',
+                hint: '默认'),
+          ] else ...[
+            if (has('subtitle.color'))
+              PlayerSettingColor(
+                  model: m,
+                  setting: 'subtitle.color',
+                  label: '文字',
+                  swatches: _text),
+            if (has('subtitle.borderColor'))
+              PlayerSettingColor(
+                  model: m,
+                  setting: 'subtitle.borderColor',
+                  label: '描边',
+                  swatches: _dark),
+            if (has('subtitle.shadowColor'))
+              PlayerSettingColor(
+                  model: m,
+                  setting: 'subtitle.shadowColor',
+                  label: '阴影',
+                  swatches: _dark),
+            if (has('subtitle.fontName'))
+              PlayerSettingField(
+                  model: m,
+                  setting: 'subtitle.fontName',
+                  label: '字体',
+                  hint: '默认'),
+          ],
+          if (has('subtitle.bold'))
+            PlayerSettingToggle(model: m, setting: 'subtitle.bold', label: '粗体'),
+          if (has('subtitle.italic'))
+            PlayerSettingToggle(
+                model: m, setting: 'subtitle.italic', label: '斜体'),
+          if (has('subtitle.opacity'))
+            PlayerSettingSlider(
+                model: m,
+                setting: 'subtitle.opacity',
+                label: '不透明度',
+                min: 0,
+                max: 1,
+                step: 0.05,
+                unit: DialUnit.percent),
+          if (has('subtitle.borderSize'))
+            PlayerSettingSlider(
+                model: m,
+                setting: 'subtitle.borderSize',
+                label: '描边粗细',
+                min: 0,
+                max: overlay ? 8 : 10,
+                step: 0.5,
+                unit: DialUnit.points),
+          if (has('subtitle.shadowOffset'))
+            PlayerSettingSlider(
+                model: m,
+                setting: 'subtitle.shadowOffset',
+                label: '阴影偏移',
+                min: 0,
+                max: 10,
+                step: 0.5,
+                unit: DialUnit.points),
+          if (overlay && session != null)
+            _OverlayPlace(playback: session, on: on),
+          if (has('subtitle.position'))
+            PlayerSettingSlider(
+                model: m,
+                setting: 'subtitle.position',
+                label: '位置',
+                min: 0,
+                max: 100,
+                step: 1,
+                unit: DialUnit.points),
+          if (has('subtitle.alignX'))
+            PlayerSettingChoices(
+                model: m,
+                setting: 'subtitle.alignX',
+                label: '水平对齐',
+                options: const [
+                  ('left', '左'),
+                  ('center', '中'),
+                  ('right', '右'),
+                ]),
+          if (has('subtitle.alignY'))
+            PlayerSettingChoices(
+                model: m,
+                setting: 'subtitle.alignY',
+                label: '垂直对齐',
+                options: const [
+                  ('top', '上'),
+                  ('center', '中'),
+                  ('bottom', '下'),
+                ]),
+          if (has('subtitle.marginX'))
+            PlayerSettingSlider(
+                model: m,
+                setting: 'subtitle.marginX',
+                label: '左右边距',
+                min: 0,
+                max: 300,
+                step: 1,
+                unit: DialUnit.points),
+          if (has('subtitle.marginY'))
+            PlayerSettingSlider(
+                model: m,
+                setting: 'subtitle.marginY',
+                label: '上下边距',
+                min: 0,
+                max: 300,
+                step: 1,
+                unit: DialUnit.points),
+          if (has('subtitle.overrideMode')) ...[
+            const PlayerSettingHeading('ASS 字幕'),
+            PlayerSettingChoices(
+                model: m,
+                setting: 'subtitle.overrideMode',
+                label: '样式',
+                options: const [
+                  ('auto', '自动'),
+                  ('none', '原样'),
+                  ('scale', '缩放'),
+                  ('force', '覆盖'),
+                ]),
+          ],
+        ];
+        final keys = [
+          if (overlay) ...['subtitle.externalColor', 'subtitle.externalFontName'],
+          for (final key in SubtitleLook.kernelStyleKeys.keys)
+            if (has(key)) key,
+        ];
+        return PlayerSettingsPage(title: '字幕样式', onBack: onBack, children: [
+          ...rows,
+          if (keys.isNotEmpty) ...[
+            const PlayerMenuDivider(),
+            PlayerSettingAction(
+                label: '恢复默认', onTap: () => unawaited(m.reset(keys))),
+          ],
+        ]);
+      },
+    );
+  }
+}
+
+/// A file drawn over the video: how high it sits and how far sideways,
+/// kept for that file.
+class _OverlayPlace extends StatelessWidget {
+  const _OverlayPlace({required this.playback, required this.on});
+  final SessionPlayback playback;
+  final SubtitleChoice on;
+
+  @override
+  Widget build(BuildContext context) => PlaybackSelector<OverlayPlacement?>(
+        playback: playback,
+        selector: (_) => playback.overlayPlacement(on),
+        builder: (context, place, _) {
+          if (place == null) return const SizedBox.shrink();
+          void set(OverlayPlacement next) => unawaited(playback
+              .setOverlayPlacement(on, next)
+              .catchError((Object e) =>
+                  debugPrint('[NextPlayer] subtitle place: $e')));
+          return Column(mainAxisSize: MainAxisSize.min, children: [
+            PlayerSettingRow(
+              label: '位置',
+              child: PlayerMenuSlider(
+                label: '位置',
+                dial: PlayerDial(place.position.clamp(0, 100).toDouble(), 0,
+                    100, 1, DialUnit.points),
+                onChanged: (_) {},
+                onEnd: (v) => set(place.copyWith(position: v)),
+              ),
+            ),
+            PlayerSettingRow(
+              label: '左右',
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: PlayerMenuStepper(
+                  label: '左右',
+                  dial: PlayerDial(place.marginX.clamp(-400, 400).toDouble(),
+                      -400, 400, 10, DialUnit.points),
+                  onChanged: (v) => set(place.copyWith(marginX: v)),
+                ),
+              ),
+            ),
+          ]);
+        },
+      );
+}
+
+/// The lines of the subtitle on, as Classic's 字幕列表: the one showing
+/// marked and scrolled to; a click goes there.
+class SubtitleLinesPage extends StatefulWidget {
+  const SubtitleLinesPage(
+      {super.key,
+      required this.playback,
+      required this.onBack,
+      required this.onDone});
+  final NextPlayback playback;
+  final VoidCallback onBack;
+  final VoidCallback onDone;
+
+  @override
+  State<SubtitleLinesPage> createState() => _SubtitleLinesPageState();
+}
+
+class _SubtitleLinesPageState extends State<SubtitleLinesPage> {
+  List<({int startMs, String text, bool current})>? _lines;
+  final _scroll = ScrollController();
+  static const _row = 52.0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final lines = <({int startMs, String text, bool current})>[];
+    try {
+      int? cursor = 0;
+      final end = widget.playback.duration.inMilliseconds;
+      // A long file is read in pages; four thousand lines is a film's.
+      while (cursor != null && lines.length < 4000) {
+        final page = await widget.playback.inspection.inspect('subtitle.cues', {
+          'startMs': 0,
+          'endMs': end > 0 ? end : 24 * 3600 * 1000,
+          'limit': 500,
+          'cursor': cursor,
+        });
+        for (final item in (page['items'] as List?) ?? const []) {
+          final m = item as Map;
+          lines.add((
+            startMs: (m['startMs'] as num?)?.toInt() ?? 0,
+            text: '${m['text'] ?? ''}'.trim(),
+            current: m['current'] == true,
+          ));
+        }
+        cursor = (page['nextCursor'] as num?)?.toInt();
+      }
+    } catch (e) {
+      debugPrint('[NextPlayer] subtitle lines: $e');
+    }
+    if (!mounted) return;
+    setState(() => _lines = lines);
+    final now = widget.playback.position.inMilliseconds;
+    var at = lines.lastIndexWhere((l) => l.startMs <= now);
+    if (at > 2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) {
+          _scroll.jumpTo(math.min(
+              (at - 2) * _row, _scroll.position.maxScrollExtent));
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = _lines;
+    final height = MediaQuery.sizeOf(context).height;
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Align(
+          alignment: Alignment.centerLeft,
+          child: PlayerMenuBack(
+              lines == null || lines.isEmpty
+                  ? '字幕列表'
+                  : '字幕列表 · ${lines.length}',
+              onTap: widget.onBack)),
+      if (lines == null)
+        const SizedBox(height: 58, child: Center(child: PulseDot()))
+      else if (lines.isEmpty)
+        SizedBox(
+          height: 58,
+          child: Center(
+            child: Text('这条字幕读不到台词',
+                style: NextText.sans(13, color: NextColors.p3)),
+          ),
+        )
+      else
+        ConstrainedBox(
+          constraints: BoxConstraints(
+              maxHeight: math.max(200, math.min(440, height - 150))),
+          child: PlaybackSelector<int>(
+            playback: widget.playback,
+            selector: (p) => lines.lastIndexWhere(
+                (l) => l.startMs <= p.position.inMilliseconds),
+            builder: (context, now, _) => ListView.builder(
+              controller: _scroll,
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemExtent: _row,
+              itemCount: lines.length,
+              itemBuilder: (context, i) => TimedLine(
+                at: lines[i].startMs,
+                text: lines[i].text,
+                current: i == now,
+                onTap: () =>
+                    widget.playback.seek(Duration(milliseconds: lines[i].startMs)),
+              ),
+            ),
+          ),
+        ),
+    ]);
+  }
+}
+
+/// A timed line: when, and what.
+class TimedLine extends StatelessWidget {
+  const TimedLine(
+      {super.key,
+      required this.at,
+      required this.text,
+      required this.onTap,
+      this.current = false,
+      this.dim = false});
+  final int at;
+  final String text;
+  final bool current;
+  final bool dim;
+  final VoidCallback onTap;
+
+  static String clock(int ms) {
+    final s = ms ~/ 1000;
+    final h = s ~/ 3600, m = (s ~/ 60) % 60, sec = s % 60;
+    final mm = m.toString().padLeft(2, '0'), ss = sec.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+  }
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: onTap,
+        semanticLabel: text,
+        pressScale: 0.99,
+        builder: (context, hovered) => AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: current
+                ? const Color(0x14FFFFFF)
+                : hovered
+                    ? const Color(0x0FFFFFFF)
+                    : const Color(0x00FFFFFF),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(children: [
+            SizedBox(
+              width: 58,
+              child: Text(clock(at),
+                  style: NextText.num(12,
+                      color: current ? NextColors.accent : NextColors.p3)),
+            ),
+            Expanded(
+              child: Text(text.replaceAll('\n', ' ').replaceAll(r'\N', ' '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: NextText.sans(13,
+                      height: 1.35,
+                      color: current || hovered
+                          ? NextColors.paper
+                          : dim
+                              ? NextColors.p4
+                              : NextColors.p2)),
+            ),
+          ]),
+        ),
       );
 }
 

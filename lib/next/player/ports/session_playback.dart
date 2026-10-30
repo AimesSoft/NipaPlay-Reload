@@ -820,6 +820,13 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   @override
   bool key(KeyEvent event) {
     final s = _session;
+    // → let go: a press seeks, a hold's faster speed ends.
+    if (event is KeyUpEvent &&
+        event.logicalKey == LogicalKeyboardKey.arrowRight &&
+        _rightDown) {
+      _rightUp();
+      return true;
+    }
     if (s == null || !hasVideo || _held) return false;
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
     final focus = FocusManager.instance.primaryFocus?.context;
@@ -857,12 +864,18 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       togglePlay();
       return true;
     }
-    if (key == LogicalKeyboardKey.arrowLeft ||
-        key == LogicalKeyboardKey.arrowRight) {
-      final step = _seekStep;
-      final to = position +
-          (key == LogicalKeyboardKey.arrowLeft ? -step : step);
-      seek(to);
+    // → held plays faster (Classic's 长按右键倍速) until let go; a press
+    // seeks on release.
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (event is KeyDownEvent) {
+        _rightDown = true;
+        _boostTimer?.cancel();
+        _boostTimer = Timer(const Duration(milliseconds: 350), _boost);
+      }
+      return true;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      seek(position - _seekStep);
       _show();
       return true;
     }
@@ -874,6 +887,43 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   }
 
   Duration _seekStep = const Duration(seconds: 10);
+
+  bool _rightDown = false;
+  Timer? _boostTimer;
+
+  /// The speed before → was held; null while it is not.
+  double? _unboosted;
+
+  Future<void> _boost() async {
+    _boostTimer = null;
+    final s = _session;
+    if (!_rightDown || s == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final boost = prefs.getDouble('speed_boost_rate') ?? 2.0;
+    if (!_rightDown) return;
+    _unboosted = rate;
+    await s.setRate(boost, origin: 'gui');
+    _frame.poke();
+  }
+
+  void _rightUp() {
+    _rightDown = false;
+    _boostTimer?.cancel();
+    _boostTimer = null;
+    final before = _unboosted;
+    _unboosted = null;
+    if (before != null) {
+      unawaited(_session?.setRate(before, origin: 'gui'));
+      _frame.poke();
+      return;
+    }
+    if (_session == null || !hasVideo) return;
+    seek(position + _seekStep);
+    _show();
+  }
+
+  /// Faster while → is held ([_boost]).
+  bool get boosted => _unboosted != null;
 
   /// The shared volume and speed, for what is shown with nothing playing.
   Future<void> _readLevels() async {
@@ -1090,6 +1140,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       preview.enabled = value == true;
       if (!preview.enabled) await preview.reset();
       _frame.poke();
+    } else if (key == 'seek.stepSeconds' && value is num && value > 0) {
+      _seekStep = Duration(microseconds: (value * 1e6).round());
     } else if (key == 'player.videoAspectMode' && value is String) {
       aspectMode.value = VideoAspectMode.values.byName(value);
       _frame.poke();
@@ -1154,6 +1206,26 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   bool get _kernelDelays =>
       _session?.driver?.capabilities.subtitleDelay ?? false;
 
+  /// The registry's subtitle style settings the kernel playing draws its
+  /// own subtitles with (`KernelCapabilities.subtitleStyle`).
+  Set<String> get kernelSubtitleStyle =>
+      _session?.driver?.capabilities.subtitleStyle ?? const {};
+
+  /// Where the file of [on] sits when NipaPlay draws it over the video
+  /// (kept per file); null when the kernel draws it.
+  OverlayPlacement? overlayPlacement(SubtitleChoice? on) {
+    final path = drawnOver(on);
+    return path == null ? null : host.placementOf(path);
+  }
+
+  Future<void> setOverlayPlacement(
+      SubtitleChoice? on, OverlayPlacement placement) async {
+    final path = drawnOver(on);
+    if (path == null) return;
+    await host.setPlacement(path, placement);
+    _frame.poke();
+  }
+
   @override
   bool canDelaySubtitles(SubtitleChoice? on) =>
       on != null && !on.off && (drawnOver(on) != null || _kernelDelays);
@@ -1217,6 +1289,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     host.current.removeListener(_bind);
     _hide?.cancel();
     _skipEdge?.cancel();
+    _boostTimer?.cancel();
     _persistVolume?.cancel();
     if (_window case final watch?) windowManager.removeListener(watch);
     _frame.stop();

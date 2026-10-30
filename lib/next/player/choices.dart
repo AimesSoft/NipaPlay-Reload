@@ -99,7 +99,9 @@ final class PlayerDial {
   int get hashCode => Object.hash(value, min, max, step, unit);
 }
 
-enum DialUnit { percent, points, times, seconds }
+/// How a dial reads: 80%, 30, 1.25×, +0.5s (earlier or later), 10 秒 (a
+/// length of time), 2.5.
+enum DialUnit { percent, points, times, seconds, length, decimal }
 
 /// Where on the screen danmaku of a kind run.
 enum DanmakuLane { top, bottom, scroll }

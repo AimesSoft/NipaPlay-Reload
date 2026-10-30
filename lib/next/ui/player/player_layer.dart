@@ -84,6 +84,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   bool _holding = false;
   final _menuFocus = FocusNode(debugLabel: 'next.player.menu');
   final _more = GlobalKey<MoreMenuState>();
+  final _subtitles = GlobalKey<SubtitleMenuState>();
 
   /// The still just taken (its file), or that none could be; and the
   /// flash that says it was.
@@ -191,6 +192,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   /// Esc: back from a page of ⋯, else the menu closes.
   void _escape() {
     if (_more.currentState?.back() ?? false) return;
+    if (_subtitles.currentState?.back() ?? false) return;
     _closeMenu();
   }
 
@@ -385,7 +387,10 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                     child: PlayerMenuSheet(
                       child: switch (_menu!) {
                         _Menu.subtitles => SubtitleMenu(
-                            playback: playback, onDone: _closeMenu),
+                            key: _subtitles,
+                            playback: playback,
+                            settings: shell.services.settings,
+                            onDone: _closeMenu),
                         _Menu.episodes => EpisodeMenu(
                             playback: playback,
                             shell: shell,
@@ -393,6 +398,8 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                         _Menu.more => MoreMenu(
                             key: _more,
                             playback: playback,
+                            settings: shell.services.settings,
+                            calls: shell.services.calls,
                             onScreenshot: () => unawaited(_screenshot()),
                             onPictureInPicture: _pictureInPicture),
                       },
@@ -418,7 +425,10 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                             onEnter: (_) => _hoverChrome(true),
                             child: switch (_menu!) {
                               _Menu.subtitles => SubtitleMenu(
-                                  playback: playback, onDone: _closeMenu),
+                                  key: _subtitles,
+                                  playback: playback,
+                                  settings: shell.services.settings,
+                                  onDone: _closeMenu),
                               _Menu.episodes => EpisodeMenu(
                                   playback: playback,
                                   shell: shell,
@@ -426,6 +436,8 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                               _Menu.more => MoreMenu(
                                   key: _more,
                                   playback: playback,
+                                  settings: shell.services.settings,
+                                  calls: shell.services.calls,
                                   onScreenshot: () => unawaited(_screenshot()),
                                   onPictureInPicture: _pictureInPicture),
                             },

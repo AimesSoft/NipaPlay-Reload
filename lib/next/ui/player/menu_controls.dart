@@ -172,6 +172,10 @@ String dialText(DialUnit unit, double v) => switch (unit) {
       DialUnit.seconds => v.abs() < 0.001
           ? '0s'
           : '${v > 0 ? '+' : '−'}${v.abs().toStringAsFixed(1)}s',
+      DialUnit.length => v == v.roundToDouble()
+          ? '${v.round()} 秒'
+          : '${v.toStringAsFixed(1)} 秒',
+      DialUnit.decimal => v.toStringAsFixed(1),
     };
 
 /// − value +: a step a click, faster while held. A click on the value
