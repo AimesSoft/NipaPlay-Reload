@@ -143,7 +143,7 @@
 | `media.files.reveal` | write | 在文件管理器中定位文件 | Core | 允许 | [源码](../../../lib/next/system/desktop.dart) |
 | `media.frames` | read | Take pictures from a video file at given times | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/media_frames.dart) |
 | `media.hash.match` | read | Match multiple native files against Dandanplay using the MD5 of their first 16 MiB | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
-| `media.identity.bind_batch` | write | Atomically accept explicit bindings in one batch | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
+| `media.identity.bind_batch` | write | 原子绑定身份；direct 不抓资料，需继续 refresh_batch 并回读 | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.identity.get` | read | Read identity by entityId, path or current (default) | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.identity.restore_classic_batch` | write | Undo the revocation of classic_match bindings made by unbind_batch, by name | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.identity.unbind_batch` | write | Atomically revoke Agent/user bindings and retain provenance | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
@@ -182,12 +182,12 @@
 | `media.metadata.override` | write | Edit title (display title), originalTitle, overview (synopsis) or legacy imageUrl | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.metadata.override_batch` | write | 批量编辑文字 | 通用/组合 | 允许 | [源码](../../../lib/next/media/catalog_capability.dart) |
 | `media.metadata.put` | write | 交一部作品的资料 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |
-| `media.metadata.refresh` | write | Schedule a metadata snapshot refresh for an accepted external object | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
-| `media.metadata.refresh_batch` | write | 批量刷新来源资料 | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
+| `media.metadata.refresh` | write | 获取并保存已绑定对象详情；等待任务回执，不递归刷新子对象 | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
+| `media.metadata.refresh_batch` | write | 批量获取并保存来源详情；逐项等待任务回执 | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.metadata.search` | read | Search a metadata source | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.metadata.search_batch` | read | Search multiple metadata sources or queries in one call | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.metadata.snapshots` | read | Read all retained source snapshots and host provenance for an entity | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
-| `media.metadata.ui_facts` | read | 读取作品资料完整性和来源 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |
+| `media.metadata.ui_facts` | read | 读取来源获取状态、合并字段与全部资料缺项 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |
 | `media.metadata.ui_facts_batch` | read | 批量读取资料完整情况 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |
 | `media.sources.add` | write | Configure a media source | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.addresses` | write | List or modify Classic server addresses in one batch | Core | 允许 | [源码](../../../lib/next/media_sources/remote_admin.dart) |

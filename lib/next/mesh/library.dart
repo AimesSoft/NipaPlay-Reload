@@ -352,11 +352,8 @@ final class MeshLibrary {
     // union-find, title indexing or full-map serialization runs on the UI.
     _works.addAll(update.works);
     _episodes.addAll(update.episodes);
-    if (_packedWorks == null) {
-      for (final entry in update.orderedUpdates.entries) {
-        _orderedWorkIds[entry.key] = entry.value.workId;
-      }
-    }
+    // Progress changes work values, never their IDs/order. In the lazy worker
+    // projection the ID list may still be the immutable empty placeholder.
     if (searchIndex.ready) {
       for (final work in update.works.values) {
         searchIndex.updateProgress(workJson(work),

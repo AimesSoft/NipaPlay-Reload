@@ -65,6 +65,8 @@ ObjectSchema _recordSchema(int depth) => ObjectSchema({
       'episodeCount': const IntegerSchema(
           description: 'Work episode count as the provider reports it; absent when unknown.'),
       'details': const ObjectSchema({}, additionalProperties: true),
+      'acquisition': const ObjectSchema({}, additionalProperties: true,
+          description: 'Acquisition kind and requested section outcomes for this object. Detail fetched does not mean every field exists, nor that child records were fetched in detail. Absent on older records.'),
       'episodes': ArraySchema(
           depth == 0 ? const ObjectSchema({}) : _recordSchema(depth - 1))
     }, required: [
@@ -312,7 +314,7 @@ final _specs = [
           required: const ['results'])),
   _spec(
       'media.metadata.get',
-      'Fetch an external object without persisting it. TMDB refs use stable IDs and a route scope including season/episode numbers. Work records carry rating {value,max,count?}, episodeCount and details (credits, studios, genres, runtime, status, infobox, staff, characters, tags and retained providerData when available). Bangumi public metadata needs no login. Scraping never downloads danmaku; bind confirmed episode IDs separately.',
+      'Fetch an external object without persisting it. acquisition describes this object only; nested episodes may be catalogue summaries. Bind then refresh to save source details, or explicitly import the returned fields including details. TMDB refs use stable IDs and a route scope including season/episode numbers. Work records carry rating {value,max,count?}, episodeCount and details (credits, studios, genres, runtime, status, infobox, staff, characters, tags and retained providerData when available). Bangumi public metadata needs no login. Scraping never downloads danmaku; bind confirmed episode IDs separately.',
       Effect.read,
       const ObjectSchema({'ref': _refSchema, 'language': _text},
           required: ['ref']),
@@ -423,7 +425,7 @@ final _specs = [
       ])),
   _spec(
       'media.identity.bind_batch',
-      'Atomically accept explicit bindings in one batch. Local hierarchy is work -> release -> episode; files link to episodes. '
+      'Atomically accept explicit bindings in one batch. Binding an ID is not metadata collection: direct mode fetches and saves no details. For library organization, follow direct bindings with metadata.refresh_batch, await each task receipt, then read metadata.ui_facts.sourceCoverage/review. Dandanplay identity does not replace TMDB or Bangumi details. Local hierarchy is work -> release -> episode; files link to episodes. '
       'Two input modes must not be mixed within an entry. '
       '(1) Catalogue mode: every entry supplies workRef. kind=work binds/creates only the work; '
       'kind=release binds/creates the work and release; kind=episode binds/creates the work, release and exactly one episodeRef; '
@@ -496,6 +498,8 @@ final _specs = [
           'fileId': StringSchema(nullable: true),
           'classicProjectionId': StringSchema(nullable: true),
           'bindingIds': ArraySchema(StringSchema()),
+          'metadata': ObjectSchema({}, additionalProperties: true, description:
+              'This invocation only: identity_only fetches/persists no metadata; nextAction suggests built-in refresh or external import after checking existing coverage. Catalogue records report their acquisition scope; child summaries are not full details. Existing snapshots are not assessed here; read ui_facts.sourceCoverage.'),
           'classicProjection': ArraySchema(ObjectSchema({
             'locator': StringSchema(),
             'status': StringSchema(),
@@ -605,7 +609,7 @@ final _specs = [
       ])),
   _spec(
       'media.metadata.get_batch',
-      'Read multiple external works, seasons or episodes in one call; identical refs are fetched once. Results preserve input order and per-item errors. Does not persist metadata or identities.',
+      'Read multiple external works, seasons or episodes in one call; identical refs are fetched once. Results preserve input order and per-item errors. Does not persist metadata or identities. Preserve details/providerData when importing; reading records alone does not complete library enrichment. acquisition distinguishes detail requests from child catalogue summaries.',
       Effect.read,
       const ObjectSchema({'refs': ArraySchema(_refSchema), 'language': _text},
           required: ['refs']),
@@ -709,7 +713,7 @@ final _specs = [
       const ObjectSchema({'identity': _entitySchema}, required: ['identity'])),
   _spec(
       'media.metadata.refresh',
-      'Schedule a metadata snapshot refresh for an accepted external object. Identity and persistent overrides remain unchanged; newer snapshots supersede corrections. requestId deduplicates acceptance.',
+      'Fetch and save source details for one accepted external object. Required after identity-only binding when collecting metadata. This schedules a task: wait for its terminal receipt and inspect acquisition, then read ui_facts. It does not bind or separately refresh child seasons/episodes; submit each verified ref explicitly. Identity and persistent overrides remain unchanged; newer snapshots supersede corrections. requestId deduplicates acceptance.',
       Effect.write,
       const ObjectSchema(
           {'ref': _refSchema, 'language': _text, 'requestId': _text},
@@ -730,7 +734,7 @@ final class _RefreshBatchAction extends Action<_JsonValue, _JsonValue> {
   @override
   ActionSpec get spec => const ActionSpec(
     id: 'media.metadata.refresh_batch', title: '批量刷新来源资料',
-    description: 'Schedule the same refresh as media.metadata.refresh for multiple refs. Each item is accepted independently (atomic:false), with index, job or structured error. Per-entry requestId deduplicates task acceptance.',
+    description: 'Schedule the same refresh as media.metadata.refresh for multiple refs. Each item is accepted independently (atomic:false), with index, job or structured error. Use after direct identity binding to fetch AND save metadata for every verified work/season/episode ref. No recursive child refresh. Wait for each job receipt, inspect acquisition, and read ui_facts.sourceCoverage/review; acceptance is not completion. Per-entry requestId deduplicates task acceptance.',
     effect: Effect.write,
     input: ObjectSchema({'entries': ArraySchema(ObjectSchema(
       {'ref': _refSchema, 'language': _text, 'requestId': _text}, required: ['ref','requestId']))}, required: ['entries']),

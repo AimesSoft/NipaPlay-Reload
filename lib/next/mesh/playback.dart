@@ -135,7 +135,9 @@ final class MeshPlayback {
     final library = core.uiData.meshLibrary!;
     final context = library.playback[path];
     if (context == null || context['bundle'] == null) return null;
-    return _loading.putIfAbsent(path, () async {
+    final pending = _loading[path];
+    if (pending != null) return pending;
+    final future = () async {
       final peer = context['deviceId'] as String;
       final bundle = await compute(_copyBundle, context['bundle'] as JsonMap);
       for (final track in (bundle['tracks'] as List).cast<JsonMap>()) {
@@ -168,7 +170,14 @@ final class MeshPlayback {
         }
       }
       return bundle;
-    });
+    }();
+    _loading[path] = future;
+    try {
+      return await future;
+    } catch (_) {
+      if (identical(_loading[path], future)) _loading.remove(path);
+      rethrow;
+    }
   }
 
   Future<List<JsonMap>?> tracks(String path) async =>

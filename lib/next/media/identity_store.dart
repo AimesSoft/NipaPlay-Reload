@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'classic_history_eligibility.dart';
 
 import 'metadata_provider.dart';
+import 'metadata_coverage.dart';
 import 'metadata_snapshot.dart';
 import 'presentation.dart';
 import 'presentation_store.dart';
@@ -30,6 +31,15 @@ String newMediaId(String prefix) => '$prefix-${const Uuid().v4()}';
 JsonMap decodeMediaJson(Object? value) =>
     Map<String, Object?>.from(jsonDecode(value as String) as Map);
 String get _now => DateTime.now().toUtc().toIso8601String();
+
+JsonMap _identityOnlyMetadataReceipt(JsonMap ref) => {
+  'mode': 'identity_only', 'fetched': false, 'persisted': false,
+  'refs': [ref],
+  'nextAction': const ['tmdb', 'bangumi', 'dandanplay'].contains(ref['provider'])
+      ? 'media.metadata.refresh_batch' : 'media.metadata.import_batch',
+  'note': 'This binding fetched and saved no metadata. Inspect existing source coverage; fetch and save missing details.',
+};
+
 bool isLocationOnlyMediaProbe(JsonMap probe) =>
     probe.keys.every((key) => key == 'legacy');
 
@@ -59,7 +69,7 @@ final class IdentityStore {
   }
 
   /// Whether the work, or a release under it, has an accepted TMDB identity:
-  /// backdrop, logo and episode stills come from it.
+  /// used for work artwork. Episode stills need the episode's own identity.
   Future<bool> workHasTmdb(String workId) async => (await database.rawQuery(
           "SELECT 1 FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id "
           "JOIN media_entities e ON e.id=b.entity_id "
@@ -1075,6 +1085,7 @@ final class IdentityStore {
     final ratings = <JsonMap>[];
     final sources = <JsonMap>[];
     final sourceFields = <String, JsonMap>{};
+    final sourceRows = <String, JsonMap>{};
     final sourceFieldHistory = <String, JsonMap>{};
     final seenRatings = <String>{}, seenSubmitted = <String>{};
     for (final row in rows) {
@@ -1104,13 +1115,21 @@ final class IdentityStore {
       if (!sourceFields.containsKey(sourceKey)) {
         sourceFields[sourceKey] = {};
         sourceFieldHistory[sourceKey] = {};
-        sources.add({
+        final source = <String, Object?>{
           'provider': row['provider'], 'objectType': row['object_type'],
           'externalId': row['external_id'], 'scope': row['object_scope'],
           'snapshotId': row['id'], 'language': row['language'],
           'fetchedAt': row['fetched_at'], 'fields': sourceFields[sourceKey],
           'fieldProvenance': sourceFieldHistory[sourceKey],
-        });
+        };
+        sources.add(source);
+        sourceRows[sourceKey] = source;
+      }
+      if (record['acquisition'] case final Map acquisition) {
+        sourceRows[sourceKey]!['acquisition'] = preferredAcquisition(
+          sourceRows[sourceKey]!['acquisition'],
+          {...acquisition, 'snapshotId': row['id'], 'fetchedAt': row['fetched_at']},
+        );
       }
       // Artwork and identity snapshots can be newer but deliberately sparse.
       // A detail source must retain older facts absent from those updates,
@@ -1579,6 +1598,7 @@ final class IdentityStore {
                     'episodeIds': kind == 'episode' ? [id] : <String>[],
                     'fileId': null,
                     'bindingIds': [binding],
+                    'metadata': _identityOnlyMetadataReceipt(entry['ref'] as JsonMap),
                   });
                   continue;
                 }
@@ -1606,6 +1626,7 @@ final class IdentityStore {
                   'endMs': entry['endMs']
                 };
                 final bindings = <String>[];
+                final metadataRecords = <String, JsonMap>{};
                 final actor = invocation.origin == 'gui' ? 'user' : 'agent';
                 Future<void> bind(String id, MetadataRecord record,
                     String relation, JsonMap bindingScope,
@@ -1623,6 +1644,17 @@ final class IdentityStore {
                       ((await entity(id, db: tx))['attributes']
                               as JsonMap)['bindingRevision'] as int? ??
                           0);
+                  final snapshotId = stableMediaId('snapshot', [
+                    stableMediaId('object', record.ref.toJson()), record.language,
+                    record.fetchedAt.toIso8601String(),
+                  ]);
+                  final persisted = (await tx.query('media_snapshots',
+                      columns: ['id'], where: 'id=?', whereArgs: [snapshotId])).isNotEmpty;
+                  metadataRecords[snapshotId] = {
+                    'ref': record.ref.toJson(), 'acquisition': record.acquisition,
+                    'persisted': persisted,
+                    if (persisted) 'snapshotId': snapshotId,
+                  };
                   if (!bindings.contains(binding)) {
                     bindings.add(binding);
                     await _audit(tx, binding, entry, invocation, file: file);
@@ -1791,7 +1823,13 @@ final class IdentityStore {
                         ]))
                         .map((p) => p['id'])
                         .firstOrNull,
-                  'bindingIds': bindings
+                  'bindingIds': bindings,
+                  'metadata': {
+                    'mode': 'catalogue', 'fetched': true,
+                    'persisted': metadataRecords.values.any((r) => r['persisted'] == true),
+                    'records': metadataRecords.values.toList(),
+                    'nextAction': 'media.metadata.ui_facts',
+                  },
                 });
               } on Failure catch (error) {
                 throw Failure(error.code, 'Entry $index: ${error.message}',
@@ -2273,7 +2311,8 @@ final class IdentityStore {
       'episodeIds': [episodeId],
       'fileId': fileId,
       'classicProjectionId': projections.map((row) => row['id']).firstOrNull,
-      'bindingIds': [binding]
+      'bindingIds': [binding],
+      'metadata': _identityOnlyMetadataReceipt(entry['ref'] as JsonMap),
     };
   }
 

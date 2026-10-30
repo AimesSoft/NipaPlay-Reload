@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'media_service.dart';
+import 'identity_store.dart' show decodeMediaJson;
 import 'metadata_provider.dart';
 
 List<JobExecutor> mediaExecutors(MediaService service) => [
@@ -214,6 +215,9 @@ final class _RefreshExecutor implements JobExecutor {
         .succeed(JobReceipt(verification: VerificationLevel.verified, details: {
       'snapshotId': id,
       'refreshed': true,
+      'ref': ref.toJson(),
+      'acquisition': decodeMediaJson(rows.single['fields'])['acquisition'],
+      'childrenRefreshed': false,
       'identityChanged': false,
       'userOverridesPreserved': true
     }));

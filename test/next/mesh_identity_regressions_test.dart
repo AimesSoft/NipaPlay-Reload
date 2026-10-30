@@ -127,7 +127,7 @@ void main() {
 
   test('newer sparse peer retains older source fields', () async {
     await worker.build('probe');
-    JsonMap peer(String when, JsonMap fields) => {
+    JsonMap peer(String when, JsonMap fields, {JsonMap? acquisition}) => {
           'name': 'peer',
           'records': [
             {
@@ -148,6 +148,7 @@ void main() {
                     'scope': '',
                     'language': 'zh-CN',
                     'fetchedAt': when,
+                    if (acquisition != null) 'acquisition': acquisition,
                     'fields': fields
                   }
                 ]
@@ -156,11 +157,14 @@ void main() {
             }
           ]
         };
+    final detailEvidence = <String, Object?>{'kind': 'detail',
+      'fetchedAt': '2026-10-20', 'snapshotId': 'old-detail',
+      'sections': {'core': 'received', 'credits': 'received'}};
     final snapshot = await worker.compose({
       'a': peer('2026-10-20', {
         'title': 'probe',
         'actors': ['kept actor']
-      }),
+      }, acquisition: detailEvidence),
       'b': peer('2026-10-21', {'title': 'probe', 'imageUrl': 'image'})
     }, {
       'a': true,
@@ -171,6 +175,7 @@ void main() {
     final source =
         ((evidence['metadata'] as Map)['sources'] as List).single as Map;
     expect((source['fields'] as Map).containsKey('actors'), true);
+    expect(source['acquisition'], detailEvidence);
   });
   test('explicit empty provider collection clears composite', () async {
     final f = MediaFixture();

@@ -158,6 +158,8 @@ void main() {
     final source = (after['sources'] as List).cast<Map>()
         .singleWhere((s) => s['objectType'] == 'tv');
     expect(source['snapshotId'], 'new-artwork-only');
+    expect(source['acquisition'], originalSource['acquisition']);
+    expect((source['acquisition'] as Map)['snapshotId'], isNot('new-artwork-only'));
     expect((source['fields'] as Map)['title'], '新的来源标题');
     expect((source['fields'] as Map)['credits'], (originalSource['fields'] as Map)['credits']);
     expect(((source['fieldProvenance'] as Map)['credits'] as Map)['snapshotId'],

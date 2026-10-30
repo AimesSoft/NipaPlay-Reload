@@ -128,6 +128,10 @@ TMDB season 为 `tv/<tvId>/season/<number>`，episode 在其后追加 `/episode/
 外部集编号使用实际 object ID，不用显示集数。完整输入示例和字段语义在 `nipa describe` 中。
 除内置目录模式外，`kind` + 既有 `entityId` + `ref` + `reason` 可以直接绑定
 work/release/episode 的任意外部对象：不请求 provider、不建立父实体或文件关联。
+直接模式回执 `entries[].metadata` 返回 `fetched:false`、`persisted:false`；
+收集资料时随后显式 `metadata.refresh_batch` 获取并保存各已核实的作品／季／集，
+等待逐项任务终态，再回读。目录模式的 `metadata.records` 标明获取类型和本次是否保存：
+已有绑定复用不会重新写入所获取的快照，不能把重复绑定当作刷新。
 宿主仍校验实体层级、同来源身份冲突、同种本地实体的外部对象唯一归属，并记录理由与证据。
 直接绑定不能混入 `workRef` 等目录模式字段。任意来源的外部目录关系由 Agent 判断，宿主保存其证据。
 
@@ -328,7 +332,23 @@ Bangumi 公开资料无需账号。metadata.sources 返回各外部对象的最�
 手动覆盖和提交资料优先，普通快照的中文标题优先 Bangumi，同语言简介取更完整来源，
 其余汇总字段优先 TMDB。具体来源仍在 provenance，不改写原始快照。
 
-ui_facts 报告三站身份与动画的建议补全目标。刮削不下载弹幕；正式剧集身份在播放时
+`get/get_batch` 返回资料但不入库。`refresh/refresh_batch` 保存请求对象的快照，
+不递归为本地子实体补身份或分别获取详情。提供方记录的 `acquisition` 将搜索、目录摘要
+与详情请求分开，详情的 `sections` 标明 received / not_returned / failed；
+TMDB TV/movie 请求演职员、外部 ID 与关键词，season/episode 请求演职员及外部 ID。
+这些状态说明请求范围，不证明来源提供了所有字段。原始响应继续保留在 providerData。
+
+ui_facts 的 `sourceCoverage` 独立于合并页面字段：有身份无快照、摘要、获取范围未知、
+详情部分返回、详情已返回分别报告；各集也有自己的 sourceCoverage。历史与外部导入
+缺少获取证据时标为 snapshot_unverified，内容仍保留，不能仅据此判定未抓取。
+按外部对象及语言保留最近详情获取记录，新的图片快照不覆盖它；新的部分失败详情
+不能被旧成功记录遮住。Mesh 合并来源证据时遵循相同规则。
+`review.gapCounts` 汇总所有 missing 分组，包括来源详情与逐集身份，不使用
+missing.fields 为空或已有 ID 来推断全部资料齐全。字段来源的快照和时间仍由
+fieldProvenance 描述，可能与详情获取记录不同。任务流程见
+[媒体整理指南](../../../docs/next/development/guides/media-identity.md)。
+
+ui_facts 还报告三站身份与动画的建议补全目标。刮削不下载弹幕；正式剧集身份在播放时
 由 AutomaticDanmaku 使用，跨季、SP、合集不能仅按编号推断。
 文件扫描同时保存 technical（容器、码率 bit/s、视频和音轨），files.list 返回它；
 详情页按来源展示演职员、角色声优、评分、资料表及已探测的文件信息。

@@ -88,7 +88,7 @@ final class UiDataCapability implements Capability {
           ClassicAction(_setLayoutSpec, service.setDetailLayout),
           ClassicAction(const ActionSpec(
               id: 'media.metadata.ui_facts_batch', title: '批量读取资料完整情况',
-              description: 'Read the same metadata facts for multiple works. Each item returns facts or a structured failure; atomic:false.',
+              description: 'Read the same metadata facts for multiple works, including sourceCoverage and review. Check all missing groups, not just missing.fields: identity and merged page fields do not prove source details were saved. Each item returns facts or a structured failure; atomic:false.',
               effect: Effect.read, input: ObjectSchema({'workIds': ArraySchema(_ref)}, required: ['workIds']),
               output: ObjectSchema({}, additionalProperties: true)), (input, _) async {
                 final results = <JsonMap>[];
@@ -208,7 +208,7 @@ final class _MetadataAction extends Action<_Json, _Json> {
       title: write ? '设置作品与剧集图片' : '读取界面元数据完整情况',
       description: write
           ? 'Set independent persistent artwork overrides in one atomic batch. backdrop/poster/logo require entityId of a work; still requires an episode. Each entry supplies exactly one HTTP(S) url without userinfo or absolute local file, plus source:{label,url?}. Images are decoded and cached by X26 before commit; local files are copied. Source, actor and invocation are retained in metadata edits/activity. Overrides survive metadata refresh and need no provider identity or credentials. Text title/overview use media.metadata.override.'
-          : 'Read the same NextUiData work/episodes as the viewer: availability, actual values/local image paths, source provenance, synopsis/title language, ratings, per-episode titles/stills/danmaku and subtitles (languages, embedded/external origin, availability, provenance and selection), and coverage counts. Includes heroImage fallback and tint. Missing fields remain explicit. Language uses observed Japanese kana when present, otherwise declared language or unknown; declaredLanguage is retained. Episodes of a film (a TMDB movie identity) are not counted in missing.episodes.withoutNumber. Does not change domain metadata; reading may populate the disposable image cache.',
+          : 'Read sourceCoverage and review alongside all missing groups: identity_only means no saved snapshot; catalogue_only/search_only are summaries; snapshot_unverified lacks acquisition evidence; detail_partial has unreceived sections; detail_fetched confirms requested sections, not every field or freshness. Never infer full source metadata from identities or missing.fields alone. Also read the same NextUiData work/episodes as the viewer: availability, actual values/local image paths, source provenance, synopsis/title language, ratings, per-episode titles/stills/danmaku and subtitles (languages, embedded/external origin, availability, provenance and selection), and coverage counts. Includes heroImage fallback and tint. Missing fields remain explicit. Language uses observed Japanese kana when present, otherwise declared language or unknown; declaredLanguage is retained. Episodes of a film (a TMDB movie identity) are not counted in missing.episodes.withoutNumber. Does not change domain metadata; reading may populate the disposable image cache.',
       effect: write ? Effect.write : Effect.read,
       input: write
           ? const ObjectSchema({

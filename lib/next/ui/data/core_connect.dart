@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 
@@ -173,6 +174,7 @@ final class CoreUiActions implements NextUiActions {
   CoreUiActions(this.core, this.runtime);
   final NextCore core;
   final NextRuntime runtime;
+  final _openingEpisodes = <String, Future<void>>{};
 
   // [UiTask.taskId] is the TaskEngine job ID (lib/next/ui_data/README.md).
   @override
@@ -212,12 +214,16 @@ final class CoreUiActions implements NextUiActions {
     }
   }
 
-  /// Plays in Classic's player, which the shell reveals while a video is
-  /// open. Several recorded locations: the first one.
+  /// Open through the active player; repeated clicks share the pending open.
   @override
-  Future<void> play(UiWork work, {UiEpisode? episode}) async {
+  Future<void> play(UiWork work, {UiEpisode? episode}) {
     final target = episode ?? work.next;
-    if (target == null) return;
+    if (target == null) return Future.value();
+    return _openingEpisodes.putIfAbsent(target.episodeId, () =>
+        _playEpisode(target).whenComplete(() { _openingEpisodes.remove(target.episodeId); }));
+  }
+
+  Future<void> _playEpisode(UiEpisode target) async {
     final invocation = Invocation(origin: 'gui');
     var outcome = await (await runtime.harnessReady)
         .invokeJson('ui.open', {'entityId': target.episodeId}, invocation);
@@ -228,7 +234,11 @@ final class CoreUiActions implements NextUiActions {
           .invokeJson(call.actionId, call.input, Invocation(origin: 'gui'));
     }
     if (outcome case Failed(:final failure)) {
-      debugPrint('[NextUi] play failed: ${failure.message}');
+      await (await runtime.harnessReady).invokeJson('ui.notify', {
+        'requestId': 'play-error-${invocation.id}',
+        'title': '播放失败', 'severity': 'error',
+        'body': const JsonEncoder.withIndent('  ').convert(failure.toJson()),
+      }, invocation);
     }
   }
 

@@ -39,16 +39,24 @@ List<String> _names(Object? rows) => rows is List
     : const [];
 
 JsonMap _tmdbDetails(JsonMap row) {
-  final credits = row['aggregate_credits'] ?? row['credits'];
+  final candidate = row['aggregate_credits'] ?? row['credits'];
+  // An appended endpoint error is not an explicitly empty collection.
+  final credits = candidate is Map &&
+          candidate['success'] != false &&
+          (candidate['cast'] is List || candidate['crew'] is List)
+      ? candidate
+      : null;
+  final keywords = row['keywords'];
+  final keywordRows = keywords is Map && keywords['success'] != false
+      ? keywords['results'] ?? keywords['keywords']
+      : null;
   final cast = credits is Map ? credits['cast'] : null;
   final crew = credits is Map ? credits['crew'] : null;
   final runtime =
       row['runtime'] ?? (row['episode_run_time'] as List?)?.firstOrNull;
   return {
     'providerData': row,
-    if (row['keywords'] is Map)
-      'tags': _names((row['keywords'] as Map)['results'] ??
-          (row['keywords'] as Map)['keywords']),
+    if (keywordRows is List) 'tags': _names(keywordRows),
     if (row['genres'] is List) 'genres': _names(row['genres']),
     if (runtime is num && runtime > 0) 'runtimeMs': (runtime * 60000).round(),
     if (row['production_companies'] is List) ...{
@@ -114,6 +122,7 @@ JsonMap _tmdbDetails(JsonMap row) {
       'first_air_date': 'firstAirDate',
       'last_air_date': 'lastAirDate',
       'release_date': 'releaseDate',
+      'air_date': 'airDate',
       'origin_country': 'countries',
       'original_language': 'originalLanguage',
       'spoken_languages': 'languages',
@@ -124,7 +133,10 @@ JsonMap _tmdbDetails(JsonMap row) {
       'revenue': 'revenue',
       'number_of_seasons': 'seasonCount',
     }.entries)
-      if (row[entry.key] != null) entry.value: row[entry.key],
+      if (row[entry.key] != null &&
+          !(row[entry.key] is Map &&
+              (row[entry.key] as Map)['success'] == false))
+        entry.value: row[entry.key],
   };
 }
 
@@ -157,7 +169,7 @@ final class TmdbMetadataProvider implements MetadataProvider {
             if (year == null ||
                 '${row[type == 'tv' ? 'first_air_date' : 'release_date'] ?? ''}'
                     .startsWith('$year'))
-              _record(row, type)
+              _record(row, type, acquisition: const {'kind': 'search'})
       ];
     }
     if (!{'tv', 'movie'}.contains(kind)) {
@@ -169,12 +181,16 @@ final class TmdbMetadataProvider implements MetadataProvider {
       'language': 'zh-CN',
       if (year != null) (kind == 'tv' ? 'first_air_date_year' : 'year'): '$year'
     });
-    return [for (final row in _rows(response, 'results')) _record(row, kind)];
+    return [
+      for (final row in _rows(response, 'results'))
+        _record(row, kind, acquisition: const {'kind': 'search'})
+    ];
   }
 
   MetadataRecord _record(JsonMap row, String type,
           {String scope = '',
           String language = 'zh-CN',
+          JsonMap acquisition = const {'kind': 'catalogue'},
           List<MetadataRecord> episodes = const []}) =>
       MetadataRecord(
           ref: ExternalRef(id, type, _id(row, 'id'), scope: scope),
@@ -184,9 +200,12 @@ final class TmdbMetadataProvider implements MetadataProvider {
               row[type == 'movie' ? 'original_title' : 'original_name']
                   as String?,
           overview: row['overview'] as String?,
-          imageUrl: row['poster_path'] == null
+          imageUrl: (type == 'episode'
+                      ? row['still_path']
+                      : row['poster_path']) ==
+                  null
               ? null
-              : 'https://image.tmdb.org/t/p/w500${row['poster_path']}',
+              : 'https://image.tmdb.org/t/p/w500${type == 'episode' ? row['still_path'] : row['poster_path']}',
           year: _year(
               row['first_air_date'] ?? row['release_date'] ?? row['air_date']),
           season: row['season_number'] as int?,
@@ -199,6 +218,7 @@ final class TmdbMetadataProvider implements MetadataProvider {
               : null,
           episodeCount: type == 'tv' ? _count(row['number_of_episodes']) : null,
           details: _tmdbDetails(row),
+          acquisition: acquisition,
           fetchedAt: DateTime.now().toUtc());
 
   @override
@@ -231,13 +251,39 @@ final class TmdbMetadataProvider implements MetadataProvider {
         throw const Failure(
             FailureCode.invalidInput, 'Unsupported TMDB object type.');
     }
+    final sections = switch (ref.objectType) {
+      'tv' => ['aggregate_credits', 'external_ids', 'keywords'],
+      'movie' => ['credits', 'external_ids', 'keywords'],
+      'season' => ['aggregate_credits', 'external_ids'],
+      _ => ['credits', 'external_ids'],
+    };
     final row = await transport.request(path, query: {
       'language': language,
-      if (ref.objectType == 'tv')
-        'append_to_response': 'aggregate_credits,external_ids,keywords',
-      if (ref.objectType == 'movie')
-        'append_to_response': 'credits,external_ids,keywords',
+      'append_to_response': sections.join(','),
     });
+    String sectionState(String section) {
+      final value = row[section];
+      if (value is! Map) return 'not_returned';
+      if (value['success'] == false) return 'failed';
+      final valid = switch (section) {
+        'credits' ||
+        'aggregate_credits' =>
+          value['cast'] is List && value['crew'] is List,
+        'keywords' => value['results'] is List || value['keywords'] is List,
+        'external_ids' => value.containsKey('id') ||
+            value.keys.any((key) => key.toString().endsWith('_id')),
+        _ => false,
+      };
+      return valid ? 'received' : 'not_returned';
+    }
+
+    final acquisition = <String, Object?>{
+      'kind': 'detail',
+      'sections': {
+        'core': 'received',
+        for (final section in sections) section: sectionState(section),
+      },
+    };
     final episodes = ref.objectType == 'season'
         ? [
             for (final ep in _rows(row, 'episodes'))
@@ -257,7 +303,10 @@ final class TmdbMetadataProvider implements MetadataProvider {
     // TMDB API routes use season/episode numbers; object identity uses the returned ID.
     return _verifyRef(
         _record(row, ref.objectType,
-            scope: ref.scope, language: language, episodes: episodes),
+            scope: ref.scope,
+            language: language,
+            episodes: episodes,
+            acquisition: acquisition),
         ref);
   }
 }
@@ -278,12 +327,15 @@ final class BangumiMetadataProvider implements MetadataProvider {
     });
     return [
       for (final row in _rows(response, 'data'))
-        if (year == null || _year(row['date']) == year) _record(row, 'subject')
+        if (year == null || _year(row['date']) == year)
+          _record(row, 'subject', acquisition: const {'kind': 'search'})
     ];
   }
 
   MetadataRecord _record(JsonMap row, String type,
-      {String scope = '', List<MetadataRecord> episodes = const []}) {
+      {String scope = '',
+      List<MetadataRecord> episodes = const [],
+      JsonMap acquisition = const {'kind': 'catalogue'}}) {
     final images = row['images'] as Map?;
     final localized = row['name_cn'] as String?;
     final rating = row['rating'];
@@ -313,6 +365,7 @@ final class BangumiMetadataProvider implements MetadataProvider {
                 _count(row['total_episodes']) ??
                 _count(regular)
             : null,
+        acquisition: acquisition,
         details: {
           'providerData': row,
           if (row['infobox'] != null) 'infobox': row['infobox'],
@@ -336,7 +389,11 @@ final class BangumiMetadataProvider implements MetadataProvider {
       return _verifyRef(
           _record(await transport.request('/v0/episodes/${ref.externalId}'),
               'episode',
-              scope: ref.scope),
+              scope: ref.scope,
+              acquisition: const {
+                'kind': 'detail',
+                'sections': {'core': 'received'}
+              }),
           ref);
     }
     if (ref.objectType != 'subject') {
@@ -384,7 +441,17 @@ final class BangumiMetadataProvider implements MetadataProvider {
             'Bangumi episode catalogue is incomplete.');
       }
     }
-    return _verifyRef(_record(row, 'subject', episodes: episodes), ref);
+    return _verifyRef(
+        _record(row, 'subject', episodes: episodes, acquisition: {
+          'kind': 'detail',
+          'sections': {
+            'core': 'received',
+            'episodes': 'received',
+            for (final name in ['staff', 'characters'])
+              name: errors.contains(name) ? 'failed' : 'received',
+          }
+        }),
+        ref);
   }
 }
 
@@ -398,11 +465,16 @@ final class DandanplayMetadataProvider implements HashMetadataProvider {
       {String kind = 'tv', int? year}) async {
     final response = await transport
         .request('/api/v2/search/anime', query: {'keyword': query});
-    return [for (final row in _rows(response, 'animes')) _series(row)];
+    return [
+      for (final row in _rows(response, 'animes'))
+        _series(row, acquisition: const {'kind': 'search'})
+    ];
   }
 
   MetadataRecord _series(JsonMap row,
-          {List<MetadataRecord> episodes = const [], int? episodeCount}) =>
+          {List<MetadataRecord> episodes = const [],
+          int? episodeCount,
+          JsonMap acquisition = const {'kind': 'catalogue'}}) =>
       MetadataRecord(
           ref: ExternalRef(id, 'anime', _id(row, 'animeId')),
           title: row['animeTitle'] as String,
@@ -411,6 +483,7 @@ final class DandanplayMetadataProvider implements HashMetadataProvider {
           imageUrl: row['imageUrl'] as String?,
           episodes: episodes,
           order: 'provider',
+          acquisition: acquisition,
           rating: _score(row['rating'], null),
           details: {
             'providerData': row,
@@ -428,14 +501,21 @@ final class DandanplayMetadataProvider implements HashMetadataProvider {
           },
           episodeCount: episodeCount ?? _count(row['episodeCount']),
           fetchedAt: DateTime.now().toUtc());
-  MetadataRecord _episode(JsonMap row, String animeId) => MetadataRecord(
-      ref: ExternalRef(id, 'episode', _id(row, 'episodeId'),
-          scope: 'anime/$animeId'),
-      title: row['episodeTitle'] as String,
-      kind: 'episode',
-      number: row['episodeNumber']?.toString(),
-      order: 'provider',
-      fetchedAt: DateTime.now().toUtc());
+  MetadataRecord _episode(JsonMap row, String animeId, {bool detail = false}) =>
+      MetadataRecord(
+          ref: ExternalRef(id, 'episode', _id(row, 'episodeId'),
+              scope: 'anime/$animeId'),
+          title: row['episodeTitle'] as String,
+          kind: 'episode',
+          number: row['episodeNumber']?.toString(),
+          order: 'provider',
+          acquisition: detail
+              ? const {
+                  'kind': 'detail',
+                  'sections': {'core': 'received'}
+                }
+              : const {'kind': 'catalogue'},
+          fetchedAt: DateTime.now().toUtc());
   @override
   Future<MetadataRecord> get(ExternalRef ref,
       {String language = 'zh-CN'}) async {
@@ -453,7 +533,8 @@ final class DandanplayMetadataProvider implements HashMetadataProvider {
     }
     final row = Map<String, Object?>.from(value);
     final episodes = [
-      for (final ep in _rows(row, 'episodes')) _episode(ep, animeId)
+      for (final ep in _rows(row, 'episodes'))
+        _episode(ep, animeId, detail: true)
     ];
     if (ref.objectType == 'episode') {
       final matches =
@@ -465,7 +546,13 @@ final class DandanplayMetadataProvider implements HashMetadataProvider {
       return matches.single;
     }
     return _verifyRef(
-        _series(row, episodes: episodes, episodeCount: _count(episodes.length)),
+        _series(row,
+            episodes: episodes,
+            episodeCount: _count(episodes.length),
+            acquisition: const {
+              'kind': 'detail',
+              'sections': {'core': 'received', 'episodes': 'received'}
+            }),
         ref);
   }
 

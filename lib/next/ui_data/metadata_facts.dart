@@ -5,6 +5,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'service.dart';
 import 'detail_layout.dart';
 import '../subtitles/facts.dart';
+import '../media/metadata_coverage.dart';
 
 extension UiMetadataFacts on UiDataService {
   Future<JsonMap> metadataFacts(String workId) async {
@@ -137,6 +138,7 @@ extension UiMetadataFacts on UiDataService {
       }
       episodeFacts.add({
         'metadataIdentities': metadataIdentities,
+        'sourceCoverage': metadataSourceCoverage(metadataIdentities, m),
         'subtitles': {
           'files': episodeEvidence == null ? await (subtitles ?? subtitleFacts(media, mediaRoot)).episodeFiles(e.episodeId) : episodeEvidence['subtitleFiles'],
           'available': subtitleTracks.any((t) => t['available'] == true),
@@ -208,39 +210,44 @@ extension UiMetadataFacts on UiDataService {
         'poster': image('poster', work.artwork.poster, metadata),
         'logo': image('logo', work.artwork.logo, metadata),
     };
-    final identities = <String, bool>{};
+    final metadataIdentities = <JsonMap>[];
     if (evidence != null) {
-      final keys = evidence['keys'];
-      if (keys is List) {
-        for (final provider in ['tmdb', 'bangumi', 'dandanplay']) {
-          identities[provider] = keys.any((k) =>
-              (k is String ? jsonDecode(k) as List : k as List).first == provider);
-        }
+      for (final key in evidence['keys'] as List? ?? const []) {
+        final parts = key is String ? jsonDecode(key) as List : key as List;
+        metadataIdentities.add({'provider': parts[0], 'objectType': parts[1],
+          'scope': parts[2], 'externalId': parts[3]});
       }
     } else {
       final family = await media.store.metadataFamily(workId);
-      for (final provider in ['tmdb', 'bangumi', 'dandanplay']) {
-        identities[provider] = (await db.rawQuery(
-          "SELECT 1 FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id "
-          "WHERE b.entity_id IN (${List.filled(family.length, '?').join(',')}) "
-          "AND b.status='accepted' AND b.relation IN ('exact','contains') AND o.provider=? LIMIT 1",
-          [...family, provider])).isNotEmpty;
-      }
+      metadataIdentities.addAll(await db.rawQuery(
+        "SELECT DISTINCT o.provider,o.object_type AS objectType,o.external_id AS externalId,o.scope "
+        "FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id "
+        "WHERE b.entity_id IN (${List.filled(family.length, '?').join(',')}) "
+        "AND b.status='accepted' AND b.relation IN ('exact','contains')", family));
     }
+    final identities = <String, bool>{
+      for (final provider in ['tmdb', 'bangumi', 'dandanplay'])
+        provider: metadataIdentities.any((ref) => ref['provider'] == provider),
+    };
+    final sourceCoverage = metadataSourceCoverage(metadataIdentities, metadata);
     final animation = !work.film && (identities['bangumi'] == true ||
         identities['dandanplay'] == true || attrs['type'] == 'anime' ||
         work.genres.any((g) => ['动画', '動畫', 'Animation', 'アニメ'].contains(g)));
-    return {
+    final result = <String, Object?>{
       'workId': workId,
       'fields': fieldFacts,
       'identities': identities,
       'metadata': metadata,
+      'sourceCoverage': sourceCoverage,
       // Where each of these shows on the work's page, from which provider,
       // and what the others would show (ui.detail.layout.set changes it).
       'presentation': presentationFacts(metadata),
       'identityTargets': ['tmdb', if (animation) ...['bangumi', 'dandanplay']],
       // What the facts above lack, as plain lists; nothing else is implied.
       'missing': {
+        'sourceDetails': [for (final source in sourceCoverage)
+          if (const ['tmdb', 'bangumi', 'dandanplay'].contains((source['ref'] as Map)['provider']) &&
+              source['state'] != 'detail_fetched') source],
         'identities': [for (final p in ['tmdb', if (animation) ...['bangumi', 'dandanplay']]) if (identities[p] == false) p],
         'fields': [
           for (final e in fieldFacts.entries)
@@ -251,6 +258,20 @@ extension UiMetadataFacts on UiDataService {
             if ((fieldFacts[name] as Map)['inChinese'] != true) name
         ],
         'episodes': {
+          'withoutTmdbIdentity': [
+            if (!work.film)
+              for (final e in episodeFacts)
+                if (!(e['metadataIdentities'] as List).cast<Map>().any((r) =>
+                    r['provider'] == 'tmdb' && r['objectType'] == 'episode')) e['episodeId']
+          ],
+          'tmdbDetailsToReview': [
+            if (!work.film)
+              for (final e in episodeFacts)
+                for (final source in (e['sourceCoverage'] as List).cast<Map>())
+                  if ((source['ref'] as Map)['provider'] == 'tmdb' &&
+                      source['state'] != 'detail_fetched')
+                    {'episodeId': e['episodeId'], ...source},
+          ],
           'withoutDandanplayEpisodeIdentity': [
             if (animation)
               for (final e in episodeFacts)
@@ -292,6 +313,20 @@ extension UiMetadataFacts on UiDataService {
         'items': episodeFacts
       }
     };
+    final missing = result['missing'] as Map;
+    final episodeGaps = missing['episodes'] as Map;
+    final counts = <String, int>{
+      for (final name in ['identities', 'fields', 'chinese', 'sourceDetails'])
+        name: (missing[name] as List).length,
+      for (final entry in episodeGaps.entries)
+        'episodes.${entry.key}': (entry.value as List).length,
+    };
+    result['review'] = {
+      'status': counts.values.any((n) => n > 0) ? 'needs_review' : 'no_reported_gaps',
+      'gapCounts': counts,
+      'meaning': 'Stored metadata evidence only. Identity, source detail acquisition and merged field availability are separate. Detail fetched is not a claim that every field exists. Unverified snapshots need inspection, not automatic re-fetching. Playback, subtitles and danmaku are separate checks.',
+    };
+    return result;
   }
 
   /// The part of [metadataFacts] that says what is missing.
@@ -301,6 +336,8 @@ extension UiMetadataFacts on UiDataService {
     return {
       'identities': facts['identities'],
       'missing': facts['missing'],
+      'sourceCoverage': facts['sourceCoverage'],
+      'review': facts['review'],
       'heroImage': facts['heroImage'],
       'episodes': {
         'total': episodes['total'],

@@ -1759,7 +1759,7 @@ final class MeshRuntime implements MeshDeviceSource {
             'chunkedResponses': true,
             'invocationId': _nonce(),
             'nonce': _nonce(),
-            'deadline': DateTime.now().millisecondsSinceEpoch + 3600000
+            'deadline': DateTime.now().millisecondsSinceEpoch + const Duration(minutes: 55).inMilliseconds
           },
         };
     final id = (frame['mesh'] as Map)['invocationId'] as String;
@@ -1862,7 +1862,7 @@ final class MeshRuntime implements MeshDeviceSource {
             'chunkedResponses': true,
             'invocationId': _nonce(),
             'nonce': _nonce(),
-            'deadline': DateTime.now().millisecondsSinceEpoch + 3600000
+            'deadline': DateTime.now().millisecondsSinceEpoch + const Duration(minutes: 55).inMilliseconds
           },
         };
     await _loadRoutes();
@@ -2059,8 +2059,10 @@ final class MeshRuntime implements MeshDeviceSource {
                   FailureCode.invalidInput, 'Remote RPC rejected the request.');
               return;
             }
-            finishWithError(const Failure(
-                FailureCode.invalidInput, 'Remote RPC rejected the request.'));
+            finishWithError(Failure(
+                error['code'] == -32603 ? FailureCode.internal : FailureCode.invalidInput,
+                error['message'] as String? ?? 'Remote RPC rejected the request.',
+                details: {'rpcCode': error['code'], 'responseReceived': true}));
             return;
           }
           finishWithSuccess(candidate, decoded['result'] as JsonMap);
@@ -2175,11 +2177,16 @@ final class MeshRuntime implements MeshDeviceSource {
           nonce = metadata['nonce'] as String;
       final deadline = metadata['deadline'] as int,
           now = DateTime.now().millisecondsSinceEpoch;
+      // Senders leave five minutes below this one-hour cap: normal clock
+      // skew must not make a fast LAN request look too far in the future.
       if (!RegExp(r'^[A-Za-z0-9_-]{22,128}$').hasMatch(id) ||
-          !RegExp(r'^[A-Za-z0-9_-]{22,128}$').hasMatch(nonce) ||
-          deadline <= now ||
-          deadline > now + 3600000) {
+          !RegExp(r'^[A-Za-z0-9_-]{22,128}$').hasMatch(nonce)) {
         throw const FormatException('Invalid replay guard.');
+      }
+      if (deadline <= now || deadline > now + 3600000) {
+        throw Failure(FailureCode.invalidInput, 'Mesh request deadline is outside the receiver clock window.',
+            details: {'reason': 'invalid_deadline', 'deadline': deadline,
+              'receiverTime': now, 'execution': 'not_started'});
       }
       _seen.removeWhere((_, expiry) => expiry <= now);
       final idKey = '${event.deviceId}:id:$id',

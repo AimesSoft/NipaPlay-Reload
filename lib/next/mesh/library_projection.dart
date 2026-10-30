@@ -13,6 +13,7 @@ import '../ui_data/library_search.dart';
 import '../ui_data/work_more.dart';
 import '../media/library_reads.dart';
 import '../media/metadata_provider.dart';
+import '../media/metadata_coverage.dart';
 import '../harness_redaction.dart';
 import 'library_codec.dart';
 import 'library_transfer.dart';
@@ -52,6 +53,8 @@ JsonMap _combinedEvidence(JsonMap primary, List<JsonMap> members) {
         final latest = newer ? row : old, earlier = newer ? old : row;
         sources[key] = {
           ...latest,
+          if (preferredAcquisition(old['acquisition'], row['acquisition']) case final acquisition?)
+            'acquisition': acquisition,
           'fields': {
             ...?earlier['fields'] as Map?,
             ...?latest['fields'] as Map?
