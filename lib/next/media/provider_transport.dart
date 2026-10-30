@@ -158,7 +158,8 @@ final class HttpMetadataTransport implements MetadataTransport {
       // Bangumi's public credits endpoints return a bare JSON array.
       if (provider == 'bangumi' &&
           decoded is List &&
-          RegExp(r'^/v0/subjects/\d+/(persons|characters)$').hasMatch(path)) {
+          RegExp(r'^/v0/(subjects/\d+/(persons|characters)|persons/\d+/(subjects|characters))$')
+              .hasMatch(path)) {
         return {'data': decoded};
       }
       if (decoded is! Map) {

@@ -692,6 +692,7 @@ void main() {
         'media_legacy_history': {'location_id': 'l1', 'fingerprint': 'f', 'payload': '{}'},
         'media_binding_operations': {'id': 'op', 'fingerprint': 'f', 'result': '{}'},
         'media_projection_outbox': {'id': 'p', 'file_id': 'e1', 'file_revision': 0, 'binding_revision': 0, 'payload': '{}', 'state': 'pending'},
+        'media_presentation': {'id': 'global', 'payload': '{}', 'updated_at': 't', 'origin': 'o', 'invocation_id': 'i'},
         'media_scan_items': {'job_id': 'j1', 'file_id': 'e1', 'file_revision': 0},
         'file_subtitles': {'file_id': 'e1', 'facts': '{}'},
         'file_skip_segments': {'file_id': 'e1', 'kind': 'opening', 'start_ms': 0, 'end_ms': 1, 'set_at': 't'},

@@ -82,6 +82,9 @@ JsonMap _tmdbDetails(JsonMap row) {
               'id': p['id'],
               'name': p['name'],
               'department': p['department'],
+              if (p['profile_path'] != null)
+                'imageUrl':
+                    'https://image.tmdb.org/t/p/w185${p['profile_path']}',
               'role': p['job'] ??
                   (p['jobs'] is List
                       ? (p['jobs'] as List)

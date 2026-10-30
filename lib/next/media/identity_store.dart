@@ -11,6 +11,8 @@ import 'classic_history_eligibility.dart';
 
 import 'metadata_provider.dart';
 import 'metadata_snapshot.dart';
+import 'presentation.dart';
+import 'presentation_store.dart';
 import 'file_identity_merge.dart';
 
 String stableMediaId(String prefix, Object value) =>
@@ -1048,6 +1050,16 @@ final class IdentityStore {
     final family = await _metadataFamily(entityId);
     final ids = [for (final row in family) row['id'] as String];
     final rows = await _metadataSnapshots(ids);
+    final overrides = await database.rawQuery(
+        'SELECT * FROM media_overrides WHERE entity_id IN (${List.filled(ids.length, '?').join(',')}) '
+        'ORDER BY changed_at DESC, CASE WHEN entity_id=? THEN 0 ELSE 1 END, entity_id',
+        [...ids, ids.first]);
+    // The page's rule: the work's own over this device's, part by part.
+    final globalRule = await readGlobalPresentation(database);
+    final workRule = PresentationRule.tryParse(overrides
+        .where((o) => o['field'] == 'presentation' && o['mode'] != 'clear')
+        .firstOrNull?['value']);
+    final rule = workRule?.over(globalRule) ?? globalRule;
     final fields = <String, Object?>{}, provenance = <String, Object?>{};
     for (final local in family) {
       final id = local['id'] as String;
@@ -1138,10 +1150,12 @@ final class IdentityStore {
         // An explicitly supplied empty collection clears that field. Only an
         // absent key is a sparse update eligible for older-snapshot fallback.
         final oldSource = provenance[field] as Map?;
+        // A rule naming this field's providers is followed as given: the
+        // first of them that has the field wins, whatever its language or
+        // length; within one provider a Chinese text still wins.
+        final chosen = rule?.sources[field];
         int providerRank(Object? provider) {
-          final order = field == 'title' || field == 'infobox' || field == 'tags'
-              ? const ['bangumi', 'tmdb', 'dandanplay']
-              : const ['tmdb', 'bangumi', 'dandanplay'];
+          final order = chosen ?? PresentationRule.defaultSources(field);
           final rank = order.indexOf(provider as String? ?? '');
           return rank < 0 ? order.length : rank;
         }
@@ -1149,13 +1163,16 @@ final class IdentityStore {
         final providerPolicy = oldSource?['source'] != 'submitted_snapshot' && record['source'] != 'submitted_snapshot';
         final sameLanguage = !languageField || languageRank(row['language'], values[field]) ==
             languageRank(oldSource?['language'], fields[field]);
-        final moreCompleteOverview = field == 'overview' && providerPolicy && oldSource?['provider'] != row['provider'] && sameLanguage &&
+        final moreCompleteOverview = chosen == null && field == 'overview' && providerPolicy && oldSource?['provider'] != row['provider'] && sameLanguage &&
             values[field] is String && fields[field] is String &&
             (values[field] as String).trim().length > (fields[field] as String).trim().length;
-        final preferredProvider = providerPolicy && sameLanguage && field != 'overview' &&
+        final preferredProvider = providerPolicy &&
+            (chosen != null || sameLanguage && field != 'overview') &&
             providerRank(row['provider']) < providerRank(oldSource?['provider']);
         final preferChinese = (field == 'title' || field == 'overview') &&
-            fields.containsKey(field) && languageRank(row['language'], values[field]) <
+            fields.containsKey(field) &&
+            (chosen == null || oldSource?['provider'] == row['provider']) &&
+            languageRank(row['language'], values[field]) <
                 languageRank((provenance[field] as Map)['language'], fields[field]);
         if (values[field] != null &&
             values[field] != '' &&
@@ -1172,15 +1189,15 @@ final class IdentityStore {
             'actor': record['actor'],
             'origin': record['origin'],
             'invocationId': record['invocationId'],
+            if (chosen != null) 'rule': chosen,
           };
         }
       }
     }
     final edited = <String>{};
-    for (final row in await database.rawQuery(
-        'SELECT * FROM media_overrides WHERE entity_id IN (${List.filled(ids.length, '?').join(',')}) '
-        'ORDER BY changed_at DESC, CASE WHEN entity_id=? THEN 0 ELSE 1 END, entity_id',
-        [...ids, ids.first])) {
+    for (final row in overrides) {
+      // The page's rule is not a field of the work; it was read above.
+      if (row['field'] == 'presentation') continue;
       if (row['mode'] == 'correction' &&
           rows.any((snapshot) =>
               (snapshot['fetched_at'] as String)
@@ -1199,7 +1216,23 @@ final class IdentityStore {
         'mode': row['mode']
       };
     }
-    return {'fields': fields, 'provenance': provenance, 'ratings': ratings, 'sources': sources};
+    final shownRatings = rule?.ratings == null
+        ? ratings
+        : [
+            for (final provider in rule!.ratings!)
+              ...ratings.where((r) => r['source'] == provider)
+          ];
+    return {
+      'fields': fields,
+      'provenance': provenance,
+      'ratings': shownRatings,
+      'sources': sources,
+      'presentation': {
+        'rule': (rule ?? const PresentationRule()).toJson(),
+        if (globalRule != null) 'global': globalRule.toJson(),
+        if (workRule != null) 'work': workRule.toJson(),
+      },
+    };
   }
 
   Future<void> overrideField(

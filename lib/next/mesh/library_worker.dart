@@ -1020,6 +1020,11 @@ Future<void> _serve(
           return projection.managementTargets(input as List<String>);
         case 'evidence':
           return projection.evidence(input as String);
+        case 'workMore':
+          return projection.workMore(input as String);
+        case 'worksCrediting':
+          final (provider, person) = input as (String, String);
+          return projection.worksCrediting(provider, person);
         case 'activityRows':
           activityContext = (input as ActivityHostContext?) ?? activityContext;
           final (events, warnings) = await readActivityFromDatabase(

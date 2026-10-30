@@ -5,6 +5,32 @@
 /// as is: natural, short, no IDs or process details.
 library;
 
+import 'work_more.dart';
+
+export 'work_more.dart'
+    show
+        UiWorkMore,
+        UiCredit,
+        UiCharacter,
+        UiFact,
+        UiLink,
+        UiGallery,
+        UiGalleryRef,
+        UiPerson,
+        UiPersonRef,
+        UiPersonWork;
+
+/// A work's page beyond its episodes, and the people and pictures it opens
+/// onto. Read when the page (or the person's page) opens, never with the
+/// library.
+abstract interface class NextWorkDetails {
+  Future<UiWorkMore> workMore(String workId);
+  Future<UiGallery> gallery(UiGalleryRef ref);
+
+  /// Null when the person cannot be read now (no network, no key).
+  Future<UiPerson?> person(UiPersonRef ref);
+}
+
 /// What a playing file is in the library: the work and the episode.
 abstract interface class NextNowPlaying {
   Future<UiNowPlaying?> nowPlaying(String path);

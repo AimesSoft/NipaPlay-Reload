@@ -106,6 +106,12 @@ const dbTableDocs = <String, DbTableDoc>{
       'media_metadata_edits 是编辑历史，只读；直接写本表不会补历史，审计在 db_commits。',
     ],
   ),
+  'media_presentation': DbTableDoc(
+    DbAccess.read,
+    '本机所有作品详情页的展示规则：只有 id=global 一行，payload 是规则 JSON（sources、ratings、sections、limits），updated_at、origin、invocation_id 记录出处。',
+    reason: '用 ui.detail.layout.set 修改：它校验规则并让界面立刻重建。单部作品的规则在 media_overrides（field=presentation），优先于这里。',
+    json: {'payload': DbJson.object},
+  ),
   'media_file_aliases': DbTableDoc(
     DbAccess.write,
     '合并过的文件的旧 ID → 现在的文件 ID（old_id 主键），archived 是合并前行的 JSON 存档。读取文件时旧 ID 按它解析。',

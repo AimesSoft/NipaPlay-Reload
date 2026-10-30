@@ -23,6 +23,7 @@ import 'no_airing.dart' if (dart.library.ui) 'airing.dart';
 import 'heat.dart';
 import '../subtitles/facts.dart';
 import 'ui_data.dart';
+import 'work_details.dart';
 import 'recently_played.dart';
 import 'library_service.dart';
 import '../mesh/library.dart';
@@ -50,7 +51,8 @@ final class LocalFiles {
 }
 
 /// Application-owned projections. Stored presentations contain no task state.
-final class UiDataService implements NextUiData, NextNowPlaying {
+final class UiDataService
+    implements NextUiData, NextNowPlaying, NextWorkDetails {
   UiDataService(this.media, this.engine, this.state, this.sources,
       Directory root, CredentialVault vault,
       {http.Client? artworkClient})
@@ -66,6 +68,16 @@ final class UiDataService implements NextUiData, NextNowPlaying {
   SubtitleFacts? subtitles;
   MeshLibrary? meshLibrary;
   LibraryDataService? libraryData;
+  late final details = WorkDetailsReader(media, () => meshLibrary);
+
+  @override
+  Future<UiWorkMore> workMore(String workId) => details.workMore(workId);
+
+  @override
+  Future<UiGallery> gallery(UiGalleryRef ref) => details.gallery(ref);
+
+  @override
+  Future<UiPerson?> person(UiPersonRef ref) => details.person(ref);
   void notifyLibraryChanged() => _changed();
   Future<LocalFiles> localFiles() async =>
       LocalFiles(await _view('library.files'));

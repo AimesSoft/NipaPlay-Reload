@@ -105,7 +105,7 @@ VoidCallback attachCoreLogins(NextCore core, LoginRequests requests) {
   };
 }
 
-final class _WhenReady implements NextUiData, NextNowPlaying {
+final class _WhenReady implements NextUiData, NextNowPlaying, NextWorkDetails {
   _WhenReady(this.core);
   final NextCore core;
 
@@ -127,6 +127,25 @@ final class _WhenReady implements NextUiData, NextNowPlaying {
 
   @override
   Future<UiWork?> work(String workId) async => (await _data).work(workId);
+
+  @override
+  Future<UiWorkMore> workMore(String workId) async =>
+      switch (await _data) {
+        final NextWorkDetails data => data.workMore(workId),
+        _ => UiWorkMore.empty,
+      };
+
+  @override
+  Future<UiGallery> gallery(UiGalleryRef ref) async => switch (await _data) {
+        final NextWorkDetails data => data.gallery(ref),
+        _ => const UiGallery(),
+      };
+
+  @override
+  Future<UiPerson?> person(UiPersonRef ref) async => switch (await _data) {
+        final NextWorkDetails data => data.person(ref),
+        _ => null,
+      };
 
   @override
   Future<List<UiEpisode>> episodes(String workId, {int? season}) async =>
