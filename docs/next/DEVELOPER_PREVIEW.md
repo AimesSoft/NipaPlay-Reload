@@ -68,6 +68,7 @@ Alpha 2 补齐了播放器菜单与 Classic 的差距，让 Erika 成为可选�
 - 启动时等待图形界面的 harness 就绪后再调用；空媒体库在作品到达时刷新；读取期间到达的片库更新不再丢失。
 - 下载恢复后每个会话只显示一个条目；任务更新与观察衔接；原生复检时复用已完成的下载任务。
 - 补全元数据获取指引；修复 Mesh 播放恢复；macOS 公证检查保留缓存并报告签名诊断。
+- 下载任务显示真实名称，重试或失败时显示原因；梨花读取图片不再先探测模型是否支持图片输入；收起提醒在本机立即生效，不再等待远端调用。
 
 ## 我们希望探索什么
 
@@ -156,7 +157,7 @@ Release 附件提供以下版本：
 
 ## 当前范围与已知问题
 
-Alpha 1 以桌面体验和设备直连为重点。Mesh 需要双方地址可达，目前不提供 NAT 穿透或中继；移动端使用远端梨花，本机不运行 Agent。完整的 Next 产品内备份恢复仍在开发，试用前请按[数据与恢复指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/DATA_AND_RECOVERY.md)保留应用数据和个人 harness 的副本。
+Next 目前仍以桌面体验和设备直连为重点。Mesh 需要双方地址可达，目前不提供 NAT 穿透或中继；移动端使用远端梨花，本机不运行 Agent。完整的 Next 产品内备份恢复仍在开发，试用前请按[数据与恢复指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/DATA_AND_RECOVERY.md)保留应用数据和个人 harness 的副本。
 
 持续更新的使用限制见[已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/KNOWN_ISSUES.md)。欢迎提交 [Bug 报告](https://github.com/AimesSoft/NipaPlay-Reload/issues/new?template=bug_report.yml)，附版本、系统、复现步骤和关于页的诊断信息。Mesh 问题请附两端信息；公开内容请移除密钥、令牌及其他个人信息。
 
