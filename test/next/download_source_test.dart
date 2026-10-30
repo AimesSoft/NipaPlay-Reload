@@ -47,6 +47,7 @@ void main() {
     final request = await sources.prepare(file.path);
     await file.delete();
     expect(request.infoHash, hash);
+    expect(request.title, 'episode.mkv');
     expect(await File(request.source).readAsBytes(), torrent);
     expect(torrentInfoHash(torrent), hash);
   });
@@ -68,8 +69,9 @@ void main() {
     final sources = DownloadSources(root,
         clientFactory: () => HttpClient()..findProxy = (_) => 'DIRECT');
     final request = await sources
-        .prepare('http://127.0.0.1:${server.port}/episode.torrent');
+        .prepare('http://127.0.0.1:${server.port}/$hash.torrent');
     expect(request.infoHash, hash);
+    expect(request.title, 'episode.mkv');
     expect(await File(request.source).readAsBytes(), torrent);
     await expectLater(
         sources.prepare('http://127.0.0.1:${server.port}/missing'),

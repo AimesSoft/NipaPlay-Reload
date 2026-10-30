@@ -356,8 +356,10 @@ Codex configuration on the computer into the app's own model. Without a model
 in settings (an environment or lab with its own `codex-home`) the route is read
 from that Codex configuration as before (`DshRoute.fromCodexConfig`).
 The `llm-pi-ai` route `nipaplay` has the address, the wire as `api`, and the
-model's `compat`; the model's image input is probed at launch and kept in
-`dsh/model-input.json`.
+model's `compat`. Custom routes allow image requests by default; an explicit
+`model.input` overrides this (use `["text"]` for text-only endpoints). The provider
+reports unsupported image input. Launch does not classify or disable vision from
+a generated answer, and the former `dsh/model-input.json` probe cache is ignored.
 
 Until a model and the runtime are in place the chat host does not start
 (settings say what is missing, first the model, then the runtime) and the

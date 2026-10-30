@@ -385,11 +385,6 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     final route = _launch?.route ?? await _routeFromCodex(clean);
     SecretRedactor.remember(
         const CredentialRef('next_model', 'dsh'), route.key);
-    // DSH's read_image hands an image only to a model declared to take one.
-    final imageInput = _launch?.dshConfig?.model.containsKey('input') == true
-        ? null
-        : await probeDshImageInput(
-            route, File('${next.path}/dsh/model-input.json'));
     final patch = File('${next.path}/dsh/nipa-patch.json');
     final persona = await Future.wait([
       File('${dshPlugins!.path}/persona-prefix.md').readAsString(),
@@ -397,7 +392,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     ]);
     final rows = dshPatch(
         config: _launch?.dshConfig,
-        route: route.withImageInput(imageInput),
+        route: route,
         plugins: dshPlugins!,
         personaPrefix: persona[0].trim(),
         personaSuffix: persona[1].trim(),

@@ -195,7 +195,7 @@ void main() {
   });
 
   test(
-      'a download whose work is not known goes by its own name, never its hash',
+      'download task names use resolved metadata and distinguish pending sources',
       () async {
     const release =
         '[LoliHouse] Sousou no Frieren - 05 [WebRip 1080p HEVC-10bit AAC][简繁内封字幕]';
@@ -207,14 +207,19 @@ void main() {
     ]) {
       await engine.submit(type: 'download', title: title);
     }
+    await engine.submit(
+        type: 'download',
+        title: 'c9e15763f722f23e98a29decdfae341b98d53056.torrent',
+        details: {'downloadTitle': '真实种子名称'});
     final tasks = await service.tasks().first;
     expect(
         [for (final t in tasks) t.title],
         unorderedEquals([
           '下载 $release',
           '下载 葬送的芙莉莲 05',
-          '下载',
-          '下载',
+          '等待获取名称 · c9e15763',
+          '等待获取名称 · C9E15763',
+          '下载 真实种子名称',
         ]));
     expect({for (final t in tasks) t.action}, {'下载'});
     expect([for (final t in tasks) t.workTitle].nonNulls, isEmpty,

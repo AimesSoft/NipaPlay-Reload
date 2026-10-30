@@ -121,9 +121,8 @@ final class DownloadSources {
       localPath = cached;
     }
     final hash = torrentInfoHash(bytes);
-    final name = p.basename(uri.path);
-    return DownloadRequest(
-        source: localPath, infoHash: hash, title: name.isEmpty ? hash : name);
+    final name = torrentManifest(bytes)['name'] as String;
+    return DownloadRequest(source: localPath, infoHash: hash, title: name);
   }
 }
 

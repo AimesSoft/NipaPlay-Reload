@@ -48,7 +48,7 @@ API 地址、协议、模型 ID 和主密钥仍在模型设置中管理；不允
 原生 provider 可用字段还包括 `displayName`、`defaultInput`、`reasoning`、
 `websocketConnectTimeoutMs`、`maxRequestImageBytes`、`requestImagePixelBudget`、`requestImageMaxBytes`。
 不要向 `request` 填入 DSH AgentOptions 没有的 `temperature` 或 `maxSteps`。
-`model.input` 显式设置后跳过图片能力探测；未指定时保持原探测流程。
+`model.input` 可显式指定输入类型。未指定时允许发送文字和图片，由实际 API 返回不支持的错误；不再用测试图片的回答判断能力，也不读取旧的图片探测缓存。纯文字模型可设置 `["text"]`。
 
 ## 默认预算与压缩
 

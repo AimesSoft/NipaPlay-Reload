@@ -147,72 +147,15 @@ trust_level = "trusted"
     expect(jsonEncode(route.piAiConfig), isNot(contains('"k"')));
   });
 
-  group('image input probe', () {
+  test('custom image input is sent unless explicitly disabled', () {
     const route = DshRoute(
         baseUrl: 'https://models.example/v1', model: 'm', key: 'k');
-    late Directory dir;
-    setUp(() async => dir = await Directory.systemTemp.createTemp('probe'));
-    tearDown(() => dir.delete(recursive: true));
-
-    test('a model that names the colour takes images, and the answer is kept',
-        () async {
-      final cache = File('${dir.path}/model-input.json');
-      var asked = 0;
-      Future<(int, String)> send(Uri uri, Map<String, Object?> body,
-          Map<String, String> headers) async {
-        asked++;
-        expect(uri.path, '/v1/responses');
-        expect(jsonEncode(body), contains('input_image'));
-        return (
-          200,
-          jsonEncode({
-            'output': [
-              {
-                'content': [
-                  {'type': 'output_text', 'text': 'Red.'}
-                ]
-              }
-            ]
-          })
-        );
-      }
-
-      expect(await probeDshImageInput(route, cache, send: send), isTrue);
-      expect(await probeDshImageInput(route, cache, send: send), isTrue);
-      expect(asked, 1);
-      final overlay = route.withImageInput(true).piAiConfig.toString();
-      expect(overlay, contains('[text, image]'));
-    });
-
-    test('a model that ignores the image or refuses it is text only; an '
-        'unanswered probe is asked again', () async {
-      final cache = File('${dir.path}/model-input.json');
-      expect(
-          await probeDshImageInput(route, cache,
-              send: (_, __, ___) async => (
-                    200,
-                    jsonEncode({
-                      'choices': [
-                        {
-                          'message': {'content': 'I cannot see images.'}
-                        }
-                      ]
-                    })
-                  )),
-          isFalse);
-      await cache.delete();
-      expect(
-          await probeDshImageInput(route, cache,
-              send: (_, __, ___) async => (400, '{"error":"image"}')),
-          isFalse);
-      await cache.delete();
-      expect(
-          await probeDshImageInput(route, cache,
-              send: (_, __, ___) async => (503, '')),
-          isNull);
-      expect(await cache.exists(), isFalse);
-      expect(route.piAiConfig.toString(), isNot(contains('input')));
-    });
+    List input(DshRoute value) =>
+        ((((value.piAiConfig['providers'] as Map)[DshRoute.provider] as Map)
+            ['models'] as List).single as Map)['input'] as List;
+    expect(input(route), ['text', 'image']);
+    expect(input(route.withImageInput(false)), ['text']);
+    expect(input(route.withImageInput(true)), ['text', 'image']);
   });
 
   group('memory stale notifier', () {

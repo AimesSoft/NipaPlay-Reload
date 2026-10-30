@@ -93,6 +93,7 @@ void main() {
     final job = await downloads.add(testRequest);
     final done = await untilState(engine, job.jobId, JobState.succeeded);
     expect(done.receipt!.verification, VerificationLevel.verified);
+    expect(done.details['downloadTitle'], backend.snapshot.title);
     expect(
         (done.receipt!.details['files'] as List).single,
         allOf(

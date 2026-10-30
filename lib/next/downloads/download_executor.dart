@@ -114,7 +114,13 @@ final class DownloadExecutor implements JobExecutor {
           ],
         });
       }
-      if (!stopped) await _noteMetadata(context);
+      if (!stopped) {
+        await context.report(details: {
+          ...context.job.details,
+          'downloadTitle': task.title,
+        });
+        await _noteMetadata(context);
+      }
       while (true) {
         if (stopped) {
           if (context.job.cancelRequestedAt == null) {
@@ -161,6 +167,11 @@ final class DownloadExecutor implements JobExecutor {
         await _noteStall(context, task);
         await context.report(
             phase: 'downloading',
+            details: {
+              ...context.job.details,
+              'downloadTitle': task.title,
+              'downloadBytesPerSecond': task.downloadSpeedBytesPerSecond,
+            },
             progress: JobProgress(
                 completed: task.completed,
                 total: task.total > 0 ? task.total : null,

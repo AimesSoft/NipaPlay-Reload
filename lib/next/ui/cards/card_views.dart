@@ -689,6 +689,7 @@ class TaskRow extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             NumText(Words.task(task),
+                maxLines: 2,
                 style: NextText.sans(11.5, color: NextColors.p3)),
           ],
         ),

@@ -429,7 +429,13 @@ final class UiDataService
       if (failure.code != FailureCode.notFound) rethrow;
     }
     final name = _display(title?['title']);
+    final rate = (job.details['downloadBytesPerSecond'] as num?)?.toInt() ?? 0;
+    final remainingBytes = (job.progress.total ?? 0) - job.progress.completed;
     return UiTask(
+        remaining: job.type == 'download' && job.state == JobState.running &&
+                job.progress.unit == 'bytes' && rate > 0 && remainingBytes > 0
+            ? Duration(seconds: (remainingBytes / rate).ceil())
+            : null,
         taskId: job.jobId,
         type: job.type,
         title: job.type == 'agent.helper'
@@ -439,7 +445,7 @@ final class UiDataService
                 : name != null
                     ? '${_taskVerb(job.type)}《$name》'
                     : job.type == 'download'
-                        ? _downloadTitle(job.title)
+                        ? _downloadTitle(job.details['downloadTitle'] as String? ?? job.title)
                         : _taskVerb(job.type),
         workTitle: job.type == 'agent.helper' ? null : name,
         action: job.type == 'agent.helper' ? null : _taskVerb(job.type),
@@ -461,7 +467,10 @@ final class UiDataService
         startedAt: job.details['startedAt'] == null
             ? null
             : DateTime.parse(job.details['startedAt'] as String),
-        currentActivity: job.details['currentActivity'] as String?,
+        currentActivity: job.type == 'download' &&
+                (job.state == JobState.waitingRetry || job.state == JobState.failed)
+            ? job.error?.message
+            : job.details['currentActivity'] as String?,
         summary: job.receipt?.details['summary'] as String?,
         threadId: job.details['threadId'] as String?,
         parentThreadId: job.input['parentThreadId'] as String?,
@@ -1504,16 +1513,17 @@ String _taskVerb(String type) => switch (type) {
 
 /// A download whose work is not known yet goes by its own name, as it came
 /// (the torrent's, or the magnet's display name). A source without one (a
-/// magnet without dn, a torrent URL named by its hash) is titled by its info
-/// hash, which is no name to show.
+/// magnet without dn) stays identifiable until its metadata arrives.
 String _downloadTitle(String title) {
   final name = title
       .trim()
       .replaceFirst(RegExp(r'\.torrent$', caseSensitive: false), '')
       .trim();
-  return name.isEmpty || RegExp(r'^[0-9a-fA-F]{40}$').hasMatch(name)
-      ? '下载'
-      : '下载 $name';
+  if (name.isEmpty) return '下载 · 等待获取名称';
+  if (RegExp(r'^[0-9a-fA-F]{40}$').hasMatch(name)) {
+    return '等待获取名称 · ${name.substring(0, 8)}';
+  }
+  return '下载 $name';
 }
 
 /// A film's episode goes without its number.

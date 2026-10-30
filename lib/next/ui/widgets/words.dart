@@ -28,7 +28,11 @@ abstract final class Words {
     return m == 0 ? '还要 $h 小时' : '还要 $h 小时 $m 分钟';
   }
 
-  static String task(UiTask task) => switch (task.state) {
+  static String task(UiTask task) {
+    if (task.type == 'download' && task.currentActivity != null) {
+      return task.currentActivity!;
+    }
+    return switch (task.state) {
         UiTaskState.queued => '等着开始',
         UiTaskState.paused => '已暂停',
         UiTaskState.finished => '好了',
@@ -39,6 +43,7 @@ abstract final class Words {
                 : '${(task.progress! * 100).round()}%')
             : remaining(task.remaining),
       };
+  }
 
   /// An episode's length, “24 分”; null when it is not known (no length,
   /// or a length of nothing), so nothing is said.
