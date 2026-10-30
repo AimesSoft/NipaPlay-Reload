@@ -4,7 +4,7 @@
 
 ## 从 Classic 进入 Next
 
-在桌面或 iPad/iPhone 的 Classic 界面，打开「设置」→「实验室」，开启「NipaPlay Next」。阅读提示后，选择「我了解风险，开启」；随后开启「使用 Next 界面」。关闭后者可回到 Classic。macOS App Sandbox 版本的开关不可用，需使用 GitHub 完整版。
+在桌面或 iPad/iPhone 的 Classic 界面，打开「设置」→「实验室」，开启「NipaPlay Next」。阅读风险和免责声明后，选择「我了解风险，开启」，即可直接进入 Next。可在 Next 设置中选择「回到经典界面」；再次进入时仍使用实验室的同一个开关。macOS App Sandbox 版本的开关不可用，需使用 GitHub 完整版。
 
 桌面提示明确说明 Agent 可按你的身份读写、删除文件、联网、运行程序并使用浏览器登录状态；网页、文件名或简介也可能误导它。iPad/iPhone 提示说明同账号其他设备上的 Agent 可操作本机 NipaPlay，删除文件及账号登录仍需本机确认。只在信任设备和模型服务商后开启。
 

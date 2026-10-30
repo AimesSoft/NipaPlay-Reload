@@ -90,7 +90,7 @@ Release 附件提供以下版本：
 
 本次发行不包含 Android、tvOS 和 HarmonyOS。
 
-安装后，在 Classic 的「设置 → 实验室」阅读授权提示并开启 NipaPlay Next，再开启 Next 界面。桌面用户进入「设置 → 梨花」配置运行环境和模型服务，保存并测试连接后即可开始对话。iPhone/iPad 用户先在另一台设备上运行梨花，让两台设备同账号加入 Mesh，再选择远端梨花。
+安装后，在 Classic 的「设置 → 实验室」阅读风险和免责声明，确认开启 NipaPlay Next 后会直接进入 Next。桌面用户进入「设置 → 梨花」配置运行环境和模型服务，保存并测试连接后即可开始对话。iPhone/iPad 用户先在另一台设备上运行梨花，让两台设备同账号加入 Mesh，再选择远端梨花。
 
 完整步骤见[快速开始](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/QUICKSTART.md)。模型服务由用户自行配置，API 使用费用按所选服务商计费。
 

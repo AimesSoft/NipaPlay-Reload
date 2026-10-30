@@ -1,9 +1,9 @@
 {
   "formatVersion": 1,
   "appVersion": "2.0.0-alpha.1",
-  "sourceCommit": "089c09e49ee119f3238d4660b6704e9eb19faff1",
+  "sourceCommit": "e7889792c2c1772cef800ab8c8357c643b6ae031",
   "sourceDirty": true,
-  "contentRevision": "b04b023cb2556b6a414ebf98dd0e73c00dbb994e147956c028a8dccaab34491a",
+  "contentRevision": "f23bbab00cdf59f90a243a29c43872e9e20443110f9d2f094fd8640e8e7381b8",
   "documents": [
     {
       "id": "docs/next/README.md",
@@ -16,8 +16,8 @@
       "id": "docs/next/QUICKSTART.md",
       "title": "快速开始",
       "kind": "current",
-      "sha256": "4554e1e2a1e0198fe2dae480004bb747148c313e744dbf2a10d9273cb6344c40",
-      "content": "# 快速开始\n\n这是开发者预览版。先阅读[数据与恢复](DATA_AND_RECOVERY.md)，并保留现有数据的备份。安装对应平台的 GitHub prerelease 产物；具体文件和签名状态以发行页为准。本次预览发行范围为 macOS、Windows、Linux、Linux headless 和 iPhone/iPad；Android、tvOS 和 HarmonyOS 不在本次发行范围。iPhone/iPad 若[发行页](https://github.com/AimesSoft/nipaplay-reload/releases)公布 TestFlight 邀请，可按邀请加入；也可使用 GitHub 上的未签名 IPA 自行签名侧载。构建通过不代表所有平台已实机验证。\n\n## 从 Classic 进入 Next\n\n在桌面或 iPad/iPhone 的 Classic 界面，打开「设置」→「实验室」，开启「NipaPlay Next」。阅读提示后，选择「我了解风险，开启」；随后开启「使用 Next 界面」。关闭后者可回到 Classic。macOS App Sandbox 版本的开关不可用，需使用 GitHub 完整版。\n\n桌面提示明确说明 Agent 可按你的身份读写、删除文件、联网、运行程序并使用浏览器登录状态；网页、文件名或简介也可能误导它。iPad/iPhone 提示说明同账号其他设备上的 Agent 可操作本机 NipaPlay，删除文件及账号登录仍需本机确认。只在信任设备和模型服务商后开启。\n\n当前 iPad/iPhone 提供 Next 界面，通过其他设备上的梨花对话，不运行本机 DSH。Android 和 tvOS 不在本次预览发行范围。平台构建与这些角色不等同于实机验收。\n\n## 桌面：配置本机梨花\n\n1. 打开「设置」→「梨花」，或通过「设置梨花」入口打开配置。选择 DeepSeek Harness（DSH）。「运行环境」显示「未下载」时点击「下载」，等待「已就绪」；下载需要网络。下载失败可点「重试」。若显示「这个平台暂时没有」，则没有该平台的预置运行环境，不能继续本机 DSH；可在另一台支持的桌面设备上配置并组网。运行环境清单以实际架构为准。\n2. 在模型设置填写「提供方」「地址」「模型」和「API key」。可从模板开始，但地址、模型名和接口类型须与服务商一致；「更多」中可选择 Responses 或 Chat Completions。点击「保存」，再点击「测试连接」；显示「可以用」表示这次连接测试成功，并不保证所有任务成功。\n3. 打开对话，发送「你好，请告诉我你当前能做什么」，确认收到回答。然后按[使用指南](USER_GUIDE.md)添加一个测试视频、匹配作品并播放，核对界面上的结果。\n\n## iPad/iPhone：使用另一台设备上的梨花\n\n先在桌面完成上面的配置并保持 Next 界面开启。在两台设备分别登录同一账号并开启 Next，在「设置」→「设备」加入组网；等待设备在线。然后在 iPad/iPhone 的「设置」→「梨花」选择正在运行梨花的设备，再打开对话发送测试消息。列表显示「不在线」或「没有运行梨花」时先检查桌面应用、模型和连接；手机不会通过下载 DSH 解决这个问题。详见[组网步骤](USER_GUIDE.md#mesh-设备组网)。\n\n模型由你选择的服务商提供，API 调用可能收费。对话内容以及执行任务所需的上下文、工具结果或附件可能发送给该服务商；网络资料查询也会联系相应服务。请先了解服务商的价格与数据政策，避免提交不愿分享的内容。模型密钥是个人凭据，不要放进反馈或截图。\n\n梨花可以调用应用能力，部分操作会改变设置、媒体资料或文件；执行前说清范围，查看预览和确认提示。授权系统目录访问时只选择需要的目录。运行环境与高级配置见 [DSH 高级配置](DSH_ADVANCED_CONFIG.md)。\n"
+      "sha256": "e1287f3ea7dc08ca5b5e66f6849a3439211d0ec79edbac2057b95a3ad598eb2c",
+      "content": "# 快速开始\n\n这是开发者预览版。先阅读[数据与恢复](DATA_AND_RECOVERY.md)，并保留现有数据的备份。安装对应平台的 GitHub prerelease 产物；具体文件和签名状态以发行页为准。本次预览发行范围为 macOS、Windows、Linux、Linux headless 和 iPhone/iPad；Android、tvOS 和 HarmonyOS 不在本次发行范围。iPhone/iPad 若[发行页](https://github.com/AimesSoft/nipaplay-reload/releases)公布 TestFlight 邀请，可按邀请加入；也可使用 GitHub 上的未签名 IPA 自行签名侧载。构建通过不代表所有平台已实机验证。\n\n## 从 Classic 进入 Next\n\n在桌面或 iPad/iPhone 的 Classic 界面，打开「设置」→「实验室」，开启「NipaPlay Next」。阅读风险和免责声明后，选择「我了解风险，开启」，即可直接进入 Next。可在 Next 设置中选择「回到经典界面」；再次进入时仍使用实验室的同一个开关。macOS App Sandbox 版本的开关不可用，需使用 GitHub 完整版。\n\n桌面提示明确说明 Agent 可按你的身份读写、删除文件、联网、运行程序并使用浏览器登录状态；网页、文件名或简介也可能误导它。iPad/iPhone 提示说明同账号其他设备上的 Agent 可操作本机 NipaPlay，删除文件及账号登录仍需本机确认。只在信任设备和模型服务商后开启。\n\n当前 iPad/iPhone 提供 Next 界面，通过其他设备上的梨花对话，不运行本机 DSH。Android 和 tvOS 不在本次预览发行范围。平台构建与这些角色不等同于实机验收。\n\n## 桌面：配置本机梨花\n\n1. 打开「设置」→「梨花」，或通过「设置梨花」入口打开配置。选择 DeepSeek Harness（DSH）。「运行环境」显示「未下载」时点击「下载」，等待「已就绪」；下载需要网络。下载失败可点「重试」。若显示「这个平台暂时没有」，则没有该平台的预置运行环境，不能继续本机 DSH；可在另一台支持的桌面设备上配置并组网。运行环境清单以实际架构为准。\n2. 在模型设置填写「提供方」「地址」「模型」和「API key」。可从模板开始，但地址、模型名和接口类型须与服务商一致；「更多」中可选择 Responses 或 Chat Completions。点击「保存」，再点击「测试连接」；显示「可以用」表示这次连接测试成功，并不保证所有任务成功。\n3. 打开对话，发送「你好，请告诉我你当前能做什么」，确认收到回答。然后按[使用指南](USER_GUIDE.md)添加一个测试视频、匹配作品并播放，核对界面上的结果。\n\n## iPad/iPhone：使用另一台设备上的梨花\n\n先在桌面完成上面的配置并保持 Next 界面开启。在两台设备分别登录同一账号并开启 Next，在「设置」→「设备」加入组网；等待设备在线。然后在 iPad/iPhone 的「设置」→「梨花」选择正在运行梨花的设备，再打开对话发送测试消息。列表显示「不在线」或「没有运行梨花」时先检查桌面应用、模型和连接；手机不会通过下载 DSH 解决这个问题。详见[组网步骤](USER_GUIDE.md#mesh-设备组网)。\n\n模型由你选择的服务商提供，API 调用可能收费。对话内容以及执行任务所需的上下文、工具结果或附件可能发送给该服务商；网络资料查询也会联系相应服务。请先了解服务商的价格与数据政策，避免提交不愿分享的内容。模型密钥是个人凭据，不要放进反馈或截图。\n\n梨花可以调用应用能力，部分操作会改变设置、媒体资料或文件；执行前说清范围，查看预览和确认提示。授权系统目录访问时只选择需要的目录。运行环境与高级配置见 [DSH 高级配置](DSH_ADVANCED_CONFIG.md)。\n"
     },
     {
       "id": "docs/next/USER_GUIDE.md",
