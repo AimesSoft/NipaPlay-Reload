@@ -18,6 +18,7 @@ import '../shell/nipa_setup.dart';
 import '../shell/shell_controller.dart';
 import '../shell/window_buttons.dart';
 import '../shell/window_chrome.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
@@ -1514,35 +1515,66 @@ class _LoginNoteState extends State<_LoginNote> {
 }
 
 /// While the video opens: the title and a pulse, nothing of the process.
+/// It shows from the click on, before the source is even found; if the open
+/// fails before a video comes, it says so for a moment. The way back is
+/// always there, and leaving stops the open.
 class _Loading extends StatelessWidget {
   const _Loading();
 
   @override
   Widget build(BuildContext context) => ColoredBox(
         color: NextColors.ink,
-        child: _Titles(
-          builder: (context, work, episode) {
-            return Center(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                if (work.isNotEmpty)
-                  Text(work,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: NextText.serif(34, letterSpacing: 1.2)),
-                if (episode.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(episode,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: NextText.sans(14, color: NextColors.p2)),
-                ],
-                const SizedBox(height: 26),
-                const PulseDot(),
-              ]),
-            );
-          },
+        child: PlaybackSelector<bool>(
+          selector: (s) =>
+              s is SessionPlayback && (s.pendingOpen?.failed ?? false),
+          builder: (context, failed, _) => Stack(children: [
+            _Titles(
+              builder: (context, work, episode) {
+                return Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    if (work.isNotEmpty)
+                      Text(work,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: NextText.serif(34, letterSpacing: 1.2)),
+                    if (episode.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(episode,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: NextText.sans(14, color: NextColors.p2)),
+                    ],
+                    const SizedBox(height: 26),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: failed
+                          ? Text('这一集现在打不开',
+                              key: const ValueKey('failed'),
+                              style: NextText.sans(13.5,
+                                  color: NextColors.accent2))
+                          : const PulseDot(key: ValueKey('pulse')),
+                    ),
+                  ]),
+                );
+              },
+            ),
+            Positioned(
+              left: NextLayout.gutter(context) - 9,
+              top: NextLayout.barTop(context) + 10,
+              child: NextIconButton(
+                glyph: NextGlyph.chevronLeft,
+                label: '返回',
+                onTap: () {
+                  if (NextPlaybackScope.maybeOf(context)
+                      case final SessionPlayback playback) {
+                    unawaited(playback.cancelOpening());
+                  }
+                },
+              ),
+            ),
+          ]),
         ),
       );
 }

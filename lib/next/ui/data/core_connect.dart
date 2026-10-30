@@ -4,6 +4,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../next_core.dart';
 import '../../next_runtime.dart';
+import '../../player/ports/session_playback.dart';
 import '../../ui_data/library.dart';
 import '../../ui_data/library_service.dart';
 import '../../ui_data/ui_data.dart';
@@ -219,6 +220,19 @@ final class CoreUiActions implements NextUiActions {
   Future<void> play(UiWork work, {UiEpisode? episode}) {
     final target = episode ?? work.next;
     if (target == null) return Future.value();
+    // The player shows now, with the title, while the episode's source is
+    // found (a Mesh device asked, a server's address resolved).
+    if (runtime.playback case final SessionPlayback playback) {
+      final number = target.number;
+      final title = target.title?.trim();
+      playback.announceOpening(
+          title: work.title,
+          episode: title != null && title.isNotEmpty
+              ? (number == null || title.contains('第') ? title : '第 $number 集  $title')
+              : number == null
+                  ? null
+                  : '第 $number 集');
+    }
     return _openingEpisodes.putIfAbsent(target.episodeId, () =>
         _playEpisode(target).whenComplete(() { _openingEpisodes.remove(target.episodeId); }));
   }
@@ -232,6 +246,11 @@ final class CoreUiActions implements NextUiActions {
       final call = decision.options.first.call;
       outcome = await (await runtime.harnessReady)
           .invokeJson(call.actionId, call.input, Invocation(origin: 'gui'));
+    }
+    // No session came of it (it failed, or opened a page instead).
+    if (runtime.playback case final SessionPlayback playback
+        when playback.session == null || playback.session!.phase.value.done) {
+      outcome is Failed ? playback.openingFailed() : playback.openingEnded();
     }
     if (outcome case Failed(:final failure)) {
       await (await runtime.harnessReady).invokeJson('ui.notify', {

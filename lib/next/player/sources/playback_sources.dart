@@ -114,11 +114,11 @@ final class PlaybackSources extends ChangeNotifier {
       throw const Failure(
           FailureCode.conflict, 'Playback changed while resolving the source.');
     }
-    await prepareDanmaku?.call(prepared.source.locator);
-    if (_disposed || ticket != _ticket) {
-      await prepared.progress?.stopTranscoding();
-      throw const Failure(FailureCode.conflict,
-          'Playback changed while preparing its danmaku.');
+    // Danmaku are found beside the opening, never before it: a hash match or
+    // a download of the comments joins the video when it is done.
+    if (prepareDanmaku case final prepare?) {
+      unawaited(prepare(prepared.source.locator).catchError(
+          (Object e) => debugPrint('[NextDanmaku] prepare: $e')));
     }
     final current = host.current.value;
     final reopening = current != null &&

@@ -140,7 +140,10 @@ final class DanmakuRuntime {
     _playback = playback;
     if (playback is SessionPlayback) {
       playback.sources.prepareDanmaku = (path) async {
-        await automatic?.prepare(path);
+        // Runs beside the opening; what it found joins the playing video.
+        if (await automatic?.prepare(path) == true) {
+          await service.refreshCurrent();
+        }
       };
     }
     playback.localDanmakuLoader = (path) async {

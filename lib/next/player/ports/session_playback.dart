@@ -135,6 +135,61 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   Timer? _persistVolume;
 
   PlaybackSession? get session => _session;
+
+  /// What was asked to play before its session exists: the player shows at
+  /// once, with the title, while the source is found (a Mesh device asked,
+  /// a server's address resolved). Gone when the session comes, or a moment
+  /// after the open failed.
+  PendingOpen? get pendingOpen => _pending;
+  PendingOpen? _pending;
+  Timer? _pendingTimer;
+
+  /// The player opens now, before anything about the source is known.
+  void announceOpening({String? title, String? episode}) {
+    final s = _session;
+    // A video already up stays up while the next one is found.
+    if (s != null && !s.phase.value.done) return;
+    _pendingTimer?.cancel();
+    _pending = PendingOpen(
+        title: title ?? _pending?.title, episode: episode ?? _pending?.episode);
+    // An open that never makes a session does not hold the screen.
+    _pendingTimer = Timer(const Duration(seconds: 60), openingEnded);
+    _sync();
+    _frame.poke();
+  }
+
+  /// The open failed before a session: said for a moment, then left.
+  void openingFailed() {
+    final pending = _pending;
+    if (pending == null) return;
+    _pendingTimer?.cancel();
+    _pending = PendingOpen(
+        title: pending.title, episode: pending.episode, failed: true);
+    _sync();
+    _frame.poke();
+    _pendingTimer = Timer(const Duration(milliseconds: 2400), openingEnded);
+  }
+
+  /// No session is coming (backed out, played elsewhere, opened a page).
+  void openingEnded() {
+    _pendingTimer?.cancel();
+    _pendingTimer = null;
+    if (_pending == null) return;
+    _pending = null;
+    _sync();
+    _frame.poke();
+  }
+
+  /// Back out of what is opening, whether its session exists yet or not.
+  Future<void> cancelOpening() async {
+    final s = _session;
+    if (s != null && !s.phase.value.done) {
+      await close(reason: 'user_cancelled_open');
+    } else {
+      sources.cancelPendingOpen();
+    }
+    openingEnded();
+  }
   final danmaku = SessionDanmakuController();
   SessionDanmakuPort? _danmakuPort;
   Future<bool> Function(String path)? _localDanmakuLoader;
@@ -248,6 +303,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       old.subtitles.overlay.removeListener(_overlayChanged);
     }
     _session = next;
+    if (next != null) {
+      _pendingTimer?.cancel();
+      _pending = null;
+    }
     aniskipFacts = const {'available': false, 'reason': 'not_asked'};
     final driver = next?.driver;
     danmaku.bind(next?.id, sink: driver is SessionNativeDanmakuDriver
@@ -337,7 +396,13 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
                 durationKnown: s.duration > Duration.zero,
                 kernel: s.driver,
               );
-        _transport.value = _transportOf(s);
+        _transport.value = _pending != null && (s == null || phase!.done)
+            ? const PlaybackTransport(
+                status: 'loading',
+                phase: PlaybackPhase.opening,
+                hasVideo: false,
+                systemDrawn: false)
+            : _transportOf(s);
         _frame.sync();
       });
 
@@ -388,10 +453,12 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   String? get path => _media.value.path;
   @override
   String? get workTitle =>
-      _session?.record?.animeName ?? _session?.request.title;
+      _session?.record?.animeName ?? _session?.request.title ?? _pending?.title;
   @override
   String? get episodeTitle =>
-      _session?.record?.episodeTitle ?? _session?.request.episodeTitle;
+      _session?.record?.episodeTitle ??
+      _session?.request.episodeTitle ??
+      _pending?.episode;
   @override
   Duration get position => _session?.position ?? Duration.zero;
   @override
@@ -537,6 +604,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     final history = item.historyItem;
     final external = externalHandoff;
     if (external != null && external.enabled()) {
+      openingEnded();
       await host.close(reason: 'external_handoff');
       await windows.returnToMain();
       try {
@@ -550,11 +618,18 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       return true;
     }
     external?.clear();
+    announceOpening(
+        title: item.title ?? history?.animeName,
+        episode: item.subtitle ?? history?.episodeTitle);
     try {
       await sources.open(item, start: start, origin: origin ?? commandOrigin());
     } on OpenRefused catch (refused) {
+      openingFailed();
       throw Failure(FailureCode.unavailable, refused.message,
           details: {'reason': refused.reason, ...refused.facts});
+    } catch (_) {
+      openingFailed();
+      rethrow;
     }
     return true;
   }
@@ -1242,4 +1317,14 @@ final class _FullscreenWatch with WindowListener {
   void onWindowEnterFullScreen() => _full.value = true;
   @override
   void onWindowLeaveFullScreen() => _full.value = false;
+}
+
+/// What was asked to play while its session does not exist yet.
+final class PendingOpen {
+  const PendingOpen({this.title, this.episode, this.failed = false});
+  final String? title;
+  final String? episode;
+
+  /// The open failed; the player says so for a moment and leaves.
+  final bool failed;
 }
