@@ -1,4 +1,4 @@
-# erika_flutter (0.3.0, 0.3.1) performs open/seek synchronously on the platform thread.
+# erika_flutter (0.3.0 to 0.3.2) performs open/seek synchronously on the platform thread.
 # A Dart loopback media source then waits on the very thread opening it.
 # Generate a build-local source copy; never mutate the shared pub cache.
 module ErikaMediaIO
