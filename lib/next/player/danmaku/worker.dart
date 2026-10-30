@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:isolate';
 import 'dart:io';
 
@@ -149,6 +150,8 @@ void _run(SendPort replies) {
           result = snapshot.view();
         case 'dump':
           result = snapshot.entries;
+        case 'dump.json':
+          result = jsonEncode(snapshot.entries);
         case 'window':
           result = windowOf(snapshot, data['from'] as double, data['to'] as double);
         case 'window.plugin':

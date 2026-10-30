@@ -49,6 +49,12 @@ class SettingsModel extends ChangeNotifier {
   final _settled = <String, UiSetting>{};
   final _inFlight = <String, int>{};
 
+  static const _shapesTheList = {
+    'player.kernel',
+    'danmaku.renderEngine',
+    'danmaku.pluginRenderer',
+  };
+
   Future<void> change(String key, Object? value) async {
     final current = this[key];
     if (current == null) return;
@@ -63,6 +69,9 @@ class SettingsModel extends ChangeNotifier {
       _settled[key] = saved;
       if (_inFlight[key] == 1) _replace(saved);
       if (saved.apply == 'restart_app') restart.add(key);
+      // Which settings apply follows these: another kernel (Erika draws its
+      // own danmaku) hides the danmaku engine; the list is read again.
+      if (_shapesTheList.contains(key)) unawaited(load());
     } catch (error) {
       if (_inFlight[key] == 1) _replace(_settled[key]!);
       errors[key] = settingFailure(error);

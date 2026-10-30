@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -312,9 +313,9 @@ class _Native implements SessionNativeDanmakuSink {
   List<Map<String, dynamic>> entries = [];
   Map<String, Object?> settings = {};
   @override
-  Future<void> replaceDanmaku(List<Map<String, dynamic>> timeline) async {
+  Future<void> replaceDanmaku(String timelineJson) async {
     calls++;
-    entries = timeline;
+    entries = (jsonDecode(timelineJson) as List).cast<Map<String, dynamic>>();
   }
   @override
   Future<void> configureDanmaku(Map<String, Object?> configuration) async {

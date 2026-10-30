@@ -8,8 +8,10 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/player_abstraction/player_enums.dart';
+import 'package:nipaplay/utils/danmaku/style.dart' show DanmakuShadowStyle;
 
 import '../core/arbiter.dart';
+import '../danmaku/native_sink.dart';
 import '../features/kernel_features.dart';
 import 'adapter_driver.dart';
 import 'driver.dart';
@@ -113,8 +115,12 @@ Future<JsonMap> erikaSubtitleStyle(Map<String, String> look) async {
 /// goes on right after, while the media is paused at its start; Erika
 /// reports each selection (`trackSelectionChanged`), which confirms it.
 /// Subtitles Erika draws itself are ASS and SSA files.
+///
+/// Danmaku, as in Classic: Erika draws them into its own picture, so the
+/// list the worker built (the rules applied) and the danmaku settings go to
+/// Erika ([danmakuSink]) and NipaPlay draws none over it.
 final class ErikaDriver extends AdapterDriver
-    implements ErikaNative, KernelPictureSnapshot {
+    implements ErikaNative, KernelPictureSnapshot, SessionNativeDanmakuDriver {
   factory ErikaDriver(KernelLease lease, KernelConfig config) {
     requireLease(lease, 'Erika');
     return ErikaDriver._(
@@ -139,6 +145,20 @@ final class ErikaDriver extends AdapterDriver
   KernelId get kernel => KernelId.erika;
   @override
   KernelNative get native => this;
+
+  @override
+  late final SessionNativeDanmakuSink danmakuSink = _ErikaDanmaku(this);
+
+  /// Danmaku calls run alongside the transport: a long list does not hold
+  /// up a seek. Once the instance is fenced there is no Erika to tell.
+  Future<void> _danmaku(Future<void> Function() op) async {
+    if (fenced) return;
+    try {
+      await queue.alongside(op);
+    } on KernelFenced {
+      return;
+    }
+  }
   /// The methods of Erika's JSON table, read as the media opens.
   Set<String> _methods = const {};
   bool _has(String method) => _methods.contains(method);
@@ -586,4 +606,53 @@ final class ErikaDriver extends AdapterDriver
   @override
   Future<Map<String, Object?>?> engineLog({int? sinceSeq}) =>
       queue.run(() => adapter.readEngineLog(sinceSeq: sinceSeq));
+}
+
+/// Erika's own danmaku, told what Classic tells it
+/// (`_syncErikaDanmakuConfig`): the blocks and block words are already
+/// applied to the list, so they are not passed again.
+final class _ErikaDanmaku implements SessionNativeDanmakuSink {
+  _ErikaDanmaku(this.driver);
+
+  final ErikaDriver driver;
+
+  ErikaPlayerAdapter get _adapter => driver.adapter;
+
+  Future<void> _tell(Future<void> Function() op) => driver._danmaku(op);
+
+  @override
+  Future<void> replaceDanmaku(String timelineJson) =>
+      _tell(() => _adapter.loadDanmakuJson(timelineJson));
+
+  @override
+  Future<void> configureDanmaku(Map<String, Object?> settings) =>
+      _tell(() async {
+        double number(String key) => (settings[key] as num).toDouble();
+        final size = number('danmaku.fontSize');
+        final font = settings['danmaku.fontFamily'] as String? ?? '';
+        final file = settings['danmaku.fontFilePath'] as String? ?? '';
+        // Visibility apart from the coalesced style, as Classic keeps it.
+        await _adapter.setDanmakuEnabled(settings['danmaku.visible'] == true);
+        await _adapter.setDanmakuConfig(
+          opacity: number('danmaku.opacity'),
+          fontSize: size <= 0 ? 30 : size,
+          displayArea: number('danmaku.displayArea'),
+          mergeDuplicates: settings['danmaku.merge'] == true,
+          allowStacking: settings['danmaku.stacking'] == true,
+          // The speed folded into the duration, as Classic passes it.
+          scrollDurationSeconds: 10 / number('danmaku.speedMultiplier'),
+          trackGapRatio: number('danmaku.trackGap'),
+          outlineWidth: number('danmaku.outlineWidth'),
+          shadowStyle: DanmakuShadowStyle.values
+              .where((style) => style.name == settings['danmaku.shadowStyle'])
+              .firstOrNull
+              ?.index,
+          customFontFamily: font.isEmpty ? null : font,
+          customFontFilePath: file.isEmpty ? null : file,
+        );
+        await _adapter.setDanmakuGlobalOffset(Duration(
+            microseconds: (number('danmaku.manualOffset') *
+                    Duration.microsecondsPerSecond)
+                .round()));
+      });
 }

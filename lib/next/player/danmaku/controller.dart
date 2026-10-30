@@ -329,11 +329,11 @@ final class SessionDanmakuController extends ChangeNotifier
         final sink = _native;
         if (sink != null) {
           await sink.configureDanmaku(Map.of(settings));
-          // Only a kernel that composites the danmaku itself gets the list on
-          // this isolate.
-          final list = await displayList();
+          // A kernel that composites the danmaku itself gets the list as the
+          // worker encoded it.
+          final json = await _worker.request<String>('dump.json', {});
           if (identical(sink, _native) && generation == _generation) {
-            await sink.replaceDanmaku(list);
+            await sink.replaceDanmaku(json);
           }
         }
       } catch (e) {

@@ -1447,6 +1447,14 @@ class ErikaPlayerAdapter
     await _player.loadDanmakuJson(jsonEncode(danmakuList));
   }
 
+  /// The list already encoded (Next encodes it off the main isolate).
+  Future<void> loadDanmakuJson(String json) async {
+    if (!_isSupported) {
+      return;
+    }
+    await _player.loadDanmakuJson(json);
+  }
+
   Future<void> clearDanmaku() async {
     if (!_isSupported) {
       return;

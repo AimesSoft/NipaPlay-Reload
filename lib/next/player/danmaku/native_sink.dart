@@ -6,6 +6,9 @@ abstract interface class SessionNativeDanmakuDriver {
 }
 
 abstract interface class SessionNativeDanmakuSink {
-  Future<void> replaceDanmaku(List<Map<String, dynamic>> timeline);
+  /// The whole display timeline as JSON (a list of NipaPlay's danmaku maps:
+  /// time, content, type, color, …), encoded on the danmaku worker so the
+  /// main isolate neither copies nor encodes the comments.
+  Future<void> replaceDanmaku(String timelineJson);
   Future<void> configureDanmaku(Map<String, Object?> settings);
 }
