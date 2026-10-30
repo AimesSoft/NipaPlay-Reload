@@ -1073,7 +1073,78 @@ class ErikaPlayerAdapter
             }),
           );
         }
+      case final style when _subtitleStyleKeys.contains(style):
+        // NipaPlay sets the subtitle style one mpv property at a time; Erika
+        // takes it whole, once per batch.
+        if (_subtitleStyleQueued) return;
+        _subtitleStyleQueued = true;
+        scheduleMicrotask(() {
+          _subtitleStyleQueued = false;
+          unawaited(_applySubtitleStyle());
+        });
     }
+  }
+
+  /// The mpv subtitle properties NipaPlay sets on a kernel that draws the
+  /// subtitles itself, which Erika takes as one `setSubtitleStyle`. It has no
+  /// subtitle position (`sub-pos`) nor a shadow colour, and liberika 0.2.1 no
+  /// subtitle delay.
+  static const _subtitleStyleKeys = {
+    'sub-color',
+    'sub-border-color',
+    'sub-opacity',
+    'sub-border-size',
+    'sub-shadow-offset',
+    'sub-bold',
+    'sub-italic',
+    'sub-align-x',
+    'sub-align-y',
+    'sub-margin-x',
+    'sub-margin-y',
+    'sub-font',
+    'sub-fonts-dir',
+    'sub-ass-override',
+  };
+  bool _subtitleStyleQueued = false;
+
+  Future<void> _applySubtitleStyle() async {
+    if (!_isSupported || _disposed) return;
+    final force = _properties['sub-ass-override'] == 'force';
+    final fontFile = await _subtitleFontFile(
+        force ? _properties['sub-font'] ?? '' : '',
+        _properties['sub-fonts-dir'] ?? '');
+    if (_disposed) return;
+    final style = erikaSubtitleStyleFromMpv(_properties, fontFile: fontFile);
+    try {
+      await _player.setSubtitleStyle(
+        primaryColorRgba: style['primaryColorRgba'] as int?,
+        outlineColorRgba: style['outlineColorRgba'] as int?,
+        outlineWidth: style['outlineWidth'] as double?,
+        shadowDepth: style['shadowDepth'] as double?,
+        bold: style['bold'] as bool?,
+        italic: style['italic'] as bool?,
+        alignment: style['alignment'] as int?,
+        marginLeft: style['marginLeft'] as int?,
+        marginRight: style['marginRight'] as int?,
+        marginVertical: style['marginVertical'] as int?,
+        fontFamily: style['fontFamily'] as String?,
+        fontFilePath: style['fontFilePath'] as String?,
+        overrideMask: style['overrideMask'] as int?,
+      );
+    } catch (error) {
+      debugPrint('Erika: set subtitle style failed: $error');
+    }
+  }
+
+  /// [font]'s file in [dir], when the custom fonts folder has one by that
+  /// name.
+  static Future<String?> _subtitleFontFile(String font, String dir) async {
+    if (font.isEmpty || dir.isEmpty) return null;
+    for (final ext in const ['ttf', 'otf', 'ttc']) {
+      final file = File('$dir${Platform.pathSeparator}$font.$ext');
+      if (await file.exists()) return file.path;
+    }
+    return null;
   }
 
   @override
@@ -1920,4 +1991,52 @@ class ErikaPlayerAdapter
       );
     }
   }
+}
+
+/// What Erika's `setSubtitleStyle` takes from the mpv subtitle properties
+/// NipaPlay sets, by argument name: colours `#RRGGBB` with `sub-opacity`
+/// (0–255) as their alpha, mpv alignment as the ASS numpad, the font only in
+/// the custom style (`sub-ass-override=force`, which also pushes the style
+/// onto ASS dialogue), as [fontFile] when the fonts folder holds it.
+@visibleForTesting
+Map<String, Object?> erikaSubtitleStyleFromMpv(Map<String, String> p,
+    {String? fontFile}) {
+  int? rgb(String? value) => value == null
+      ? null
+      : int.tryParse(value.replaceFirst('#', ''), radix: 16);
+  int? whole(String? value) => value == null ? null : int.tryParse(value);
+  double? number(String? value) =>
+      value == null ? null : double.tryParse(value);
+  bool? yes(String? value) => value == null ? null : value == 'yes';
+  final alpha = (whole(p['sub-opacity']) ?? 255).clamp(0, 255);
+  final color = rgb(p['sub-color']);
+  final border = rgb(p['sub-border-color']);
+  final row = switch (p['sub-align-y']) {
+    'top' => 6,
+    'center' => 3,
+    _ => 0,
+  };
+  final column = switch (p['sub-align-x']) {
+    'left' => 1,
+    'right' => 3,
+    _ => 2,
+  };
+  final force = p['sub-ass-override'] == 'force';
+  final font = force ? p['sub-font'] ?? '' : '';
+  final marginX = whole(p['sub-margin-x']);
+  return {
+    'primaryColorRgba': color == null ? null : (color << 8) | alpha,
+    'outlineColorRgba': border == null ? null : (border << 8) | alpha,
+    'outlineWidth': number(p['sub-border-size']),
+    'shadowDepth': number(p['sub-shadow-offset']),
+    'bold': yes(p['sub-bold']),
+    'italic': yes(p['sub-italic']),
+    'alignment': row + column,
+    'marginLeft': marginX,
+    'marginRight': marginX,
+    'marginVertical': whole(p['sub-margin-y']),
+    'fontFamily': fontFile == null ? font : '',
+    'fontFilePath': fontFile ?? '',
+    'overrideMask': force ? kErikaSubtitleOverrideAll : 0,
+  };
 }
