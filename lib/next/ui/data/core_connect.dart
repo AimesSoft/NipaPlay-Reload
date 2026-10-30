@@ -187,7 +187,7 @@ final class CoreUiActions implements NextUiActions {
   @override
   Future<bool> markWatched(List<UiEpisode> episodes,
       {required bool watched}) async {
-    final outcome = await runtime.harness.invokeJson(
+    final outcome = await (await runtime.harnessReady).invokeJson(
         'history.mark_watched_batch',
         {
           'entries': [
@@ -205,7 +205,7 @@ final class CoreUiActions implements NextUiActions {
 
   @override
   Future<void> login(String provider) async {
-    final outcome = await runtime.harness.invokeJson(
+    final outcome = await (await runtime.harnessReady).invokeJson(
         'accounts.login', {'provider': provider}, Invocation(origin: 'gui'));
     if (outcome case Failed(:final failure)) {
       debugPrint('[NextUi] login failed: ${failure.message}');
@@ -219,12 +219,12 @@ final class CoreUiActions implements NextUiActions {
     final target = episode ?? work.next;
     if (target == null) return;
     final invocation = Invocation(origin: 'gui');
-    var outcome = await runtime.harness
+    var outcome = await (await runtime.harnessReady)
         .invokeJson('ui.open', {'entityId': target.episodeId}, invocation);
     if (outcome case NeedsDecision(:final decision)
         when decision.options.isNotEmpty) {
       final call = decision.options.first.call;
-      outcome = await runtime.harness
+      outcome = await (await runtime.harnessReady)
           .invokeJson(call.actionId, call.input, Invocation(origin: 'gui'));
     }
     if (outcome case Failed(:final failure)) {
@@ -236,7 +236,7 @@ final class CoreUiActions implements NextUiActions {
   @override
   Future<void> playFromSource(
       {required String sourceId, required String itemId}) async {
-    final outcome = await runtime.harness.invokeJson('media.sources.play',
+    final outcome = await (await runtime.harnessReady).invokeJson('media.sources.play',
         {'sourceId': sourceId, 'itemId': itemId}, Invocation(origin: 'gui'));
     if (outcome case Failed(:final failure)) {
       debugPrint('[NextUi] play from source failed: ${failure.message}');

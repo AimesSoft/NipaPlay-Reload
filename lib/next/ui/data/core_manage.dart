@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart' show XTypeGroup, openFile;
@@ -22,13 +23,13 @@ final class CoreWorkManage implements NextWorkManage, NextWorkMetadata {
   CoreWorkManage(this.harness, this.data);
 
   /// The runtime's, read at each call (it may come later).
-  final Harness Function() harness;
+  final FutureOr<Harness> Function() harness;
   final NextUiData data;
 
   Invocation get _gui => Invocation(origin: 'gui');
 
-  Future<Outcome<JsonEncodable>> _invoke(String action, JsonMap input) =>
-      harness().invokeJson(action, input, _gui);
+  Future<Outcome<JsonEncodable>> _invoke(String action, JsonMap input) async =>
+      (await harness()).invokeJson(action, input, _gui);
 
   /// [action] where [owner] is: here directly (also when null), on
   /// another device through `mesh.invoke` with its own IDs.

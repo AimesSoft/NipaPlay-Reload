@@ -30,7 +30,7 @@ final class CoreSettingsData implements NextSettingsData {
 
   Future<JsonMap> _call(String action, JsonMap input) async {
     await core.ready;
-    final outcome = await runtime.harness.invokeJson(action, input, _gui);
+    final outcome = await (await runtime.harnessReady).invokeJson(action, input, _gui);
     return switch (outcome) {
       Completed(:final value) => value.toJson(),
       Failed(:final failure) => throw failure,

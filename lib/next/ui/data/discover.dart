@@ -70,7 +70,7 @@ final class CoreDiscover implements NextDiscoverData {
   final NextRuntime runtime;
 
   Future<JsonMap> _call(String action, JsonMap input) async {
-    final outcome = await runtime.harness
+    final outcome = await (await runtime.harnessReady)
         .invokeJson(action, input, Invocation(origin: 'gui'));
     return switch (outcome) {
       Completed(:final value) => value.toJson(),

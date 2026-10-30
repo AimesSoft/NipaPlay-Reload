@@ -146,7 +146,14 @@ final class NextRuntime extends ChangeNotifier {
           key, value, Invocation(origin: 'gui'),
           reason: '通过遥控器调整 Next 播放设置');
     });
-    _operations = _initialize(capabilities);
+    // A screen may mount as soon as Core is ready, before assets and the
+    // complete GUI capability catalogue have been assembled.
+    _harnessReady.future.ignore();
+    _operations = _initialize(capabilities).catchError(
+        (Object error, StackTrace stack) {
+      if (!_harnessReady.isCompleted) _harnessReady.completeError(error, stack);
+      Error.throwWithStackTrace(error, stack);
+    });
   }
 
   factory NextRuntime.fromContext(BuildContext context) {
@@ -461,6 +468,7 @@ final class NextRuntime extends ChangeNotifier {
   }
 
   late final Harness _harness;
+  final _harnessReady = Completer<Harness>();
   late final AgentEndpoint _endpoint;
   late final TaskEngine _taskEngine;
   late final LocalLibraryOperations _localLibrary;
@@ -510,6 +518,9 @@ final class NextRuntime extends ChangeNotifier {
 
   StreamSubscription<void>? _calendarChanges;
   Harness get harness => _harness;
+
+  /// Complete GUI catalogue, independently of endpoint or model startup.
+  Future<Harness> get harnessReady => _harnessReady.future;
   TaskEngine get taskEngine => _taskEngine;
   AgentEndpointStatus get endpointStatus => _endpointStatus;
   String get repositoryPath => _location?.path ?? defaultHarnessPath;
@@ -661,6 +672,7 @@ final class NextRuntime extends ChangeNotifier {
       ],
     );
     core.attachHarness(_harness);
+    _harnessReady.complete(_harness);
     try {
       // First launch only stores; later ones record what the catalogue gained,
       // lost or re-described since.
