@@ -322,6 +322,8 @@
 | `ui.open` | write | 打开页面 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/ui_open.dart) |
 | `ui.notify` | write | 发布 Agent 自主提醒 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/inbox_capability.dart) |
 | `ui.ask` | write | 非阻塞异步询问 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/inbox_capability.dart) |
+| `ui.detail.layout` | read | 读取作品详情页的展示规则与位置说明 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |
+| `ui.detail.layout.set` | write | 修改本机或单部作品的详情页展示规则 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |
 | `ui.inbox.list` | read | 分页读取提醒与问题 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/inbox_capability.dart) |
 | `ui.inbox.respond` | write | 用户回答与原会话投递 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/inbox_capability.dart) |
 | `ui.inbox.dismiss` | write | 收起或取消提醒 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/inbox_capability.dart) |

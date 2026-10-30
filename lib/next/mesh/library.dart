@@ -573,6 +573,20 @@ final class MeshLibrary {
     return await worker.call('evidence', id) as JsonMap;
   }
 
+  /// A work's page below its episodes, built in the worker from what the
+  /// catalogue holds; only the small result crosses to this isolate.
+  Future<JsonMap> workMore(String id) async {
+    await prepareIndex();
+    return await worker.call('workMore', id) as JsonMap;
+  }
+
+  /// Works of the catalogue crediting a person of [provider].
+  Future<List<String>> worksCrediting(String provider, String person) async {
+    await prepareIndex();
+    return (await worker.call('worksCrediting', (provider, person)) as List)
+        .cast<String>();
+  }
+
   /// The complete projection is transferred by the worker. Publishing consists
   /// solely of reference replacements, independent of catalogue size.
   int compositions = 0;

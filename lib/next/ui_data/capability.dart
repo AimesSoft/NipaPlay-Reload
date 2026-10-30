@@ -3,6 +3,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'service.dart';
 import 'metadata_facts.dart';
 import 'metadata_put.dart';
+import 'detail_layout.dart';
 import '../capabilities/classic_action.dart';
 
 const _text = StringSchema(minLength: 1);
@@ -82,6 +83,9 @@ final class UiDataCapability implements Capability {
                   {'entityId':e['entityId'], 'field':'artwork.${e['kind']}', 'value':null, 'mode':'clear'}], invocation);
                 return {'atomic':true, 'entries':[for(final e in entries) {...e,'cleared':true,'copyRetained':true}]};
               }),
+          ClassicAction(_layoutSpec, (input, _) =>
+              service.detailLayout(workId: input['workId'] as String?)),
+          ClassicAction(_setLayoutSpec, service.setDetailLayout),
           ClassicAction(const ActionSpec(
               id: 'media.metadata.ui_facts_batch', title: '批量读取资料完整情况',
               description: 'Read the same metadata facts for multiple works. Each item returns facts or a structured failure; atomic:false.',
@@ -98,6 +102,37 @@ final class UiDataCapability implements Capability {
   @override
   final List<Action> actions;
 }
+
+const _ruleSchema = ObjectSchema({
+  'sources': ObjectSchema({}, additionalProperties: true,
+      description: 'Field → providers in the order they are taken: title, originalTitle, overview, year, studio, runtimeMs, episodeCount, genres, tags (tmdb, bangumi, dandanplay), people (tmdb, bangumi). Providers left out come after the ones named.'),
+  'ratings': ArraySchema(StringSchema(values: ['tmdb', 'bangumi', 'dandanplay']),
+      description: 'Ratings shown, in this order; providers left out are hidden.'),
+  'sections': ArraySchema(StringSchema(values: ['characters', 'cast', 'crew', 'gallery', 'facts', 'links']),
+      description: 'Sections below the episodes, in this order; sections left out are hidden. Omit for the default order (where a work\'s characters stand for its cast).'),
+  'limits': ObjectSchema({}, additionalProperties: true,
+      description: 'Section → most entries shown (1–100): characters, cast, crew, gallery.'),
+});
+const _layoutSpec = ActionSpec(
+    id: 'ui.detail.layout',
+    title: '读取作品详情页的展示规则',
+    description:
+        'The rules a work\'s page follows: defaults, this device\'s global rule, and with workId that work\'s own rule; effective is the work\'s rule over the global one, part by part. slots says what each place of the page shows and which part of the rule chooses it. For one work\'s current values, sources and the alternatives each provider offers, read media.metadata.ui_facts (presentation).',
+    effect: Effect.read,
+    input: ObjectSchema({'workId': _ref}),
+    output: ObjectSchema({}, additionalProperties: true));
+const _setLayoutSpec = ActionSpec(
+    id: 'ui.detail.layout.set',
+    title: '修改作品详情页的展示规则',
+    description:
+        'Replace the rule of a scope: "global" (every work of this device) or a workId of this device (a merged library ID resolves to its local work; a work only on another device is set there). The rule replaces the scope\'s previous rule whole; parts it leaves out fall back (work → global → default). reset:true removes the scope\'s rule. sources reorder which provider a field is taken from (the first that has the field wins, whatever its language; within one provider a Chinese text still wins); persistent edits (media.metadata.override / put) still show before any source. ratings filters and orders the ratings shown; sections orders and hides the page\'s sections; limits caps entries. The library and the open page rebuild at once. Stored in media_presentation (global) and media_overrides field presentation (per work, audited in media_metadata_edits).',
+    effect: Effect.write,
+    input: ObjectSchema({
+      'scope': _ref,
+      'rule': _ruleSchema,
+      'reset': BooleanSchema(),
+    }, required: ['scope']),
+    output: ObjectSchema({}, additionalProperties: true));
 
 const _image = StringSchema(minLength: 1, description:
     'HTTPS image URL or absolute local file path. It is fetched and decoded before anything is committed.');

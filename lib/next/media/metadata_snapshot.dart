@@ -28,6 +28,8 @@ const metadataViewSchema = ObjectSchema({
   'provenance': ObjectSchema({}, additionalProperties: true),
   'ratings': ArraySchema(ObjectSchema({}, additionalProperties: true)),
   'sources': ArraySchema(ObjectSchema({}, additionalProperties: true)),
+  // The page's rule this view was merged by (ui.detail.layout).
+  'presentation': ObjectSchema({}, additionalProperties: true),
 }, required: [
   'fields',
   'provenance',

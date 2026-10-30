@@ -10,6 +10,7 @@ import '../ui_data/service.dart';
 import '../ui_data/ui_data.dart';
 import '../ui_data/library_index.dart';
 import '../ui_data/library_search.dart';
+import '../ui_data/work_more.dart';
 import '../media/library_reads.dart';
 import '../media/metadata_provider.dart';
 import '../harness_redaction.dart';
@@ -1092,6 +1093,46 @@ final class LibraryProjection {
       throw const Failure(FailureCode.notFound, 'Unknown catalogue entity.');
     }
     return result;
+  }
+
+  /// What a work's page shows below its episodes ([buildWorkMore]), from
+  /// the metadata this catalogue already holds for it.
+  JsonMap workMore(String id) {
+    final key = _aliases[id] ?? id;
+    final metadata = (evidence(key)['metadata'] as Map?) ?? const {};
+    return buildWorkMore(metadata, film: _works[key]?.film ?? false);
+  }
+
+  /// Works whose sources credit [person] (cast, crew, creators, voices),
+  /// in the catalogue's order.
+  List<String> worksCrediting(String provider, String person) {
+    bool credits(Map fields) {
+      bool listed(Object? list, [String key = 'id']) =>
+          list is List &&
+          list.whereType<Map>().any((p) => '${p[key]}' == person);
+      if (provider == 'tmdb') {
+        final credits = fields['credits'];
+        return credits is Map &&
+                (listed(credits['cast']) || listed(credits['crew'])) ||
+            listed(fields['creators']);
+      }
+      return listed(fields['staff']) ||
+          (fields['characters'] is List &&
+              (fields['characters'] as List)
+                  .whereType<Map>()
+                  .any((c) => listed(c['actors'])));
+    }
+
+    return [
+      for (final work in _orderedWorks)
+        if ((_evidence[work.workId]?['metadata'] as Map?)?['sources']
+            case final List sources)
+          if (sources.whereType<Map>().any((s) =>
+              s['provider'] == provider &&
+              s['fields'] is Map &&
+              credits(s['fields'] as Map)))
+            work.workId
+    ];
   }
 
   LibrarySnapshot get snapshot => LibrarySnapshot(_assets, _works, _episodes,

@@ -24,6 +24,8 @@ const catalogueTables = [
   'media_bindings',
   'media_snapshots',
   'media_overrides',
+  // How a work's page presents its sources (the rule of every work).
+  'media_presentation',
   // Tracks of danmaku and subtitles shown on an episode.
   'danmaku_bindings',
   'danmaku_cache_chunks',

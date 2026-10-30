@@ -19,6 +19,7 @@ import 'ui_data/library_index.dart';
 import 'chat/session_store.dart';
 import 'media/file_identity_merge.dart';
 import 'media/work_merge_migration.dart';
+import 'media/presentation_store.dart';
 import 'subtitles/migration.dart';
 import 'player/skip/migration.dart';
 import 'db/migration.dart';
@@ -52,6 +53,7 @@ const _migrations = [
   migrateJobRecentIndex,
   migrateDbOperations,
   migrateWorkMerges,
+  migrateMediaPresentation,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

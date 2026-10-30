@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:nipa_harness/nipa_harness.dart';
 
 import 'service.dart';
+import 'detail_layout.dart';
 import '../subtitles/facts.dart';
 
 extension UiMetadataFacts on UiDataService {
@@ -234,6 +235,9 @@ extension UiMetadataFacts on UiDataService {
       'fields': fieldFacts,
       'identities': identities,
       'metadata': metadata,
+      // Where each of these shows on the work's page, from which provider,
+      // and what the others would show (ui.detail.layout.set changes it).
+      'presentation': presentationFacts(metadata),
       'identityTargets': ['tmdb', if (animation) ...['bangumi', 'dandanplay']],
       // What the facts above lack, as plain lists; nothing else is implied.
       'missing': {

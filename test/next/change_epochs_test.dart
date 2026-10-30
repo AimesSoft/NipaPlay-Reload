@@ -33,6 +33,7 @@ void main() {
     'followups': {'snapshot': '{}'},
     'media_bindings': {'scope': '{}'},
     'media_snapshots': {'fields': '{}'},
+    'media_presentation': {'id': 'global', 'payload': '{}'},
     'media_entities': {'attributes': '{}', 'kind': 'work'},
     'file_skip_segments': {'end_ms': 2},
     'jobs': {'snapshot': '{}'},

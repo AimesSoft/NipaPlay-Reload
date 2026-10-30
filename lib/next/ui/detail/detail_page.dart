@@ -4,8 +4,10 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../ui_data/ui_data.dart';
+import '../../ui_data/work_more.dart' show buildWorkMore;
 import '../data/discover.dart';
 import '../data/work_manage.dart';
 import '../settings/settings_layout.dart' show SettingsSection;
@@ -28,6 +30,8 @@ import 'episodes.dart';
 import 'manage_episode.dart';
 import 'manage_sheet.dart';
 import 'manage_work.dart';
+import 'more_sections.dart';
+import 'person_page.dart';
 
 /// A work's page (INTERACTION.md「详情」): full-bleed backdrop, the work on
 /// the left (original title, logo or Songti title, one meta line, two lines
@@ -191,7 +195,41 @@ class _WorkDetailPageState extends State<WorkDetailPage>
       _episodes = episodes;
       _revision++;
     });
+    if (data case final NextWorkDetails details) {
+      try {
+        final more = await details.workMore(id);
+        if (mounted && id == _workId) _showMore(more);
+      } catch (error) {
+        debugPrint('[NextUi] work sections failed: $error');
+      }
+    }
   }
+
+  /// What the page shows below its episodes, and its pictures once they
+  /// are asked for.
+  UiWorkMore _more = UiWorkMore.empty;
+  Future<UiGallery>? _gallery;
+  UiGalleryRef? _galleryRef;
+
+  void _showMore(UiWorkMore more) {
+    final ref = more.gallery;
+    final data = _shell!.services.data;
+    setState(() {
+      _more = more;
+      if (ref != _galleryRef) {
+        _galleryRef = ref;
+        _gallery = ref != null && data is NextWorkDetails
+            ? (data as NextWorkDetails).gallery(ref)
+            : null;
+      }
+    });
+  }
+
+  void _openPerson(UiCredit credit) => Navigator.of(context).push(
+      personRoute(credit.person!, name: credit.name, image: credit.image));
+
+  void _openLink(String url) =>
+      launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
 
   /// A found work: what its page needs, read once (the library's changes
   /// do not touch it).
@@ -200,7 +238,11 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     _episodes = const [];
     try {
       final work = await _shell!.services.discover.details(widget.work);
-      if (mounted) setState(() => _work = work);
+      if (!mounted) return;
+      setState(() => _work = work);
+      _showMore(UiWorkMore.fromJson(buildWorkMore(
+          {'sources': work.details['sources'] ?? const []},
+          film: work.film)));
     } catch (error) {
       debugPrint('[NextUi] found work details failed: $error');
     }
@@ -316,8 +358,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         _workSheet = section;
       });
 
-  void _openEpisode(UiEpisode episode, EpisodeSection section) =>
-      setState(() {
+  void _openEpisode(UiEpisode episode, EpisodeSection section) => setState(() {
         _menuOpen = false;
         _tileMenu = null;
         _workSheet = null;
@@ -378,15 +419,21 @@ class _WorkDetailPageState extends State<WorkDetailPage>
   List<(String, VoidCallback)> _episodeItems(UiEpisode e) => [
         ..._episodeSheets(e),
         if (e.playable && (e.progress ?? 0) < 1)
-          ('看过了', () {
-            setState(() => _tileMenu = null);
-            _mark([e], true);
-          })
+          (
+            '看过了',
+            () {
+              setState(() => _tileMenu = null);
+              _mark([e], true);
+            }
+          )
         else if ((e.progress ?? 0) >= 1)
-          ('标成没看过', () {
-            setState(() => _tileMenu = null);
-            _mark([e], false);
-          }),
+          (
+            '标成没看过',
+            () {
+              setState(() => _tileMenu = null);
+              _mark([e], false);
+            }
+          ),
       ];
 
   /// The ⋯ menu: download the rest, mark the current episode or the season
@@ -411,8 +458,10 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     return [
       if (_missing) ('下载全部', _downloadAll),
       if (next != null && next.playable && (next.progress ?? 0) < 1)
-        ('${film ? '' : Words.episode(next.number) ?? ''}看过了',
-            () => _mark([next], true)),
+        (
+          '${film ? '' : Words.episode(next.number) ?? ''}看过了',
+          () => _mark([next], true)
+        ),
       if (unwatched.length > 1)
         ('$seasonName都看过了', () => _mark(unwatched, true)),
       if (allWatched) ('$seasonName标成没看过', () => _mark(season, false)),
@@ -457,8 +506,8 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         if (e.season == _currentSeason) e
     ];
     if (p['tileMenu'] case final i?) {
-      setState(() => _tileMenu =
-          i == 'none' ? null : shown[int.parse(i)].episodeId);
+      setState(
+          () => _tileMenu = i == 'none' ? null : shown[int.parse(i)].episodeId);
     }
     switch (p['open']) {
       case 'work':
@@ -552,52 +601,81 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             ),
           ),
           FadeTransition(
-            opacity: _removed != null
-                ? const AlwaysStoppedAnimation(0.35)
-                : content,
+            opacity:
+                _removed != null ? const AlwaysStoppedAnimation(0.35) : content,
             child: IgnorePointer(
               ignoring: _removed != null,
               child: NotificationListener<ScrollNotification>(
-              onNotification: _onScroll,
-              child: CustomScrollView(
-                controller: _scroll,
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                          left: NextLayout.gutter(context), top: copyTop),
-                      // Loose, so the column is its own width and the title
-                      // wraps here as it does where it is painted.
-                      child: Align(
-                        alignment: Alignment.topLeft,
-                        child: _copy(column),
-                      ),
-                    ),
-                  ),
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Align(
-                      alignment: Alignment.bottomLeft,
+                onNotification: _onScroll,
+                child: CustomScrollView(
+                  controller: _scroll,
+                  slivers: [
+                    SliverToBoxAdapter(
                       child: Padding(
                         padding: EdgeInsets.only(
-                            top: compact ? 32 : 48,
-                            bottom: 30 + MediaQuery.paddingOf(context).bottom),
-                        child: _episodesBlock(),
+                            left: NextLayout.gutter(context), top: copyTop),
+                        // Loose, so the column is its own width and the title
+                        // wraps here as it does where it is painted.
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: _copy(column),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                              top: compact ? 32 : 48,
+                              bottom:
+                                  30 + MediaQuery.paddingOf(context).bottom),
+                          child: _episodesBlock(),
+                        ),
+                      ),
+                    ),
+                    // Below the first screen the page settles into ink, so
+                    // the people and facts read over any backdrop.
+                    if (_more.hasContent || _gallery != null)
+                      SliverToBoxAdapter(
+                        child: DecoratedBox(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              stops: [0, 0.18, 1],
+                              colors: [
+                                Color(0x00000000),
+                                Color(0xF2000000),
+                                Color(0xFF000000)
+                              ],
+                            ),
+                          ),
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                                top: 24,
+                                bottom:
+                                    72 + MediaQuery.paddingOf(context).bottom),
+                            child: WorkMoreSections(
+                              more: _more,
+                              gallery: _gallery,
+                              onPerson: _openPerson,
+                              onLink: _openLink,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
             ),
           ),
           if (_standingPoster(size) case final poster?) poster,
           FadeTransition(
-            opacity: _removed != null
-                ? const AlwaysStoppedAnimation(0.35)
-                : content,
-            child: IgnorePointer(
-                child: _bar(size, column, titleTop, reduced)),
+            opacity:
+                _removed != null ? const AlwaysStoppedAnimation(0.35) : content,
+            child: IgnorePointer(child: _bar(size, column, titleTop, reduced)),
           ),
           Positioned(
             left: NextLayout.gutter(context) - 9,
@@ -621,8 +699,8 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           if (_tileMenu case final id?)
             if (_episodes?.where((e) => e.episodeId == id).firstOrNull
                 case final e?)
-              ..._popover(_tileLinks[id]!, _episodeMenu(e),
-                  () => _tileMenu = null,
+              ..._popover(
+                  _tileLinks[id]!, _episodeMenu(e), () => _tileMenu = null,
                   up: true),
           if (_removed != null) _removedBar(),
           if (_sheet() case final sheet?) Positioned.fill(child: sheet),
@@ -681,8 +759,8 @@ class _WorkDetailPageState extends State<WorkDetailPage>
 
   /// The words' column: 600 wide, narrower in a narrow window. The title
   /// is painted apart from the column, so both are given this width.
-  double _column(Size size) =>
-      math.max(0.0, math.min(600.0, size.width - NextLayout.gutter(context) * 2));
+  double _column(Size size) => math.max(
+      0.0, math.min(600.0, size.width - NextLayout.gutter(context) * 2));
 
   /// The bar scrim and the docking title (not interactive).
   Widget _bar(Size size, double column, double titleTop, bool reduced) =>
@@ -729,22 +807,22 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           child: NextLayout.compact(context)
               ? const SizedBox.shrink()
               : Center(
-            child: FadeTransition(
-              opacity: _barTitle,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                    maxWidth: math.max(
-                        0,
-                        size.width -
-                            (NextLayout.compact(context) ? 200 : 640))),
-                child: Text(_work.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: NextText.serif(16,
-                        weight: FontWeight.w700, letterSpacing: 0.6)),
-              ),
-            ),
-          ),
+                  child: FadeTransition(
+                    opacity: _barTitle,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                          maxWidth: math.max(
+                              0,
+                              size.width -
+                                  (NextLayout.compact(context) ? 200 : 640))),
+                      child: Text(_work.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: NextText.serif(16,
+                              weight: FontWeight.w700, letterSpacing: 0.6)),
+                    ),
+                  ),
+                ),
         ),
       ]);
 
@@ -964,8 +1042,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             radius: BorderRadius.circular(24),
             padding: const EdgeInsets.fromLTRB(22, 8, 8, 8),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text('已从媒体库移除',
-                  style: NextText.sans(13.5, color: NextColors.p2)),
+              Text('已从媒体库移除', style: NextText.sans(13.5, color: NextColors.p2)),
               const SizedBox(width: 16),
               NextButton(label: '撤回', onTap: _undoRemove),
             ]),
@@ -1063,8 +1140,8 @@ class _WorkDetailPageState extends State<WorkDetailPage>
               : (e) => _tileLinks[e.episodeId] ??= LayerLink(),
           onMore: _manage == null
               ? null
-              : (e) => setState(() => _tileMenu =
-                  _tileMenu == e.episodeId ? null : e.episodeId),
+              : (e) => setState(() =>
+                  _tileMenu = _tileMenu == e.episodeId ? null : e.episodeId),
           menuFor: _tileMenu,
         ),
       ],
