@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../player/ports/session_playback.dart';
+import '../widgets/buttons.dart';
+import '../widgets/icons.dart';
 import 'timeline.dart';
 import 'video_stage.dart';
 
@@ -25,8 +27,18 @@ class NextDetachedPlayer extends StatelessWidget {
                   builder: (context, _) => playback.showControls
                       ? Align(
                           alignment: Alignment.bottomCenter,
-                          child: ColoredBox(
-                              color: const Color(0xB3000000),
+                          // The main player's scrim and quiet round buttons.
+                          child: DecoratedBox(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Color(0x00000000), Color(0xCC000000)],
+                              ),
+                            ),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 40, 16, 12),
                               child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -35,42 +47,49 @@ class NextDetachedPlayer extends StatelessWidget {
                                         live: () => playback.position,
                                         repaint: playback.frame,
                                         onSeek: playback.seek),
+                                    const SizedBox(height: 6),
                                     Row(children: [
-                                      IconButton(
-                                          tooltip: '播放 / 暂停',
-                                          icon: Icon(playback.playIntent
-                                              ? Icons.pause
-                                              : Icons.play_arrow),
-                                          onPressed: playback.togglePlay),
-                                      IconButton(
-                                          tooltip: '逐帧后退',
-                                          icon: const Icon(Icons.skip_previous),
-                                          onPressed: () => unawaited(
+                                      NextIconButton(
+                                          glyph: playback.playIntent
+                                              ? NextGlyph.pause
+                                              : NextGlyph.play,
+                                          label:
+                                              playback.playIntent ? '暂停' : '播放',
+                                          size: 36,
+                                          onTap: playback.togglePlay),
+                                      NextIconButton(
+                                          glyph: NextGlyph.frameBack,
+                                          label: '逐帧后退',
+                                          size: 36,
+                                          onTap: () => unawaited(
                                               playback.inspection.inspect(
                                                   'playback.navigate',
                                                   {'frameDelta': -1}))),
-                                      IconButton(
-                                          tooltip: '逐帧前进',
-                                          icon: const Icon(Icons.skip_next),
-                                          onPressed: () => unawaited(
+                                      NextIconButton(
+                                          glyph: NextGlyph.frameForward,
+                                          label: '逐帧前进',
+                                          size: 36,
+                                          onTap: () => unawaited(
                                               playback.inspection.inspect(
                                                   'playback.navigate',
                                                   {'frameDelta': 1}))),
                                       const Spacer(),
-                                      IconButton(
-                                          tooltip: '画中画',
-                                          icon: const Icon(
-                                              Icons.picture_in_picture),
-                                          onPressed: () => unawaited(playback
+                                      NextIconButton(
+                                          glyph: NextGlyph.pictureInPicture,
+                                          label: '画中画',
+                                          size: 36,
+                                          onTap: () => unawaited(playback
                                               .pictureInPicture(context))),
-                                      IconButton(
-                                          tooltip: '返回主窗口',
-                                          icon: const Icon(
-                                              Icons.close_fullscreen),
-                                          onPressed: () => unawaited(
+                                      NextIconButton(
+                                          glyph: NextGlyph.exitFullscreen,
+                                          label: '回到主窗口',
+                                          size: 36,
+                                          onTap: () => unawaited(
                                               playback.windows.returnToMain())),
                                     ]),
-                                  ])),
+                                  ]),
+                            ),
+                          ),
                         )
                       : const SizedBox.shrink()),
             ])),
