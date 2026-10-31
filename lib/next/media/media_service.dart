@@ -224,7 +224,8 @@ final class MediaService {
     }
   }
 
-  Future<JsonMap> probe(String locator, {bool includeDuration = true}) async {
+  Future<JsonMap> probe(String locator,
+      {bool includeDuration = true, Future<void>? stopRequested}) async {
     try {
       final path = await authorizedPath(locator);
       final file = File(path);
@@ -239,7 +240,7 @@ final class MediaService {
       final info = !includeDuration
           ? <String, Object?>{}
           : durationProbe == probeMediaDuration
-              ? await probeMediaInfo(path)
+              ? await probeMediaInfo(path, stopRequested: stopRequested)
               : <String, Object?>{'durationMs': await durationProbe(path)};
       final after = await file.stat();
       if (before.size != after.size || before.modified != after.modified) {

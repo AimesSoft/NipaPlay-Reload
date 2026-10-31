@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
@@ -93,7 +94,8 @@ final class _ScanExecutor implements JobExecutor {
         .authorizedPath(context.job.input['root'] as String, directory: true);
     final db = service.store.database;
     var discovered = (await db.query('media_scan_items',
-        where: 'job_id = ?', whereArgs: [context.job.jobId])).length;
+            where: 'job_id = ?', whereArgs: [context.job.jobId]))
+        .length;
     // A directory that cannot be listed (on Windows one deeper than 259
     // characters, without the system's long path setting) is left out and
     // reported; the rest of the folder is still scanned.
@@ -122,13 +124,41 @@ final class _ScanExecutor implements JobExecutor {
         }
         final recorded = await db.rawQuery('''SELECT 1 FROM media_scan_items i
           JOIN media_locations l ON l.file_id=i.file_id
-          WHERE i.job_id=? AND l.locator=? LIMIT 1''', [context.job.jobId, entry.path]);
+          WHERE i.job_id=? AND l.locator=? LIMIT 1''',
+            [context.job.jobId, entry.path]);
         if (recorded.isNotEmpty) continue;
-        final fileId = await service.index(entry.path);
+        await context
+            .report(phase: 'probe', details: {'currentPath': entry.path});
+        // Race only read-only work. A cancelled/timed-out probe must never
+        // resume later and write an index behind the task engine's back.
+        final info = await Future.any<JsonMap?>([
+          service.probe(entry.path, stopRequested: context.stopRequested),
+          context.stopRequested.then((_) => null),
+        ]).timeout(const Duration(seconds: 30), onTimeout: () {
+          throw Failure(FailureCode.unavailable,
+              'File probe timed out after 30 seconds: ${entry.path}',
+              details: {'stage': 'probe', 'path': entry.path});
+        });
         if (await control
             .stop({'discovered': discovered, 'indexed': discovered})) {
           return;
         }
+        if (info == null) return;
+        final path = await service.authorizedPath(entry.path);
+        await context.report(phase: 'index');
+        final fileId = await service.mutate(() async {
+          // Cancellation can also arrive while waiting for the mutation queue.
+          if (control.stopped) return null;
+          final id =
+              await service.store.registerFile(path, info, via: 'local_scan');
+          await service.projection.drain(fileId: id);
+          return id;
+        });
+        if (await control
+            .stop({'discovered': discovered, 'indexed': discovered})) {
+          return;
+        }
+        if (fileId == null) return;
         final file = await service.store.entity(fileId);
         await db.insert(
             'media_scan_items',

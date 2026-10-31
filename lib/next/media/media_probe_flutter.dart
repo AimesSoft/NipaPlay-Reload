@@ -6,12 +6,24 @@ import 'package:nipa_harness/nipa_harness.dart';
 Future<int?> probeMediaDuration(String path) async =>
     (await probeMediaInfo(path))['durationMs'] as int?;
 
-Future<JsonMap> probeMediaInfo(String path) async {
+Future<void>? _pendingProbeCleanup;
+
+Future<JsonMap> probeMediaInfo(String path,
+    {Future<void>? stopRequested}) async {
+  // A timed-out native teardown still owns its player. Do not accumulate more
+  // players while it is stuck, or report missing technical data as success.
+  if (_pendingProbeCleanup != null) {
+    throw const Failure(FailureCode.unavailable,
+        'Previous media probe is still releasing its native player.');
+  }
   final player = mdk.Player();
   try {
     player.mute = true;
     player.media = path;
-    final result = await player.prepare().timeout(const Duration(seconds: 15));
+    final result = await Future.any<int>([
+      player.prepare(),
+      if (stopRequested != null) stopRequested.then((_) => -1),
+    ]).timeout(const Duration(seconds: 15));
     final info = player.mediaInfo;
     final duration = info.duration;
     return {
@@ -57,8 +69,21 @@ Future<JsonMap> probeMediaInfo(String path) async {
         ],
     };
   } on TimeoutException {
-    return {'durationMs': null};
+    throw Failure(FailureCode.unavailable,
+        'Media probe timed out after 15 seconds: $path');
   } finally {
-    await player.dispose();
+    final cleanup = player.dispose();
+    _pendingProbeCleanup = cleanup;
+    unawaited(cleanup.then<void>((_) {
+      if (identical(_pendingProbeCleanup, cleanup)) _pendingProbeCleanup = null;
+    }, onError: (Object _, StackTrace __) {
+      // Failed cleanup retains ownership; another probe must not pile on.
+    }));
+    try {
+      await cleanup.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      throw Failure(FailureCode.unavailable,
+          'Media probe player release timed out after 5 seconds: $path');
+    }
   }
 }

@@ -9,7 +9,8 @@ Future<int?> probeMediaDuration(String path) async =>
 
 /// Duration and subtitle streams from ffprobe, in the shape the Flutter
 /// probe gives; without ffprobe nothing is known.
-Future<Map<String, Object?>> probeMediaInfo(String path) async {
+Future<Map<String, Object?>> probeMediaInfo(String path,
+    {Future<void>? stopRequested}) async {
   final executable = headlessFfprobe;
   if (executable == null) return {'durationMs': null};
   final process = await Process.start(executable, [
@@ -25,7 +26,14 @@ Future<Map<String, Object?>> probeMediaInfo(String path) async {
   final errors = process.stderr.drain<void>();
   int code;
   try {
-    code = await process.exitCode.timeout(const Duration(seconds: 15));
+    code = await Future.any<int>([
+      process.exitCode,
+      if (stopRequested != null)
+        stopRequested.then((_) {
+          process.kill(ProcessSignal.sigkill);
+          return -1;
+        }),
+    ]).timeout(const Duration(seconds: 15));
   } on TimeoutException {
     process.kill();
     await process.exitCode;
