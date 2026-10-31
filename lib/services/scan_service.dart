@@ -417,6 +417,13 @@ class ScanService with ChangeNotifier {
   Future<_FolderFileDiff> _calculateFolderFileDiffWithRust(
     String folderPath,
   ) async {
+    final cachedHashes = _subFolderHashCache[folderPath];
+    if (cachedHashes != null && !_isAndroidSafPath(folderPath)) {
+      _subFolderHashCache[folderPath] = await _matchedFileHashes(
+        folderPath,
+        cachedHashes,
+      );
+    }
     if (platformIdentity.isHarmonyOS) {
       await HarmonyLocalMediaService.ensureDirectoryAccess(folderPath);
     }
@@ -438,7 +445,13 @@ class ScanService with ChangeNotifier {
     String folderUri,
   ) async {
     final entries = await AndroidSafService.scanDirectory(folderUri);
-    final cachedHashes = _subFolderHashCache[folderUri] ?? {};
+    final cachedHashes = await _matchedFileHashes(
+      folderUri,
+      _subFolderHashCache[folderUri] ?? {},
+      filePathsByRelativePath: {
+        for (final entry in entries) entry.relativePath: entry.uri,
+      },
+    );
     final currentHashes = <String, String>{
       for (final entry in entries) entry.relativePath: entry.fileHash,
     };
@@ -480,13 +493,37 @@ class ScanService with ChangeNotifier {
     );
   }
 
+  // A file fingerprint only skips work when recognition was persisted too.
+  // Reconcile old caches as well, so earlier failed matches can recover.
+  Future<Map<String, String>> _matchedFileHashes(
+    String folderPath,
+    Map<String, String> hashes, {
+    Map<String, String>? filePathsByRelativePath,
+  }) async {
+    final history = await WatchHistoryManager.getAllHistory();
+    final matchedPaths = history
+        .where((item) =>
+            item.animeId != null &&
+            item.episodeId != null &&
+            item.animeName.trim().isNotEmpty)
+        .map((item) => item.filePath)
+        .toSet();
+    return Map.fromEntries(hashes.entries.where((entry) {
+      final path =
+          filePathsByRelativePath?[entry.key] ?? p.join(folderPath, entry.key);
+      return matchedPaths.contains(path);
+    }));
+  }
+
   Future<void> _storeFileHashes(
     String folderPath,
     _FolderFileDiff diff,
   ) async {
     if (diff.currentHashes != null) {
-      _subFolderHashCache[folderPath] = Map<String, String>.from(
+      _subFolderHashCache[folderPath] = await _matchedFileHashes(
+        folderPath,
         diff.currentHashes!,
+        filePathsByRelativePath: diff.filePathsByRelativePath,
       );
       await _saveSubFolderHashCache();
       debugPrint("已使用扫描结果更新文件夹 $folderPath 的hash缓存");
