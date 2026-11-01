@@ -1,3 +1,4 @@
+import 'package:nipaplay/themes/nipaplay/widgets/apple_native_media_control.dart';
 import 'package:nipaplay/utils/performance_trace.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay/services/password_input_mode_service.dart';
@@ -198,6 +199,7 @@ void main(List<String> args) async {
   _installFrameTimingTrace();
   await ensureLinuxSystemFontLoaded();
   await globals.initializeStartupDeviceProfile();
+  await AppleNativeMediaControl.initialize();
   if (globals.isPhone) {
     await LiquidGlassWidgets.initialize();
   }

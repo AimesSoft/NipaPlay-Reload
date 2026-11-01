@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart' as cupertino;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
@@ -9,9 +9,11 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
+import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/android_storage_helper.dart';
@@ -307,6 +309,24 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
             value: appearanceSettings.showMediaLibraryNewBadge,
             onChanged: appearanceSettings.setShowMediaLibraryNewBadge,
           ),
+          if ((context
+                      .watch<LabsSettingsProvider?>()
+                      ?.enableImmersiveAnimeDetail ??
+                  false) &&
+              AdaptiveMediaDetailActionButton.supportsNativeLiquidGlass)
+            AdaptiveSettingsTile<bool>.toggle(
+              title: _text(context, '媒体信息页液态玻璃', '媒體資訊頁液態玻璃',
+                  'Media Detail Liquid Glass'),
+              subtitle: _text(
+                  context,
+                  '在新版媒体信息页使用系统原生液态玻璃按钮和菜单',
+                  '在新版媒體資訊頁使用系統原生液態玻璃按鈕和選單',
+                  'Use native Liquid Glass buttons and menus on the new media detail page.'),
+              icon: Ionicons.sparkles_outline,
+              phoneIcon: cupertino.CupertinoIcons.sparkles,
+              value: appearanceSettings.enableMediaDetailLiquidGlass,
+              onChanged: appearanceSettings.setEnableMediaDetailLiquidGlass,
+            ),
           AdaptiveSettingsTile<bool>.toggle(
             title: _text(
               context,

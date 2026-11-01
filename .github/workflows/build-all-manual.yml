@@ -3,6 +3,11 @@ name: Build All Platforms (Manual)
 # 手动触发，仅执行全平台构建并上传 Actions artifacts，不创建 Release、不上架应用商店、不更新版本号与 Homebrew Tap。
 on:
   workflow_dispatch:
+    inputs:
+      diagnostic-build:
+        description: 'Build macOS and HarmonyOS test artifacts without release signing credentials'
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -45,6 +50,8 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/build-macos.yml
+    with:
+      unsigned: ${{ inputs.diagnostic-build }}
     secrets:
       MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
       MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -64,7 +71,7 @@ jobs:
     name: Build HarmonyOS sideload package
     uses: ./.github/workflows/build-ohos.yml
     with:
-      sign_hap: true
+      sign_hap: ${{ !inputs.diagnostic-build }}
     secrets:
       OHOS_SIGNING_CERT_BASE64: ${{ secrets.OHOS_SIGNING_CERT_BASE64 }}
       OHOS_SIGNING_PROFILE_BASE64: ${{ secrets.OHOS_SIGNING_PROFILE_BASE64 }}

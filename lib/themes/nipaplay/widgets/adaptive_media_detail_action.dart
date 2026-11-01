@@ -1,3 +1,6 @@
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/apple_native_media_control.dart';
 import 'package:flutter/material.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -5,9 +8,8 @@ enum MediaDetailActionEmphasis { primary, secondary }
 
 /// Actions used by the immersive media detail page.
 ///
-/// NipaPlay currently has no bridge to Apple's native Liquid Glass controls.
-/// The bundled cross-platform shader implementation is deliberately not used
-/// here: unsupported platforms render the same lightweight NipaPlay overlay.
+/// Uses native Apple Liquid Glass on supported devices and keeps the existing
+/// NipaPlay overlay on other platforms.
 class AdaptiveMediaDetailActionButton extends StatefulWidget {
   const AdaptiveMediaDetailActionButton({
     super.key,
@@ -26,7 +28,16 @@ class AdaptiveMediaDetailActionButton extends StatefulWidget {
   final MediaDetailActionEmphasis emphasis;
   final bool expanded;
 
-  static bool get supportsNativeLiquidGlass => false;
+  static bool get supportsNativeLiquidGlass =>
+      AppleNativeMediaControl.supported;
+
+  static bool useNativeLiquidGlass(BuildContext context) {
+    final enabled = context
+            .watch<AppearanceSettingsProvider?>()
+            ?.enableMediaDetailLiquidGlass ??
+        true;
+    return supportsNativeLiquidGlass && enabled;
+  }
 
   @override
   State<AdaptiveMediaDetailActionButton> createState() =>
@@ -52,6 +63,51 @@ class _AdaptiveMediaDetailActionButtonState
     final border = primary
         ? accent.withValues(alpha: 0.95)
         : Colors.white.withValues(alpha: active ? 0.3 : 0.18);
+
+    if (AdaptiveMediaDetailActionButton.useNativeLiquidGlass(context)) {
+      const labelStyle = TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        color: Colors.white,
+      );
+      final detailStyle = TextStyle(
+        fontSize: 11,
+        color: Colors.white.withValues(alpha: 0.78),
+      );
+      double textWidth(String text, TextStyle style) {
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout();
+        final width = painter.width;
+        painter.dispose();
+        return width;
+      }
+
+      final labelWidth = textWidth(widget.label, labelStyle);
+      final detailWidth = textWidth(widget.detail ?? '', detailStyle);
+      final width = (labelWidth > detailWidth ? labelWidth : detailWidth) + 72;
+      return SizedBox(
+        width: widget.expanded
+            ? double.infinity
+            : width.clamp(80.0, MediaQuery.sizeOf(context).width - 32),
+        child: AppleNativeMediaControl(
+          label: widget.label,
+          detail: widget.detail,
+          symbol: switch (widget.label) {
+            '返回' => 'chevron.left',
+            '评论' => 'bubble.right',
+            '选择剧集' => 'list.bullet',
+            _ => 'play.fill',
+          },
+          primary: primary,
+          color: primary ? accent : null,
+          onPressed: widget.onPressed,
+        ),
+      );
+    }
 
     final content = AnimatedContainer(
       duration: const Duration(milliseconds: 160),
