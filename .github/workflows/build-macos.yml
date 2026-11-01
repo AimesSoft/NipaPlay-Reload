@@ -7,6 +7,10 @@ on:
         description: 'JSON array of package architectures (include universal for the macOS 14 gate)'
         type: string
         default: '["universal", "arm64", "x86_64"]'
+      build-app-store:
+        description: 'Also compile a universal App Store application with sponsorship hidden'
+        type: boolean
+        default: false
       unsigned:
         description: 'Explicitly allow diagnostic builds without signing credentials'
         type: boolean
@@ -382,11 +386,20 @@ jobs:
         with:
           app-version: ${{ needs.prepare.outputs.version }}
           build-architectures: ${{ matrix.architecture }}
+          build-app-store: ${{ inputs.build-app-store && matrix.architecture == 'universal' }}
           macos-certificate-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           macos-certificate-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           apple-team-id: ${{ secrets.APPLE_TEAM_ID }}
           apple-id: ${{ secrets.APPLE_ID }}
           apple-app-password: ${{ secrets.APPLE_APP_PASSWORD }}
+
+      - name: Upload unsigned macOS App Store application
+        if: inputs.build-app-store && matrix.architecture == 'universal'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-macOS-unsigned
+          path: build/app-store-macos/NipaPlay-AppStore-unsigned.zip
+          if-no-files-found: error
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4

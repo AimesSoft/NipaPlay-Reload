@@ -8,6 +8,10 @@ inputs:
     description: '要构建的 macOS 架构列表：universal arm64 x86_64'
     required: false
     default: 'universal'
+  build-app-store:
+    description: 'Compile an additional universal application for App Store signing'
+    required: false
+    default: 'false'
   macos-certificate-base64:
     description: 'macOS Distribution Certificate (Base64)'
     required: false
@@ -641,3 +645,25 @@ runs:
           printf '%s\n' "${package_paths[@]}"
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
+
+    - name: Compile macOS App Store application
+      if: inputs.build-app-store == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/app-store-macos build/symbols-macos/app-store
+        flutter build macos --release --config-only --no-pub --obfuscate \
+          --split-debug-info=build/symbols-macos/app-store \
+          --dart-define=NIPAPLAY_APP_STORE=true \
+          --build-name=${{ inputs.app-version }} --build-number=1101.2
+        xcodebuild -workspace macos/Runner.xcworkspace -configuration Release \
+          -scheme Runner -derivedDataPath build/macos-universal \
+          -destination 'generic/platform=macOS' \
+          "OBJROOT=${PWD}/build/macos-universal/Build/Intermediates.noindex" \
+          "SYMROOT=${PWD}/build/macos-universal/Build/Products" \
+          'ARCHS=x86_64 arm64' ONLY_ACTIVE_ARCH=NO \
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= \
+          COMPILER_INDEX_STORE_ENABLE=NO -quiet
+        ditto -c -k --keepParent \
+          build/macos-universal/Build/Products/Release/NipaPlay.app \
+          build/app-store-macos/NipaPlay-AppStore-unsigned.zip
