@@ -10,6 +10,7 @@ import 'package:nipaplay/next/ui/widgets/buttons.dart';
 import 'package:nipaplay/next/ui/widgets/words.dart';
 import 'package:nipaplay/next/ui/widgets/work_title.dart';
 import 'package:nipaplay/next/ui_data/ui_data.dart';
+import 'package:nipaplay/next/ui_data/work_more.dart';
 
 import 'found_cards_support.dart';
 
@@ -48,6 +49,18 @@ final class _Library implements NextUiData {
   Future<List<UiCard>> cards(
           {required String threadId, String? turnId}) async =>
       const [];
+}
+
+/// The library, with what the work's sources say beyond it.
+final class _Details extends _Library implements NextWorkDetails {
+  _Details(super.works, super.seasons, this.more);
+  final UiWorkMore more;
+  @override
+  Future<UiWorkMore> workMore(String workId) async => more;
+  @override
+  Future<UiGallery> gallery(UiGalleryRef ref) async => const UiGallery();
+  @override
+  Future<UiPerson?> person(UiPersonRef ref) async => null;
 }
 
 /// Plays what it is asked to; nothing else is asked of it here.
@@ -321,6 +334,52 @@ void main() {
           actions: plays);
       expect(
           tester.widget<PlayButton>(find.byType(PlayButton)).label, '继续播放');
+      await _close(tester, shell);
+    });
+
+    testWidgets(
+        'its first row of people stands where episodes would, once; '
+        'what is left of it is said', (tester) async {
+      const half = UiEpisode(
+          episodeId: 'e-sintel',
+          workId: 'w-sintel',
+          number: 1,
+          season: 1,
+          progress: 0.4,
+          playable: true);
+      final work = sintel(next: half);
+      const more = UiWorkMore(
+        sections: ['characters', 'cast', 'crew', 'facts'],
+        characters: [UiCharacter(name: '辛特尔')],
+        cast: [UiCredit(name: 'Halina Reijn', role: 'Sintel（配音）')],
+        crew: [
+          UiCredit(name: 'Colin Levy', role: '导演 · 编剧'),
+          UiCredit(name: 'Jan Morgenstern', role: '音乐'),
+        ],
+        facts: [(label: '时长', value: '15 分钟')],
+      );
+      final shell = await _open(tester, work,
+          data: _Details({work.workId: work}, {
+            work.workId: const [half]
+          }, more));
+      final view = tester.getSize(find.byType(WorkDetailPage));
+      // On the first screen, below the buttons; the rest further down.
+      expect(find.text('角色'), findsOneWidget);
+      expect(tester.getRect(find.text('角色')).bottom, lessThan(view.height));
+      expect(tester.getRect(find.text('角色')).top,
+          greaterThan(tester.getRect(find.byType(PlayButton)).bottom));
+      expect(find.text('演员', skipOffstage: false), findsOneWidget);
+      expect(find.text('辛特尔', skipOffstage: false), findsOneWidget);
+      // Who directed it, under its meta line.
+      expect(
+          find.byWidgetPredicate((w) =>
+              w is RichText && w.text.toPlainText() == '导演  Colin Levy'),
+          findsOneWidget);
+      // 92 minutes, 40 % seen.
+      expect(
+          find.byWidgetPredicate(
+              (w) => w is NumText && w.text == '还剩 55 分钟'),
+          findsOneWidget);
       await _close(tester, shell);
     });
 

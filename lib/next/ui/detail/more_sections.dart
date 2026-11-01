@@ -15,6 +15,10 @@ import '../widgets/shelf.dart';
 /// its rule gives: characters and who voices them, cast, crew, pictures,
 /// facts and links. A section with nothing in it is left out, and the page
 /// shows nothing more than it has.
+///
+/// A film has no row of episodes: its first row of people ([lead]) stands
+/// where they would, on the first screen ([only]), and is left out below
+/// ([skip]).
 class WorkMoreSections extends StatelessWidget {
   const WorkMoreSections({
     super.key,
@@ -22,7 +26,25 @@ class WorkMoreSections extends StatelessWidget {
     required this.gallery,
     required this.onPerson,
     required this.onLink,
+    this.only,
+    this.skip,
   });
+
+  /// The first section of people the rule orders that has someone in it.
+  static String? lead(UiWorkMore more) => more.sections
+      .where((section) => switch (section) {
+            'characters' => more.characters.isNotEmpty,
+            'cast' => more.cast.isNotEmpty,
+            'crew' => more.crew.isNotEmpty,
+            _ => false,
+          })
+      .firstOrNull;
+
+  /// Only this section.
+  final String? only;
+
+  /// All sections but this one.
+  final String? skip;
 
   final UiWorkMore more;
 
@@ -35,6 +57,7 @@ class WorkMoreSections extends StatelessWidget {
   Widget build(BuildContext context) {
     final blocks = <Widget>[];
     for (final section in more.sections) {
+      if (only != null && section != only || section == skip) continue;
       final block = switch (section) {
         'characters' when more.characters.isNotEmpty =>
           _Characters(more.characters, onPerson: onPerson),

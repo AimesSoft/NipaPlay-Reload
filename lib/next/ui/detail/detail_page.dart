@@ -21,6 +21,7 @@ import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/menu.dart';
 import '../widgets/nipa_avatar.dart';
+import '../widgets/progress.dart';
 import '../widgets/words.dart';
 import '../widgets/work_title.dart';
 import 'collection.dart';
@@ -631,7 +632,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                               top: compact ? 32 : 48,
                               bottom:
                                   30 + MediaQuery.paddingOf(context).bottom),
-                          child: _episodesBlock(),
+                          child: _work.film ? _leadPeople() : _episodesBlock(),
                         ),
                       ),
                     ),
@@ -662,6 +663,9 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                               gallery: _gallery,
                               onPerson: _openPerson,
                               onLink: _openLink,
+                              skip: _work.film
+                                  ? WorkMoreSections.lead(_more)
+                                  : null,
                             ),
                           ),
                         ),
@@ -858,6 +862,22 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                 visible: false, child: WorkTitle(work: work, margins: false)),
           ),
           MetaLine(work, allRatings: true, studio: true, genres: false),
+          if ((work.film ? _directors() : null) case final directors?)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                      text: '导演  ',
+                      style: NextText.sans(13.5, color: NextColors.p3)),
+                  TextSpan(
+                      text: directors,
+                      style: NextText.sans(13.5, color: NextColors.p2)),
+                ]),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           if (overview != null && overview.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 14),
@@ -871,6 +891,40 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           _actions(),
         ],
       ),
+    );
+  }
+
+  /// Who directed it, as its crew says: “新海诚”, “A、B”.
+  String? _directors() {
+    final names = [
+      for (final p in _more.crew)
+        if ((p.role ?? '').split(' · ').contains('导演')) p.name
+    ];
+    return names.isEmpty ? null : names.take(2).join('、');
+  }
+
+  /// How far a film was watched: a thin bar and what is left.
+  Widget? _filmProgress(UiEpisode? next) {
+    final progress = next?.progress ?? 0;
+    if (!_work.film || progress <= 0 || progress >= 1) return null;
+    final length = next?.runtime ?? _work.runtime;
+    final left = length == null
+        ? null
+        : length -
+            (next?.position ??
+                Duration(
+                    milliseconds:
+                        (progress * length.inMilliseconds).round()));
+    return Padding(
+      padding: const EdgeInsets.only(top: 18, left: 2),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        ThinBar(progress: progress, width: 132),
+        if (Words.length(left) case final rest?) ...[
+          const SizedBox(width: 12),
+          NumText('还剩 $rest',
+              style: NextText.sans(12.5, color: NextColors.p2)),
+        ],
+      ]),
     );
   }
 
@@ -951,6 +1005,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
       mainAxisSize: MainAxisSize.min,
       children: [
         row,
+        if (_filmProgress(next) case final progress?) progress,
         AnimatedSize(
           duration: const Duration(milliseconds: 200),
           alignment: Alignment.topLeft,
@@ -1098,6 +1153,25 @@ class _WorkDetailPageState extends State<WorkDetailPage>
           ),
         ),
       ];
+
+  /// A film has no row of episodes: its first row of people stands there,
+  /// coming in once the page's sources are read.
+  Widget _leadPeople() {
+    final lead = WorkMoreSections.lead(_more);
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      child: lead == null
+          ? const SizedBox(key: ValueKey('none'), width: double.infinity)
+          : WorkMoreSections(
+              key: ValueKey(lead),
+              more: _more,
+              gallery: null,
+              onPerson: _openPerson,
+              onLink: _openLink,
+              only: lead,
+            ),
+    );
+  }
 
   /// A film has no row of episodes: “播放” plays it.
   Widget _episodesBlock() {
