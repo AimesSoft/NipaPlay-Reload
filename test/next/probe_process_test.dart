@@ -8,10 +8,11 @@ void main() {
   late Directory dir;
   late MediaProbeProcess probe;
   Future<void> executable(String body) async {
-    final file = File('${dir.path}/ffprobe');
+    final file = File('${dir.path}/nipa_media_probe');
     await file.writeAsString('#!/bin/sh\n$body\n');
     await Process.run('chmod', ['+x', file.path]);
     probe.executable = file.path;
+    probe.library = file.path;
   }
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('probe-test-');
@@ -24,7 +25,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(probe.status()['active'], isEmpty);
     expect((probe.status()['recent'] as List).single['reason'], 'timeout');
-    await executable('echo \'{"format":{"duration":"1.25"},"streams":[{"index":2,"codec_type":"subtitle","codec_name":"subrip","tags":{"language":"chi"}}]}\'');
+    await executable('echo \'{"container":{"ok":true,"value":{"mediaOpen":true,"format":"matroska"}},"tracks":{"ok":true,"value":[{"id":2,"kind":2,"codec":"subrip","language":"chi"}]},"events":[{"ok":true,"value":{"durationMicros":1250000}}]}\'');
     final facts = await probe.run('healthy.mkv');
     expect(facts['durationMs'], 1250);
     expect((facts['subtitles'] as List).single['streamIndex'], 2);

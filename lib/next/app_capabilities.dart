@@ -43,7 +43,7 @@ final class AppCapabilities implements Capability {
 
   Future<JsonMap> facts() async {
     final desktopProbe = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-    final probeReady = subtitleProbeReady?.call() ?? (desktopProbe ? mediaProbeProcess.resolveExecutable() != null : host != 'headless');
+    final probeReady = subtitleProbeReady?.call() ?? (desktopProbe ? mediaProbeProcess.status()['available'] == true : host != 'headless');
     final ddp = await _credentialState(
         const CredentialRef('preferences', 'dandanplay_token'));
     final tmdb =
@@ -158,7 +158,7 @@ final class AppCapabilities implements Capability {
               ? null
               : 'Media probe executable is unavailable; inspect media.probe.status.',
           'requiredHostSetup':
-              probeReady ? <String>[] : ['Install the bundled ffprobe or configure NIPAPLAY_FFPROBE.']
+              probeReady ? <String>[] : ['Repair the bundled Erika probe helper/library, or explicitly configure ffprobe on a headless host.']
         },
         {
           ...feature(

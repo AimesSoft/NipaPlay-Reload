@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi' show Abi;
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -9,12 +8,15 @@ import 'package:path/path.dart' as p;
 
 final mediaProbeProcess = MediaProbeProcess();
 
-/// Owns only ffprobe children. A failed file cannot poison a native player in
+/// Owns only isolated media probe children. A failed file cannot poison a native player in
 /// the application, and cancellation never signals an arbitrary PID.
 final class MediaProbeProcess {
   MediaProbeProcess(
       {this.executable, this.timeout = const Duration(seconds: 15)});
   String? executable;
+  String? library;
+  // Existing headless CLI may explicitly supply ffprobe. Desktop never bundles it.
+  String? ffprobeExecutable;
   final Duration timeout;
   final _active = <String, _Probe>{};
   final _recent = <JsonMap>[];
@@ -22,26 +24,38 @@ final class MediaProbeProcess {
   int _starting = 0;
 
   String? resolveExecutable() {
-    final override = executable ?? Platform.environment['NIPAPLAY_FFPROBE'];
-    final bin = Platform.isWindows ? 'ffprobe.exe' : 'ffprobe';
+    if (ffprobeExecutable != null) {
+      return File(ffprobeExecutable!).existsSync() ? ffprobeExecutable : null;
+    }
     final dir = p.dirname(Platform.resolvedExecutable);
-    final arch = Abi.current().toString().contains('arm64') ? 'arm64' : 'x64';
+    final name =
+        Platform.isWindows ? 'nipa_media_probe.exe' : 'nipa_media_probe';
     return [
-      if (override != null) override,
-      if (Platform.isMacOS) p.join(dir, '..', 'Resources', 'probe', arch, bin),
-      p.join(dir, 'probe', bin),
-      for (final entry in (Platform.environment['PATH'] ?? '')
-          .split(Platform.isWindows ? ';' : ':'))
-        if (entry.isNotEmpty) p.join(entry, bin),
-      if (Platform.isMacOS) '/opt/homebrew/bin/ffprobe',
-      if (Platform.isMacOS) '/usr/local/bin/ffprobe',
+      if (executable != null) executable!,
+      if (Platform.isMacOS) p.join(dir, '..', 'Helpers', name),
+      p.join(dir, name),
+    ].where((path) => File(path).existsSync()).firstOrNull;
+  }
+
+  String? resolveLibrary() {
+    final dir = p.dirname(Platform.resolvedExecutable);
+    return [
+      if (library != null) library!,
+      if (Platform.isMacOS)
+        p.join(dir, '..', 'Frameworks', 'erika_flutter.framework', 'Versions',
+            'A', 'Frameworks', 'liberika_capi.dylib'),
+      if (Platform.isWindows) p.join(dir, 'erika_capi.dll'),
+      if (Platform.isLinux) p.join(dir, 'lib', 'liberika_capi.so'),
     ].where((path) => File(path).existsSync()).firstOrNull;
   }
 
   JsonMap status() => {
-        'backend': 'ffprobe_process',
-        'available': resolveExecutable() != null,
+        'backend':
+            ffprobeExecutable == null ? 'erika_process' : 'ffprobe_process',
+        'available': resolveExecutable() != null &&
+            (ffprobeExecutable != null || resolveLibrary() != null),
         'executable': resolveExecutable(),
+        'library': ffprobeExecutable == null ? resolveLibrary() : null,
         'timeoutMs': timeout.inMilliseconds,
         'capacity': 4,
         'active': [for (final probe in _active.values) probe.json()],
@@ -69,9 +83,10 @@ final class MediaProbeProcess {
 
   Future<JsonMap> run(String path, {Future<void>? stopRequested}) async {
     final exe = resolveExecutable();
-    if (exe == null)
+    final native = resolveLibrary();
+    if (exe == null || (ffprobeExecutable == null && native == null))
       throw const Failure(FailureCode.unavailable,
-          'ffprobe is missing. Install the bundled desktop probe or set NIPAPLAY_FFPROBE; inspect media.probe.status.');
+          'The Erika probe helper or bundled library is missing; inspect media.probe.status and repair the application installation.');
     if (_active.length + _starting >= 4)
       throw const Failure(FailureCode.unavailable,
           'Media probe capacity is occupied; inspect media.probe.status.',
@@ -81,16 +96,20 @@ final class MediaProbeProcess {
     _starting++;
     final Process process;
     try {
-      process = await Process.start(exe, [
-        '-v',
-        'error',
-        '-show_entries',
-        'format=duration,format_name,bit_rate:stream=index,codec_type,codec_name,width,height,avg_frame_rate,pix_fmt,bit_rate,sample_rate,channels,color_space,color_transfer:stream_tags=language,title',
-        '-of',
-        'json',
-        '-i',
-        path
-      ]);
+      process = await Process.start(
+          exe,
+          ffprobeExecutable == null
+              ? [native!, path]
+              : [
+                  '-v',
+                  'error',
+                  '-show_entries',
+                  'format=duration,format_name,bit_rate:stream=index,codec_type,codec_name,width,height,avg_frame_rate,pix_fmt,bit_rate,sample_rate,channels,color_space,color_transfer:stream_tags=language,title',
+                  '-of',
+                  'json',
+                  '-i',
+                  path
+                ]);
     } finally {
       _starting--;
     }
@@ -131,8 +150,10 @@ final class MediaProbeProcess {
                 : stderr,
             details: {...probe.json(), 'exitCode': code, 'stderr': stderr});
       }
-      final result =
-          parseProbeOutput(jsonDecode(utf8.decode(output.takeBytes())) as Map);
+      final json = jsonDecode(utf8.decode(output.takeBytes())) as Map;
+      final result = ffprobeExecutable == null
+          ? parseErikaProbeOutput(json)
+          : parseProbeOutput(json);
       _remember({...probe.json(), 'state': 'succeeded', 'exitCode': code});
       return result;
     } catch (error) {
@@ -244,6 +265,70 @@ JsonMap parseProbeOutput(Map json) {
           'language': (s['tags'] as Map?)?['language'] ?? 'und',
           'title': (s['tags'] as Map?)?['title'],
           'format': s['codec_name'],
+        }
+    ],
+  };
+}
+
+JsonMap parseErikaProbeOutput(Map json) {
+  Object? value(Object? envelope) {
+    if (envelope is! Map || envelope['ok'] != true) {
+      throw Failure(
+          FailureCode.unavailable,
+          envelope is Map
+              ? '${envelope['error'] ?? 'Erika returned no facts.'}'
+              : 'Missing Erika response.');
+    }
+    return envelope['value'];
+  }
+
+  final container = value(json['container']) as Map;
+  if (container['mediaOpen'] != true) {
+    throw const Failure(
+        FailureCode.unavailable, 'Erika did not open the media.');
+  }
+  final tracks = (value(json['tracks']) as List).cast<Map>();
+  int? duration;
+  for (final envelope in json['events'] as List) {
+    final event = value(envelope) as Map;
+    final micros = event['durationMicros'] as num?;
+    if (micros != null && micros > 0) duration = (micros / 1000).round();
+  }
+  return {
+    'durationMs': duration,
+    'technical': {
+      'container': container['format'],
+      'bitrate': container['bitRate'],
+      'video': [
+        for (final t in tracks.where((t) => t['kind'] == 0))
+          {
+            'codec': t['codec'],
+            'width': t['width'],
+            'height': t['height'],
+            'pixelFormat': t['pixelFormat'],
+            'profile': t['profile'],
+            'dolbyVisionProfile': t['dolbyVisionProfile'],
+          }
+      ],
+      'audio': [
+        for (final t in tracks.where((t) => t['kind'] == 1))
+          {
+            'codec': t['codec'],
+            'channels': t['channels'],
+            'sampleRate': t['sampleRate'],
+            'language': t['language'],
+            'title': t['title'],
+          }
+      ],
+    },
+    'subtitles': [
+      for (final (i, t) in tracks.where((t) => t['kind'] == 2).indexed)
+        {
+          'index': i,
+          'streamIndex': t['id'],
+          'language': t['language'] ?? 'und',
+          'title': t['title'],
+          'format': t['codec'],
         }
     ],
   };

@@ -207,3 +207,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE nipaplay_native)
 install(TARGETS nipaplay_native
     LIBRARY DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
 )
+
+# The probe helper dynamically loads the existing Erika runtime, not another codec bundle.
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../native/media_probe" media_probe_build)
+add_dependencies(${BINARY_NAME} nipa_media_probe)
+install(TARGETS nipa_media_probe RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)

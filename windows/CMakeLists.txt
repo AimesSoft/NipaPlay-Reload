@@ -81,6 +81,9 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# erika_flutter 0.3.3 downloads the versioned archive but only extracts when
+# this unversioned output is absent. Reconfigure must not package an older DLL.
+file(REMOVE "${CMAKE_BINARY_DIR}/plugins/erika_flutter/erika_runtime/erika_capi.dll")
 include(flutter/generated_plugins.cmake)
 
 # universal_gamepad（git 依赖）源码含 UTF-8 无 BOM 字符（em-dash 等），
@@ -158,3 +161,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE nipaplay_native)
 install(FILES "$<TARGET_FILE:nipaplay_native>"
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
+
+# The probe helper dynamically loads the existing Erika runtime, not another codec bundle.
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../native/media_probe" media_probe_build)
+add_dependencies(${BINARY_NAME} nipa_media_probe)
+install(TARGETS nipa_media_probe RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)

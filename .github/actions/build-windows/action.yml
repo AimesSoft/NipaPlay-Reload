@@ -451,8 +451,6 @@ runs:
         $version = "${{ inputs.app-version }}"
         $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
         $SrcDir = "build\windows\x64\runner\Release"
-        python scripts/next/bundle_ffprobe.py --target win32-x64 --output "$SrcDir\probe"
-        if ($LASTEXITCODE -ne 0) { throw "ffprobe bundling failed" }
         $CustomLib = "windows\libmpv-2.dll"
         if (!(Test-Path $SrcDir)) {
           throw "Windows 构建输出目录不存在：$SrcDir"

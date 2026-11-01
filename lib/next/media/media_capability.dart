@@ -299,11 +299,11 @@ ActionSpec _spec(String id, String description, Effect effect,
         output: output);
 final _specs = [
   _spec('media.probe.status',
-      'Inspect this device desktop ffprobe availability, active probe IDs/paths/PIDs/elapsed time and the last 20 outcomes with original errors. Shared by scans and subtitle inspection. Mobile native probes are not controlled here. No mutation.',
+      'Inspect this device desktop Erika probe availability, active probe IDs/paths/PIDs/elapsed time and the last 20 outcomes with original errors. Shared by scans and subtitle inspection. Mobile native probes are not controlled here. No mutation.',
       Effect.read, const ObjectSchema({}),
       const ObjectSchema({}, additionalProperties: true)),
   _spec('media.probe.cancel',
-      'Stop only the owned ffprobe child selected by probeId from media.probe.status; wait for exit confirmation. Does not stop playback, delete files, change identities or mark a scan successful. The interrupted scan fails/cancels honestly. Then resubmit media.library.scan with a NEW requestId and inspect task.wait; task.cancel is preferred when cancelling an entire scan.',
+      'Stop only the owned Erika probe child selected by probeId from media.probe.status; wait for exit confirmation. Does not stop playback, delete files, change identities or mark a scan successful. The interrupted scan fails/cancels honestly. Then resubmit media.library.scan with a NEW requestId and inspect task.wait; task.cancel is preferred when cancelling an entire scan.',
       Effect.write, const ObjectSchema({'probeId': _text}, required: ['probeId']),
       const ObjectSchema({}, additionalProperties: true)),
   _spec(
