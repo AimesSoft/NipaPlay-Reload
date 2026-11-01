@@ -311,6 +311,7 @@ final class TrackFacts {
     this.language,
     this.channels,
     this.sampleRate,
+    this.bitRate,
   });
   final int index;
   final String? codec;
@@ -318,6 +319,7 @@ final class TrackFacts {
   final String? language;
   final int? channels;
   final int? sampleRate;
+  final int? bitRate;
 
   JsonMap toJson() => {
         'index': index,
@@ -326,6 +328,7 @@ final class TrackFacts {
         'language': language,
         if (channels != null) 'channels': channels,
         if (sampleRate != null) 'sampleRate': sampleRate,
+        if (bitRate != null) 'bitRate': bitRate,
       };
 }
 
@@ -340,6 +343,10 @@ final class MediaFacts {
     this.frameRate,
     this.format,
     this.bitRate,
+    this.videoProfile,
+    this.pixelFormat,
+    this.videoBitRate,
+    this.dynamicRange,
     this.audio = const [],
     this.subtitles = const [],
     this.activeAudio = const [],
@@ -352,8 +359,16 @@ final class MediaFacts {
   final int height;
   final String? videoCodec;
   final double? frameRate;
+  /// The container's format and its overall bit rate.
   final String? format;
   final int? bitRate;
+  final String? videoProfile;
+  final String? pixelFormat;
+  final int? videoBitRate;
+
+  /// How the picture is encoded for light: `sdr`, `pq`, `hlg` or
+  /// `dolby_vision`, as the kernel reads the stream (null: it does not say).
+  final String? dynamicRange;
   final List<TrackFacts> audio;
   final List<TrackFacts> subtitles;
 
@@ -376,6 +391,10 @@ final class MediaFacts {
         'frameRate': frameRate,
         'format': format,
         'bitRate': bitRate,
+        if (videoProfile != null) 'videoProfile': videoProfile,
+        if (pixelFormat != null) 'pixelFormat': pixelFormat,
+        if (videoBitRate != null) 'videoBitRate': videoBitRate,
+        if (dynamicRange != null) 'dynamicRange': dynamicRange,
         'audio': [for (final t in audio) t.toJson()],
         'subtitles': [for (final t in subtitles) t.toJson()],
         'activeAudio': activeAudio,

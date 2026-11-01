@@ -639,6 +639,7 @@ class ErikaPlayerAdapter
   // Kept for NipaPlay Next; Classic reads neither. Erika starts without its
   // debug HUD and only [setDebugHud] turns it on.
   Map<String, Object?>? _lastVideoParams;
+  Map<String, Object?>? _container;
   bool _debugHudEnabled = false;
   String? _lastNativeError;
   int _lastPositionMs = 0;
@@ -893,6 +894,43 @@ class ErikaPlayerAdapter
     return track.frameRateNumerator / track.frameRateDenominator;
   }
 
+  ErikaTrackInfo? get _videoTrack =>
+      _videoTrackInfos.where((t) => t.selected).firstOrNull ??
+      _videoTrackInfos.firstOrNull;
+
+  String? get videoProfile => _videoTrack?.profile;
+  String? get videoPixelFormat => _videoTrack?.pixelFormat;
+  int? get videoBitRate => _videoTrack?.bitRate;
+
+  /// `sdr`, `pq` or `hlg`, by the transfer Erika reads from the video
+  /// (null: it reads none).
+  String? get videoDynamicRange => switch (_lastVideoParams?['transfer']) {
+        1 || 2 => 'sdr',
+        3 => 'pq',
+        4 => 'hlg',
+        _ => null,
+      };
+
+  /// The container's format and overall bit rate, once [readContainer] has
+  /// asked Erika for them.
+  String? get containerFormat => _container?['format'] as String?;
+  int? get containerBitRate => (_container?['bitRate'] as num?)?.toInt();
+
+  /// Asks Erika what the opened container says of itself; an Erika without
+  /// the `container` method leaves both unknown.
+  Future<void> readContainer() async {
+    if (!_isSupported) return;
+    final reply = await invokeNative('container', const {});
+    final result = reply.result;
+    if (reply.error != null || result is! Map || result['mediaOpen'] != true) {
+      return;
+    }
+    _container = <String, Object?>{
+      'format': result['format'] as String?,
+      'bitRate': result['bitRate'] as num?,
+    };
+  }
+
   /// Turns tracks on and returns once Erika has taken the request (Next's
   /// session driver; the setters above fire and forget). [audio] and
   /// [subtitles] are indices of [mediaInfo]'s lists; an empty [subtitles]
@@ -978,6 +1016,7 @@ class ErikaPlayerAdapter
       _lastOutputStatus = const <String, dynamic>{};
       _lastDecoderStatus = const <String, dynamic>{};
       _lastVideoParams = null;
+      _container = null;
       _properties.remove('decoder.video');
       _properties.remove('video.decoder');
       _lastAudioOutputStatus = const <String, dynamic>{};
@@ -1700,6 +1739,8 @@ class ErikaPlayerAdapter
       'outputStatus': _lastOutputStatus,
       'decoder': _lastDecoderStatus,
       'audioOutput': _lastAudioOutputStatus,
+      'container': _container,
+      'videoParams': _lastVideoParams,
       if (_lastNativeError != null) 'lastError': _lastNativeError,
       'tracks': <String, dynamic>{
         'video': _videoTrackInfos.map(_erikaTrackToDebugMap).toList(),
@@ -1716,6 +1757,7 @@ class ErikaPlayerAdapter
   }
 
   Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async {
+    if (_container == null) await readContainer();
     await getUpscalerStatus();
     await _refreshPresenterStats();
     return getDetailedMediaInfo();
@@ -1971,6 +2013,9 @@ class ErikaPlayerAdapter
       final decoderName = switch (decoder.activeBackend) {
         'cuda' => 'CUDA / NVDEC',
         'vaapi' => 'VA-API',
+        'videotoolbox' => 'VideoToolbox',
+        'd3d11va' => 'D3D11VA',
+        'mediacodec' => 'MediaCodec',
         'software' => 'FFmpeg (software)',
         final backend => backend,
       };
@@ -2104,18 +2149,22 @@ class ErikaPlayerAdapter
         duration: event.duration.inMilliseconds,
       );
     }
+    // The video's parameters follow its track list; they give the size of
+    // tracks that state none, and stand alone only until the list arrives.
     if (event.video.width > 0 && event.video.height > 0) {
       updatedInfo = updatedInfo.copyWith(
-        video: <PlayerVideoStreamInfo>[
-          PlayerVideoStreamInfo(
-            codec: PlayerVideoCodecParams(
-              width: event.video.width,
-              height: event.video.height,
-              name: 'Erika Video',
-            ),
-            codecName: 'unknown',
-          ),
-        ],
+        video: _videoTrackInfos.isEmpty
+            ? <PlayerVideoStreamInfo>[
+                PlayerVideoStreamInfo(
+                  codec: PlayerVideoCodecParams(
+                    width: event.video.width,
+                    height: event.video.height,
+                    name: 'Erika Video',
+                  ),
+                  codecName: 'unknown',
+                ),
+              ]
+            : _videoStreams(event.video.width, event.video.height),
       );
     }
     // Erika emits the full descriptor list (with native ids, titles and the
@@ -2141,21 +2190,10 @@ class ErikaPlayerAdapter
       updatedInfo = updatedInfo.copyWith(
         video: videoInfos.isEmpty
             ? null
-            : <PlayerVideoStreamInfo>[
-                for (var i = 0; i < videoInfos.length; i++)
-                  PlayerVideoStreamInfo(
-                    codec: PlayerVideoCodecParams(
-                      width: videoInfos[i].width > 0
-                          ? videoInfos[i].width
-                          : event.video.width,
-                      height: videoInfos[i].height > 0
-                          ? videoInfos[i].height
-                          : event.video.height,
-                      name: _formatErikaVideoCodecParams(videoInfos[i]),
-                    ),
-                    codecName: videoInfos[i].codec ?? 'unknown',
-                  ),
-              ],
+            : _videoStreams(
+                (_lastVideoParams?['width'] as int?) ?? event.video.width,
+                (_lastVideoParams?['height'] as int?) ?? event.video.height,
+              ),
         audio: <PlayerAudioStreamInfo>[
           for (var i = 0; i < audioInfos.length; i++)
             PlayerAudioStreamInfo(
@@ -2166,6 +2204,7 @@ class ErikaPlayerAdapter
                 sampleRate: audioInfos[i].sampleRate > 0
                     ? audioInfos[i].sampleRate
                     : null,
+                bitRate: audioInfos[i].bitRate,
               ),
               title: audioInfos[i].title ?? 'Audio ${i + 1}',
               language: audioInfos[i].language,
@@ -2217,12 +2256,26 @@ class ErikaPlayerAdapter
         : 'Erika 播放失败：${details.join('；')}';
   }
 
+  List<PlayerVideoStreamInfo> _videoStreams(int width, int height) => [
+        for (final track in _videoTrackInfos)
+          PlayerVideoStreamInfo(
+            codec: PlayerVideoCodecParams(
+              width: track.width > 0 ? track.width : width,
+              height: track.height > 0 ? track.height : height,
+              name: _formatErikaVideoCodecParams(track),
+            ),
+            codecName: track.codec ?? 'unknown',
+          ),
+      ];
+
   static String _formatErikaVideoCodecParams(ErikaTrackInfo track) {
     final parts = <String>[
       if (track.codec != null) 'codec: ${track.codec}',
       if (track.profile != null) 'profile: ${track.profile}',
       if (track.level > 0) 'level: ${track.level}',
+      if (track.bitRate != null) 'bitRate: ${track.bitRate}',
       if (track.width > 0 && track.height > 0) '${track.width}x${track.height}',
+      if (track.framesPerSecond case final fps?) '${fps}fps',
       if (track.pixelFormat != null) 'format: ${track.pixelFormat}',
     ];
     return parts.isEmpty ? 'Erika Video' : parts.join(', ');
@@ -2246,6 +2299,8 @@ class ErikaPlayerAdapter
       if (track.sampleFormat != null) 'sampleFormat': track.sampleFormat,
       if (track.profile != null) 'profile': track.profile,
       if (track.level > 0) 'level': track.level,
+      if (track.bitRate != null) 'bitRate': track.bitRate,
+      if (track.framesPerSecond case final fps?) 'frameRate': fps,
     };
   }
 

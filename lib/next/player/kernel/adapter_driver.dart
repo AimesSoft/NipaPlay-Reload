@@ -539,7 +539,13 @@ abstract class AdapterDriver implements KernelDriver {
       {List<int> activeAudio = const [],
       List<int> activeSubtitles = const [],
       double? frameRate,
-      List<ChapterFacts>? chapters}) {
+      List<ChapterFacts>? chapters,
+      String? format,
+      int? bitRate,
+      String? videoProfile,
+      String? pixelFormat,
+      int? videoBitRate,
+      String? dynamicRange}) {
     final first = info.video?.firstOrNull;
     return MediaFacts(
       duration: Duration(milliseconds: info.duration),
@@ -548,6 +554,12 @@ abstract class AdapterDriver implements KernelDriver {
       videoCodec: first == null || first.codecName == 'unknown'
           ? null
           : first.codecName,
+      format: format,
+      bitRate: bitRate,
+      videoProfile: videoProfile,
+      pixelFormat: pixelFormat,
+      videoBitRate: videoBitRate,
+      dynamicRange: dynamicRange,
       audio: [
         for (final (i, a)
             in (info.audio ?? const <PlayerAudioStreamInfo>[]).indexed)
@@ -557,7 +569,8 @@ abstract class AdapterDriver implements KernelDriver {
               title: a.title,
               language: a.language,
               channels: a.codec.channels,
-              sampleRate: a.codec.sampleRate),
+              sampleRate: a.codec.sampleRate,
+              bitRate: a.codec.bitRate),
       ],
       subtitles: [
         for (final (i, s)

@@ -347,6 +347,8 @@ final class ErikaDriver extends AdapterDriver
     queue.live();
     _chapters = await readErikaChapters(adapter.invokeNative);
     queue.live();
+    await adapter.readContainer();
+    queue.live();
     // Duration and the tracks arrive as events once Erika has opened it.
     await _durationKnown.future;
     queue.live();
@@ -529,7 +531,13 @@ final class ErikaDriver extends AdapterDriver
       activeAudio: adapter.activeAudioTracks,
       activeSubtitles: adapter.activeSubtitleTracks,
       frameRate: adapter.videoFrameRate,
-      chapters: _chapters);
+      chapters: _chapters,
+      format: adapter.containerFormat,
+      bitRate: adapter.containerBitRate,
+      videoProfile: adapter.videoProfile,
+      pixelFormat: adapter.videoPixelFormat,
+      videoBitRate: adapter.videoBitRate,
+      dynamicRange: adapter.videoDynamicRange);
 
   /// Erika's own picture, with the subtitles it draws in it. It has no
   /// frame step of its own: stepping a frame is a seek by the declared

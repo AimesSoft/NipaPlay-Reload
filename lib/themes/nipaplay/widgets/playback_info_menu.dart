@@ -407,9 +407,23 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
         ],
         sep: ' · ',
       );
+      final detailedInfo = _detailedInfoFor(videoState);
+      final container = detailedInfo['container'] is Map
+          ? Map<String, dynamic>.from(detailedInfo['container'] as Map)
+          : const <String, dynamic>{};
+      final containerFormat = _normalizeText(container['format']);
+      final containerBitRate = _toNum(container['bitRate'])?.toInt() ?? 0;
+      final dynamicRange = _erikaDynamicRange(detailedInfo['videoParams']);
       return [
+        if (containerFormat != null) InfoItem('容器', containerFormat),
         InfoItem('编解码器', codecName),
         InfoItem('分辨率', resolution),
+        InfoItem('帧率', codecInfo['fps'] ?? '未知'),
+        InfoItem('码率', codecInfo['bitRate'] ?? '未知'),
+        if (containerBitRate > 0)
+          InfoItem('整体码率',
+              '${(containerBitRate / 1000000).toStringAsFixed(1)} Mbps'),
+        if (dynamicRange != null) InfoItem('动态范围', dynamicRange),
         InfoItem('解码', videoState.player.getProperty('decoder.video') ?? 'Erika'),
         if (details.isNotEmpty) InfoItem('参数', details),
       ];
@@ -679,6 +693,17 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
 
   bool get _isErikaKernel => _playerKernelName.toLowerCase().contains('erika');
 
+  // Erika's transfer function: 1 sRGB, 2 BT.1886, 3 PQ, 4 HLG.
+  String? _erikaDynamicRange(Object? videoParams) {
+    if (videoParams is! Map) return null;
+    return switch (_toNum(videoParams['transfer'])?.toInt()) {
+      1 || 2 => 'SDR',
+      3 => 'HDR (PQ)',
+      4 => 'HDR (HLG)',
+      _ => null,
+    };
+  }
+
   List<InfoItem> _getAudioInfo(VideoPlayerState videoState) {
     final mediaInfo = videoState.player.mediaInfo;
     final audioStreams = mediaInfo.audio;
@@ -706,12 +731,15 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
           ? _formatChannels(codec.channels!)
           : '未知';
       final sampleFormat = audioStream.metadata['sampleFormat'];
+      final bitRate = codec.bitRate != null && codec.bitRate! > 0
+          ? '${(codec.bitRate! / 1000).toStringAsFixed(0)} kbps'
+          : '未知';
       return [
         InfoItem('编解码器', codecName),
         InfoItem('采样率', sampleRate),
         InfoItem('声道', channels),
         if (sampleFormat != null) InfoItem('采样格式', sampleFormat),
-        InfoItem('码率', '未知'),
+        InfoItem('码率', bitRate),
       ];
     } else if (playerKernelName.toLowerCase().contains('mdk')) {
       // MDK播放器：解析完整的参数字符串

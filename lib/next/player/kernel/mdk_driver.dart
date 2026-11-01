@@ -814,6 +814,31 @@ final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
   Future<String?> subtitleText({Duration? at}) => _queue.run(() async =>
       _player.subtitleText(time: at == null ? -1 : at.inMicroseconds / 1e6));
 
+  // MDK reports the profile as FFmpeg's number; these are the names of the
+  // ones a player meets.
+  static String? _profile(mdk.VideoCodecParameters c) =>
+      switch ((c.codec.toLowerCase(), c.profile)) {
+        ('h264', 66) => 'Baseline',
+        ('h264', 77) => 'Main',
+        ('h264', 100) => 'High',
+        ('h264', 110) => 'High 10',
+        ('hevc', 1) => 'Main',
+        ('hevc', 2) => 'Main 10',
+        ('av1', 0) => 'Main',
+        ('av1', 1) => 'High',
+        _ => null,
+      };
+
+  static String? _dynamicRange(mdk.VideoCodecParameters c) {
+    if (c.doviProfile > 0) return 'dolby_vision';
+    return switch (c.colorSpace) {
+      mdk.ColorSpace.bt2100PQ => 'pq',
+      mdk.ColorSpace.bt2100hlg => 'hlg',
+      mdk.ColorSpace.bt709 => 'sdr',
+      _ => null,
+    };
+  }
+
   MediaFacts _readMedia() {
     final info = _player.mediaInfo;
     final video = info.video ?? const [];
@@ -835,6 +860,12 @@ final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
       frameRate: first?.codec.frameRate,
       format: text(() => info.format),
       bitRate: info.bitRate,
+      videoProfile: first == null ? null : _profile(first.codec),
+      pixelFormat: first == null ? null : text(() => first.codec.formatName),
+      videoBitRate: first == null || first.codec.bitRate <= 0
+          ? null
+          : first.codec.bitRate,
+      dynamicRange: first == null ? null : _dynamicRange(first.codec),
       audio: [
         for (final (i, a) in (info.audio ?? const <mdk.AudioStreamInfo>[]).indexed)
           TrackFacts(
@@ -844,6 +875,7 @@ final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
             language: a.metadata['language'],
             channels: a.codec.channels,
             sampleRate: a.codec.sampleRate,
+            bitRate: a.codec.bitRate > 0 ? a.codec.bitRate : null,
           ),
       ],
       subtitles: [

@@ -6,6 +6,7 @@ import 'package:nipaplay/next/player/core/arbiter.dart';
 import 'package:nipaplay/next/player/kernel/adapter_driver.dart';
 import 'package:nipaplay/next/player/kernel/driver.dart';
 import 'package:nipaplay/next/player/kernel/native.dart';
+import 'package:nipaplay/player_abstraction/player_data_models.dart';
 
 /// A kernel behind [AdapterDriver] that does what it is scripted to: the
 /// order in which the base opens, seeks, changes tracks and lets go is what
@@ -177,6 +178,37 @@ void main() {
     requireLease(lease, 'Test');
     await lease.release();
     expect(() => requireLease(lease, 'Test'), throwsStateError);
+  });
+
+  test('the facts carry what the kernel read of container, video and audio',
+      () async {
+    final (driver, _) = await made();
+    // ignore: invalid_use_of_protected_member
+    final facts = driver.mediaFromInfo(
+        PlayerMediaInfo(duration: 1000, audio: [
+          PlayerAudioStreamInfo(
+              codec: PlayerAudioCodecParams(
+                  name: 'aac', channels: 2, sampleRate: 48000, bitRate: 128000),
+              rawRepresentation: 'aac'),
+        ]),
+        format: 'matroska,webm',
+        bitRate: 8000000,
+        videoProfile: 'Main 10',
+        pixelFormat: 'yuv420p10le',
+        videoBitRate: 7000000,
+        dynamicRange: 'pq');
+    expect(facts.toJson(), containsPair('format', 'matroska,webm'));
+    expect(facts.toJson(), containsPair('bitRate', 8000000));
+    expect(facts.toJson(), containsPair('videoProfile', 'Main 10'));
+    expect(facts.toJson(), containsPair('pixelFormat', 'yuv420p10le'));
+    expect(facts.toJson(), containsPair('videoBitRate', 7000000));
+    expect(facts.toJson(), containsPair('dynamicRange', 'pq'));
+    expect(facts.audio.single.toJson(), containsPair('bitRate', 128000));
+    // What a kernel does not say stays out of the facts.
+    // ignore: invalid_use_of_protected_member
+    final bare = driver.mediaFromInfo(PlayerMediaInfo(duration: 1000));
+    expect(bare.toJson().keys,
+        isNot(anyOf(contains('videoProfile'), contains('dynamicRange'))));
   });
 
   test('it opens in order, paused, and says what it opened with', () async {

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipa_harness/nipa_harness.dart' show Failure;
 
+import '../../player/kernel/driver.dart' show KernelDriver;
 import '../../player/ports/session_playback.dart';
 import '../data/gui_calls.dart';
 import '../data/settings_data.dart';
@@ -1202,6 +1203,8 @@ class _PlaybackInfo extends StatefulWidget {
 
 class _PlaybackInfoState extends State<_PlaybackInfo> {
   bool _copied = false;
+  String? _decoder;
+  Object? _decoderOf;
 
   static String _source(String? kind) => switch (kind) {
         'local' => '本地文件',
@@ -1215,6 +1218,49 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
   static String _rate(int bits) => bits >= 1000000
       ? '${(bits / 1000000).toStringAsFixed(1)} Mbps'
       : '${(bits / 1000).round()} kbps';
+
+  // FFmpeg's demuxer names, as a viewer knows the formats.
+  static String _container(String format) => switch (format) {
+        'matroska,webm' => 'Matroska',
+        'mov,mp4,m4a,3gp,3g2,mj2' => 'MP4 / MOV',
+        'mpegts' => 'MPEG-TS',
+        _ => format,
+      };
+
+  static int? _bitDepth(String? pixelFormat) {
+    if (pixelFormat == null) return null;
+    final deep = RegExp(r'p(\d{2})(?:le|be)?$').firstMatch(pixelFormat) ??
+        RegExp(r'^p0(\d{2})').firstMatch(pixelFormat);
+    if (deep != null) return int.parse(deep.group(1)!);
+    return RegExp(r'^(yuvj?4[24][024]p|nv12|nv21)$').hasMatch(pixelFormat)
+        ? 8
+        : null;
+  }
+
+  static String? _range(String? range) => switch (range) {
+        'sdr' => 'SDR',
+        'pq' => 'HDR (PQ)',
+        'hlg' => 'HDR (HLG)',
+        'dolby_vision' => 'Dolby Vision',
+        _ => null,
+      };
+
+  /// The decoder as the kernel names it now, read once per kernel instance.
+  void _readDecoder(KernelDriver? driver) {
+    if (driver == null || identical(driver, _decoderOf)) return;
+    _decoderOf = driver;
+    _decoder = null;
+    if (driver.fenced) return;
+    unawaited(() async {
+      try {
+        final decoders = (await driver.readFacts())['decoders'];
+        final video = decoders is Map ? decoders['video'] : null;
+        if (mounted && identical(driver, _decoderOf) && video is String) {
+          setState(() => _decoder = video.isEmpty ? null : video);
+        }
+      } catch (_) {}
+    }());
+  }
 
   Future<void> _copy() async {
     try {
@@ -1237,6 +1283,7 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
       selector: (_) => session?.media.value.hashCode ?? 0,
       builder: (context, _, __) {
         final media = session?.media.value;
+        _readDecoder(session?.driver);
         final plan = s?.sources.plan;
         final audio = media == null
             ? null
@@ -1250,14 +1297,25 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
           if (plan?.serverSession case final server?)
             ('串流', server.isTranscoding ? '转码' : '直接播放'),
           if (media != null) ...[
-            if (media.format case final f? when f.isNotEmpty) ('容器', f),
+            if (media.format case final f? when f.isNotEmpty)
+              ('容器', _container(f)),
             if (media.width > 0)
               ('分辨率', '${media.width} × ${media.height}'),
             if (media.videoCodec case final c? when c.isNotEmpty)
-              ('视频', c),
+              (
+                '视频',
+                [
+                  c,
+                  if (media.videoProfile case final p? when p.isNotEmpty) p,
+                  if (_bitDepth(media.pixelFormat) case final d?) '$d bit',
+                  if (media.videoBitRate case final b? when b > 0) _rate(b),
+                ].join(' · ')
+              ),
+            if (_range(media.dynamicRange) case final r?) ('动态范围', r),
             if (media.frameRate case final f? when f > 0)
               ('帧率', '${f.toStringAsFixed(f == f.roundToDouble() ? 0 : 2)} fps'),
             if (media.bitRate case final b? when b > 0) ('码率', _rate(b)),
+            if (_decoder case final d?) ('解码', d),
             if (audio != null)
               (
                 '音频',
@@ -1266,6 +1324,7 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
                   if (audio.channels case final ch? when ch > 0) '$ch 声道',
                   if (audio.sampleRate case final r? when r > 0)
                     '${(r / 1000).toStringAsFixed(1)} kHz',
+                  if (audio.bitRate case final b? when b > 0) _rate(b),
                 ].join(' · ')
               ),
           ],
