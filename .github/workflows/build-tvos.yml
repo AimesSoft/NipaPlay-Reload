@@ -3,11 +3,6 @@ name: Build tvOS
 on:
   workflow_dispatch:
   workflow_call:
-    inputs:
-      build-app-store:
-        description: 'Also compile an App Store application with sponsorship hidden'
-        type: boolean
-        default: false
     outputs:
       version:
         description: Application version from pubspec.yaml
@@ -222,22 +217,3 @@ jobs:
             dist/SHA256SUMS-tvOS
           if-no-files-found: error
           retention-days: 14
-
-      - name: Compile tvOS App Store application
-        if: inputs.build-app-store && github.event_name != 'pull_request'
-        shell: bash
-        run: |
-          set -euo pipefail
-          XCODE_XCCONFIG_FILE="$RUNNER_TEMP/NipaPlay-tvOS-unsigned.xcconfig" \
-            "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" build tvos --release --no-pub \
-            --dart-define=NIPAPLAY_APP_STORE=true --build-number=1101.2
-          app_path=$(find build/tvos/Release-appletvos -maxdepth 1 -type d -name '*.app' -print -quit)
-          test -n "$app_path"
-          ditto -c -k --keepParent "$app_path" "$RUNNER_TEMP/NipaPlay-tvOS-AppStore-unsigned.zip"
-      - name: Upload unsigned tvOS App Store application
-        if: inputs.build-app-store && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-store-tvOS-unsigned
-          path: ${{ runner.temp }}/NipaPlay-tvOS-AppStore-unsigned.zip
-          if-no-files-found: error

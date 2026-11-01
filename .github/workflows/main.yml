@@ -7,16 +7,6 @@ on:
         description: 'Release title, e.g. 2026.0430'
         required: true
         type: string
-      changelog_base_ref:
-        description: 'Optional previous release tag when rebuilding an existing version'
-        required: false
-        default: ''
-        type: string
-      expected_release_tag_sha:
-        description: 'Expected existing tag SHA when replacing release assets and retargeting its source'
-        required: false
-        default: ''
-        type: string
       submit_ios_for_review:
         description: 'Upload iOS build and automatically submit it for App Review'
         required: true
@@ -96,8 +86,6 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/build-macos.yml
-    with:
-      build-app-store: true
     secrets:
       MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
       MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -137,8 +125,6 @@ jobs:
     needs: Gatekeeper
     if: needs.Gatekeeper.outputs.triggered == 'true'
     uses: ./.github/workflows/build-tvos.yml
-    with:
-      build-app-store: true
 
   Publish:
     name: Publish Release
@@ -171,7 +157,6 @@ jobs:
         id: ai_changelog
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
-          CHANGELOG_BASE_REF: ${{ inputs.changelog_base_ref }}
           AI_API_URL: ${{ vars.RELEASE_AI_API_URL }}
           AI_MODEL: ${{ vars.RELEASE_AI_MODEL || 'gemini-3-flash-preview' }}
           AI_API_TOKEN: ${{ secrets.RELEASE_AI_TOKEN }}
@@ -211,11 +196,6 @@ jobs:
           else
             echo "Last release was at tag: $LATEST_TAG"
             COMMIT_RANGE="$LATEST_TAG..HEAD"
-          fi
-
-          if [ -n "$CHANGELOG_BASE_REF" ]; then
-            git rev-parse --verify "$CHANGELOG_BASE_REF^{commit}" >/dev/null
-            COMMIT_RANGE="$CHANGELOG_BASE_REF..HEAD"
           fi
 
           # Get commit history since the last tag
@@ -444,21 +424,6 @@ jobs:
           artifactErrorsFailBuild: true
           replacesArtifacts: true
           token: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
-
-      - name: Retarget replaced release to its rebuilt source
-        if: inputs.expected_release_tag_sha != ''
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
-          EXPECTED_TAG_SHA: ${{ inputs.expected_release_tag_sha }}
-          RELEASE_VERSION: ${{ needs.Build-Android.outputs.version }}
-        run: |
-          set -euo pipefail
-          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$RELEASE_VERSION" --jq '.object.sha')
-          if [ "$current" != "$EXPECTED_TAG_SHA" ] && [ "$current" != "$GITHUB_SHA" ]; then
-            echo 'Release tag changed externally; refusing to overwrite it.' >&2
-            exit 1
-          fi
-          gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/v$RELEASE_VERSION" -f sha="$GITHUB_SHA" -F force=true
 
   Publish-iOS-App-Store:
     name: Publish iOS to App Store Connect
