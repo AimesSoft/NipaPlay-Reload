@@ -1719,6 +1719,9 @@ class ErikaPlayerAdapter
       final decoderName = switch (decoder.activeBackend) {
         'cuda' => 'CUDA / NVDEC',
         'vaapi' => 'VA-API',
+        'videotoolbox' => 'VideoToolbox',
+        'd3d11va' => 'D3D11VA',
+        'mediacodec' => 'MediaCodec',
         'software' => 'FFmpeg (software)',
         final backend => backend,
       };
@@ -1813,18 +1816,22 @@ class ErikaPlayerAdapter
         duration: event.duration.inMilliseconds,
       );
     }
+    // The video's parameters follow its track list; they give the size of
+    // tracks that state none, and stand alone only until the list arrives.
     if (event.video.width > 0 && event.video.height > 0) {
       updatedInfo = updatedInfo.copyWith(
-        video: <PlayerVideoStreamInfo>[
-          PlayerVideoStreamInfo(
-            codec: PlayerVideoCodecParams(
-              width: event.video.width,
-              height: event.video.height,
-              name: 'Erika Video',
-            ),
-            codecName: 'unknown',
-          ),
-        ],
+        video: _videoTrackInfos.isEmpty
+            ? <PlayerVideoStreamInfo>[
+                PlayerVideoStreamInfo(
+                  codec: PlayerVideoCodecParams(
+                    width: event.video.width,
+                    height: event.video.height,
+                    name: 'Erika Video',
+                  ),
+                  codecName: 'unknown',
+                ),
+              ]
+            : _videoStreams(event.video.width, event.video.height),
       );
     }
     // Erika emits the full descriptor list (with native ids, titles and the
@@ -1850,21 +1857,7 @@ class ErikaPlayerAdapter
       updatedInfo = updatedInfo.copyWith(
         video: videoInfos.isEmpty
             ? null
-            : <PlayerVideoStreamInfo>[
-                for (var i = 0; i < videoInfos.length; i++)
-                  PlayerVideoStreamInfo(
-                    codec: PlayerVideoCodecParams(
-                      width: videoInfos[i].width > 0
-                          ? videoInfos[i].width
-                          : event.video.width,
-                      height: videoInfos[i].height > 0
-                          ? videoInfos[i].height
-                          : event.video.height,
-                      name: _formatErikaVideoCodecParams(videoInfos[i]),
-                    ),
-                    codecName: videoInfos[i].codec ?? 'unknown',
-                  ),
-              ],
+            : _videoStreams(event.video.width, event.video.height),
         audio: <PlayerAudioStreamInfo>[
           for (var i = 0; i < audioInfos.length; i++)
             PlayerAudioStreamInfo(
@@ -1875,6 +1868,7 @@ class ErikaPlayerAdapter
                 sampleRate: audioInfos[i].sampleRate > 0
                     ? audioInfos[i].sampleRate
                     : null,
+                bitRate: audioInfos[i].bitRate,
               ),
               title: audioInfos[i].title ?? 'Audio ${i + 1}',
               language: audioInfos[i].language,
@@ -1925,12 +1919,26 @@ class ErikaPlayerAdapter
         : 'Erika 播放失败：${details.join('；')}';
   }
 
+  List<PlayerVideoStreamInfo> _videoStreams(int width, int height) => [
+        for (final track in _videoTrackInfos)
+          PlayerVideoStreamInfo(
+            codec: PlayerVideoCodecParams(
+              width: track.width > 0 ? track.width : width,
+              height: track.height > 0 ? track.height : height,
+              name: _formatErikaVideoCodecParams(track),
+            ),
+            codecName: track.codec ?? 'unknown',
+          ),
+      ];
+
   static String _formatErikaVideoCodecParams(ErikaTrackInfo track) {
     final parts = <String>[
       if (track.codec != null) 'codec: ${track.codec}',
       if (track.profile != null) 'profile: ${track.profile}',
       if (track.level > 0) 'level: ${track.level}',
+      if (track.bitRate != null) 'bitRate: ${track.bitRate}',
       if (track.width > 0 && track.height > 0) '${track.width}x${track.height}',
+      if (track.framesPerSecond case final fps?) '${fps}fps',
       if (track.pixelFormat != null) 'format: ${track.pixelFormat}',
     ];
     return parts.isEmpty ? 'Erika Video' : parts.join(', ');
@@ -1954,6 +1962,8 @@ class ErikaPlayerAdapter
       if (track.sampleFormat != null) 'sampleFormat': track.sampleFormat,
       if (track.profile != null) 'profile': track.profile,
       if (track.level > 0) 'level': track.level,
+      if (track.bitRate != null) 'bitRate': track.bitRate,
+      if (track.framesPerSecond case final fps?) 'frameRate': fps,
     };
   }
 

@@ -410,6 +410,8 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
       return [
         InfoItem('编解码器', codecName),
         InfoItem('分辨率', resolution),
+        InfoItem('帧率', codecInfo['fps'] ?? '未知'),
+        InfoItem('码率', codecInfo['bitRate'] ?? '未知'),
         InfoItem('解码', videoState.player.getProperty('decoder.video') ?? 'Erika'),
         if (details.isNotEmpty) InfoItem('参数', details),
       ];
@@ -706,12 +708,15 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
           ? _formatChannels(codec.channels!)
           : '未知';
       final sampleFormat = audioStream.metadata['sampleFormat'];
+      final bitRate = codec.bitRate != null && codec.bitRate! > 0
+          ? '${(codec.bitRate! / 1000).toStringAsFixed(0)} kbps'
+          : '未知';
       return [
         InfoItem('编解码器', codecName),
         InfoItem('采样率', sampleRate),
         InfoItem('声道', channels),
         if (sampleFormat != null) InfoItem('采样格式', sampleFormat),
-        InfoItem('码率', '未知'),
+        InfoItem('码率', bitRate),
       ];
     } else if (playerKernelName.toLowerCase().contains('mdk')) {
       // MDK播放器：解析完整的参数字符串
