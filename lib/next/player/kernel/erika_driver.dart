@@ -347,7 +347,7 @@ final class ErikaDriver extends AdapterDriver
     queue.live();
     _chapters = await readErikaChapters(adapter.invokeNative);
     queue.live();
-    await adapter.readContainer();
+    await adapter.readMediaFacts();
     queue.live();
     // Duration and the tracks arrive as events once Erika has opened it.
     await _durationKnown.future;

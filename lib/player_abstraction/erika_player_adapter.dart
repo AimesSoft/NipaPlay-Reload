@@ -640,6 +640,7 @@ class ErikaPlayerAdapter
   // debug HUD and only [setDebugHud] turns it on.
   Map<String, Object?>? _lastVideoParams;
   Map<String, Object?>? _container;
+  int? _dolbyVisionProfile;
   bool _debugHudEnabled = false;
   String? _lastNativeError;
   int _lastPositionMs = 0;
@@ -902,23 +903,28 @@ class ErikaPlayerAdapter
   String? get videoPixelFormat => _videoTrack?.pixelFormat;
   int? get videoBitRate => _videoTrack?.bitRate;
 
-  /// `sdr`, `pq` or `hlg`, by the transfer Erika reads from the video
-  /// (null: it reads none).
-  String? get videoDynamicRange => switch (_lastVideoParams?['transfer']) {
-        1 || 2 => 'sdr',
-        3 => 'pq',
-        4 => 'hlg',
-        _ => null,
-      };
+  /// `dolby_vision` when the container signals a Dolby Vision profile for
+  /// the video; else `sdr`, `pq` or `hlg`, by the transfer Erika reads from
+  /// it (null: it reads none).
+  String? get videoDynamicRange {
+    if ((_dolbyVisionProfile ?? 0) > 0) return 'dolby_vision';
+    return switch (_lastVideoParams?['transfer']) {
+      1 || 2 => 'sdr',
+      3 => 'pq',
+      4 => 'hlg',
+      _ => null,
+    };
+  }
 
-  /// The container's format and overall bit rate, once [readContainer] has
+  /// The container's format and overall bit rate, once [readMediaFacts] has
   /// asked Erika for them.
   String? get containerFormat => _container?['format'] as String?;
   int? get containerBitRate => (_container?['bitRate'] as num?)?.toInt();
 
-  /// Asks Erika what the opened container says of itself; an Erika without
-  /// the `container` method leaves both unknown.
-  Future<void> readContainer() async {
+  /// Asks Erika what the opened container says of itself, and of its video's
+  /// Dolby Vision profile; an Erika without the `container` method or the
+  /// profile in `tracks` leaves them unknown.
+  Future<void> readMediaFacts() async {
     if (!_isSupported) return;
     final reply = await invokeNative('container', const {});
     final result = reply.result;
@@ -929,6 +935,11 @@ class ErikaPlayerAdapter
       'format': result['format'] as String?,
       'bitRate': result['bitRate'] as num?,
     };
+    final tracks = (await invokeNative('tracks', const {})).result;
+    if (tracks is! List) return;
+    final video = tracks.whereType<Map>().where((t) =>
+        t['kind'] == ErikaTrackKind.video.index && t['selected'] == true);
+    _dolbyVisionProfile = (video.firstOrNull?['dolbyVisionProfile'] as num?)?.toInt();
   }
 
   /// Turns tracks on and returns once Erika has taken the request (Next's
@@ -1017,6 +1028,7 @@ class ErikaPlayerAdapter
       _lastDecoderStatus = const <String, dynamic>{};
       _lastVideoParams = null;
       _container = null;
+      _dolbyVisionProfile = null;
       _properties.remove('decoder.video');
       _properties.remove('video.decoder');
       _lastAudioOutputStatus = const <String, dynamic>{};
@@ -1741,6 +1753,7 @@ class ErikaPlayerAdapter
       'audioOutput': _lastAudioOutputStatus,
       'container': _container,
       'videoParams': _lastVideoParams,
+      'dolbyVisionProfile': _dolbyVisionProfile,
       if (_lastNativeError != null) 'lastError': _lastNativeError,
       'tracks': <String, dynamic>{
         'video': _videoTrackInfos.map(_erikaTrackToDebugMap).toList(),
@@ -1757,7 +1770,7 @@ class ErikaPlayerAdapter
   }
 
   Future<Map<String, dynamic>> getDetailedMediaInfoAsync() async {
-    if (_container == null) await readContainer();
+    if (_container == null) await readMediaFacts();
     await getUpscalerStatus();
     await _refreshPresenterStats();
     return getDetailedMediaInfo();

@@ -413,7 +413,8 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
           : const <String, dynamic>{};
       final containerFormat = _normalizeText(container['format']);
       final containerBitRate = _toNum(container['bitRate'])?.toInt() ?? 0;
-      final dynamicRange = _erikaDynamicRange(detailedInfo['videoParams']);
+      final dynamicRange = _erikaDynamicRange(
+          detailedInfo['videoParams'], detailedInfo['dolbyVisionProfile']);
       return [
         if (containerFormat != null) InfoItem('容器', containerFormat),
         InfoItem('编解码器', codecName),
@@ -693,8 +694,11 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
 
   bool get _isErikaKernel => _playerKernelName.toLowerCase().contains('erika');
 
-  // Erika's transfer function: 1 sRGB, 2 BT.1886, 3 PQ, 4 HLG.
-  String? _erikaDynamicRange(Object? videoParams) {
+  // A Dolby Vision profile the container signals; else Erika's transfer
+  // function: 1 sRGB, 2 BT.1886, 3 PQ, 4 HLG.
+  String? _erikaDynamicRange(Object? videoParams, Object? dolbyVisionProfile) {
+    final profile = _toNum(dolbyVisionProfile)?.toInt() ?? 0;
+    if (profile > 0) return 'Dolby Vision（Profile $profile）';
     if (videoParams is! Map) return null;
     return switch (_toNum(videoParams['transfer'])?.toInt()) {
       1 || 2 => 'SDR',

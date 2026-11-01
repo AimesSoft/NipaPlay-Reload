@@ -15,6 +15,7 @@ void main() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   Object? containerReply;
+  Object? tracksReply;
 
   setUp(() {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
@@ -27,11 +28,23 @@ void main() {
         'mediaOpen': true,
       },
     });
+    tracksReply = jsonEncode({
+      'ok': true,
+      'status': 0,
+      'value': [
+        {'id': 1, 'kind': 0, 'selected': true, 'dolbyVisionProfile': 8},
+        {'id': 2, 'kind': 1, 'selected': true, 'dolbyVisionProfile': null},
+      ],
+    });
     messenger.setMockMethodCallHandler(playerChannel, (call) async {
       if (call.method == 'create') return 9;
       if (call.method == 'invokeJson' &&
           (call.arguments as Map)['method'] == 'container') {
         return containerReply;
+      }
+      if (call.method == 'invokeJson' &&
+          (call.arguments as Map)['method'] == 'tracks') {
+        return tracksReply;
       }
       return null;
     });
@@ -126,11 +139,13 @@ void main() {
     final player = await opened();
     try {
       expect(player.containerFormat, isNull);
-      await player.readContainer();
+      await player.readMediaFacts();
       expect(player.containerFormat, 'matroska,webm');
       expect(player.containerBitRate, 8000000);
       expect(player.getDetailedMediaInfo()['container'],
           {'format': 'matroska,webm', 'bitRate': 8000000});
+      // The container signals Dolby Vision; the PQ transfer says no more.
+      expect(player.videoDynamicRange, 'dolby_vision');
       player.setMedia('next.mkv', PlayerMediaType.video);
       expect(player.containerFormat, isNull);
     } finally {
@@ -147,7 +162,7 @@ void main() {
     });
     final player = await opened();
     try {
-      await player.readContainer();
+      await player.readMediaFacts();
       expect(player.containerFormat, isNull);
       expect(player.containerBitRate, isNull);
     } finally {
