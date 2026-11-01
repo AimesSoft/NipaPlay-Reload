@@ -46,3 +46,11 @@ Next 启动、扫描与下载完成不会隐式运行 Classic 识别。旧 Class
 合并及撤回有同来源、同 requestId 的持久回执契约：响应丢失时保留目标设备与完全相同输入，按该 Action 契约取回原结果，不换键重做。其他动作先检查各自幂等及任务回执；没有该契约不能自动重试。SQL 可通过 `db.describe/query/write/undo/receipt` 在目标库预演、提交和核查；SQL 与专用能力并存，回执 unknown 不等于未提交。
 
 参考：[媒体能力实现说明](../../../../lib/next/media/README.md)、[合并实现](../../../../lib/next/media/work_merge.dart)、[过程事实契约](../../OBSERVABILITY_CONTRACT.md)。
+
+### 扫描在 probe 阶段失败
+
+先查看 `task.get` 的 `error` 和 `receipt.probeErrors`。桌面端使用
+`media.probe.status` 查看独立探测进程；`media.probe.cancel {probeId}` 可终止指定探测并等待退出。
+不需要关闭正在播放的视频。超时会自动终止该探测，其他文件继续扫描；只要存在失败文件，
+整个任务仍报告失败及已完成数量。处理问题后用新的 requestId 调用 `media.library.scan`，
+再等任务回执。不要重复旧 requestId，也不要直接 SQL 修改任务状态。

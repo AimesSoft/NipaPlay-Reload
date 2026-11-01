@@ -13,6 +13,7 @@ import 'package:nipaplay/next/media/metadata_provider.dart';
 import 'package:nipaplay/next/media/provider_transport.dart';
 import 'package:nipaplay/next/media/providers.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
+import 'package:nipaplay/next/state/change_history.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as ppath;
 
@@ -84,10 +85,13 @@ final class MediaFixture {
   late TaskEngine engine;
   late Harness harness;
   final classic = MemoryClassic();
+  Future<int?> Function(String)? durationProbe;
   final tmdb = FixtureTransport('tmdb'),
       bangumi = FixtureTransport('bangumi'),
       dandanplay = FixtureTransport('dandanplay');
-  Future<void> open({List<String> sources = const ['tmdb']}) async {
+  bool wrapExecutors = false;
+  Future<void> open({List<String> sources = const ['tmdb'], bool productionWrappers = false}) async {
+    wrapExecutors = productionWrappers;
     sqfliteFfiInit();
     root = await Directory.systemTemp.createTemp('next-media-');
     media = await Directory(ppath.join(root.path, 'media')).create();
@@ -107,11 +111,12 @@ final class MediaFixture {
         providers: providers.where((provider) => sources.contains(provider.id)),
         classic: classic,
         authorizedRoots: () => [media.path],
-        durationProbe: (_) async => 1440000);
+        durationProbe: (path) => durationProbe?.call(path) ?? Future.value(1440000));
     engine = TaskEngine(
         store: jobs,
         ownerDeviceId: 'fixture-device',
-        executors: mediaExecutors(service));
+        executors: [for (final e in mediaExecutors(service))
+          if (wrapExecutors) OriginExecutor(e, jobs.database) else e]);
     service.engine = engine;
     harness = Harness([MediaCapability(service), TaskCapability(engine)]);
     await engine.start();

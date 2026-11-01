@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/events/signals.dart';
@@ -10,7 +11,7 @@ void main() {
   late Completer<void> entered;
   setUp(() async {
     f = MediaFixture();
-    await f.open();
+    await f.open(productionWrappers: true);
     notification = Completer<void>();
     entered = Completer<void>();
     BodySignals.emit = (_, __, ___) {
@@ -39,6 +40,21 @@ void main() {
     }
     fail('Task did not finish');
   }
+  test('one failed probe does not prevent indexing other files; scan reports failure', () async {
+    BodySignals.emit = null;
+    await File('${f.media.path}/bad.mkv').writeAsString('bad');
+    await File('${f.media.path}/good.mkv').writeAsString('good');
+    f.durationProbe = (path) async {
+      if (path.endsWith('bad.mkv')) throw const Failure(FailureCode.unavailable, 'probe fixture failure');
+      return 1000;
+    };
+    final job = await f.service.submit('media.scan', {'root': f.media.path});
+    final done = await terminal(job.jobId);
+    expect(done.state, JobState.failed);
+    expect(done.receipt!.details['indexed'], 1);
+    expect(done.receipt!.details['failedProbes'], 1);
+    expect((done.receipt!.details['probeErrors'] as List).single['error']['message'], 'probe fixture failure');
+  });
   for (final cancel in [false, true]) {
     test('reconcile committed movie with blocked notification, cancel=$cancel', () async {
       final id = await refresh();

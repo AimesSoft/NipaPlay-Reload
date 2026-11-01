@@ -159,6 +159,8 @@
 | `media.library.roots.cleanup` | write | Clean missing scan folders | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/local_library_operations.dart) |
 | `media.library.roots.list` | read | Read local scan folders | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/local_library_operations.dart) |
 | `media.library.roots.remove` | write | Remove local scan folders | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/local_library_operations.dart) |
+| `media.probe.status` | read | 查看桌面探测进程、可用性、文件、耗时和最近原始错误 | 桌面/Headless | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
+| `media.probe.cancel` | write | 停止指定探测并确认退出；不改变文件、身份或任务成功状态 | 桌面/Headless | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.library.scan` | write | Index video files under an authorized native root: enumeration, probe, head hash and file locations only | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.library.scan_classic` | write | Classic 识别扫描；Next 激活时不可用 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/local_library_operations.dart) |
 | `media.library.search` | read | Search the media library | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/library_capability.dart) |

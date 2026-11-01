@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'probe_process.dart';
 
 import 'package:fvp/mdk.dart' as mdk;
 import 'package:nipa_harness/nipa_harness.dart';
@@ -10,6 +12,9 @@ Future<void>? _pendingProbeCleanup;
 
 Future<JsonMap> probeMediaInfo(String path,
     {Future<void>? stopRequested}) async {
+  if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+    return mediaProbeProcess.run(path, stopRequested: stopRequested);
+  }
   // A timed-out native teardown still owns its player. Do not accumulate more
   // players while it is stuck, or report missing technical data as success.
   if (_pendingProbeCleanup != null) {

@@ -35,9 +35,11 @@ const nipaTaskTypes = {
 
 /// Runs [inner] once [gate] is open (or the task is asked to stop): left
 /// from a Next session, such a task waits through Classic.
-final class NipaGatedExecutor implements JobExecutor {
+final class NipaGatedExecutor implements JobExecutor, WrappedJobExecutor {
   NipaGatedExecutor(this.inner, this.gate);
   final JobExecutor inner;
+  @override
+  JobExecutor get innerExecutor => inner;
   final NipaGate gate;
 
   @override

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'media/media_service.dart';
+import 'media/probe_process.dart';
 import 'danmaku/service.dart';
 import 'settings/registry.dart';
 import 'mesh/runtime.dart';
@@ -41,6 +42,8 @@ final class AppCapabilities implements Capability {
   }
 
   Future<JsonMap> facts() async {
+    final desktopProbe = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+    final probeReady = subtitleProbeReady?.call() ?? (desktopProbe ? mediaProbeProcess.resolveExecutable() != null : host != 'headless');
     final ddp = await _credentialState(
         const CredentialRef('preferences', 'dandanplay_token'));
     final tmdb =
@@ -150,12 +153,12 @@ final class AppCapabilities implements Capability {
         {
           'id': 'subtitle.embeddedProbe',
           'supported': true,
-          'available': subtitleProbeReady?.call() ?? gui,
-          'reason': (subtitleProbeReady?.call() ?? gui)
+          'available': probeReady,
+          'reason': (probeReady)
               ? null
-              : 'Headless ffprobe is not configured.',
+              : 'Media probe executable is unavailable; inspect media.probe.status.',
           'requiredHostSetup':
-              gui ? <String>[] : ['Provide the host ffprobe executable.']
+              probeReady ? <String>[] : ['Install the bundled ffprobe or configure NIPAPLAY_FFPROBE.']
         },
         {
           ...feature(

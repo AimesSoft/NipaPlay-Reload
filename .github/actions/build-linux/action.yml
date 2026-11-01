@@ -234,6 +234,7 @@ runs:
         arch_dir=x64
         if [ "${{ inputs.arch }}" = arm64 ]; then arch_dir=arm64; fi
         bundle="build/linux/$arch_dir/release/bundle"
+        python3 scripts/next/bundle_ffprobe.py --target "linux-$arch_dir" --output "$bundle/probe"
         test -f "$bundle/lib/liberika_capi.so"
         mkdir -p "$bundle/lib/erika-licenses"
         cp -a build/erika-linux-runtime/licenses/. "$bundle/lib/erika-licenses/"
@@ -408,6 +409,7 @@ runs:
         # Copy contents of bundle/data to AppDir/data
         echo "Copying data/* to AppDir/data/"
         cp -r "${BUILD_OUTPUT_DIR}/data/." "${APPDIR}/data/"
+        cp -r "${BUILD_OUTPUT_DIR}/probe" "${APPDIR}/probe"
         
         # Copy system libmpv libraries only when not already bundled (avoid overwriting media_kit_libs_* shipped libs)
         if find "${APPDIR}/lib" -maxdepth 1 -name "libmpv*.so*" -type f | grep -q .; then

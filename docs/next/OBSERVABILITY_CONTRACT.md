@@ -24,6 +24,26 @@
 - `mesh.devices`：runtime 给监听器、登录定时器、停止状态和防重放容量。只读传输与查询不占用持久写操作的防重放账本；重复写调用与容量不足、持久化失败具有不同 reason。
 - 既有持久入口继续保留：task 状态和 job_events、事件/动态及 body_changes、领域提交回执、journal、播放器 state/info/kernel/failures、network observations、diagnostics.status/file_logs/errors。它们通过 invocationId / jobId / commitId 关联，各自声明观察范围。
 
+## 文件探测与扫描恢复
+
+桌面版扫描、时长和字幕探测使用独立的 ffprobe 进程，不创建播放内核。
+安装包包含固定版本的探测程序；开发环境可通过 `NIPAPLAY_FFPROBE` 指定路径。
+`media.probe.status` 返回可用性、执行程序、15 秒超时、最多 4 个进程的占用、
+每个 probeId 的文件/PID/耗时，以及最近 20 次结果。错误保留原始 stderr（上限 64 KiB）。
+手机端的原生探测不属于这两个工具的控制范围。
+
+梨花发现扫描失败时，先读 `task.get` 的错误和回执，再在任务所属设备调用
+`media.probe.status`。需要中断仍在运行的探测时调用 `media.probe.cancel {probeId}`；
+只终止应用拥有的对应子进程，不接受任意 PID。`terminated:true` 表示已确认退出。
+如果只想取消整个扫描，优先 `task.cancel`，停止信号会传到探测进程。
+未确认退出的进程仍占容量并显示在状态中，不能假装已经清理。
+
+一个文件探测失败不会阻止其他文件入库；扫描最终为 `failed`，回执中的
+`indexed`、`failedProbes` 和 `probeErrors`（最多 10 条示例，包含原始错误）分别说明
+已完成和失败部分。恢复后用新的 requestId 提交 `media.library.scan`，读取新回执；
+重复旧 requestId 只返回旧任务。不会自动重试、删除失败历史、修改媒体身份或撤销已入库文件。
+当前工具不是通用的内核解锁器；其他任务按自己的错误和回执恢复，不能强制标记成功。
+
 ## 卡住的元数据刷新
 
 `task.get` 的 `execution` 返回本进程执行器占用、类型容量、更新时间和

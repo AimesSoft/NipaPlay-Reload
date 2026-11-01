@@ -10,6 +10,10 @@ abstract interface class JobExecutor {
 
 /// Read-only verification of completed effects. Implementations must reject
 /// missing evidence and ensure a signalled old execution cannot add effects.
+abstract interface class WrappedJobExecutor {
+  JobExecutor get innerExecutor;
+}
+
 abstract interface class JobReconciler {
   Future<JobReceipt> reconcile(Job job);
 }
@@ -370,9 +374,17 @@ final class TaskEngine {
     return job;
   }
 
+  JobExecutor? _resultExecutor(String type) {
+    var executor = _executors[type];
+    while (executor is WrappedJobExecutor) {
+      executor = (executor as WrappedJobExecutor).innerExecutor;
+    }
+    return executor;
+  }
+
   JsonMap executionStatus(Job job) => {
         'activeInProcess': isActive(job.jobId),
-        'reconciliationSupported': _executors[job.type] is JobReconciler,
+        'reconciliationSupported': _resultExecutor(job.type) is JobReconciler,
         'lastUpdatedAt': job.updatedAt.toUtc().toIso8601String(),
         'activeOfType': activeCount(job.type),
         'capacity': capacity(job.type),
@@ -382,7 +394,7 @@ final class TaskEngine {
   Future<Job> reconcile(String jobId) async {
     final observed = await get(jobId);
     if (observed.state.isTerminal) return observed;
-    final executor = _executors[observed.type];
+    final executor = _resultExecutor(observed.type);
     if (executor is! JobReconciler) {
       throw const Failure(FailureCode.unavailable,
           'This task type has no result reconciler; cancellation does not prove it stopped.');

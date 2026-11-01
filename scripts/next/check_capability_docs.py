@@ -95,7 +95,7 @@ BASELINE_HASHES = {
  'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': '566fb00085f124eddebb5e86bf2e9feb5bca63a6ed33be6b1ff6c3eaed656eb8',
  'lib/next/knowledge/capability.dart': '705ef8725a060aa20504794279f0b433e14288663ee024d17e33477dd9b3c400',
  'lib/next/accounts/capability.dart': '1174193fe779e32c1cf3d97792ab7be09ea3aea93d424bca90d2b4ac3b8341e1',
- 'lib/next/app_capabilities.dart': '4c9a1eea1af9a09272fcdf074c9de49927bf86a55d77c0d1f9eb3ade68961903',
+ 'lib/next/app_capabilities.dart': '96194ea948faf02ac121d969439c3d352afe276456bda2973d72f4a70e4c3f7e',
  'lib/next/body/next_body.dart': 'a4b6fc194df08cbb1573fd731e21effa97f36f213d13993a8d1dfda294e796e9',
  'lib/next/capabilities/app_runtime_capability.dart': '269a8a0bbdd214cd8bff0dece13b780f8b7f7041a7c83b7fa6055be9d2f465aa',
  'lib/next/capabilities/classic_action.dart': '7437bdf0dfda2e98026d3a0983a4d86f6de958aa56bca205880bd5696b2fa7ef',
@@ -103,7 +103,7 @@ BASELINE_HASHES = {
  'lib/next/capabilities/download_capability.dart': '18e66aee3ccb0788165ddbea65c842b0b52c8d90aa09db3ed018caaf80e9472c',
  'lib/next/capabilities/download_metadata_capability.dart': '9c55fdf10875cbe97126d4d08e162efbc2fadd9538d32fec4044b35b945ec27a',
  'lib/next/capabilities/download_playback_capability.dart': '56f9b51ac7c8ee83cbc3192f1ff3dd9e27faa3575b55b69c48ec3a650a3eefcf',
- 'lib/next/capabilities/family_descriptions.dart': '10648efc1ec0bd9c8e049f02f3180499f3af993b2dd7ac21407121258f852a6b',
+ 'lib/next/capabilities/family_descriptions.dart': '0443f622a0595af4200a90832b8d480259f1871d75ffae5a61202f91e4ed18ab',
  'lib/next/capabilities/history_capability.dart': '16c32339022d69d1a86120694938820408a879120a22aae2e2cec1862893619f',
  'lib/next/capabilities/kernel_control.dart': '83b08db31481bd3f34bfafb2e0c03b3a903b8b615da1b2a74fde61606f5f70a6',
  'lib/next/capabilities/library_capability.dart': '107685542a32791dbc7424b8a6dcf6d49a0d00a6c9d33ae2cfaccbe7e42a19d2',
@@ -129,7 +129,7 @@ BASELINE_HASHES = {
  'lib/next/media/catalog_capability.dart': 'fb4729d8a35c862346496c23283f132e7c26ecd9e5383f72a674d8b0ffa06ec0',
  'lib/next/media/file_indexing.dart': 'e1d72b823f8923988d451024d2a4899711d9ce4372d958b83b91fa278d89a16d',
  'lib/next/media/management.dart': '65d945b4e79e4e38a82c64bfa93dd89b3d97e69f6132ebdc7588b24341dca6b7',
- 'lib/next/media/media_capability.dart': '1f92c7cf328b4d0723bd216eb186f39927a983a80ad177a6be866ef7eb0d7680',
+ 'lib/next/media/media_capability.dart': '306487fc4880e848110619a9f8b2c56c2dae71e6f689b7d1a91722fbfbd9dd68',
  'lib/next/media/work_merge.dart': '0c2f996d0a7f9ecb7858ecf01b96be470ffda37b2dcdb16980b76f9d6a2566f9',
  'lib/next/media_sources/capability.dart': '3e33d4d2bddfe8ce487cc2314a9c46d93ea96676c3283b6b572b1ebf6d4b3699',
  'lib/next/media_sources/remote_admin.dart': 'c30bce4b74d697f0da26fb1b7de816dc6143f9b8b87da72a6a4e33bd93550267',
@@ -152,7 +152,7 @@ BASELINE_HASHES = {
  'lib/next/settings/consent.dart': '2ea42a2135cc4fd87679ad358ba446c90569d7d9f80b0845948cec38c19a70f9',
  'lib/next/settings/operations.dart': 'b1affc3df109392cb51639aaa96bfdb32bbeab839822b52ac30956cf1de01551',
  'lib/next/settings/prefs.dart': 'af9b70652b7e65d7d9616dbfc818511c177959b63cfaa5d60ba6c60176ae6f0d',
- 'lib/next/state/change_history.dart': 'c74d680da0f2b89e0f04a2a3e0c026ad7d49e784aec39d598f9709d571a56006',
+ 'lib/next/state/change_history.dart': '74da9724b415557f3b3de1af825ff9e1cb3eddba5772087f56ee6db55b73ad0b',
  'lib/next/state/query.dart': 'cbe6d8a902be45ee25cd81566fc51f367ed9b9b3dc677e1a421edd5b4426b596',
  'lib/next/subtitles/capability.dart': '8375856deb184041647b6224163f4cae98c261b6344a1246455d7bc9efa036d1',
  'lib/next/subtitles/edit_capability.dart': '7de256174bd60ef21ce620a6459200ffe526903ed8fa68a17d7f3d44454b4fdd',
@@ -168,7 +168,7 @@ BASELINE_HASHES = {
  'lib/security/credential_capability.dart': '26bc1852bc98ef1c4c21446b165bfb0764bdb7c763fbd16355079ebbd03f32ac',
  'packages/nipa_harness/lib/src/action.dart': 'b80ccb05cb5eb0143290d6750ec8b4557da08511c222dfff06f929d329efcb55',
  'packages/nipa_harness/lib/src/tasks/actions.dart': 'd2ee746ca0224c55c47601ea7893a4ca0aa40604cc7c59499f9e9c5d9ea55f8b',
- 'packages/nipa_harness/lib/src/tasks/engine.dart': 'ebe618e8b98a602b4359c68d4be138a4c89ae6b155a8c76a960831f564c1d81e'}
+ 'packages/nipa_harness/lib/src/tasks/engine.dart': 'b8239c6f89d81ee06380696d6e5a61e8047332c216950f7968efaaa730b11509'}
 current_files = {str(p.relative_to(root)) for p in paths if '/ui/dev/' not in str(p) and any((t in p.read_text() for t in ('ActionSpec(', 'extends Action<', 'implements Capability')))}
 current_files.update(['lib/next/next_core.dart', 'lib/next/next_runtime.dart', 'lib/next/headless/core.dart', 'lib/next/headless/ports.dart', 'lib/next/body/next_body.dart', 'lib/next/mesh/runtime.dart'])
 drift = []

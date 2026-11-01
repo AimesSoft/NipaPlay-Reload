@@ -1,6 +1,7 @@
 import 'package:nipa_harness/nipa_harness.dart';
 
 import 'identity_store.dart';
+import 'probe_process.dart';
 import 'media_service.dart';
 import 'metadata_provider.dart';
 import 'metadata_snapshot.dart';
@@ -297,6 +298,14 @@ ActionSpec _spec(String id, String description, Effect effect,
         input: input,
         output: output);
 final _specs = [
+  _spec('media.probe.status',
+      'Inspect this device desktop ffprobe availability, active probe IDs/paths/PIDs/elapsed time and the last 20 outcomes with original errors. Shared by scans and subtitle inspection. Mobile native probes are not controlled here. No mutation.',
+      Effect.read, const ObjectSchema({}),
+      const ObjectSchema({}, additionalProperties: true)),
+  _spec('media.probe.cancel',
+      'Stop only the owned ffprobe child selected by probeId from media.probe.status; wait for exit confirmation. Does not stop playback, delete files, change identities or mark a scan successful. The interrupted scan fails/cancels honestly. Then resubmit media.library.scan with a NEW requestId and inspect task.wait; task.cancel is preferred when cancelling an entire scan.',
+      Effect.write, const ObjectSchema({'probeId': _text}, required: ['probeId']),
+      const ObjectSchema({}, additionalProperties: true)),
   _spec(
       'media.metadata.search',
       'Search a metadata source. On TMDB, kind tv or movie searches that kind only; without kind, series and films are searched together in TMDB\'s own order (year then keeps results whose first air or release date is in that year). Results are transient candidates; no binding is written. Each result includes nullable workId from accepted exact/contains work or release identities in the local + Mesh catalogue (Next page ID). Title similarity and proposed/rejected/revoked bindings never count. Search may prepare the disposable catalogue/artwork projection on first read.',
@@ -352,7 +361,7 @@ final _specs = [
           required: ['imported'])),
   _spec(
       'media.library.scan',
-      'Index video files under an authorized native root: enumeration, probe, head hash and file locations only. Does not search providers, infer episodes or create identification tasks. A directory that cannot be listed (on Windows one deeper than 259 characters, unless the system allows long paths) is left out and the receipt says which: unreadableDirectories {count, examples, reason}. requestId deduplicates submission. organizeAddedFolder=true explicitly requests Agent organization after this scan using saved settings; omit for background/repeated scans. This only queues work, not a completed scrape.',
+      'Index video files under an authorized native root: enumeration, probe, head hash and file locations only. Does not search providers, infer episodes or create identification tasks. Desktop probes run in bounded child processes; media.probe.status/cancel inspect and stop them. Individual probe failures are recorded while remaining files continue; the final task is failed with indexed, failedProbes and probeErrors. A directory that cannot be listed (on Windows one deeper than 259 characters, unless the system allows long paths) is left out and the receipt says which: unreadableDirectories {count, examples, reason}. requestId deduplicates submission. organizeAddedFolder=true explicitly requests Agent organization after this scan using saved settings; omit for background/repeated scans. This only queues work, not a completed scrape.',
       Effect.write,
       const ObjectSchema({'root': _text, 'requestId': _text, 'organizeAddedFolder': BooleanSchema()},
           required: ['root', 'requestId']),
@@ -782,6 +791,10 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
     final store = service.store;
     JsonMap result;
     switch (spec.id) {
+      case 'media.probe.status':
+        result = mediaProbeProcess.status();
+      case 'media.probe.cancel':
+        result = await mediaProbeProcess.cancel(json['probeId'] as String);
       case 'media.metadata.search':
         final records = await service
             .provider(json['provider'] as String)

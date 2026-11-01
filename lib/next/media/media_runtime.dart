@@ -11,6 +11,7 @@ import 'media_service.dart';
 import 'media_capability.dart';
 import 'media_executors.dart';
 import 'media_probe.dart';
+import 'probe_process.dart';
 import 'metadata_provider.dart';
 import 'provider_transport.dart';
 import 'online_providers.dart';
@@ -57,6 +58,7 @@ final class MediaRuntime {
   Future<void> start() => service.recoverProjections();
 
   Future<void> quiesce() async {
+    await mediaProbeProcess.close();
     await service.mutate(() async {});
   }
 

@@ -202,9 +202,11 @@ final class _ScopedAction extends Action<JsonEncodable, JsonEncodable> {
   }
 }
 
-final class OriginExecutor implements JobExecutor {
+final class OriginExecutor implements JobExecutor, WrappedJobExecutor {
   const OriginExecutor(this.executor, this.database);
   final JobExecutor executor;
+  @override
+  JobExecutor get innerExecutor => executor;
   final Database database;
   @override
   String get type => executor.type;
