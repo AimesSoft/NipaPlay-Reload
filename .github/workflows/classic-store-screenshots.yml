@@ -1,0 +1,51 @@
+name: Capture Classic tvOS Store Screenshots
+on:
+  push:
+    branches: [codex/classic-appstore-11111]
+    paths: ['.github/workflows/classic-store-screenshots.yml']
+permissions:
+  actions: read
+  contents: read
+jobs:
+  capture:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-tvOS-simulator
+          run-id: 41271624857
+          github-token: ${{ github.token }}
+          path: simulator-app
+      - name: Launch Classic on Apple TV simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list runtimes
+          xcrun simctl list devicetypes
+          runtime=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; print(next(r["identifier"] for r in json.load(sys.stdin)["runtimes"] if "tvOS" in r["name"] and r["isAvailable"]))')
+          device_type=$(xcrun simctl list devicetypes -j | python3 -c 'import json,sys; print(next(r["identifier"] for r in reversed(json.load(sys.stdin)["devicetypes"]) if "Apple TV 4K" in r["name"]))')
+          device=$(xcrun simctl create NipaPlay-Store "$device_type" "$runtime")
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
+          app=$(find simulator-app -type d -name '*.app' -print -quit)
+          if [ -z "$app" ]; then
+            mkdir -p Runner.app
+            cp -R simulator-app/. Runner.app/
+            app=Runner.app
+          fi
+          bundle=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
+          xcrun simctl install "$device" "$app"
+          mkdir -p screenshots
+          for locale in zh-Hans en; do
+            xcrun simctl launch "$device" "$bundle" -AppleLanguages "($locale)"
+            sleep 20
+            xcrun simctl io "$device" screenshot "screenshots/tvos-$locale.png"
+            xcrun simctl terminate "$device" "$bundle" || true
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: classic-tvos-store-screenshots
+          path: screenshots
+          if-no-files-found: warn
