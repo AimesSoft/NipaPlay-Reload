@@ -429,12 +429,18 @@ class SubtitleManager extends ChangeNotifier {
     }
   }
 
+  /// 外挂字幕激活状态变化（挂载、移除、清除、切换）后回调。每个改变激活
+  /// 状态的入口最后都会走 [onSubtitleTrackChanged]，在这里统一通知，
+  /// VideoPlayerState 借此让内核 sub-visibility 跟随整块字幕模式。
+  VoidCallback? onExternalSubtitleActivationChanged;
+
   // 当字幕轨道改变时调用
   void onSubtitleTrackChanged() {
     final subtitlePath = getActiveExternalSubtitlePath();
     if (subtitlePath != null) {
       preloadSubtitleFile(subtitlePath);
     }
+    onExternalSubtitleActivationChanged?.call();
   }
 
   // 设置当前外部字幕路径
@@ -709,7 +715,8 @@ class SubtitleManager extends ChangeNotifier {
         final shouldFixEncoding = _shouldFixExternalSubtitleEncoding();
         _currentExternalSubtitlePath = path;
         if (shouldRenderInApp) {
-          _activateAppRenderedExternalSubtitle(path);
+          _activateAppRenderedExternalSubtitle(path,
+              keepKernelExternal: preserveStack);
         } else if (!shouldFixEncoding) {
           // 设置外部字幕文件
           _loadExternalSubtitleIntoPlayer(
@@ -874,7 +881,7 @@ class SubtitleManager extends ChangeNotifier {
       if (displayName != null) registerPathDisplayName(path, displayName);
       _activeExternalSubtitlePaths.add(path);
       unawaited(_loadPathDisplayState(path));
-      _activateAppRenderedExternalSubtitle(path);
+      _activateAppRenderedExternalSubtitle(path, keepKernelExternal: true);
       if (!_activeExternalSubtitlePaths
           .contains(_currentExternalSubtitlePath)) {
         _currentExternalSubtitlePath = path;
@@ -969,15 +976,13 @@ class SubtitleManager extends ChangeNotifier {
     // SRT/VTT 无特效，全平台 App 内叠层渲染（与内核无关）：
     // 不占内核字幕轨 -> 可与 mkv 内嵌轨共存、可热切换、可拖动
     if (extension == '.srt' || extension == '.vtt') return true;
-    // ASS/SSA：libmpv(Media Kit) 内核走内核轨由 libass 渲染，保留特效样式
-    // （滚动/卡拉OK/渐变等，adapter 已设 sub-ass-override=no）。
-    // 其他内核（Erika 等）对外挂 ASS 支持差 -> 走 App 叠层纯文本保证可显示。
+    // ASS/SSA：libmpv(Media Kit)、MDK、Erika 内核走内核轨由 libass 渲染，
+    // 保留特效样式（滚动/卡拉OK/渐变等，adapter 已设 sub-ass-override=no）。
+    // 其他内核走 App 叠层纯文本保证可显示。
     if (extension == '.ass' || extension == '.ssa') {
       try {
         final kernel = _player.getPlayerKernelName();
-        // libmpv(Media Kit)/MDK 内核走内核轨由 libass 渲染，保留特效样式；
-        // Erika 等内核挂载不了外挂 ASS 轨 -> 走 App 叠层纯文本保证可显示。
-        return kernel != 'Media Kit' && kernel != 'MDK';
+        return kernel != 'Media Kit' && kernel != 'MDK' && kernel != 'Erika';
       } catch (_) {
         return true;
       }
@@ -985,16 +990,63 @@ class SubtitleManager extends ChangeNotifier {
     return false;
   }
 
-  void _activateAppRenderedExternalSubtitle(String path) {
-    // 多字幕分块渲染：外挂字幕（SRT/ASS）走 Flutter 叠层，与内嵌轨共存，
-    // 不再清内核字幕轨/选择——否则挂载外挂会顶掉用户选好的内嵌轨。
+  void _activateAppRenderedExternalSubtitle(String path,
+      {bool keepKernelExternal = false}) {
+    // 同一时间只显示一条字幕：外挂字幕走 Flutter 叠层渲染，内核里选中的内嵌轨
+    // 会同时出画面，所以挂载时先关掉内核的内嵌轨。叠加挂载时若内核正在渲染外挂
+    // ASS/SSA（占 sid），则保持不动。
+    final kernelExternalActive = keepKernelExternal &&
+        _activeExternalSubtitlePaths.any(
+            (other) => other != path && !_shouldRenderExternalSubtitleInApp(other));
+    if (!kernelExternalActive) {
+      try {
+        if (_player.activeSubtitleTracks.isNotEmpty) {
+          _player.activeSubtitleTracks = [];
+        }
+      } catch (e) {
+        debugPrint('SubtitleManager: 关闭内嵌字幕轨失败: $e');
+      }
+    }
     unawaited(preloadSubtitleFile(path));
     debugPrint('SubtitleManager: 使用应用内叠层渲染外挂字幕: $path');
+  }
+
+  /// 在字幕菜单里选内嵌轨（[trackIndex] >= 0）或关闭字幕（< 0）：
+  /// 先摘掉所有外挂字幕（叠层与内核轨），再选内嵌轨，保证同一时间只显示一条。
+  void selectEmbeddedSubtitleTrack(int trackIndex) {
+    setExternalSubtitle('');
+    try {
+      if (trackIndex >= 0) {
+        _lastSelectedEmbeddedTrackIndex = trackIndex;
+        _player.activeSubtitleTracks = [trackIndex];
+      } else {
+        _player.activeSubtitleTracks = [];
+      }
+    } catch (e) {
+      debugPrint('SubtitleManager: 切换内嵌字幕轨失败: $e');
+    }
+    onSubtitleTrackChanged();
+    notifyListeners();
   }
 
   /// 该外挂字幕是否走 App 叠层渲染（false = 内核轨，如 libmpv 的 ASS/SSA）
   bool externalSubtitleRenderedInApp(String path) =>
       _shouldRenderExternalSubtitleInApp(path);
+
+  /// Whether the currently active external subtitle is a kernel-track
+  /// ASS/SSA (rendered by libass with script styles under libmpv).
+  ///
+  /// The whole-block embedded subtitle mode must step aside for it: writing
+  /// sub-visibility=no stops libass rendering and sub-text only exposes
+  /// plain text, which strips the script's positioning and colors (colored
+  /// \pos annotations collapse into white centered text).
+  bool isKernelRenderedExternalAssActive() {
+    final path = getActiveExternalSubtitlePath();
+    if (path == null || path.isEmpty) return false;
+    if (_shouldRenderExternalSubtitleInApp(path)) return false;
+    final ext = p.extension(path).toLowerCase();
+    return ext == '.ass' || ext == '.ssa';
+  }
 
   bool shouldRenderCurrentExternalSubtitleInApp() {
     // 多字幕分块渲染：以激活路径集合为准——取消其中一条不能让

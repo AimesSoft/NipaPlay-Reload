@@ -151,9 +151,13 @@ class _TooltipBubbleState extends State<TooltipBubble> {
         builder: (context) => Positioned(
           left: _overlayOffset.dx,
           top: _overlayOffset.dy,
-          child: Material(
-            color: Colors.transparent,
-            child: _buildBubble(_overlayWidth),
+          // 气泡纯展示：不能拦截指针事件，否则它悬浮在菜单/按钮上方时
+          // 会挡住下方内容的点击。
+          child: IgnorePointer(
+            child: Material(
+              color: Colors.transparent,
+              child: _buildBubble(_overlayWidth),
+            ),
           ),
         ),
       );

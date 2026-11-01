@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:nipaplay/app/app_navigation_scope.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
+import 'package:nipaplay/app/app_size_class_scope.dart';
 import 'package:nipaplay/app/unified_app_pages.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
@@ -24,11 +25,13 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_app_page_actions.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_page_actions_scope.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bounce_wrapper.dart';
+import 'package:nipaplay/themes/cupertino/widgets/cupertino_vertical_glass_tab_bar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/background_with_blur.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/tab_change_notifier.dart';
 import 'package:nipaplay/utils/launch_file_handler.dart';
+import 'package:nipaplay/utils/system_window_traits.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:path/path.dart' as path;
 import 'package:provider/provider.dart';
@@ -112,6 +115,9 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
   @override
   void initState() {
     super.initState();
+    SystemWindowTraitsObserver.instance
+      ..ensureStarted()
+      ..traits.addListener(_handleWindowTraitsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
   }
 
@@ -212,8 +218,14 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
     });
   }
 
+  void _handleWindowTraitsChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    SystemWindowTraitsObserver.instance.traits
+        .removeListener(_handleWindowTraitsChanged);
     _tabChangeNotifier?.removeListener(_handleNavigationRequest);
     _fileAssociationSubscription?.cancel();
     _fileAssociationErrorSubscription?.cancel();
@@ -302,6 +314,20 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         .toList(growable: false);
   }
 
+  List<CupertinoVerticalGlassTab> _buildVerticalTabs(
+    BuildContext context,
+    List<UnifiedAppPage> pages,
+  ) {
+    return pages
+        .map(
+          (page) => CupertinoVerticalGlassTab(
+            icon: page.phoneActiveIcon,
+            label: page.title(context.l10n),
+          ),
+        )
+        .toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = _pages;
@@ -325,6 +351,7 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
         CupertinoTheme.brightnessOf(context) == Brightness.light
             ? _lightPhoneNavigationGlassSettings
             : _darkPhoneNavigationGlassSettings;
+    final windowTraits = SystemWindowTraitsObserver.instance.traits.value;
 
     return Selector2<BottomBarProvider, VideoPlayerState,
         (bool, bool, bool, bool, Rect?, bool)>(
@@ -348,6 +375,46 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
             selectedPage.id == AppPageIds.video &&
                 videoState.hasVideo &&
                 videoState.player.usesWindowOverlayVideoSurface;
+        // Fullscreen playback keeps the whole window, like the bottom bar.
+        final sideNavigation = isFullscreenPlayback
+            ? null
+            : resolveSideNavigationLayout(
+                placement: windowTraits.navigationPlacement,
+                windowSize: MediaQuery.sizeOf(context),
+                viewPadding: MediaQuery.viewPaddingOf(context),
+                occlusions: windowTraits.occlusions,
+                barWidth: cupertinoVerticalGlassTabBarWidth,
+              );
+        Widget pageStack = AppSizeClassScope(
+          isRegularWidth: windowTraits.isRegularWidth,
+          child: LazyPageStack(
+            pageIds: pages.map((page) => page.id).toList(growable: false),
+            selectedId: selectedPage.id,
+            builder: (context, id) => CupertinoPageActionsScope(
+              controller: _actionsFor(id),
+              child: CupertinoBounceWrapper(
+                key: _bounceKey(id),
+                autoPlay: false,
+                child: pages.firstWhere((page) => page.id == id).build(
+                      context,
+                      AppDisplaySurface.phone,
+                    ),
+              ),
+            ),
+          ),
+        );
+        if (sideNavigation != null) {
+          // The column already clears the system inset on the bar edge.
+          pageStack = Padding(
+            padding: sideNavigation.contentPadding,
+            child: MediaQuery.removePadding(
+              context: context,
+              removeLeft: sideNavigation.isLeft,
+              removeRight: !sideNavigation.isLeft,
+              child: pageStack,
+            ),
+          );
+        }
         final body = BackgroundWithBlur(
           transparentCutout: useWindowHostedVideoUnderlay
               ? videoState.windowHostedVideoRect
@@ -360,29 +427,33 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
               onSelectPage: _selectPage,
               child: Stack(
                 children: [
-                  LazyPageStack(
-                    pageIds:
-                        pages.map((page) => page.id).toList(growable: false),
-                    selectedId: selectedPage.id,
-                    builder: (context, id) => CupertinoPageActionsScope(
-                      controller: _actionsFor(id),
-                      child: CupertinoBounceWrapper(
-                        key: _bounceKey(id),
-                        autoPlay: false,
-                        child: pages.firstWhere((page) => page.id == id).build(
-                              context,
-                              AppDisplaySurface.phone,
+                  pageStack,
+                  if (sideNavigation == null)
+                    Positioned(
+                      top: MediaQuery.paddingOf(context).top + 4,
+                      right: pageActionsTrailingOffset,
+                      child: CupertinoAppPageActions(
+                        actionIds: selectedPage.actionIds,
+                      ),
+                    )
+                  else
+                    Positioned(
+                      top: sideNavigation.pageActionsTop,
+                      left: sideNavigation.isLeft
+                          ? sideNavigation.edgeOffsetFor(
+                              cupertinoPageActionButtonSize,
+                            )
+                          : null,
+                      right: sideNavigation.isLeft
+                          ? null
+                          : sideNavigation.edgeOffsetFor(
+                              cupertinoPageActionButtonSize,
                             ),
+                      child: CupertinoAppPageActions(
+                        actionIds: selectedPage.actionIds,
+                        direction: Axis.vertical,
                       ),
                     ),
-                  ),
-                  Positioned(
-                    top: MediaQuery.paddingOf(context).top + 4,
-                    right: pageActionsTrailingOffset,
-                    child: CupertinoAppPageActions(
-                      actionIds: selectedPage.actionIds,
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -397,6 +468,37 @@ class _CupertinoMainPageState extends State<CupertinoMainPage> {
           height: nativeTabBarHeight,
           items: _buildCupertinoItems(context, pages),
         );
+
+        if (sideNavigation != null) {
+          // iPhone Duo places the tab bar vertically at the bottom of the side
+          // column. UITabBar has no vertical layout outside UITabBarController,
+          // so both iOS paths use the liquid-glass implementation here.
+          final tabBarEdgeOffset =
+              sideNavigation.edgeOffsetFor(cupertinoVerticalGlassTabBarWidth);
+          return CupertinoPageScaffold(
+            backgroundColor: const Color(0x00000000),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned.fill(child: body),
+                if (isBottomNavigationVisible)
+                  Positioned(
+                    left: sideNavigation.isLeft ? tabBarEdgeOffset : null,
+                    right: sideNavigation.isLeft ? null : tabBarEdgeOffset,
+                    bottom: sideNavigation.tabBarBottom,
+                    child: CupertinoVerticalGlassTabBar(
+                      tabs: _buildVerticalTabs(context, pages),
+                      selectedIndex: selectedIndex,
+                      onTabSelected: _selectIndex,
+                      selectedColor: bottomNavigationColors.selected,
+                      unselectedColor: bottomNavigationColors.unselected,
+                      settings: glassTabBarSettings,
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }
 
         if (usesNativeIOS26Toolbar) {
           return AdaptiveScaffold(

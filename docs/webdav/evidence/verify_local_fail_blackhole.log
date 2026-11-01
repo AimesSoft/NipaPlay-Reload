@@ -1,0 +1,10 @@
+NipaPlay 局域网发现验证  2026-10-11 23:45:30
+
+===== Local 自检（服务端本机）=====
+[FAIL] L1 UDP 32123 本机不可绑定（被占用或被系统保留）——NipaPlay 应答器将启动失败
+[PASS] L2 UDP 32123 不在系统保留段内
+[WARN] L3 防火墙中未找到 UDP 32123 / NipaPlay 放行规则——若 L4 失败，先以管理员运行 scripts\grant_nipaplay_firewall.ps1
+[FAIL] L4 5 秒内未收到发现应答（目标 3 个）。服务端入站 UDP 32123 大概率被防火墙拦截或服务未开启
+[WARN] L5 TCP 1180 /api/info 无应答（远程访问未开启或端口不同）——不影响 UDP 发现断言
+
+RESULT: FAIL（2 项断言失败，2 项警告）

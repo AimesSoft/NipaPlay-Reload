@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/credential_notice.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/apple_native_media_control.dart';
 import 'package:nipaplay/utils/performance_trace.dart';
 import 'package:nipaplay/services/remote_control_access_guard_service.dart';
 import 'package:nipaplay/services/password_input_mode_service.dart';
@@ -219,6 +220,7 @@ Future<void> _main(List<String> args) async {
   _installFrameTimingTrace();
   await ensureLinuxSystemFontLoaded();
   await globals.initializeStartupDeviceProfile();
+  await AppleNativeMediaControl.initialize();
   if (globals.isPhone) {
     await LiquidGlassWidgets.initialize();
   }
@@ -1464,8 +1466,21 @@ class MainPageState extends State<MainPage>
     DesktopPlayerWindowService.instance.addListener(_manageHotkeys);
     ExternalPlayerConsoleService.sessionAvailability
         .addListener(_onExternalPlayerConsoleAvailabilityChanged);
+    DandanplayService.loginExpired.addListener(_onDandanplayLoginExpired);
     _initGuideButtonListener();
     _initialize();
+  }
+
+  /// 服务器作废了保存的弹弹play登录：说清楚，并给出重新登录的入口。
+  void _onDandanplayLoginExpired() {
+    if (!mounted) return;
+    BlurSnackBar.show(
+      context,
+      '弹弹play登录已失效，请重新登录',
+      actionText: '去登录',
+      onAction: () => _selectPage(AppPageIds.account),
+      duration: const Duration(seconds: 8),
+    );
   }
 
   /// 监听手柄 Guide 按钮（Xbox 正中间上方按键），
@@ -1767,6 +1782,7 @@ class MainPageState extends State<MainPage>
   void dispose() {
     HotkeyService().setLargeScreenModeActive(false);
     DesktopPlayerWindowService.instance.removeListener(_manageHotkeys);
+    DandanplayService.loginExpired.removeListener(_onDandanplayLoginExpired);
     _tabChangeNotifier
         ?.removeListener(_onTabChangeRequested); // Temporarily remove
     _webdavQuickAccessProvider?.removeListener(_onWebDAVSettingsChanged);

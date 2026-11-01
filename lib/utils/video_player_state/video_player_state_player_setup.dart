@@ -361,15 +361,26 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
     }
 
-    // 新格式远程路径 (webdav:// / smb://) 需要解析为实际的 HTTP URL
-    if (isNewRemotePath &&
-        (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty)) {
+    // 新格式远程路径 (webdav:// / smb://) 需要解析为实际的 HTTP URL。
+    // WebDAV 即使调用方传入了直链也要重新解析：需要认证的连接会换成本地
+    // 认证代理地址（MDK 无法在 401 挑战时完成 Digest 协商）。
+    final bool needsRemoteResolution = isNewRemotePath &&
+        ((resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) ||
+            MediaSourceUtils.isNewWebDavPath(videoPath));
+    if (needsRemoteResolution) {
       try {
         if (MediaSourceUtils.isNewWebDavPath(videoPath)) {
-          await MediaSourceUtils.prepareRemotePath(videoPath);
+          final proxyUrl =
+              await MediaSourceUtils.resolveWebDavPathToUrlInitialized(
+                  videoPath);
+          // 解析失败（连接不存在等）时保留传入直链，维持旧行为。
           resolvedActualPlayUrl =
-              MediaSourceUtils.resolveWebDavPathToUrl(videoPath);
-        } else if (MediaSourceUtils.isNewSmbPath(videoPath)) {
+              (proxyUrl != null && proxyUrl.isNotEmpty)
+                  ? proxyUrl
+                  : resolvedActualPlayUrl;
+        } else if (MediaSourceUtils.isNewSmbPath(videoPath) &&
+            (resolvedActualPlayUrl == null ||
+                resolvedActualPlayUrl.isEmpty)) {
           resolvedActualPlayUrl =
               MediaSourceUtils.resolveSmbPathToUrl(videoPath);
         }
@@ -627,17 +638,18 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
         );
       } else {
         // 其他内核保持原有最多10秒的兼容轮询，不改变其启动体验。
-        for (var waitCount = 0; waitCount < 100; waitCount++) {
-          await Future.delayed(const Duration(milliseconds: 100));
-          if (player.state == PlaybackState.playing) {
-            break;
-          }
-          if (player.state == PlaybackState.paused ||
-              (player.mediaInfo.duration > 0 &&
-                  (player.prefersPlatformVideoSurface ||
-                      player.textureId.value != null))) {
-            break;
-          }
+        // 就绪判定必须等到 paused/playing（MDK prepare 契约），否则打开失败
+        // 的媒体会带着 duration>0 蒙混过关，最终在 updateTexture 上超时并
+        // 触发静默的错误恢复级联（issue #1010）。详见 waitForPlaybackReady。
+        await waitForPlaybackReady(
+          player,
+          cancelled: () =>
+              _isDisposed || initializationGeneration != _playbackGeneration,
+        );
+        // 被新的播放任务取代时就绪门静默返回，这里必须中止，不能继续对
+        // 已换成新媒体的播放器做 updateTexture / 设置 ready。
+        if (_isDisposed || initializationGeneration != _playbackGeneration) {
+          return;
         }
       }
       debugPrint('[PlayerSetup] 媒体就绪检查完成 state=${player.state} '
@@ -840,6 +852,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       final previousSubtitleDelay = subtitleDelaySeconds;
       _duration = Duration(milliseconds: player.mediaInfo.duration);
+      // Whole-block overlay mode: sync the kernel render switch for the
+      // new video and drop the previous video's residue text (polling
+      // refills it).
+      _embeddedSubtitleOverlayText = '';
+      applyEmbeddedSubtitleOverlayKernelState();
       if ((previousSubtitleDelay - subtitleDelaySeconds).abs() >= 0.0001) {
         unawaited(applySubtitleStylePreference());
       }
@@ -986,6 +1003,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
                         isCurrentPlayback()) {
                       player.activeSubtitleTracks = activeEmbeddedTracks;
                     }
+                    applyEmbeddedSubtitleOverlayKernelState();
                   }
                 },
                 loadExternal: (action) async {
@@ -1414,6 +1432,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
   void _onExternalSubtitleAutoLoaded(String path, String fileName) {
     // 这里可以处理回调，例如显示提示或更新UI
     debugPrint('VideoPlayerState: 外部字幕自动加载: $fileName');
+    // Auto-load activates the subtitle inside SubtitleManager without going
+    // through VideoPlayerState.setExternalSubtitle. If a kernel-rendered
+    // external ASS became active, whole-block mode must step aside; if an
+    // external was cleared, the mode resumes. Re-sync sub-visibility.
+    applyEmbeddedSubtitleOverlayKernelState();
+    _notifyListeners();
   }
 
   // 预先计算视频哈希值

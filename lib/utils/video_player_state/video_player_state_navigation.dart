@@ -435,12 +435,16 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       );
     }
 
-    await MediaSourceUtils.prepareRemotePath(episode.videoPath);
-    final actualPlayUrl = episode.actualPlayUrl ??
-        (MediaSourceUtils.isNewWebDavPath(episode.videoPath) ||
-                MediaSourceUtils.isNewSmbPath(episode.videoPath)
-            ? MediaSourceUtils.resolveRemotePathToUrl(episode.videoPath)
-            : null);
+    String? actualPlayUrl;
+    if (MediaSourceUtils.isNewWebDavPath(episode.videoPath)) {
+      actualPlayUrl = episode.actualPlayUrl ??
+          await MediaSourceUtils.resolveWebDavPathToUrlInitialized(
+            episode.videoPath,
+          );
+    } else if (MediaSourceUtils.isNewSmbPath(episode.videoPath)) {
+      actualPlayUrl = episode.actualPlayUrl ??
+          MediaSourceUtils.resolveSmbPathToUrl(episode.videoPath);
+    }
 
     // 当 historyItem 未匹配到番剧（animeId 为空）但当前播放上下文已识别时，
     // 将上下文的番剧名写回 historyItem。否则 initializePlayer 会优先读取
@@ -718,8 +722,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     // "路径不可用"（非本地文件也非 HTTP URL）而跳过，导致续播无弹幕。
     if (MediaSourceUtils.isNewWebDavPath(filePath)) {
       try {
-        await MediaSourceUtils.prepareRemotePath(filePath);
-        final url = MediaSourceUtils.resolveWebDavPathToUrl(filePath);
+        final url =
+            await MediaSourceUtils.resolveWebDavPathToUrlInitialized(filePath);
         if (url != null && url.isNotEmpty) return url;
       } catch (_) {}
     }
@@ -903,6 +907,11 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
       }
 
       if (!_isSeeking && hasVideo) {
+        // Whole-block mode: reduced-frequency poll while paused so style
+        // slider drags keep the text fresh on a paused frame.
+        if (embeddedSubtitleOverlayMode && _status != PlayerStatus.playing) {
+          pollEmbeddedSubtitleOverlayTextPaused();
+        }
         if (_status == PlayerStatus.playing) {
           if (isBuffering) {
             // Buffering is not a user pause. Keep the ticker available for
@@ -917,6 +926,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           if (playerPosition >= 0 && playerDuration > 0) {
             // 更新UI显示
             _position = Duration(milliseconds: playerPosition);
+            // 内嵌字幕整块移动模式：节流轮询 sub-text（文本变化才通知）
+            pollEmbeddedSubtitleOverlayText();
             // 同步当前章节索引（MKV 自带章节，参考 mpv playloop.c:607 get_current_chapter）
             _updateCurrentChapterFromPosition(playerPosition);
             final previousDurationMs = _duration.inMilliseconds;

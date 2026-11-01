@@ -50,6 +50,12 @@ class CupertinoAnimeCard extends StatelessWidget {
     this.showNewBadge = false,
   });
 
+  static const double _padding = 12;
+  static const double _posterHeight = 168;
+
+  /// Fixed card height: the poster plus the card padding.
+  static const double height = _posterHeight + _padding * 2;
+
   @override
   Widget build(BuildContext context) {
     final resolvedCardColor = CupertinoDynamicColor.resolve(
@@ -76,7 +82,7 @@ class CupertinoAnimeCard extends StatelessWidget {
     return GestureDetector(
       onTap: isLoading ? null : onTap,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(_padding),
         decoration: BoxDecoration(
           color: resolvedCardColor,
           borderRadius: BorderRadius.circular(20),
@@ -101,7 +107,7 @@ class CupertinoAnimeCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 child: SizedBox(
                   width: 120,
-                  height: 168,
+                  height: _posterHeight,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -116,7 +122,7 @@ class CupertinoAnimeCard extends StatelessWidget {
             // 右侧：文字信息
             Expanded(
               child: SizedBox(
-                height: 168, // 与封面高度对齐
+                height: _posterHeight, // 与封面高度对齐
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

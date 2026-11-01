@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_portrait_backdrop_color.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -565,6 +566,13 @@ class _BackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (AdaptiveMediaDetailActionButton.useNativeLiquidGlass(context)) {
+      return AdaptiveMediaDetailActionButton(
+        icon: Ionicons.chevron_back,
+        label: '返回',
+        onPressed: onPressed,
+      );
+    }
     return Semantics(
       button: true,
       label: '返回',

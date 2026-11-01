@@ -86,6 +86,11 @@ class DandanplayService {
     return {'Authorization': 'Bearer $_token'};
   }
 
+  /// 与桌面端同名：浏览器的登录由桌面端同步，这里不续期、不判定失效。
+  static final ValueNotifier<int> loginExpired = ValueNotifier(0);
+
+  static Future<bool> handleTokenRefused(String? authorization) async => false;
+
   static bool _allowContainsMethod(String? allowHeader, String method) {
     if (allowHeader == null || allowHeader.trim().isEmpty) return false;
     final target = method.toUpperCase();

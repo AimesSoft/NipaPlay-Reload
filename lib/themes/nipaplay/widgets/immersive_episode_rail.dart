@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -134,23 +135,31 @@ class _ImmersiveEpisodeRailState extends State<ImmersiveEpisodeRail> {
                   ),
                   const Spacer(),
                   if (widget.onSelectEpisodes != null)
-                    TextButton.icon(
-                      onPressed: widget.onSelectEpisodes,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white.withValues(alpha: 0.82),
-                        backgroundColor: Colors.black.withValues(alpha: 0.25),
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.16),
+                    if (AdaptiveMediaDetailActionButton.useNativeLiquidGlass(
+                        context))
+                      AdaptiveMediaDetailActionButton(
+                        icon: Ionicons.list_outline,
+                        label: '选择剧集',
+                        onPressed: widget.onSelectEpisodes,
+                      )
+                    else
+                      TextButton.icon(
+                        onPressed: widget.onSelectEpisodes,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white.withValues(alpha: 0.82),
+                          backgroundColor: Colors.black.withValues(alpha: 0.25),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.16),
+                          ),
+                          minimumSize: const Size(48, 40),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
-                        minimumSize: const Size(48, 40),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        icon: const Icon(Ionicons.list_outline, size: 17),
+                        label: const Text('选择剧集'),
                       ),
-                      icon: const Icon(Ionicons.list_outline, size: 17),
-                      label: const Text('选择剧集'),
-                    ),
                 ],
               ),
               const SizedBox(height: 10),

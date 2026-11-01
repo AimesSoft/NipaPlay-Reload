@@ -21,6 +21,7 @@
 FVP_EXPORT void MdkSetKey(const char* key);
 FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, int64_t send_port);
 FVP_EXPORT void MdkCallbacksUnregisterPort(int64_t handle);
+FVP_EXPORT void MdkCallbacksRearm(int64_t handle);
 FVP_EXPORT void MdkCallbacksRegisterType(int64_t handle, int type, bool reply);
 FVP_EXPORT void MdkCallbacksUnregisterType(int64_t handle, int type);
 FVP_EXPORT void MdkCallbacksReplyType(int64_t handle, int type, const void* data);

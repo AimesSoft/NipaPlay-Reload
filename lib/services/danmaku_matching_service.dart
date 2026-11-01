@@ -145,6 +145,8 @@ String resolveDanmakuProbePath(
     return videoPath;
   }
 
+  // 同步回退版本：代理已在播放链路启动，这里直接复用其回环地址；
+  // 未启动时回退直链（保持旧行为）。
   final resolved = MediaSourceUtils.resolveRemotePathToUrl(videoPath)?.trim();
   if (resolved == null || resolved.isEmpty || resolved == videoPath) {
     throw StateError('无法解析远程媒体路径用于弹幕识别');

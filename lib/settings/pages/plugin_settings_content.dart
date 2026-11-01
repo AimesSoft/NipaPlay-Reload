@@ -691,6 +691,7 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
                     description: entry.description,
                     initialValue: currentValue,
                     hintText: entry.textSetting?.hintText,
+                    obscureText: entry.textSetting?.obscureText ?? false,
                     onChanged: (value) {
                       pluginService.setTextSettingValue(
                         updatedPlugin.manifest.id,
@@ -820,6 +821,8 @@ class _PluginSettingsContentState extends State<PluginSettingsContent> {
                                     description: entry.description,
                                     initialValue: currentValue,
                                     hintText: entry.textSetting?.hintText,
+                                    obscureText:
+                                        entry.textSetting?.obscureText ?? false,
                                     useCupertino: true,
                                     onChanged: (value) {
                                       pluginService.setTextSettingValue(
@@ -1296,8 +1299,10 @@ class _PluginTextSettingField extends StatefulWidget {
     this.description,
     this.hintText,
     this.useCupertino = false,
+    this.obscureText = false,
   });
 
+  final bool obscureText;
   final String title;
   final String? description;
   final String initialValue;
@@ -1361,6 +1366,9 @@ class _PluginTextSettingFieldState extends State<_PluginTextSettingField> {
         if (widget.useCupertino)
           cupertino.CupertinoTextField(
             controller: _controller,
+            obscureText: widget.obscureText,
+            autocorrect: !widget.obscureText,
+            enableSuggestions: !widget.obscureText,
             placeholder: widget.hintText,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             onChanged: widget.onChanged,
@@ -1370,6 +1378,9 @@ class _PluginTextSettingFieldState extends State<_PluginTextSettingField> {
             title: widget.title,
             child: TextField(
               controller: _controller,
+              obscureText: widget.obscureText,
+              autocorrect: !widget.obscureText,
+              enableSuggestions: !widget.obscureText,
               decoration: InputDecoration(
                 hintText: widget.hintText,
                 border: OutlineInputBorder(

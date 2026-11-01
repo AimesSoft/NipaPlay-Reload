@@ -6,6 +6,7 @@ import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:nipaplay/providers/service_provider.dart';
+import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/services/single_instance_service.dart';
 import 'package:nipaplay/services/smb2_native_service_ffi.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
@@ -415,6 +416,8 @@ class DesktopExitHandler
       await next?.closeChat();
       await next?.exiting();
     }
+    await PluginService.shutdownExternalProcesses();
+
     try {
       final context = _navigatorKey?.currentContext;
       if (context != null && context.mounted) {
@@ -456,8 +459,9 @@ class DesktopExitHandler
     if (!(Platform.isWindows || Platform.isLinux)) return;
     _hardExitScheduled = true;
 
-    Future.delayed(const Duration(seconds: 2), () {
+    Future.delayed(const Duration(seconds: 2), () async {
       if (!_quitting) return;
+      await PluginService.shutdownExternalProcesses();
       exit(0);
     });
   }

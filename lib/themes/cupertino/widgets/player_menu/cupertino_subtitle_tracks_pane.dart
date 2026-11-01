@@ -291,12 +291,7 @@ class _CupertinoSubtitleTracksPaneState
             await _subtitleService.setExternalSubtitleActive(path, -1, false);
           }
 
-          videoState.setExternalSubtitle("");
-          if (trackIndex >= 0) {
-            videoState.selectEmbeddedSubtitleTrack(trackIndex);
-          } else {
-            videoState.selectEmbeddedSubtitleTrack(-1);
-          }
+          videoState.selectEmbeddedSubtitleTrack(trackIndex);
           if (mounted) setState(() {});
           didApply = true;
         },

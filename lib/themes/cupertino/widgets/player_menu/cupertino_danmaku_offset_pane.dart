@@ -91,8 +91,8 @@ class _CupertinoDanmakuOffsetPaneState
                         currentOffset == 0
                             ? '弹幕与视频同步显示'
                             : currentOffset > 0
-                                ? '弹幕延迟 $currentOffset' ' 秒'
-                                : '弹幕提前 ${currentOffset.abs()} 秒',
+                                ? '弹幕提前 $currentOffset' ' 秒'
+                                : '弹幕延后 ${currentOffset.abs()} 秒',
                       ),
                     ),
                   ],

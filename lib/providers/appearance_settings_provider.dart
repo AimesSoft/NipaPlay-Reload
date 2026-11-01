@@ -32,6 +32,9 @@ enum FolderNameDisplayMode {
 }
 
 class AppearanceSettingsProvider extends ChangeNotifier {
+  /// Completes when persisted appearance preferences have been restored.
+  late final Future<void> ready;
+
   static const String _widgetBlurEffectKey = 'enable_widget_blur_effect';
   static const String _animeCardActionKey = 'anime_card_action';
   static const String _recentWatchingStyleKey = 'recent_watching_style';
@@ -67,6 +70,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   late bool _useAutomaticUiScale;
   late bool _showAnimeCardSummary;
   late bool _showQuarterlyAnimeReview;
+  bool _enableMediaDetailLiquidGlass = true;
   late bool _showMediaLibraryNewBadge;
   late NipaplayWindowDisplayMode _windowDisplayMode;
   late AppAccentColorPreset _accentColorPreset;
@@ -90,6 +94,7 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   bool get useAutomaticUiScale => _useAutomaticUiScale;
   bool get showAnimeCardSummary => _showAnimeCardSummary;
   bool get showQuarterlyAnimeReview => _showQuarterlyAnimeReview;
+  bool get enableMediaDetailLiquidGlass => _enableMediaDetailLiquidGlass;
   bool get showMediaLibraryNewBadge => _showMediaLibraryNewBadge;
   NipaplayWindowDisplayMode get windowDisplayMode => _windowDisplayMode;
   AppAccentColorPreset get accentColorPreset => _accentColorPreset;
@@ -161,7 +166,6 @@ class AppearanceSettingsProvider extends ChangeNotifier {
   }
 
   // 从SharedPreferences加载设置
-  late final Future<void> ready;
 
   Future<void> _loadSettings() async {
     try {
@@ -172,6 +176,8 @@ class AppearanceSettingsProvider extends ChangeNotifier {
       _showAnimeCardSummary = prefs.getBool(_showAnimeCardSummaryKey) ?? true;
       _showQuarterlyAnimeReview =
           prefs.getBool(_showQuarterlyAnimeReviewKey) ?? true;
+      _enableMediaDetailLiquidGlass =
+          prefs.getBool(SettingsKeys.enableMediaDetailLiquidGlass) ?? true;
       _showMediaLibraryNewBadge =
           prefs.getBool(SettingsKeys.showMediaLibraryNewBadge) ?? true;
       _diffuseLowResolutionPosters =
@@ -457,6 +463,15 @@ class AppearanceSettingsProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('保存主页上方推荐小卡片显示设置时出错: $e');
     }
+  }
+
+  Future<void> setEnableMediaDetailLiquidGlass(bool value) async {
+    await ready;
+    if (_enableMediaDetailLiquidGlass == value) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(SettingsKeys.enableMediaDetailLiquidGlass, value);
+    _enableMediaDetailLiquidGlass = value;
+    notifyListeners();
   }
 
   // 设置主页顶部右侧下方推荐小卡片是否显示

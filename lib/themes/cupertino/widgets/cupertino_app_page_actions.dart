@@ -9,13 +9,20 @@ import 'package:nipaplay/themes/cupertino/widgets/cupertino_page_actions_scope.d
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
 
+/// Side length of each page action button.
+const double cupertinoPageActionButtonSize = 44;
+
 class CupertinoAppPageActions extends StatelessWidget {
   const CupertinoAppPageActions({
     super.key,
     required this.actionIds,
+    this.direction = Axis.horizontal,
   });
 
   final List<String> actionIds;
+
+  /// [Axis.vertical] stacks the actions for side-placed bars (iPhone Duo).
+  final Axis direction;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +45,8 @@ class CupertinoAppPageActions extends StatelessWidget {
     // Keep painting and hit testing in the same Flutter coordinate space.
     // UIKit toolbar groups can lay out their trailing item outside the
     // platform view when a page adds an action (such as the library's menu).
-    return Row(
+    return Flex(
+      direction: direction,
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final action in pageActions)
@@ -122,7 +130,7 @@ class _PageActionButtonState extends State<_PageActionButton> {
   @override
   Widget build(BuildContext context) {
     return SizedBox.square(
-      dimension: 44,
+      dimension: cupertinoPageActionButtonSize,
       child: CupertinoButton(
         padding: EdgeInsets.zero,
         focusColor: const Color(0x00000000),

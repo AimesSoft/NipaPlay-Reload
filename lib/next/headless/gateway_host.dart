@@ -6,6 +6,8 @@ abstract final class DandanplayService {
       NipaplayServerRouter.instance.effectiveServer();
   static Map<String, String> get authorizationHeaders => const {};
   static bool get isLoggedIn => false;
+  // A headless host has no GUI login session to renew or clear.
+  static Future<bool> handleTokenRefused(String? authorization) async => false;
 }
 
 abstract final class WebRemoteAccessService {
