@@ -1,0 +1,44 @@
+name: Rebuild Classic 1.11.11 Public Apple Packages
+on:
+  push:
+    branches: [codex/classic-11111-public-rebuild]
+    paths: ['.github/workflows/rebuild-classic-public-apple.yml']
+permissions:
+  actions: read
+  contents: write
+  id-token: write
+jobs:
+  macos:
+    uses: ./.github/workflows/build-macos.yml
+    secrets: inherit
+  tvos:
+    uses: ./.github/workflows/build-tvos.yml
+  replace:
+    needs: [macos, tvos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-macOS-*
+          path: packages
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-tvOS-sideload
+          path: packages/release-tvOS-sideload
+      - name: Replace public 1.11.11 Apple assets
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(awk '/^version:/ {print $2; exit}' pubspec.yaml)" = 1.11.11
+          mapfile -t assets < <(find packages -type f \( -name '*.dmg' -o -name '*.pkg' -o -name '*.zip' -o -name '*.ipa' \) | sort)
+          test "${#assets[@]}" -eq 10
+          gh release upload v1.11.11 "${assets[@]}" --clobber
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1.11.11" --jq '.object.sha')
+          if [ "$current" != b1bb7096c51345f635d2cc7ec19514bbc0f38f7d ] && [ "$current" != "$GITHUB_SHA" ]; then
+            echo 'Release tag changed externally; refusing to overwrite it.' >&2
+            exit 1
+          fi
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/v1.11.11" -f sha="$GITHUB_SHA" -F force=true
