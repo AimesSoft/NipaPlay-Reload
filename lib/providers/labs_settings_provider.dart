@@ -14,36 +14,19 @@ class LabsSettingsProvider extends ChangeNotifier {
   /// SharedPreferences has finished loading.
   late final Future<void> ready;
 
-  bool _enableErikaPlayerKernel = false;
   bool _enableImmersiveAnimeDetail = false;
   bool _isLoaded = false;
 
-  bool get enableErikaPlayerKernel => _enableErikaPlayerKernel;
   bool get enableImmersiveAnimeDetail => _enableImmersiveAnimeDetail;
   bool get isLoaded => _isLoaded;
 
   Future<void> _loadSettings() async {
-    _enableErikaPlayerKernel = await SettingsStorage.loadBool(
-      SettingsKeys.labsEnableErikaPlayerKernel,
-      defaultValue: false,
-    );
     _enableImmersiveAnimeDetail = await SettingsStorage.loadBool(
       SettingsKeys.labsEnableImmersiveAnimeDetail,
       defaultValue: false,
     );
     _isLoaded = true;
     notifyListeners();
-  }
-
-  Future<void> setEnableErikaPlayerKernel(bool enabled) async {
-    await ready;
-    if (_enableErikaPlayerKernel == enabled) return;
-    _enableErikaPlayerKernel = enabled;
-    notifyListeners();
-    await SettingsStorage.saveBool(
-      SettingsKeys.labsEnableErikaPlayerKernel,
-      enabled,
-    );
   }
 
   Future<void> setEnableImmersiveAnimeDetail(bool enabled) async {

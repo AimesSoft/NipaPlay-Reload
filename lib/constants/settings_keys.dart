@@ -61,9 +61,6 @@ class SettingsKeys {
   static const String labsShowRemoteAccessQrCode =
       'labs_show_remote_access_qr_code';
 
-  static const String labsEnableErikaPlayerKernel =
-      'labs_enable_erika_player_kernel';
-
   static const String labsEnableImmersiveAnimeDetail =
       'labs_enable_immersive_anime_detail';
 
@@ -91,7 +88,8 @@ class SettingsKeys {
   static const String downloaderAutoScanCompletedTasks =
       'downloader_auto_scan_completed_tasks';
 
-  static const String downloaderVerifiedScannedCompletedTaskKeys = 'downloader_verified_scanned_completed_task_keys';
+  static const String downloaderVerifiedScannedCompletedTaskKeys =
+      'downloader_verified_scanned_completed_task_keys';
   static const String downloaderAutoScannedCompletedTaskKeys =
       'downloader_auto_scanned_completed_task_keys';
 

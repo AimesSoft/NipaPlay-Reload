@@ -13,7 +13,6 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
-import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/utils/anime4k_shader_manager.dart';
 import 'package:nipaplay/utils/crt_shader_manager.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -167,7 +166,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
       case PlayerKernelType.mediaKit:
         return 'MediaKit (Libmpv) 播放器\n基于MPV，功能强大，支持硬件解码，支持复杂媒体格式';
       case PlayerKernelType.erika:
-        return 'Erika Rust 播放器（实验性）\niOS/tvOS/macOS 使用 Metal，Windows 使用 D3D11，Android 使用 wgpu；HarmonyOS 使用 OHNativeWindow、OpenGL ES 和 OHAudio';
+        return 'Erika Rust 播放器\niOS/tvOS/macOS 使用 Metal，Windows 使用 D3D11，Android 使用 wgpu；HarmonyOS 使用 OHNativeWindow、OpenGL ES 和 OHAudio';
     }
   }
 
@@ -302,10 +301,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final showErikaKernel = PlayerFactory.isErikaKernelSupported &&
-        (globals.isTelevision ||
-            PlayerFactory.isHarmonyOS ||
-            context.watch<LabsSettingsProvider>().enableErikaPlayerKernel);
+    final showErikaKernel = PlayerFactory.isErikaKernelSupported;
     final fallbackKernelType =
         globals.isTelevision ? PlayerKernelType.erika : PlayerKernelType.mdk;
     final visibleKernelType =
