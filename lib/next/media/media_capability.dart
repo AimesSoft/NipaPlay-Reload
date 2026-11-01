@@ -298,6 +298,11 @@ ActionSpec _spec(String id, String description, Effect effect,
         input: input,
         output: output);
 final _specs = [
+  _spec('media.identity.operation',
+      'Read a bind_batch durable receipt by its original requestId, on the same device and calling origin. Bypasses the mutation queue and never replays writes. committed proves the database write; not_observed is inconclusive while queued/running. Also reports mutation queue age and waiters. Use after outcome_unknown before considering another bind.',
+      Effect.read,
+      const ObjectSchema({'requestId': _text}, required: ['requestId']),
+      const ObjectSchema({}, additionalProperties: true)),
   _spec('media.probe.status',
       'Inspect this device desktop Erika probe availability, active probe IDs/paths/PIDs/elapsed time and the last 20 outcomes with original errors. Shared by scans and subtitle inspection. Mobile native probes are not controlled here. No mutation.',
       Effect.read, const ObjectSchema({}),
@@ -499,6 +504,8 @@ final _specs = [
         'entries'
       ]),
       const ObjectSchema({
+        'notificationStatus': StringSchema(),
+        'notificationError': StringSchema(),
         'entries': ArraySchema(ObjectSchema({
           'index': IntegerSchema(),
           'workId': StringSchema(),
@@ -813,6 +820,8 @@ final class _MediaAction extends Action<_JsonValue, _JsonValue> {
                   .get(ref, language: json['language'] as String? ?? 'zh-CN'))
               .toJson()
         };
+      case 'media.identity.operation':
+        result = await service.bindingOperation(json['requestId'] as String, invocation);
       case 'media.identity.get':
         result = {
           'identity': await _identity(store, await service.resolveEntity(json))

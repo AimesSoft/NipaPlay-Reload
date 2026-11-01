@@ -49,7 +49,10 @@ final class IdentityStore {
   IdentityStore(this.database, this.ownerDeviceId);
   final Database database;
   final String ownerDeviceId;
-  Future<T> _transaction<T>(Future<T> Function(Transaction) action) => BodySignals.transaction(database, action);
+  Future<T> _transaction<T>(Future<T> Function(Transaction) action,
+      {Future<void> Function(Object)? onNotificationError}) =>
+      BodySignals.transaction(database, action,
+          onNotificationError: onNotificationError);
   final _fileChanges = StreamController<JsonMap>.broadcast();
   Stream<JsonMap> get fileChanges => _fileChanges.stream;
   /// [via] says which door the file came through, as far as the caller
@@ -1574,8 +1577,9 @@ final class IdentityStore {
   }
 
   Future<JsonMap> bindBatch(List<JsonMap> entries, String key,
-          String fingerprint, Invocation invocation) =>
-      _filesChanged((newFiles) => _transaction((tx) async {
+          String fingerprint, Invocation invocation) async {
+    Object? notificationError;
+    final result = await _filesChanged((newFiles) => _transaction((tx) async {
             final saved = await operation(key, fingerprint, db: tx);
             if (saved != null) return saved;
             final results = <JsonMap>[];
@@ -1889,7 +1893,17 @@ final class IdentityStore {
               'result': jsonEncode(result)
             });
             return result;
-          }), via: 'metadata_put');
+          }, onNotificationError: (error) async { notificationError = error; }),
+          via: 'metadata_put');
+    if (notificationError != null) {
+      result['notificationStatus'] = 'unconfirmed';
+      result['notificationError'] = notificationError is TimeoutException
+          ? 'notification_timeout' : 'notification_failed';
+      await database.update('media_binding_operations', {'result': jsonEncode(result)},
+          where: 'id=?', whereArgs: [key]);
+    }
+    return result;
+  }
 
   Future<JsonMap> unbindBatch(List<JsonMap> entries, String key,
           String fingerprint, Invocation invocation) =>

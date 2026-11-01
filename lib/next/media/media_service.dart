@@ -93,15 +93,43 @@ final class MediaService {
   Future<void> _tail = Future.value();
   Future<void> _submissions = Future.value();
 
+  int _waitingMutations = 0;
+  DateTime? _mutationStarted;
+  JsonMap get mutationStatus => {
+    'active': _mutationStarted != null,
+    'elapsedMs': _mutationStarted == null ? null
+        : DateTime.now().difference(_mutationStarted!).inMilliseconds,
+    'waiting': _waitingMutations,
+  };
+
+  /// Read the durable receipt without joining the mutation queue or replaying it.
+  Future<JsonMap> bindingOperation(String requestId, Invocation invocation) async {
+    final key = stableMediaId('bind-operation', [invocation.origin, requestId]);
+    final rows = await store.database.query('media_binding_operations',
+        columns: ['result'], where: 'id=?', whereArgs: [key]);
+    return {
+      'requestId': requestId,
+      'operationId': key,
+      'commitStatus': rows.isEmpty ? 'not_observed' : 'committed',
+      'receipt': rows.isEmpty ? null : decodeMediaJson(rows.single['result']),
+      'mutationQueue': mutationStatus,
+      'note': 'Scoped to the calling origin. not_observed does not prove failure: the write may still be queued or running. A committed receipt does not prove notification or Classic projection completion.',
+    };
+  }
+
   // Serializes identity changes with delivery to the separate Classic database.
   Future<T> mutate<T>(Future<T> Function() operation) async {
     final previous = _tail;
     final done = Completer<void>();
     _tail = done.future;
+    _waitingMutations++;
     await previous;
+    _waitingMutations--;
+    _mutationStarted = DateTime.now();
     try {
       return await operation();
     } finally {
+      _mutationStarted = null;
       done.complete();
     }
   }

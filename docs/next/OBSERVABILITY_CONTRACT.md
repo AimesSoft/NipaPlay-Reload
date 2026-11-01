@@ -62,6 +62,21 @@
 请求对象、语言和创建后的 detail 快照核验结果，回执明确这不是原执行完成的证明。
 其他任务类型需要各自的核验实现，不能仅凭超时强制标记成功。
 
+## 身份绑定提交与通知
+
+`media.identity.operation {requestId}` 在原设备、同一调用 origin 下读取绑定的持久回执，
+不进入身份写入队列，也不重放绑定。`commitStatus:committed` 证明身份事务已提交；
+`not_observed` 只表示尚未查到，可能仍在排队或执行。`receipt` 中的
+`classicProjection` 才是已记录的投影结果，不能从数据库提交推断投影或通知已经完成。
+`mutationQueue` 提供当前写入耗时和等待数量。
+
+所有 `BodySignals.transaction` 的提交后通知默认最多等待 5 秒；绑定返回
+`notificationStatus:unconfirmed` 和 `notificationError` 时，绑定已经提交，通知送达未确认。
+超时不撤销通知、不重放写入。`events.describe.delivery` 与
+`diagnostics.status.health.notifications` 保留本进程最近 20 次通知失败观察；
+`diagnostics.status.health.identityMutations` 提供身份队列状态。
+本地事件落库独立于 followup 远端派发，远端回报不可达不应阻塞本地身份写入。
+
 ## 重试规则
 
 1. not_delivered：本次传输没有找到可交付连接；这不证明此前同领域请求没有执行。

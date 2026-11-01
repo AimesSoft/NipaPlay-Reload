@@ -146,6 +146,7 @@
 | `media.files.reveal` | write | 在文件管理器中定位文件 | Core | 允许 | [源码](../../../lib/next/system/desktop.dart) |
 | `media.frames` | read | Take pictures from a video file at given times | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/media_frames.dart) |
 | `media.hash.match` | read | Match multiple native files against Dandanplay using the MD5 of their first 16 MiB | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
+| `media.identity.operation` | read | 按原 requestId 和调用 origin 查询绑定提交回执及写入队列；不重放操作 | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.identity.bind_batch` | write | 原子绑定身份；direct 不抓资料，需继续 refresh_batch 并回读 | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.identity.get` | read | Read identity by entityId, path or current (default) | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |
 | `media.identity.restore_classic_batch` | write | Undo the revocation of classic_match bindings made by unbind_batch, by name | 通用/组合 | 允许 | [源码](../../../lib/next/media/media_capability.dart) |

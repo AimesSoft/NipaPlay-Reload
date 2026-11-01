@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../capabilities/classic_action.dart';
 import '../harness_redaction.dart';
 import '../media/media_service.dart';
+import '../events/signals.dart';
 import '../network/observations.dart';
 import '../settings/system_settings.dart';
 import '../settings/registry.dart';
@@ -194,6 +195,8 @@ final class SystemDiagnostics implements Capability {
             },
             'player': await playerFacts(),
             'health': {
+              'identityMutations': media.mutationStatus,
+              'notifications': BodySignals.deliveryStatus,
               'database': await database.rawQuery('PRAGMA quick_check'),
               'pendingProjections':
                   (await media.store.pendingProjections()).length,

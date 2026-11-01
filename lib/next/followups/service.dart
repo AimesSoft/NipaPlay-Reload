@@ -502,26 +502,27 @@ final class Followups {
     return jsonDecode(rows.single['snapshot'] as String) as JsonMap;
   }
 
-  Future<void> hookEvent(String event, String objectId, JsonMap payload) =>
-      _serial(() async {
-        if ((event == 'download.file_completed' ||
-                event == 'download.stalled') &&
-            (await database.query('followup_hook_events',
-                    where: 'event=? AND object_id=?',
-                    whereArgs: [event, objectId],
-                    limit: 1))
-                .isNotEmpty) {
-          return;
-        }
-        await database.insert('followup_hook_events', {
-          'event': event,
-          'object_id': objectId,
-          'payload': await redactAndEncodeHarnessJsonOffMain(payload),
-        });
-        if (event == 'download.stalled') _stallRecorded(payload);
-        eventCommitted?.call();
-        _schedule();
+  // Event persistence must not wait for a sweep delivering to another device.
+  // SQLite serializes the deduplication and insert, independently of _serial.
+  Future<void> hookEvent(String event, String objectId, JsonMap payload) async {
+    final encoded = await redactAndEncodeHarnessJsonOffMain(payload);
+    final inserted = await database.transaction((tx) async {
+      if ((event == 'download.file_completed' || event == 'download.stalled') &&
+          (await tx.query('followup_hook_events',
+                  where: 'event=? AND object_id=?',
+                  whereArgs: [event, objectId], limit: 1)).isNotEmpty) {
+        return false;
+      }
+      await tx.insert('followup_hook_events', {
+        'event': event, 'object_id': objectId, 'payload': encoded,
       });
+      return true;
+    });
+    if (!inserted) return;
+    if (event == 'download.stalled') _stallRecorded(payload);
+    eventCommitted?.call();
+    _schedule();
+  }
 
   /// A download's stall goes back to its conversation once its event is
   /// recorded: that download is looked at again.

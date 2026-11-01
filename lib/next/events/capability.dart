@@ -4,6 +4,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../capabilities/classic_action.dart';
 import '../harness_hooks.dart';
+import 'signals.dart';
 
 /// The followup journal is also the public event cursor; no second event store.
 final class BodyEvents implements Capability {
@@ -94,6 +95,7 @@ final class BodyEvents implements Capability {
                 input: ObjectSchema({}),
                 output: ObjectSchema({}, additionalProperties: true)),
             (_, __) async => {
+                  'delivery': BodySignals.deliveryStatus,
                   'events': [
                     for (final event in HarnessHooks.events)
                       {
