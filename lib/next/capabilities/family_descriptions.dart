@@ -287,6 +287,7 @@ NipaPlay 自己会做一部分：实体有对应 TMDB 身份时取图，把下�
   'task': 'UiTask.type 带 executor 类型，例如 download、media.scan_classic；kind 仍区分 background/helper。任务关联的作品不存在时仍呈现任务，不假造作品或图片。\n' +
       r'''后台任务共用持久快照、来源和回执。control 批量暂停/恢复/取消，逐项给支持与受理事实；paused 可能仍在排空当前文件。get/wait 核对完成。resources 读取实际容量；tasks.*Concurrency 设置只改变新工作派发。不能安全重放的执行器拒绝暂停。终态回执不改写，取消不删除文件。
 - `describe ACTION` 给出输入与输出契约，`call task.list` 可筛选任务（默认最新的在前、每页 50 个，`total` 是匹配总数；用 `limit`、`offset` 翻页，`nextOffset` 给出下一页的起点，没有时已是最后一页；需要正序时传 `order:"oldest"`），`call task.get '{"jobId":"..."}'` 给出单个任务详情。查询默认每页 50 行，可用 `limit`、`select` 与返回的 `nextCursor` 控制读取范围。
+- `task.get` 的 `execution` 说明本进程是否仍持有执行器、同类占用和是否支持结果核验；更新时间久不代表任务已经停止。`task.reconcile {jobId}` 核验已保存结果并结束卡住的任务，不重新执行、不删除历史。目前支持 `media.metadata.refresh`；仍在抓取或写入时拒绝接管。取消后的已提交资料保留在回执中，`notificationStatus:unconfirmed` 表示通知尚未确认，不等于资料未保存。其他类型不能据此强制成功。
 - 任务快照的 `origin` 记录提交时的真实调用来源，只在提交时记下：`kind` 为 `user`（NipaPlay 界面上的用户操作）、`conversation`（某个对话里的 `./nipa` 调用，带 `sessionId`，已知时带 `threadId`）、`subagent`（子代理的调用，带 `helperJobId` 或 `threadId`）、`script`（hooks 或 schedules 程序的调用，带 `hookJobId`，已知时带 `event`、`scheduleId`）、`host`（宿主自己提交，如事件触发的 hook 运行、恢复、后台派发）、`device`（另一台设备经 mesh 提交，带 `deviceId`）、`cli`（不在对话里的 `./nipa`）、`mcp`、`other`。没有记录的旧任务不带 `origin`。
 - 返回任务只代表已受理。只有状态为 `succeeded`、并且回执经过验证，才算完成。`watch` 是有界的等待，不是后台守护。''',
   'state':

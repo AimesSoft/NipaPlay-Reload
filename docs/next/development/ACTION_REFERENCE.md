@@ -310,6 +310,7 @@
 | `task.control` | write | 批量控制后台任务 | 通用/组合 | 允许 | [源码](../../../lib/next/tasks/resources.dart) |
 | `task.get` | read | 读取指定任务和回执 | 通用/组合 | 允许 | [源码](../../../packages/nipa_harness/lib/src/tasks/actions.dart) |
 | `task.list` | read | 列出任务 | 通用/组合 | 允许 | [源码](../../../packages/nipa_harness/lib/src/tasks/actions.dart) |
+| `task.reconcile` | write | 核验持久结果并结束卡住的刷新；不重放、不删除历史 | 通用/组合 | 允许 | [源码](../../../packages/nipa_harness/lib/src/tasks/actions.dart) |
 | `task.resources` | read | 后台容量与占用 | 通用/组合 | 允许 | [源码](../../../lib/next/tasks/resources.dart) |
 | `task.wait` | read | 有界等待任务 | 通用/组合 | 允许 | [源码](../../../packages/nipa_harness/lib/src/tasks/actions.dart) |
 | `ui.capture` | read | Capture this NipaPlay main interface | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/ui_capture.dart) |

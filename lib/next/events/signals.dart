@@ -17,13 +17,29 @@ abstract final class BodySignals {
   }
 
   static Future<T> transaction<T>(
-      Database db, Future<T> Function(Transaction) action) async {
+      Database db, Future<T> Function(Transaction) action,
+      {Future<void> Function(T)? afterCommit,
+      Duration? notificationTimeout,
+      Future<void> Function(Object)? onNotificationError}) async {
     final events = <JsonMap>[];
     final result = await runZoned(() => db.transaction(action),
         zoneValues: {_transaction: events});
-    for (final event in events) {
-      await emit?.call(event['event'] as String, event['entityId'] as String,
-          event['facts'] as JsonMap);
+    await afterCommit?.call(result);
+    Future<void> notify() async {
+      for (final event in events) {
+        await emit?.call(event['event'] as String, event['entityId'] as String,
+            event['facts'] as JsonMap);
+      }
+    }
+
+    try {
+      final delivery = notify();
+      await (notificationTimeout == null
+          ? delivery
+          : delivery.timeout(notificationTimeout));
+    } catch (error) {
+      if (onNotificationError == null) rethrow;
+      await onNotificationError(error);
     }
     return result;
   }

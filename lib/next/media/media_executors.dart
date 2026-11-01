@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'media_service.dart';
-import 'identity_store.dart' show decodeMediaJson;
+import 'identity_store.dart' show decodeMediaJson, stableMediaId;
 import 'metadata_provider.dart';
 
 List<JobExecutor> mediaExecutors(MediaService service) => [
@@ -191,7 +191,7 @@ final class _ScanExecutor implements JobExecutor {
   }
 }
 
-final class _RefreshExecutor implements JobExecutor {
+final class _RefreshExecutor implements JobExecutor, JobReconciler {
   const _RefreshExecutor(this.service);
   final MediaService service;
   @override
@@ -199,7 +199,23 @@ final class _RefreshExecutor implements JobExecutor {
   @override
   Future<void> execute(JobContext context) => _run(context);
   @override
-  Future<void> recover(JobContext context) => _run(context);
+  Future<void> recover(JobContext context) async {
+    JobReceipt? receipt;
+    try {
+      receipt = await _storedResult(context.job);
+    } on Failure catch (error) {
+      if (error.code != FailureCode.conflict) rethrow;
+    }
+    if (receipt == null) return _run(context);
+    await context.markSideEffectCommitted(
+        checkpoint: {'snapshotId': receipt.details['snapshotId']});
+    if (context.job.cancelRequestedAt != null) {
+      await context.cancelled(receipt);
+    } else {
+      await context.succeed(receipt);
+    }
+  }
+
   Future<void> _run(JobContext context) async {
     final control = _Control(context);
     if (await control.stop({'refreshed': false})) return;
@@ -212,9 +228,18 @@ final class _RefreshExecutor implements JobExecutor {
     } else {
       final MetadataRecord record;
       try {
-        record = await service
-            .provider(ref.provider)
-            .get(ref, language: context.job.input['language'] as String);
+        final fetched = await Future.any<MetadataRecord?>([
+          service
+              .provider(ref.provider)
+              .get(ref, language: context.job.input['language'] as String),
+          context.stopRequested.then((_) => null),
+        ]).timeout(const Duration(seconds: 60), onTimeout: () {
+          throw const Failure(FailureCode.unavailable,
+              'Metadata fetch timed out before persistence.');
+        });
+        if (await control.stop({'refreshed': false})) return;
+        if (fetched == null) return;
+        record = fetched;
       } on ProviderRetry catch (error) {
         if (await control.stop({'refreshed': false})) return;
         final retries = (context.job.checkpoint['retries'] as int?) ?? 0;
@@ -231,25 +256,96 @@ final class _RefreshExecutor implements JobExecutor {
         return;
       }
       if (await control.stop({'refreshed': false})) return;
-      id = await service.store.saveSnapshot(record);
-      await context.markSideEffectCommitted(checkpoint: {'snapshotId': id});
+      await context.report(phase: 'persist');
+      id = await service.store.saveSnapshot(record,
+          onCommitted: (snapshotId) async {
+        await context
+            .markSideEffectCommitted(checkpoint: {'snapshotId': snapshotId});
+        await context.report(phase: 'notify');
+      }, onNotificationError: (error) async {
+        await context.report(details: {
+          ...context.job.details,
+          'notificationStatus': 'unconfirmed',
+          'notificationError': error is TimeoutException
+              ? 'notification_timeout'
+              : 'notification_failed',
+          'metadataCommitted': true,
+        });
+      });
     }
     await context.report(phase: 'verify');
+    await context.succeed(await _verify(context.job, id));
+  }
+
+  @override
+  Future<JobReceipt> reconcile(Job job) async {
+    if (service.engine.isActive(job.jobId) &&
+        !{'notify', 'verify'}.contains(job.phase)) {
+      throw const Failure(FailureCode.conflict,
+          'Executor may still fetch or persist data; it cannot be detached safely.');
+    }
+    return _storedResult(job);
+  }
+
+  Future<JobReceipt> _storedResult(Job job) async {
+    final known = job.checkpoint['snapshotId'] as String?;
+    if (known != null) return _verify(job, known, reconciled: true);
+    // Older jobs did not checkpoint until notification delivery returned.
+    // Verify the requested result (ref, language, time, detail acquisition),
+    // without claiming which invocation produced a matching snapshot.
+    final rows = await service.store.database.query('media_snapshots',
+        columns: ['id'],
+        where: 'object_id=? AND language=? AND fetched_at>=? '
+            r"AND json_extract(fields, '$.acquisition.kind')='detail'",
+        whereArgs: [
+          stableMediaId('object', job.input['ref'] as Map),
+          job.input['language'],
+          job.createdAt.toUtc().toIso8601String()
+        ],
+        orderBy: 'fetched_at DESC',
+        limit: 1);
+    if (rows.isEmpty) {
+      throw const Failure(FailureCode.conflict,
+          'No persisted detail snapshot satisfies this refresh; task left unchanged.');
+    }
+    return _verify(job, rows.single['id'] as String, reconciled: true);
+  }
+
+  Future<JobReceipt> _verify(Job job, String id,
+      {bool reconciled = false}) async {
     final rows = await service.store.database
         .query('media_snapshots', where: 'id = ?', whereArgs: [id]);
     if (rows.length != 1) {
       throw const Failure(
           FailureCode.conflict, 'Metadata snapshot readback failed.');
     }
-    await context
-        .succeed(JobReceipt(verification: VerificationLevel.verified, details: {
+    final row = rows.single;
+    final fields = decodeMediaJson(row['fields']);
+    final fetchedAt = DateTime.tryParse(row['fetched_at'] as String);
+    if (stableMediaId('object', fields['ref'] as Map) !=
+            stableMediaId('object', job.input['ref'] as Map) ||
+        row['language'] != job.input['language'] ||
+        fetchedAt == null ||
+        fetchedAt.isBefore(job.createdAt)) {
+      throw const Failure(
+          FailureCode.conflict, 'Snapshot does not satisfy this refresh.');
+    }
+    return JobReceipt(verification: VerificationLevel.verified, details: {
       'snapshotId': id,
       'refreshed': true,
-      'ref': ref.toJson(),
-      'acquisition': decodeMediaJson(rows.single['fields'])['acquisition'],
+      'ref': job.input['ref'],
+      'acquisition': fields['acquisition'],
       'childrenRefreshed': false,
       'identityChanged': false,
-      'userOverridesPreserved': true
-    }));
+      'userOverridesPreserved': true,
+      if (job.details['notificationStatus'] != null)
+        'notificationStatus': job.details['notificationStatus'],
+      if (reconciled) ...{
+        'reconciledFromStoredSnapshot': true,
+        'originalExecutionCompletionProven': false,
+        'notificationStatus': 'unconfirmed',
+        'operationReexecuted': false,
+      },
+    });
   }
 }

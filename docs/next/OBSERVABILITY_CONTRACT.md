@@ -24,6 +24,22 @@
 - `mesh.devices`：runtime 给监听器、登录定时器、停止状态和防重放容量。只读传输与查询不占用持久写操作的防重放账本；重复写调用与容量不足、持久化失败具有不同 reason。
 - 既有持久入口继续保留：task 状态和 job_events、事件/动态及 body_changes、领域提交回执、journal、播放器 state/info/kernel/failures、network observations、diagnostics.status/file_logs/errors。它们通过 invocationId / jobId / commitId 关联，各自声明观察范围。
 
+## 卡住的元数据刷新
+
+`task.get` 的 `execution` 返回本进程执行器占用、类型容量、更新时间和
+`reconciliationSupported`；运行中不能推断为“什么都没做”。
+刷新阶段为 `fetch → persist → notify → verify`。快照提交后先保存
+`snapshotId` 检查点，再等待事件通知；通知等待最多 5 秒，超时或失败记为
+`notificationStatus:unconfirmed`，仍可核验资料并完成刷新。这不证明通知已经送达。
+
+`task.reconcile {jobId}` 可经 Mesh 在任务所属设备核验结果并结束任务。
+目前只支持元数据刷新：核验对象、语言、快照及时间，不重新抓取、不修改身份、
+不删除历史。还在抓取/写入、证据不足或核验期间任务发生变化时拒绝接管。
+成功时撤销旧执行器的任务写入资格并释放占用；有取消请求则进入 `cancelled`，
+回执仍记录已提交资料。旧版本没有快照检查点的任务，在进程恢复时可根据
+请求对象、语言和创建后的 detail 快照核验结果，回执明确这不是原执行完成的证明。
+其他任务类型需要各自的核验实现，不能仅凭超时强制标记成功。
+
 ## 重试规则
 
 1. not_delivered：本次传输没有找到可交付连接；这不证明此前同领域请求没有执行。

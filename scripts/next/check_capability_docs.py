@@ -39,7 +39,7 @@ def put(i, p, e, d):
 def group(prefix, ops, path, reads='', destructive='', desc=''):
     for x in ops.split():
         put(prefix + x, path, 'read' if x in reads.split() else 'destructive' if x in destructive.split() else 'write', desc or x.replace('_', ' '))
-group('task.', 'list get wait cancel', 'packages/nipa_harness/lib/src/tasks/actions.dart', 'list get wait', desc='查询、等待或取消持久任务；以任务回执为完成依据')
+group('task.', 'list get wait cancel reconcile', 'packages/nipa_harness/lib/src/tasks/actions.dart', 'list get wait', desc='查询、等待、取消或核对持久任务；以任务回执为完成依据')
 group('media.management.', 'bind_batch unbind_batch', 'lib/next/media/management.dart', desc='预览或提交显式身份绑定变更')
 group('chat.session.', 'main new list switch', 'lib/next/followups/capability.dart', 'list', desc='选择、创建或列出对话会话')
 group('followup.', 'register list cancel', 'lib/next/followups/capability.dart', 'list', desc='登记、查询或取消持久后续')
@@ -103,7 +103,7 @@ BASELINE_HASHES = {
  'lib/next/capabilities/download_capability.dart': '18e66aee3ccb0788165ddbea65c842b0b52c8d90aa09db3ed018caaf80e9472c',
  'lib/next/capabilities/download_metadata_capability.dart': '9c55fdf10875cbe97126d4d08e162efbc2fadd9538d32fec4044b35b945ec27a',
  'lib/next/capabilities/download_playback_capability.dart': '56f9b51ac7c8ee83cbc3192f1ff3dd9e27faa3575b55b69c48ec3a650a3eefcf',
- 'lib/next/capabilities/family_descriptions.dart': 'f6198872673d8336a4b86561e031a3ed67e1fa0f6b7d161a7c3db636a0798ab2',
+ 'lib/next/capabilities/family_descriptions.dart': '10648efc1ec0bd9c8e049f02f3180499f3af993b2dd7ac21407121258f852a6b',
  'lib/next/capabilities/history_capability.dart': '16c32339022d69d1a86120694938820408a879120a22aae2e2cec1862893619f',
  'lib/next/capabilities/kernel_control.dart': '83b08db31481bd3f34bfafb2e0c03b3a903b8b615da1b2a74fde61606f5f70a6',
  'lib/next/capabilities/library_capability.dart': '107685542a32791dbc7424b8a6dcf6d49a0d00a6c9d33ae2cfaccbe7e42a19d2',
@@ -167,8 +167,8 @@ BASELINE_HASHES = {
  'lib/next/ui_data/library_capability.dart': '6d1f854d5afb865855d1e1f54aa499d5806044410b2348a29cc478e336931124',
  'lib/security/credential_capability.dart': '26bc1852bc98ef1c4c21446b165bfb0764bdb7c763fbd16355079ebbd03f32ac',
  'packages/nipa_harness/lib/src/action.dart': 'b80ccb05cb5eb0143290d6750ec8b4557da08511c222dfff06f929d329efcb55',
- 'packages/nipa_harness/lib/src/tasks/actions.dart': '41ddb4650c62b8045c11cf90c349a17dc93dbaa7c66b6b3fcf243f3551e310ce',
- 'packages/nipa_harness/lib/src/tasks/engine.dart': '5c43659484aaa994fc3f8be416fa01f144bc8bb10423959ccfdb8f09f471130d'}
+ 'packages/nipa_harness/lib/src/tasks/actions.dart': 'd2ee746ca0224c55c47601ea7893a4ca0aa40604cc7c59499f9e9c5d9ea55f8b',
+ 'packages/nipa_harness/lib/src/tasks/engine.dart': 'ebe618e8b98a602b4359c68d4be138a4c89ae6b155a8c76a960831f564c1d81e'}
 current_files = {str(p.relative_to(root)) for p in paths if '/ui/dev/' not in str(p) and any((t in p.read_text() for t in ('ActionSpec(', 'extends Action<', 'implements Capability')))}
 current_files.update(['lib/next/next_core.dart', 'lib/next/next_runtime.dart', 'lib/next/headless/core.dart', 'lib/next/headless/ports.dart', 'lib/next/body/next_body.dart', 'lib/next/mesh/runtime.dart'])
 drift = []

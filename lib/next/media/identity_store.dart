@@ -801,8 +801,15 @@ final class IdentityStore {
     return id;
   }
 
-  Future<String> saveSnapshot(MetadataRecord record) => _transaction(
-      (tx) async => _snapshot(tx, await _object(tx, record.ref), record));
+  Future<String> saveSnapshot(MetadataRecord record,
+      {Future<void> Function(String)? onCommitted,
+      Future<void> Function(Object)? onNotificationError}) =>
+      BodySignals.transaction(database,
+          (tx) async => _snapshot(tx, await _object(tx, record.ref), record),
+          afterCommit: onCommitted,
+          notificationTimeout: onNotificationError == null
+              ? null : const Duration(seconds: 5),
+          onNotificationError: onNotificationError);
 
   Future<JsonMap> importSnapshots(JsonMap input, Invocation invocation) =>
       _transaction((tx) async {

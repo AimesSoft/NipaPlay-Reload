@@ -3,7 +3,13 @@ part of '../kernel.dart';
 final class TaskCapability implements Capability {
   TaskCapability(TaskEngine engine)
       : actions = [
-          for (final operation in ['list', 'get', 'wait', 'cancel'])
+          for (final operation in [
+            'list',
+            'get',
+            'wait',
+            'cancel',
+            'reconcile'
+          ])
             _TaskAction(engine, operation),
         ];
   @override
@@ -41,7 +47,12 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
                 'origin, when present, records who submitted the task, taken from the call that created it.',
           'get' =>
             'Read the complete task snapshot. origin, when present, records who submitted the task. succeeded means verification finished; '
-                'receipt contains verified results. needs_decision contains optional executable option calls.',
+                'receipt contains verified results. execution reports the active worker, reconciliation support and capacity. needs_decision contains optional executable option calls.',
+          'reconcile' =>
+            'Verify persisted effects and finish a stuck task without rerunning it or deleting history. '
+                'Currently supported only by registered reconcilers (media.metadata.refresh). '
+                'Missing evidence or concurrent changes refuse the operation. A cancellation retains verified committed effects. '
+                'Inspect task.get execution.reconciliationSupported first; this is not force-success or a process kill.',
           'wait' => 'Wait for a terminal state, a state/phase/decision change after afterRevision, or timeout. '
               'Progress alone does not wake the wait unless includeProgress is true. '
               'timeoutMs defaults to 60000 and is bounded to 0–60000. Without afterRevision, '
@@ -51,7 +62,9 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
             'Request cancellation for jobId or jobIds and return accepted snapshots with individual batch failures. cancelling is not '
                 'confirmation of stopping. Committed effects are still verified and recorded in receipt. Does not remove downloads or delete files.',
         },
-        effect: operation == 'cancel' ? Effect.write : Effect.read,
+        effect: {'cancel', 'reconcile'}.contains(operation)
+            ? Effect.write
+            : Effect.read,
         input: operation == 'list'
             ? ObjectSchema({
                 'state': StringSchema(
@@ -91,6 +104,9 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
               ])
             : ObjectSchema({
                 'job': jobSnapshotSchema,
+                if (operation == 'get')
+                  'execution':
+                      const ObjectSchema({}, additionalProperties: true),
                 if (operation == 'cancel')
                   'results': ArraySchema(ObjectSchema({
                     'index': const IntegerSchema(minimum: 0),
@@ -180,9 +196,13 @@ final class _TaskAction extends Action<_TaskInput, _TaskOutput> {
           timeout: Duration(
               milliseconds: (json['timeoutMs'] as num?)?.toInt() ?? 60000)),
       'cancel' => await engine.cancel(id),
+      'reconcile' => await engine.reconcile(id),
       _ => await engine.get(id),
     };
-    return Completed(_TaskOutput({'job': job.toJson()}));
+    return Completed(_TaskOutput({
+      'job': job.toJson(),
+      if (operation == 'get') 'execution': engine.executionStatus(job)
+    }));
   }
 }
 

@@ -8,6 +8,12 @@ abstract interface class JobExecutor {
   Future<void> recover(JobContext context);
 }
 
+/// Read-only verification of completed effects. Implementations must reject
+/// missing evidence and ensure a signalled old execution cannot add effects.
+abstract interface class JobReconciler {
+  Future<JobReceipt> reconcile(Job job);
+}
+
 final class JobContext {
   JobContext._(this._engine, this._job);
   final TaskEngine _engine;
@@ -362,6 +368,63 @@ final class TaskEngine {
     _active[jobId]?._signal();
     _schedule(job);
     return job;
+  }
+
+  JsonMap executionStatus(Job job) => {
+        'activeInProcess': isActive(job.jobId),
+        'reconciliationSupported': _executors[job.type] is JobReconciler,
+        'lastUpdatedAt': job.updatedAt.toUtc().toIso8601String(),
+        'activeOfType': activeCount(job.type),
+        'capacity': capacity(job.type),
+      };
+
+  /// Verify effects without rerunning the operation or deleting its history.
+  Future<Job> reconcile(String jobId) async {
+    final observed = await get(jobId);
+    if (observed.state.isTerminal) return observed;
+    final executor = _executors[observed.type];
+    if (executor is! JobReconciler) {
+      throw const Failure(FailureCode.unavailable,
+          'This task type has no result reconciler; cancellation does not prove it stopped.');
+    }
+    if (!{JobState.running, JobState.cancelling, JobState.interrupted}
+        .contains(observed.state)) {
+      throw const Failure(FailureCode.conflict,
+          'Only running, cancelling or interrupted tasks can be reconciled.');
+    }
+    final receipt = await (executor as JobReconciler)
+        .reconcile(observed)
+        .timeout(const Duration(seconds: 10), onTimeout: () {
+      throw const Failure(FailureCode.unavailable,
+          'Result verification timed out; task state was not changed.');
+    });
+    if (receipt.verification != VerificationLevel.verified) {
+      throw const Failure(
+          FailureCode.conflict, 'A verified result is required.');
+    }
+    return _serial(() async {
+      final current = await _get(jobId);
+      if (current.state.isTerminal) return current;
+      if (current.revision != observed.revision) {
+        throw const Failure(FailureCode.conflict,
+            'Task changed during verification; read it again before reconciling.');
+      }
+      final context = _active[jobId];
+      final completed = _change(current,
+          state: current.cancelRequestedAt == null
+              ? JobState.succeeded
+              : JobState.cancelled,
+          phase: 'reconciled',
+          committed: true,
+          receipt: receipt);
+      await _commit(completed, current, 'reconciled');
+      context?._signal(retire: true);
+      _active.remove(jobId);
+      _retries.remove(jobId)?.cancel();
+      _waiting.remove(jobId);
+      _drain(current.type);
+      return completed;
+    });
   }
 
   /// Replaces the receipt of a job that already ended. State, error and
