@@ -2541,11 +2541,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         }
     try {
       final playerKernelName = player.getPlayerKernelName();
-      if (playerKernelName == 'Erika') {
-        player.setProperty('sub-scale', _subtitleScale.toStringAsFixed(2));
-        return;
-      }
-      if (playerKernelName != 'Media Kit' && playerKernelName != 'MDK') {
+      // Erika 取同一组 mpv 字幕属性，由它的适配器合成一次 setSubtitleStyle。
+      if (playerKernelName != 'Media Kit' &&
+          playerKernelName != 'MDK' &&
+          playerKernelName != 'Erika') {
               return;
             }
             // mdk 属性名是 subtitle.scale（sub-scale 是 mpv 的）——之前用错

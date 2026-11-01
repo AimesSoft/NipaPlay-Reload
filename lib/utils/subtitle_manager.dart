@@ -975,15 +975,13 @@ class SubtitleManager extends ChangeNotifier {
     // SRT/VTT 无特效，全平台 App 内叠层渲染（与内核无关）：
     // 不占内核字幕轨 -> 可与 mkv 内嵌轨共存、可热切换、可拖动
     if (extension == '.srt' || extension == '.vtt') return true;
-    // ASS/SSA：libmpv(Media Kit) 内核走内核轨由 libass 渲染，保留特效样式
-    // （滚动/卡拉OK/渐变等，adapter 已设 sub-ass-override=no）。
-    // 其他内核（Erika 等）对外挂 ASS 支持差 -> 走 App 叠层纯文本保证可显示。
+    // ASS/SSA：libmpv(Media Kit)、MDK、Erika 内核走内核轨由 libass 渲染，
+    // 保留特效样式（滚动/卡拉OK/渐变等，adapter 已设 sub-ass-override=no）。
+    // 其他内核走 App 叠层纯文本保证可显示。
     if (extension == '.ass' || extension == '.ssa') {
       try {
         final kernel = _player.getPlayerKernelName();
-        // libmpv(Media Kit)/MDK 内核走内核轨由 libass 渲染，保留特效样式；
-        // Erika 等内核挂载不了外挂 ASS 轨 -> 走 App 叠层纯文本保证可显示。
-        return kernel != 'Media Kit' && kernel != 'MDK';
+        return kernel != 'Media Kit' && kernel != 'MDK' && kernel != 'Erika';
       } catch (_) {
         return true;
       }
