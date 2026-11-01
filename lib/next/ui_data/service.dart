@@ -78,6 +78,12 @@ final class UiDataService
 
   @override
   Future<UiPerson?> person(UiPersonRef ref) => details.person(ref);
+
+  @override
+  Future<UiWorkFiles> files(String workId) => details.files(workId);
+
+  @override
+  Future<List<UiPersonWork>> related(UiRelatedRef ref) => details.related(ref);
   void notifyLibraryChanged() => _changed();
   Future<LocalFiles> localFiles() async =>
       LocalFiles(await _view('library.files'));

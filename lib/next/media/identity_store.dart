@@ -294,6 +294,37 @@ final class IdentityStore {
             return id;
           }), via: via);
 
+  /// Keeps the streams [probe] read of a file scanned before streams were
+  /// kept, when it is still the file that was scanned (same size, time and
+  /// head). Nothing else of the file changes: its identity stays.
+  Future<bool> addStreams(String fileId, JsonMap probe) =>
+      _transaction((tx) async {
+        final file = await entity(fileId, db: tx);
+        final attrs = file['attributes'] as JsonMap;
+        final old = attrs['probe'] as JsonMap?;
+        if (old == null ||
+            probe['technical'] is! Map ||
+            ['size', 'modifiedAt', 'headMd5'].any((k) => old[k] != probe[k])) {
+          return false;
+        }
+        await tx.update(
+            'media_entities',
+            {
+              'attributes': jsonEncode({
+                ...attrs,
+                'probe': {
+                  ...old,
+                  'technical': probe['technical'],
+                  if (probe['subtitles'] != null && old['subtitles'] == null)
+                    'subtitles': probe['subtitles'],
+                }
+              })
+            },
+            where: 'id = ?',
+            whereArgs: [file['id']]);
+        return true;
+      });
+
   Future<List<JsonMap>> locations(String fileId) async => database
       .query('media_locations', where: 'file_id = ?', whereArgs: [await canonicalFileId(database, fileId)]);
 

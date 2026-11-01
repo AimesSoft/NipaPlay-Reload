@@ -28,6 +28,7 @@ import 'collection.dart';
 import 'detail_backdrop.dart';
 import 'docking_title.dart';
 import 'episodes.dart';
+import 'file_facts.dart';
 import 'manage_episode.dart';
 import 'manage_sheet.dart';
 import 'manage_work.dart';
@@ -203,7 +204,59 @@ class _WorkDetailPageState extends State<WorkDetailPage>
       } catch (error) {
         debugPrint('[NextUi] work sections failed: $error');
       }
+      try {
+        final files = await details.files(id);
+        if (mounted && id == _workId) {
+          setState(() => _files = fileSummary(files.files));
+        }
+      } catch (error) {
+        debugPrint('[NextUi] work files failed: $error');
+      }
     }
+  }
+
+  /// What its files are: marks beside the meta line, rows below.
+  ({List<String> badges, List<UiFact> rows}) _files =
+      (badges: const [], rows: const []);
+
+  /// The other entries of its series, once read.
+  List<UiPersonWork> _related = const [];
+  String? _relatedKey;
+
+  void _readRelated(UiRelatedRef? ref) {
+    if (ref?.key == _relatedKey) return;
+    _relatedKey = ref?.key;
+    final data = _shell!.services.data;
+    if (ref == null || data is! NextWorkDetails) {
+      _related = const [];
+      return;
+    }
+    (data as NextWorkDetails).related(ref).then((works) {
+      if (!mounted || _relatedKey != ref.key) return;
+      setState(() => _related = [
+            for (final w in works)
+              if (w.workId != _workId) w
+          ]);
+    }, onError: (Object error) {
+      debugPrint('[NextUi] related works failed: $error');
+    });
+  }
+
+  /// A relative the library holds opens its page; one it does not, as a
+  /// found work.
+  Future<void> _openRelated(UiPersonWork w) async {
+    final shell = _shell!;
+    final held = Found.isFoundId(w.workId)
+        ? null
+        : await shell.services.data.work(w.workId);
+    if (!mounted) return;
+    shell.openWork(held ??
+        UiWork(
+          workId: w.workId,
+          title: w.title,
+          year: w.year,
+          artwork: UiArtwork(poster: w.poster),
+        ));
   }
 
   /// What the page shows below its episodes, and its pictures once they
@@ -215,6 +268,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
   void _showMore(UiWorkMore more) {
     final ref = more.gallery;
     final data = _shell!.services.data;
+    _readRelated(more.related);
     setState(() {
       _more = more;
       if (ref != _galleryRef) {
@@ -638,7 +692,10 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                     ),
                     // Below the first screen the page settles into ink, so
                     // the people and facts read over any backdrop.
-                    if (_more.hasContent || _gallery != null)
+                    if (_more.hasContent ||
+                        _gallery != null ||
+                        _related.isNotEmpty ||
+                        _files.rows.isNotEmpty)
                       SliverToBoxAdapter(
                         child: DecoratedBox(
                           decoration: const BoxDecoration(
@@ -666,6 +723,9 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                               skip: _work.film
                                   ? WorkMoreSections.lead(_more)
                                   : null,
+                              related: _related,
+                              onRelated: _openRelated,
+                              files: _files.rows,
                             ),
                           ),
                         ),
@@ -861,7 +921,15 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             child: Visibility.maintain(
                 visible: false, child: WorkTitle(work: work, margins: false)),
           ),
-          MetaLine(work, allRatings: true, studio: true, genres: false),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 10,
+            runSpacing: 6,
+            children: [
+              MetaLine(work, allRatings: true, studio: true, genres: false),
+              for (final badge in _files.badges) _Badge(badge),
+            ],
+          ),
           if ((work.film ? _directors() : null) case final directors?)
             Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -1337,5 +1405,25 @@ class _MenuLine extends StatelessWidget {
         height: 1,
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
         color: NextColors.line,
+      );
+}
+
+/// A mark of what the files are (4K, HDR, 5.1), beside the meta line.
+class _Badge extends StatelessWidget {
+  const _Badge(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: NextColors.line2),
+        ),
+        child: Text(text,
+            style: NextText.sans(11,
+                weight: FontWeight.w600,
+                color: NextColors.p2,
+                letterSpacing: 0.4)),
       );
 }

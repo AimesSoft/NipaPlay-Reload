@@ -613,6 +613,13 @@ final class MeshLibrary {
 
   /// A work's page below its episodes, built in the worker from what the
   /// catalogue holds; only the small result crosses to this isolate.
+  /// The files of a work's episodes here and on the other devices
+  /// (`LibraryProjection.workFiles`).
+  Future<List<JsonMap>> workFiles(String id) async {
+    await prepareIndex();
+    return (await worker.call('workFiles', id) as List).cast<JsonMap>();
+  }
+
   Future<JsonMap> workMore(String id) async {
     await prepareIndex();
     return await worker.call('workMore', id) as JsonMap;

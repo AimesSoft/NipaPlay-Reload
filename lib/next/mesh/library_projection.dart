@@ -10,6 +10,7 @@ import '../ui_data/service.dart';
 import '../ui_data/ui_data.dart';
 import '../ui_data/library_index.dart';
 import '../ui_data/library_search.dart';
+import '../ui_data/work_files.dart';
 import '../ui_data/work_more.dart';
 import '../media/library_reads.dart';
 import '../media/metadata_provider.dart';
@@ -524,17 +525,30 @@ final class LibraryProjection {
         final value = episodeJson(episode);
         value['still'] = await _asset(episode.still);
         final locations = <JsonMap>[];
+        final subtitles =
+            await ui.subtitles?.episodeSubtitles(episode.episodeId);
         final nativeFiles = await db.rawQuery(
-            "SELECT l.locator,l.file_id AS fileId,e.start_ms AS startMs,e.end_ms AS endMs FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id WHERE e.episode_id=? AND l.owner_device_id=? AND l.source='local' AND l.available=1",
+            "SELECT l.locator,l.file_id AS fileId,e.start_ms AS startMs,e.end_ms AS endMs,f.attributes FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id JOIN media_entities f ON f.id=l.file_id WHERE e.episode_id=? AND l.owner_device_id=? AND l.source='local' AND l.available=1",
             [episode.episodeId, ui.media.store.ownerDeviceId]);
         for (final f in nativeFiles) {
           final path = f['locator'] as String;
           if (!await File(path).exists()) continue;
+          final probe =
+              (jsonDecode(f['attributes'] as String) as Map)['probe'] as Map?;
           locations.add({
             'fileId': f['fileId'],
             'sample': await _sample(path),
             'startMs': f['startMs'] ?? 0,
-            'endMs': f['endMs']
+            'endMs': f['endMs'],
+            // What the file's streams are, for the work's page wherever it
+            // is shown.
+            'facts': {
+              ...fileFactsOf(probe, [
+                for (final t in subtitles?.tracks ?? const <JsonMap>[])
+                  if (t['fileId'] == f['fileId']) t
+              ]),
+              if (lacksStreams(probe)) 'unread': true,
+            },
           });
         }
         if (nativeFiles.isNotEmpty) value['playable'] = locations.isNotEmpty;
@@ -557,8 +571,6 @@ final class LibraryProjection {
                     : 'binding'
           });
         }
-        final subtitles =
-            await ui.subtitles?.episodeSubtitles(episode.episodeId);
         records.add({
           'kind': 'episode',
           'id': episode.episodeId,
@@ -842,6 +854,7 @@ final class LibraryProjection {
               locations.add({
                 ...f,
                 'deviceId': e['deviceId'],
+                if (e['local'] != true) 'deviceName': e['name'],
                 'sourceEpisodeId': e['id'],
                 'local': e['local'],
                 'online': e['online']
@@ -1096,6 +1109,25 @@ final class LibraryProjection {
       throw const Failure(FailureCode.notFound, 'Unknown catalogue entity.');
     }
     return result;
+  }
+
+  /// What the files of a work's episodes are ([fileFactsOf]), on this
+  /// device and the others, each file once: its facts, its file id here
+  /// (`fileId` with `local`), the other device's name (`device`).
+  List<JsonMap> workFiles(String id) {
+    final key = _aliases[id] ?? id;
+    final seen = <String>{};
+    return [
+      for (final episode in _episodes[key] ?? const <UiEpisode>[])
+        for (final l in _locations[episode.episodeId] ?? const <JsonMap>[])
+          if (seen.add('${l['deviceId']}\u0000${l['fileId'] ?? l['sample']}'))
+            {
+              ...(l['facts'] as Map?)?.cast<String, Object?>() ??
+                  const <String, Object?>{},
+              if (l['local'] == true) 'fileId': l['fileId'],
+              if (l['local'] != true) 'device': l['deviceName'],
+            }
+    ];
   }
 
   /// What a work's page shows below its episodes ([buildWorkMore]), from

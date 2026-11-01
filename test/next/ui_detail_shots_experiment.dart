@@ -49,7 +49,16 @@ UiCredit _person(String name, String role, String picture) =>
 
 /// What the sources of a film say about it, as the page reads it.
 final _suzumeMore = UiWorkMore(
-  sections: const ['characters', 'cast', 'crew', 'gallery', 'facts', 'links'],
+  sections: const [
+    'characters',
+    'cast',
+    'crew',
+    'related',
+    'gallery',
+    'facts',
+    'files',
+    'links'
+  ],
   characters: [
     for (final (name, role, voice, picture) in const [
       ('岩户铃芽', '主角', '原菜乃华', 'suzume-poster.jpg'),
@@ -89,14 +98,14 @@ final _suzumeMore = UiWorkMore(
     (label: '票房', value: '\$3.2 亿'),
   ],
   tags: const ['奇幻', '冒险', '公路片'],
+  related: const UiRelatedRef(bangumi: '361379'),
   links: const [
     (label: 'TMDB', url: 'https://www.themoviedb.org/movie/916224'),
     (label: 'Bangumi', url: 'https://bgm.tv/subject/361379'),
   ],
 );
 
-const _overview =
-    '生活在日本九州宁静小镇的17岁少女铃芽，遇见了为了寻找“门”而踏上旅途的青年。'
+const _overview = '生活在日本九州宁静小镇的17岁少女铃芽，遇见了为了寻找“门”而踏上旅途的青年。'
     '追随着青年的脚步，铃芽来到了山上一片废墟之地，在这里静静伫立着一扇古老的门，'
     '仿佛是坍塌中存留下的唯一遗迹。铃芽仿佛被什么吸引了一般，将手伸向了那扇门……';
 
@@ -127,6 +136,57 @@ UiWork _suzume({double? progress}) => UiWork(
           playable: true),
     );
 
+/// The film's one file: a 4K HDR release with two audio tracks and
+/// subtitles in it and beside it.
+final _suzumeFiles = UiWorkFiles([
+  UiFileFacts.fromJson(const {
+    'known': true,
+    'size': 18900000000,
+    'container': 'matroska,webm',
+    'video': {
+      'codec': 'hevc',
+      'width': 3840,
+      'height': 2160,
+      'pixelFormat': 'yuv420p10le',
+      'colorSpace': 'bt2100PQ',
+    },
+    'audio': [
+      {'codec': 'truehd', 'channels': 6, 'language': 'jpn'},
+      {'codec': 'aac', 'channels': 2, 'language': 'jpn', 'title': '导演评论音轨'},
+    ],
+    'subtitles': [
+      {'language': 'zh-Hans', 'format': 'ass', 'external': false},
+      {'language': 'zh-Hant', 'format': 'ass', 'external': false},
+      {'language': 'zh-Hans', 'format': 'ass', 'external': true},
+    ],
+  }),
+]);
+
+/// What its sources say it relates to.
+final _suzumeRelated = <UiPersonWork>[
+  (
+    workId: 'found:bangumi:1',
+    title: '铃芽之旅 预告篇',
+    role: '番外篇',
+    year: 2022,
+    poster: _s('suzume-poster.jpg')
+  ),
+  (
+    workId: 'found:bangumi:2',
+    title: '你的名字。',
+    role: '相同世界观',
+    year: 2016,
+    poster: _s('yourname-poster.jpg')
+  ),
+  (
+    workId: 'found:bangumi:3',
+    title: '天气之子',
+    role: '相同世界观',
+    year: 2019,
+    poster: _s('violet-poster.jpg')
+  ),
+];
+
 final class _Library implements NextUiData, NextWorkDetails {
   _Library(this.works, this.more, this.seasons);
   final Map<String, UiWork> works;
@@ -142,13 +202,17 @@ final class _Library implements NextUiData, NextWorkDetails {
       more[workId] ?? UiWorkMore.empty;
   @override
   Future<UiGallery> gallery(UiGalleryRef ref) async => UiGallery(wide: [
-        for (final n in ['suzume-backdrop.jpg', 'suzume-backdrop2.jpg'])
-          _s(n)
+        for (final n in ['suzume-backdrop.jpg', 'suzume-backdrop2.jpg']) _s(n)
       ], posters: [
         _s('suzume-poster.jpg')
       ]);
   @override
   Future<UiPerson?> person(UiPersonRef ref) async => null;
+  @override
+  Future<UiWorkFiles> files(String workId) async =>
+      more.containsKey(workId) ? _suzumeFiles : UiWorkFiles.empty;
+  @override
+  Future<List<UiPersonWork>> related(UiRelatedRef ref) async => _suzumeRelated;
   @override
   Future<UiHome> home() async => const UiHome();
   @override
@@ -218,16 +282,18 @@ void main() {
     final shell = await pumpFoundCards(tester,
         cards: [UiWorkCard(work)],
         discover: FoundDetails(),
-        data: _Library({work.workId: work}, {if (more != null) work.workId: more},
-            const {}),
+        data: _Library({work.workId: work},
+            {if (more != null) work.workId: more}, const {}),
         pixelRatio: 2,
         onPlay: (_) {});
     await tester.tap(find.text(work.title).first);
     await tester.pump();
     await shot(tester, name);
     if (scrolled) {
-      await tester.drag(find.byType(CustomScrollView).last, const Offset(0, -760));
-      await shot(tester, '$name-scrolled');
+      for (final (i, by) in [760.0, 900.0, 900.0].indexed) {
+        await tester.drag(find.byType(CustomScrollView).last, Offset(0, -by));
+        await shot(tester, '$name-scrolled-${i + 1}');
+      }
     }
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));

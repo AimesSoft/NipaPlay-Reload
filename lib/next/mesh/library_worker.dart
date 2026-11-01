@@ -1022,6 +1022,8 @@ Future<void> _serve(
           return projection.evidence(input as String);
         case 'workMore':
           return projection.workMore(input as String);
+        case 'workFiles':
+          return projection.workFiles(input as String);
         case 'worksCrediting':
           final (provider, person) = input as (String, String);
           return projection.worksCrediting(provider, person);

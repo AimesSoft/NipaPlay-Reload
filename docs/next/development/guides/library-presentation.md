@@ -13,7 +13,7 @@
 
 ## 作品详情页
 
-剧集下面依次是角色、演员、制作人员、图片、信息和外部链接；没有内容的区块不出现。页面每处取哪个字段、按什么规则选来源：
+剧集下面依次是角色、演员、制作人员、同系列作品、图片、信息、文件和外部链接；没有内容的区块不出现。电影没有剧集行，排在最前的一行人物显示在首屏原本剧集行的位置。页面每处取哪个字段、按什么规则选来源：
 
 | 位置 | 显示的字段 | 由规则的哪部分决定 | 默认来源顺序 |
 | --- | --- | --- | --- |
@@ -24,8 +24,11 @@
 | `section.characters` | Bangumi 角色与声优 | `sections`、`limits.characters` | — |
 | `section.cast` | TMDB 演员（饰演角色），或 Bangumi 声优 | `sources.people`、`sections`、`limits.cast` | tmdb → bangumi；默认有角色时不重复列演员 |
 | `section.crew` | TMDB 主创与职员（导演、原作、系列构成、音乐……），或 Bangumi staff | `sources.people`、`sections`、`limits.crew` | tmdb → bangumi |
+| `section.related` | 同系列作品：Bangumi 关联条目（带前传、续集、剧场版等关系），电影所属的 TMDB 合集；都没有时用弹弹play 的相关作品。库里已有的打开库内页面（打开详情页时读取） | `sections` | bangumi → tmdb → dandanplay |
 | `section.gallery` | TMDB 剧照、背景与海报（打开详情页时读取） | `sections`、`limits.gallery` | — |
 | `section.facts` | 原名、类型、首播/上映、完结、状态、季集、时长、形式、播出、制作、国家、原始语言、预算与票房、标签 | `sources.genres`、`sources.tags`、`sections` | 标签 bangumi 优先，其余 tmdb 优先 |
+| `section.files` | 文件：画质（分辨率、编码、位深、HDR）、音轨、字幕（内嵌与外挂）、封装与大小，跨设备时注明设备。来自扫描时对文件的读取；之前扫描的文件在打开页面时补读一次 | `sections` | — |
+| `hero.badges` | 画质、HDR 与多声道标记（多数文件的） | — | — |
 | `section.links` | TMDB、Bangumi、IMDb、弹弹play、官网 | `sections` | — |
 
 - 读：`media.metadata.ui_facts` 的 `presentation` 给出每个字段当前的值、来自哪个来源、其他来源能给的值和可显示的评分；`ui.detail.layout` 给出默认规则、本机规则和某部作品的规则。

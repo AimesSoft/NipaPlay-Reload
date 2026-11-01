@@ -8,6 +8,7 @@ import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
+import '../widgets/cards.dart';
 import '../widgets/icons.dart';
 import '../widgets/shelf.dart';
 
@@ -28,7 +29,17 @@ class WorkMoreSections extends StatelessWidget {
     required this.onLink,
     this.only,
     this.skip,
+    this.related = const [],
+    this.onRelated,
+    this.files = const [],
   });
+
+  /// The other entries of its series ([NextWorkDetails.related]).
+  final List<UiPersonWork> related;
+  final ValueChanged<UiPersonWork>? onRelated;
+
+  /// What its files are, as rows ([fileSummary]).
+  final List<UiFact> files;
 
   /// The first section of people the rule orders that has someone in it.
   static String? lead(UiWorkMore more) => more.sections
@@ -65,9 +76,12 @@ class WorkMoreSections extends StatelessWidget {
           _People('演员', more.cast, onPerson: onPerson, key: const Key('cast')),
         'crew' when more.crew.isNotEmpty => _People('制作人员', more.crew,
             onPerson: onPerson, key: const Key('crew')),
+        'related' when related.isNotEmpty =>
+          _Related(related, onOpen: onRelated),
         'gallery' when gallery != null => _Gallery(gallery!),
         'facts' when more.facts.isNotEmpty || more.tags.isNotEmpty =>
           _Facts(more.facts, more.tags),
+        'files' when files.isNotEmpty => _Facts(files, const [], title: '文件'),
         'links' when more.links.isNotEmpty =>
           _Links(more.links, onLink: onLink),
         _ => null,
@@ -362,10 +376,44 @@ class _Gallery extends StatelessWidget {
       );
 }
 
+/// The work's other entries: its films, its sequels, the series it comes
+/// from; each says how it relates when its source says so.
+class _Related extends StatelessWidget {
+  const _Related(this.works, {required this.onOpen});
+  final List<UiPersonWork> works;
+  final ValueChanged<UiPersonWork>? onOpen;
+
+  @override
+  Widget build(BuildContext context) => Shelf(
+        title: '系列',
+        height: 300,
+        itemCount: works.length,
+        storageKey: 'work-related',
+        itemBuilder: (context, i) {
+          final w = works[i];
+          return PosterCard(
+            workId: w.workId,
+            image: w.poster,
+            title: w.title,
+            reason: w.role == null && w.year == null
+                ? null
+                : [
+                    if (w.role case final role?) role,
+                    if (w.year case final year?) '$year',
+                  ].join(' · '),
+            width: 160,
+            height: 240,
+            onOpen: onOpen == null ? null : () => onOpen!(w),
+          );
+        },
+      );
+}
+
 class _Facts extends StatelessWidget {
-  const _Facts(this.facts, this.tags);
+  const _Facts(this.facts, this.tags, {this.title = '信息'});
   final List<UiFact> facts;
   final List<String> tags;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -379,7 +427,7 @@ class _Facts extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _Heading('信息'),
+        _Heading(title),
         Padding(
           padding:
               EdgeInsets.only(left: gutter, right: NextLayout.end(context)),

@@ -163,7 +163,7 @@ BASELINE_HASHES = {
  'lib/next/system/storage.dart': '8d6d251c87b8b8dc35c1dd8826a046a3cad0fe5190cbbf1cd18f13fb94b6f3bc',
  'lib/next/tasks/resources.dart': '1d0484e666c5f93b017b9898b73534b69a9c6e9ffcf9bcdc0ae1922dff8ba750',
  'lib/next/tasks/user_consent.dart': 'b570b5a457943c77cb1ac356394321562c80ae1567996005779686ccbe9f3b3f',
- 'lib/next/ui_data/capability.dart': 'afb364ba2e57a7e504d81ba72df2010a21caa6ee93ad69b9d4670295d2c11c74',
+ 'lib/next/ui_data/capability.dart': '32b928f8d5a2fbc66c14c58c08ea75ae8e98b9136dd8d510eebfa603615cf361',
  'lib/next/ui_data/library_capability.dart': '6d1f854d5afb865855d1e1f54aa499d5806044410b2348a29cc478e336931124',
  'lib/security/credential_capability.dart': '26bc1852bc98ef1c4c21446b165bfb0764bdb7c763fbd16355079ebbd03f32ac',
  'packages/nipa_harness/lib/src/action.dart': 'b80ccb05cb5eb0143290d6750ec8b4557da08511c222dfff06f929d329efcb55',

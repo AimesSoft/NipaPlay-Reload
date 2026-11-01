@@ -61,6 +61,10 @@ final class _Details extends _Library implements NextWorkDetails {
   Future<UiGallery> gallery(UiGalleryRef ref) async => const UiGallery();
   @override
   Future<UiPerson?> person(UiPersonRef ref) async => null;
+  @override
+  Future<UiWorkFiles> files(String workId) async => UiWorkFiles.empty;
+  @override
+  Future<List<UiPersonWork>> related(UiRelatedRef ref) async => const [];
 }
 
 /// Plays what it is asked to; nothing else is asked of it here.

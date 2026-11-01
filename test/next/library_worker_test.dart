@@ -252,6 +252,65 @@ void main() {
     expect(current.workId, isNot(remote.workId));
     expect((await worker.homePlan()).hero?.work.workId, current.workId);
   });
+  test('a work\'s files say what their streams are; an older scan asks to be read',
+      () async {
+    final db = jobs.database;
+    for (final (i, probe) in [
+      {
+        'size': 1000,
+        'technical': {
+          'container': 'matroska,webm',
+          'video': [
+            {'codec': 'hevc', 'width': 1920, 'height': 1080}
+          ],
+          'audio': [
+            {'codec': 'flac', 'channels': 2, 'language': 'jpn'}
+          ],
+        },
+      },
+      // Scanned before streams were kept.
+      {'size': 900, 'durationMs': 1000},
+    ].indexed) {
+      final video = File(ppath.join(root.path, 'e${i + 1}.mkv'));
+      await video.writeAsString('video $i');
+      await db.insert('media_entities', {
+        'id': 'f${i + 1}',
+        'kind': 'file',
+        'attributes': jsonEncode({'probe': probe})
+      });
+      await db.insert('media_locations', {
+        'id': 'l${i + 1}',
+        'file_id': 'f${i + 1}',
+        'source': 'local',
+        'owner_device_id': 'owner',
+        'locator': video.path,
+        'available': 1
+      });
+      await db.insert('media_file_episodes', {
+        'file_id': 'f${i + 1}',
+        'episode_id': 'e${i + 1}',
+        'relation': 'exact',
+        'ordinal': 0
+      });
+    }
+    await worker.build('files');
+    final snapshot = await worker.compose({}, {}, null);
+    final files = (await worker.call('workFiles', snapshot.works.keys.single)
+            as List)
+        .cast<Map>();
+    expect(files, hasLength(2));
+    final read = files.singleWhere((f) => f['fileId'] == 'f1');
+    expect(read['known'], isTrue);
+    expect((read['video'] as Map)['codec'], 'hevc');
+    expect(read['audio'], [
+      {'codec': 'flac', 'channels': 2, 'language': 'jpn'}
+    ]);
+    expect(read.containsKey('unread'), isFalse);
+    final older = files.singleWhere((f) => f['fileId'] == 'f2');
+    expect(older['unread'], isTrue);
+    expect(older['size'], 900);
+  });
+
   test('startup indexers scan, parse and commit in the library worker',
       () async {
     await worker.warm();

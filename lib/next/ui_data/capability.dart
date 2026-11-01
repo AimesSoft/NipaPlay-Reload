@@ -108,7 +108,7 @@ const _ruleSchema = ObjectSchema({
       description: 'Field → providers in the order they are taken: title, originalTitle, overview, year, studio, runtimeMs, episodeCount, genres, tags (tmdb, bangumi, dandanplay), people (tmdb, bangumi). Providers left out come after the ones named.'),
   'ratings': ArraySchema(StringSchema(values: ['tmdb', 'bangumi', 'dandanplay']),
       description: 'Ratings shown, in this order; providers left out are hidden.'),
-  'sections': ArraySchema(StringSchema(values: ['characters', 'cast', 'crew', 'gallery', 'facts', 'links']),
+  'sections': ArraySchema(StringSchema(values: ['characters', 'cast', 'crew', 'related', 'gallery', 'facts', 'files', 'links']),
       description: 'Sections below the episodes, in this order; sections left out are hidden. Omit for the default order (where a work\'s characters stand for its cast).'),
   'limits': ObjectSchema({}, additionalProperties: true,
       description: 'Section → most entries shown (1–100): characters, cast, crew, gallery.'),

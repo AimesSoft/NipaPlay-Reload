@@ -150,6 +150,19 @@ final class _WhenReady implements NextUiData, NextNowPlaying, NextWorkDetails {
       };
 
   @override
+  Future<UiWorkFiles> files(String workId) async => switch (await _data) {
+        final NextWorkDetails data => data.files(workId),
+        _ => UiWorkFiles.empty,
+      };
+
+  @override
+  Future<List<UiPersonWork>> related(UiRelatedRef ref) async =>
+      switch (await _data) {
+        final NextWorkDetails data => data.related(ref),
+        _ => const <UiPersonWork>[],
+      };
+
+  @override
   Future<List<UiEpisode>> episodes(String workId, {int? season}) async =>
       (await _data).episodes(workId, season: season);
 

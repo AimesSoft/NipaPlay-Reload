@@ -5,7 +5,10 @@
 /// as is: natural, short, no IDs or process details.
 library;
 
+import 'work_files.dart';
 import 'work_more.dart';
+
+export 'work_files.dart' show UiFileFacts, UiWorkFiles;
 
 export 'work_more.dart'
     show
@@ -18,7 +21,8 @@ export 'work_more.dart'
         UiGalleryRef,
         UiPerson,
         UiPersonRef,
-        UiPersonWork;
+        UiPersonWork,
+        UiRelatedRef;
 
 /// A work's page beyond its episodes, and the people and pictures it opens
 /// onto. Read when the page (or the person's page) opens, never with the
@@ -26,6 +30,16 @@ export 'work_more.dart'
 abstract interface class NextWorkDetails {
   Future<UiWorkMore> workMore(String workId);
   Future<UiGallery> gallery(UiGalleryRef ref);
+
+  /// What the work's files are, here and on the other devices. Files
+  /// scanned before their streams were kept are read again in the
+  /// background; the library tells when they are.
+  Future<UiWorkFiles> files(String workId);
+
+  /// The other entries of its series: library works by their library id,
+  /// the rest as found works; `role` says how each relates when the source
+  /// says so (前传, 续集, 剧场版…).
+  Future<List<UiPersonWork>> related(UiRelatedRef ref);
 
   /// Null when the person cannot be read now (no network, no key).
   Future<UiPerson?> person(UiPersonRef ref);

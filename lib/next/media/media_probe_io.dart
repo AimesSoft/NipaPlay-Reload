@@ -77,6 +77,7 @@ Future<Map<String, Object?>> probeMediaInfo(String path,
             'pixelFormat': s['pix_fmt'],
             'bitrate': positive(s['bit_rate']),
             'colorSpace': s['color_space'],
+            'colorTransfer': s['color_transfer'],
           }
       ],
       'audio': [

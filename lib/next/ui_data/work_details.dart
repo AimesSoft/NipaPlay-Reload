@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:isolate';
 
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../media/media_service.dart';
+import '../media/metadata_provider.dart';
 import '../media/provider_transport.dart';
 import '../media/providers.dart';
 import '../mesh/library.dart';
 import 'found.dart';
+import 'work_files.dart';
 import 'work_more.dart';
 
 /// What a work's page reads beyond the library: its sections, and the
@@ -20,13 +23,104 @@ final class WorkDetailsReader {
   final MeshLibrary? Function() meshLibrary;
   final _galleries = <String, Future<UiGallery>>{};
   final _people = <String, Future<UiPerson?>>{};
+  final _related = <String, Future<List<(ExternalRef, UiPersonWork)>>>{};
+
+  Future<UiWorkFiles> files(String workId) async {
+    if (Found.isFoundId(workId) || workId.startsWith('source-work:')) {
+      return UiWorkFiles.empty;
+    }
+    List<JsonMap>? rows;
+    if (meshLibrary() case final mesh?) {
+      try {
+        rows = await mesh.workFiles(workId);
+      } on Failure catch (error) {
+        if (error.code != FailureCode.notFound) rethrow;
+      }
+    }
+    rows ??= await localWorkFiles(media.store.database, workId);
+    final unread = [
+      for (final row in rows)
+        if (row['unread'] == true && row['fileId'] is String)
+          row['fileId'] as String
+    ];
+    // Read again in the background; the library's change brings them.
+    if (unread.isNotEmpty) unawaited(media.readStreams(unread));
+    return UiWorkFiles([for (final row in rows) UiFileFacts.fromJson(row)],
+        reading: unread.isNotEmpty);
+  }
+
+  /// The relatives the sources list are read once a session; which of them
+  /// the library holds is asked each time.
+  Future<List<UiPersonWork>> related(UiRelatedRef ref) async {
+    final found = await _relatives(ref);
+    final library =
+        await media.acceptedWorkIds([for (final (ref, _) in found) ref]);
+    final seen = <String>{};
+    return [
+      for (final (i, (_, work)) in found.indexed)
+        if (seen.add(library[i] ?? work.workId))
+          (
+            workId: library[i] ?? work.workId,
+            title: work.title,
+            role: work.role,
+            year: work.year,
+            poster: work.poster,
+          )
+    ];
+  }
+
+  Future<List<(ExternalRef, UiPersonWork)>> _relatives(UiRelatedRef ref) {
+    return _related[ref.key] ??= () async {
+      try {
+        final found = <(ExternalRef, UiPersonWork)>[];
+        if (ref.bangumi case final id?) {
+          if (_transport('bangumi') case final bangumi?) {
+            found.addAll(bangumiRelated((await bangumi
+                    .request('/v0/subjects/$id/subjects'))['data'] as List? ??
+                const []));
+          }
+        }
+        if (ref.tmdbCollection case final id?) {
+          if (_transport('tmdb') case final tmdb?) {
+            found.addAll(tmdbCollectionParts(
+                await tmdb
+                    .request('/3/collection/$id', query: {'language': 'zh-CN'}),
+                self: ref.tmdbMovie));
+          }
+        }
+        // Dandanplay's list says no relation: it fills in when the others
+        // know none.
+        if (found.isEmpty) {
+          for (final d in ref.dandanplay) {
+            found.add((
+              ExternalRef('dandanplay', 'anime', d.id),
+              (
+                workId: Found.id('dandanplay', d.id),
+                title: d.title,
+                role: null,
+                year: null,
+                poster: d.image,
+              )
+            ));
+          }
+        }
+        return found;
+      } catch (error) {
+        developer.log('related ${ref.key}: ${error.runtimeType}',
+            name: 'NextUi');
+        _related.remove(ref.key);
+        return const <(ExternalRef, UiPersonWork)>[];
+      }
+    }();
+  }
 
   Future<UiWorkMore> workMore(String workId) async {
     // A found work's page builds this from the record it already read.
     if (Found.isFoundId(workId)) {
       return UiWorkMore.empty;
     }
-    if (meshLibrary() case final mesh? when !workId.startsWith('source-work:')) {
+    if (meshLibrary() case final mesh?
+        when !workId.startsWith('source-work:')) {
       try {
         return UiWorkMore.fromJson(await mesh.workMore(workId));
       } on Failure catch (error) {
@@ -117,3 +211,54 @@ final class WorkDetailsReader {
     return null;
   }
 }
+
+/// Bangumi's related subjects (`/v0/subjects/{id}/subjects`): the anime and
+/// live-action ones, with how they relate (前传, 续集, 剧场版…).
+List<(ExternalRef, UiPersonWork)> bangumiRelated(List rows) => [
+      for (final r in rows.whereType<Map>())
+        if ((r['type'] == 2 || r['type'] == 6) && r['id'] != null)
+          if (_name(r['name_cn']) ?? _name(r['name']) case final title?)
+            (
+              ExternalRef('bangumi', 'subject', '${r['id']}'),
+              (
+                workId: Found.id('bangumi', r['id']),
+                title: title,
+                role: _name(r['relation']),
+                year: null,
+                poster: switch (r['images']) {
+                  final Map images => _name(images['common']) ??
+                      _name(images['medium']) ??
+                      _name(images['large']),
+                  _ => null,
+                },
+              )
+            )
+    ];
+
+/// The films of a TMDB collection but [self], in the order they came out.
+List<(ExternalRef, UiPersonWork)> tmdbCollectionParts(Map row, {String? self}) {
+  final parts = [
+    for (final p in (row['parts'] as List? ?? const []).whereType<Map>())
+      if (p['id'] != null && '${p['id']}' != self)
+        if (_name(p['title']) ?? _name(p['name']) case final title?) (p, title)
+  ]..sort((a, b) => '${a.$1['release_date'] ?? ''}'
+      .compareTo('${b.$1['release_date'] ?? ''}'));
+  return [
+    for (final (p, title) in parts)
+      (
+        ExternalRef('tmdb', 'movie', '${p['id']}'),
+        (
+          workId: Found.id('tmdb', p['id'], objectType: 'movie'),
+          title: title,
+          role: null,
+          year: int.tryParse('${p['release_date'] ?? ''}'.split('-').first),
+          poster: _name(p['poster_path']) == null
+              ? null
+              : 'https://image.tmdb.org/t/p/w342${p['poster_path']}',
+        )
+      )
+  ];
+}
+
+String? _name(Object? value) =>
+    value is String && value.trim().isNotEmpty ? value.trim() : null;

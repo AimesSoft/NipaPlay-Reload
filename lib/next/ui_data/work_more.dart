@@ -76,6 +76,47 @@ typedef UiLink = ({String label, String url});
 /// gallery comes into view.
 typedef UiGalleryRef = ({String objectType, String id});
 
+/// Where a work's relatives are known: its Bangumi subject (whose related
+/// subjects say how they relate), the TMDB collection its film is part of,
+/// and the related works Dandanplay lists (already in its record).
+final class UiRelatedRef {
+  const UiRelatedRef(
+      {this.bangumi,
+      this.tmdbCollection,
+      this.tmdbMovie,
+      this.dandanplay = const []});
+  final String? bangumi;
+  final String? tmdbCollection;
+
+  /// The film itself, left out of its collection.
+  final String? tmdbMovie;
+  final List<({String id, String title, String? image})> dandanplay;
+
+  bool get isEmpty =>
+      bangumi == null && tmdbCollection == null && dandanplay.isEmpty;
+
+  String get key => '$bangumi|$tmdbCollection|$tmdbMovie|'
+      '${dandanplay.map((d) => d.id).join(',')}';
+
+  static UiRelatedRef? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final ref = UiRelatedRef(
+      bangumi: json['bangumi'] as String?,
+      tmdbCollection: json['tmdbCollection'] as String?,
+      tmdbMovie: json['tmdbMovie'] as String?,
+      dandanplay: [
+        for (final d in (json['dandanplay'] as List? ?? const []).cast<Map>())
+          (
+            id: d['id'] as String,
+            title: d['title'] as String,
+            image: d['image'] as String?
+          )
+      ],
+    );
+    return ref.isEmpty ? null : ref;
+  }
+}
+
 /// Pictures of a work: wide stills and backdrops, and posters.
 final class UiGallery {
   const UiGallery({this.wide = const [], this.posters = const []});
@@ -94,6 +135,7 @@ final class UiWorkMore {
     this.cast = const [],
     this.crew = const [],
     this.gallery,
+    this.related,
     this.facts = const [],
     this.tags = const [],
     this.links = const [],
@@ -105,6 +147,9 @@ final class UiWorkMore {
   final List<UiCredit> cast;
   final List<UiCredit> crew;
   final UiGalleryRef? gallery;
+
+  /// Where its other entries (sequels, films, the series) are known.
+  final UiRelatedRef? related;
   final List<UiFact> facts;
   final List<String> tags;
   final List<UiLink> links;
@@ -140,6 +185,7 @@ final class UiWorkMore {
             ),
           _ => null,
         },
+        related: UiRelatedRef.fromJson(json['related']),
         facts: [
           for (final f in (json['facts'] as List? ?? const []).cast<Map>())
             (label: f['label'] as String, value: f['value'] as String)
@@ -231,8 +277,11 @@ JsonMap buildWorkMore(Map metadata, {bool film = false}) {
         (s['objectType'] as String, '${s['externalId']}')
   ].firstOrNull;
 
+  final related = _relatedRef(sources);
+
   return {
     'sections': sections,
+    if (related.isNotEmpty) 'related': related,
     'characters': characters.take(rule.limit('characters')).toList(),
     'cast': cast.take(rule.limit('cast')).toList(),
     'crew': crew.take(rule.limit('crew')).toList(),
@@ -241,6 +290,41 @@ JsonMap buildWorkMore(Map metadata, {bool film = false}) {
     'facts': _facts(field, fields, tmdb, bangumi, film: film),
     'tags': _tags(field('tags')),
     'links': _links(sources, tmdb, dandanplay, fields),
+  };
+}
+
+/// Where the work's relatives are known ([UiRelatedRef]), from its sources.
+JsonMap _relatedRef(List<Map> sources) {
+  String? id(String provider, Set<String> kinds) => [
+        for (final s in sources)
+          if (s['provider'] == provider && kinds.contains(s['objectType']))
+            '${s['externalId']}'
+      ].firstOrNull;
+  Map? raw(String provider) => [
+        for (final s in sources)
+          if (s['provider'] == provider &&
+              (s['fields'] as Map)['providerData'] is Map)
+            (s['fields'] as Map)['providerData'] as Map
+      ].firstOrNull;
+  final movie = id('tmdb', {'movie'});
+  final collection = movie == null ? null : raw('tmdb')?['belongs_to_collection'];
+  final relateds = raw('dandanplay')?['relateds'];
+  return {
+    if (id('bangumi', {'subject'}) case final subject?) 'bangumi': subject,
+    if (collection is Map && collection['id'] != null) ...{
+      'tmdbCollection': '${collection['id']}',
+      'tmdbMovie': movie,
+    },
+    if (relateds is List)
+      'dandanplay': [
+        for (final r in relateds.whereType<Map>())
+          if (r['animeId'] != null && _text(r['animeTitle']) != null)
+            {
+              'id': '${r['animeId']}',
+              'title': _text(r['animeTitle']),
+              if (_text(r['imageUrl']) case final image?) 'image': image,
+            }
+      ],
   };
 }
 

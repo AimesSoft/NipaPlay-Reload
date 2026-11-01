@@ -39,8 +39,10 @@ final class PresentationRule {
     'characters',
     'cast',
     'crew',
+    'related',
     'gallery',
     'facts',
+    'files',
     'links'
   ];
 

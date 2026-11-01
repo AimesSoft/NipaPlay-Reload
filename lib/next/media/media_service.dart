@@ -266,6 +266,35 @@ final class MediaService {
           : FailureCode.unavailable,
       'Media path is inaccessible: ${error.message}');
 
+  Future<void> _streams = Future.value();
+  final _streamsAsked = <String>{};
+
+  /// Reads the streams of files scanned before streams were kept, one at a
+  /// time, behind whatever is being read already; each file once a session.
+  /// Completes when these are read (or could not be).
+  Future<void> readStreams(Iterable<String> fileIds) {
+    final ids = [
+      for (final id in fileIds)
+        if (_streamsAsked.add(id)) id
+    ];
+    if (ids.isEmpty) return _streams;
+    return _streams = _streams.then((_) async {
+      for (final id in ids) {
+        try {
+          final here = (await store.locations(id)).where((l) =>
+              l['source'] == 'local' &&
+              l['owner_device_id'] == store.ownerDeviceId &&
+              l['available'] == 1);
+          if (here.isEmpty) continue;
+          await store.addStreams(
+              id, await probe(here.first['locator'] as String));
+        } on Failure {
+          // Gone, changed or unreadable: its page shows what it knew.
+        }
+      }
+    });
+  }
+
   Future<String> index(String locator, {String via = 'local_scan'}) async {
     final path = await authorizedPath(locator);
     final info = await probe(path);

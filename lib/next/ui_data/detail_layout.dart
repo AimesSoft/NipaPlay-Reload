@@ -22,6 +22,12 @@ const detailPageSlots = <JsonMap>[
     'shows': 'year, episode count or runtime, studio, then ratings',
     'chosenBy': 'sources.year/episodeCount/runtimeMs/studio; ratings'
   },
+  {
+    'slot': 'hero.badges',
+    'shows':
+        "marks of what most of its files are (4K/1080p…, HDR/HLG, 5.1/7.1), from the files' scans",
+    'chosenBy': '—'
+  },
   {'slot': 'copy.overview', 'shows': 'overview', 'chosenBy': 'sources.overview'},
   {
     'slot': 'section.characters',
@@ -41,6 +47,12 @@ const detailPageSlots = <JsonMap>[
     'chosenBy': 'sources.people, sections, limits.crew'
   },
   {
+    'slot': 'section.related',
+    'shows':
+        "its series: Bangumi related subjects (anime and live action, with how each relates), else its film's TMDB collection; Dandanplay's related works when neither knows any. Works the library holds open there; read when shown",
+    'chosenBy': 'sections'
+  },
+  {
     'slot': 'section.gallery',
     'shows': "TMDB images of the work's tv/movie identity, read when shown",
     'chosenBy': 'sections, limits.gallery'
@@ -50,6 +62,12 @@ const detailPageSlots = <JsonMap>[
     'shows':
         'original title, genres, first aired/released, ended, status, seasons and episodes, runtime, Bangumi platform, networks, studios, countries, original language, budget and revenue (films), tags',
     'chosenBy': 'sources.genres, sources.tags, sections'
+  },
+  {
+    'slot': 'section.files',
+    'shows':
+        "what its files are, from their scans: picture (resolution, codec, bit depth, HDR), audio tracks, subtitles in and beside the files, container and size, and the devices they are on; files scanned before streams were kept are read again when the page asks",
+    'chosenBy': 'sections'
   },
   {
     'slot': 'section.links',
