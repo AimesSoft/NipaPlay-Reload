@@ -1,0 +1,7 @@
+• Improved folded and unfolded layouts on iPhone Duo, with refined navigation and media details on iPhone and iPad.
+• Added native glass media detail controls and an appearance switch.
+• Improved external ASS/SSA rendering, subtitle styling and switching, and fixed subtitle timing issues.
+• Kept cached danmaku available offline even after expiry, and clarified offset controls.
+• Improved Emby season lists, WebDAV authentication and external subtitle downloads.
+• Fixed library state after manual matching, retries for unmatched files and long title overflow.
+• Improved stability when closing, reopening and resuming playback.

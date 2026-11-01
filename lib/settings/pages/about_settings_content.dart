@@ -63,8 +63,11 @@ class _AboutSettingsContentState extends State<AboutSettingsContent>
 
     return AdaptiveSettingsPage(
       children: [
-        _buildAboutCanvas(context,
-            versionText: versionText, hasUpdate: hasUpdate),
+        _buildAboutCanvas(
+          context,
+          versionText: versionText,
+          hasUpdate: hasUpdate,
+        ),
         const SizedBox(height: 16),
         AdaptiveSettingsSection(
           children: [
@@ -111,28 +114,30 @@ class _AboutSettingsContentState extends State<AboutSettingsContent>
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        AdaptiveSettingsSection(
-          children: [
-            AdaptiveSettingsTile<void>.card(
-              title: l10n.aboutAfdianSponsorPage,
-              subtitle: AboutSettingsData.afdianUrl,
-              icon: Ionicons.heart,
-              phoneIcon: cupertino.CupertinoIcons.heart_fill,
-              onTap: () => _openCommunityLink(
-                l10n.aboutAfdianSponsorPage,
-                AboutSettingsData.afdianUrl,
+        if (AboutSettingsData.showSponsorship) ...[
+          const SizedBox(height: 16),
+          AdaptiveSettingsSection(
+            children: [
+              AdaptiveSettingsTile<void>.card(
+                title: l10n.aboutAfdianSponsorPage,
+                subtitle: AboutSettingsData.afdianUrl,
+                icon: Ionicons.heart,
+                phoneIcon: cupertino.CupertinoIcons.heart_fill,
+                onTap: () => _openCommunityLink(
+                  l10n.aboutAfdianSponsorPage,
+                  AboutSettingsData.afdianUrl,
+                ),
               ),
-            ),
-            AdaptiveSettingsTile<void>.card(
-              title: l10n.appreciationCode,
-              subtitle: l10n.appreciationCodeHint,
-              icon: Ionicons.qr_code,
-              phoneIcon: cupertino.CupertinoIcons.qrcode,
-              onTap: _showAppreciationQR,
-            ),
-          ],
-        ),
+              AdaptiveSettingsTile<void>.card(
+                title: l10n.appreciationCode,
+                subtitle: l10n.appreciationCodeHint,
+                icon: Ionicons.qr_code,
+                phoneIcon: cupertino.CupertinoIcons.qrcode,
+                onTap: _showAppreciationQR,
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -228,22 +233,18 @@ class _AboutSettingsContentState extends State<AboutSettingsContent>
           const SizedBox(height: 12),
           _buildCanvasUpdateAction(context, accentColor, secondaryColor),
           const SizedBox(height: 22),
-          _buildCanvasRichText(
-            context,
-            [
-              TextSpan(text: l10n.aboutStoryPrefix),
-              TextSpan(
-                text: 'にぱ〜☆',
-                style: TextStyle(
-                  color: Colors.pinkAccent.shade100,
-                  fontWeight: FontWeight.bold,
-                  fontStyle: FontStyle.italic,
-                ),
+          _buildCanvasRichText(context, [
+            TextSpan(text: l10n.aboutStoryPrefix),
+            TextSpan(
+              text: 'にぱ〜☆',
+              style: TextStyle(
+                color: Colors.pinkAccent.shade100,
+                fontWeight: FontWeight.bold,
+                fontStyle: FontStyle.italic,
               ),
-              TextSpan(text: l10n.aboutStorySuffix),
-            ],
-            textColor,
-          ),
+            ),
+            TextSpan(text: l10n.aboutStorySuffix),
+          ], textColor),
           _buildCanvasDivider(textColor),
           Text(
             l10n.acknowledgements,
@@ -254,30 +255,20 @@ class _AboutSettingsContentState extends State<AboutSettingsContent>
             ),
           ),
           const SizedBox(height: 12),
-          _buildCanvasRichText(
-            context,
-            [
-              TextSpan(text: l10n.aboutThanksDandanplayPrefix),
-              TextSpan(
-                text: 'Kaedei',
-                style: TextStyle(
-                  color: accentColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              TextSpan(text: '${l10n.aboutThanksDandanplaySuffix}\n\n'),
-              TextSpan(text: l10n.aboutThanksSakikoPrefix),
-              TextSpan(
-                text: 'Sakiko',
-                style: TextStyle(
-                  color: accentColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              TextSpan(text: l10n.aboutThanksSakikoSuffix),
-            ],
-            textColor,
-          ),
+          _buildCanvasRichText(context, [
+            TextSpan(text: l10n.aboutThanksDandanplayPrefix),
+            TextSpan(
+              text: 'Kaedei',
+              style: TextStyle(color: accentColor, fontWeight: FontWeight.bold),
+            ),
+            TextSpan(text: '${l10n.aboutThanksDandanplaySuffix}\n\n'),
+            TextSpan(text: l10n.aboutThanksSakikoPrefix),
+            TextSpan(
+              text: 'Sakiko',
+              style: TextStyle(color: accentColor, fontWeight: FontWeight.bold),
+            ),
+            TextSpan(text: l10n.aboutThanksSakikoSuffix),
+          ], textColor),
           const SizedBox(height: 14),
           Text(
             l10n.thanksSponsorUsers,
@@ -292,23 +283,22 @@ class _AboutSettingsContentState extends State<AboutSettingsContent>
                 _buildAcknowledgementItem(context, name, accentColor),
             ],
           ),
-          _buildCanvasDivider(textColor),
-          Text(
-            l10n.sponsorSupport,
-            style: TextStyle(
-              color: textColor,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+          if (AboutSettingsData.showSponsorship) ...[
+            _buildCanvasDivider(textColor),
+            Text(
+              l10n.sponsorSupport,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '${l10n.aboutSponsorParagraph1}\n${l10n.aboutSponsorParagraph2}',
-            style: TextStyle(
-              color: secondaryColor,
-              height: 1.55,
+            const SizedBox(height: 10),
+            Text(
+              '${l10n.aboutSponsorParagraph1}\n${l10n.aboutSponsorParagraph2}',
+              style: TextStyle(color: secondaryColor, height: 1.55),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -344,10 +334,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent>
             curve: Curves.easeOutBack,
             alignment: Alignment.centerLeft,
             child: TweenAnimationBuilder<double>(
-              tween: Tween<double>(
-                begin: 0,
-                end: isHovered ? 1 : 0,
-              ),
+              tween: Tween<double>(begin: 0, end: isHovered ? 1 : 0),
               duration: const Duration(milliseconds: 150),
               curve: Curves.easeOut,
               builder: (context, hoverProgress, child) {
@@ -406,10 +393,8 @@ class _AboutSettingsContentState extends State<AboutSettingsContent>
   ) {
     return RichText(
       text: TextSpan(
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: textColor.withValues(alpha: 0.9),
-              height: 1.6,
-            ),
+        style: Theme.of(context).textTheme.bodyLarge
+            ?.copyWith(color: textColor.withValues(alpha: 0.9), height: 1.6),
         children: spans,
       ),
     );
@@ -418,10 +403,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent>
   Widget _buildCanvasDivider(Color textColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 18),
-      child: Divider(
-        height: 1,
-        color: textColor.withValues(alpha: 0.12),
-      ),
+      child: Divider(height: 1, color: textColor.withValues(alpha: 0.12)),
     );
   }
 
@@ -443,10 +425,7 @@ class _AboutSettingsContentState extends State<AboutSettingsContent>
         const SizedBox(width: 7),
         Text(
           name,
-          style: TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
         ),
       ],
     );
