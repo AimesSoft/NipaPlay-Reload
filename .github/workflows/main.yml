@@ -637,7 +637,7 @@ jobs:
   Publish-iOS-Existing-Run:
     name: Publish existing iOS artifact to App Store Connect
     if: inputs.publish_ios_from_run_id != ''
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 120
     permissions:
       actions: read
