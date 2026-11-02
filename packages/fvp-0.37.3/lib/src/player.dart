@@ -330,6 +330,33 @@ class Player {
     malloc.free(cs);
   }
 
+  /// As [media] =, but lets native decoder/render teardown finish off the
+  /// UI isolate. The caller must await this before opening or disposing.
+  Future<void> setMediaOffThread(String value) {
+    if (_media != value) {
+      if (!_videoSize.isCompleted) _videoSize.complete(null);
+      _videoSize = Completer<ui.Size?>();
+    }
+    _media = value;
+    return _setMediaOn(
+        _player.ref.setMedia.address, _player.ref.object.address, value);
+  }
+
+  static Future<void> _setMediaOn(int function, int player, String media) =>
+      Isolate.run(() {
+        final uri = media.toNativeUtf8();
+        try {
+          Pointer<NativeFunction<Void Function(Pointer<mdkPlayer>, Pointer<Char>)>>
+                  .fromAddress(function)
+              .asFunction<void Function(Pointer<mdkPlayer>, Pointer<Char>)>()(
+            Pointer<mdkPlayer>.fromAddress(player),
+            uri.cast(),
+          );
+        } finally {
+          malloc.free(uri);
+        }
+      }, debugName: 'mdk setMedia');
+
   /// Current media.
   String get media => _media;
 

@@ -7,6 +7,23 @@ import 'package:nipaplay/player_abstraction/player_enums.dart';
 class _NativePlayer extends Fake implements mdk.Player {
   final completion = Completer<void>();
   int disposals = 0;
+  final stopped = Completer<void>();
+  final mediaCleared = Completer<void>();
+  String? requestedMedia;
+  mdk.PlaybackState? requestedState;
+
+  @override
+  Future<void> setMediaOffThread(String value) {
+    requestedMedia = value;
+    return mediaCleared.future;
+  }
+
+  @override
+  Future<void> setStateOffThread(mdk.PlaybackState value) {
+    requestedState = value;
+    return stopped.future;
+  }
+
   @override
   String media = '';
   @override
@@ -35,6 +52,57 @@ class _NativePlayer extends Fake implements mdk.Player {
 }
 
 void main() {
+  test('disposal keeps the native handle alive until queued clear finishes',
+      () async {
+    final native = _NativePlayer();
+    final adapter = MdkPlayerAdapter.withPlayer(native);
+    final stopping = adapter.stopAndWait(clearMedia: true);
+    final disposing = adapter.disposeAsync();
+    native.stopped.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(native.disposals, 0);
+    native.mediaCleared.complete();
+    await stopping;
+    await Future<void>.delayed(Duration.zero);
+    expect(native.disposals, 1);
+    native.completion.complete();
+    await disposing;
+  });
+
+  test('reset waits for native stop and media clear in order', () async {
+    final native = _NativePlayer();
+    final adapter = MdkPlayerAdapter.withPlayer(native);
+    var completed = false;
+    final stopping =
+        adapter.stopAndWait(clearMedia: true).then((_) => completed = true);
+    expect(native.requestedMedia, isNull);
+    native.stopped.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(native.requestedMedia, '');
+    expect(completed, isFalse);
+    native.mediaCleared.complete();
+    await stopping;
+    expect(completed, isTrue);
+    native.completion.complete();
+    await adapter.disposeAsync();
+  });
+
+  test('stopping MDK awaits the native stop without a synchronous state write',
+      () async {
+    final native = _NativePlayer();
+    final adapter = MdkPlayerAdapter.withPlayer(native);
+    var completed = false;
+    final stopping = adapter.stopAndWait().then((_) => completed = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(native.requestedState, mdk.PlaybackState.stopped);
+    expect(completed, isFalse);
+    native.stopped.complete();
+    await stopping;
+    expect(completed, isTrue);
+    native.completion.complete();
+    await adapter.disposeAsync();
+  });
+
   test('OHOS MDK status streams forward changes and cancel on teardown',
       () async {
     final source = StreamController<
@@ -143,6 +211,10 @@ void main() {
     final native = _NativePlayer();
     final adapter = MdkPlayerAdapter.withPlayer(native);
     final result = expectLater(adapter.disposeAsync(), throwsStateError);
+    // Teardown first drains any pending native work. Report the fake native
+    // failure after dispose has actually attached to that native future.
+    await Future<void>.delayed(Duration.zero);
+    expect(native.disposals, 1);
     native.completion.completeError(StateError('native release failed'));
     await result;
     await expectLater(adapter.disposeAsync(), throwsStateError);

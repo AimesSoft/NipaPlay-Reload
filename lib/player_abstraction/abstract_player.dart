@@ -19,6 +19,11 @@ abstract interface class AsyncSeekPlayer {
   Future<void> seekAndWait({required int position});
 }
 
+/// Stops native decoding without blocking Flutter's UI isolate.
+abstract interface class AsyncStopPlayer {
+  Future<void> stopAndWait({bool clearMedia = false});
+}
+
 /// Native buffering is independent of the user's play/pause intent.
 abstract interface class BufferingAwarePlayer {
   ValueListenable<bool> get buffering;
