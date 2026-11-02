@@ -532,7 +532,7 @@ class MdkPlayerAdapter
   Future<void> prepare() async {
     if (_released('prepare')) return;
     try {
-      _mdkPlayer.prepare();
+      await _mdkPlayer.prepare().timeout(const Duration(seconds: 10));
       // prepare后重新应用播放速度，确保设置生效
       if (_playbackRate != 1.0) {
         _mdkPlayer.playbackRate = _playbackRate;
