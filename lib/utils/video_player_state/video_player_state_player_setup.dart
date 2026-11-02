@@ -1215,7 +1215,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 使用屏幕方向管理器设置播放时的屏幕方向
       if (globals.isMobilePlatform) {
         debugPrint(
-          'VideoPlayerState: Device is phone. Setting video playing orientation.',
+          '[PlayerSetup] setting playback orientation tabletLike=${globals.isTablet}',
         );
         await ScreenOrientationManager.instance.setVideoPlayingOrientation();
         if (_isDisposed || initializationGeneration != _playbackGeneration) {
