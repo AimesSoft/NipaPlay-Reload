@@ -3,6 +3,12 @@ part of video_player_state;
 extension VideoPlayerStateLifecycle on VideoPlayerState {
   /// 处理应用生命周期变化，在移动端根据设置自动暂停。
   void handleAppLifecycleState(AppLifecycleState state) {
+    // Exit can background the ability while native stop/clear is awaiting.
+    // A lifecycle pause at that point races the teardown on the same player.
+    if (_isDisposed || _isResetting) {
+      _wasPlayingBeforeBackground = false;
+      return;
+    }
     if (!globals.isMobilePlatform) return;
 
     if (state == AppLifecycleState.paused ||

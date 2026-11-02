@@ -58,16 +58,31 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     }
   }
 
-  Future<void> resetPlayer() async {
+  Future<void> resetPlayer() => _playerResetFuture ??=
+      _resetPlayer().whenComplete(() => _playerResetFuture = null);
+
+  Future<void> _resetPlayer() async {
     try {
       _isResetting = true; // 设置重置标志
+      debugPrint('[PlayerReset] begin kernel=${player.getPlayerKernelName()}');
+      _playbackGeneration++;
+      _sourceResolutionGeneration++;
       _logMacOSHdrResetTrace(
         'resetPlayer start path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
 
       // 立即重置屏幕方向，不受后续等待阻塞，避免用户被卡在横屏状态
       if (globals.isMobilePlatform) {
-        await ScreenOrientationManager.instance.resetOrientation();
+        final orientation = ScreenOrientationManager.instance;
+        // The phone back action already restored portrait. Repeating that
+        // transition on OHOS adds another system-UI timeout before exit.
+        final portraitAlreadyRestored = globals.isHarmonyOS &&
+            globals.isPhone &&
+            !orientation.isLandscape &&
+            !orientation.isTransitioning;
+        if (!portraitAlreadyRestored) {
+          await orientation.resetOrientation();
+        }
         _isFullscreen = false;
         await _restoreSystemUiOverlayStyleIfNeeded();
       }
@@ -178,16 +193,27 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
 
       // 清除字幕设置（同时更新SubtitleManager状态）
-      _subtitleManager.clearExternalSubtitle();
+      if (!globals.isHarmonyOS) {
+        _subtitleManager.clearExternalSubtitle();
+      }
 
-      // 先停止播放
-      if (player.state != PlaybackState.stopped) {
+      // Hide the outgoing picture while native decoding stops off-thread.
+      // A new open waits for _playerResetFuture before changing the player.
+      if (globals.isHarmonyOS) {
+        _status = PlayerStatus.idle;
+        _notifyListeners();
+        // Clearing media can also wait for native surface buffers, so both
+        // stop and clear must finish off-thread before a new open is allowed.
+        await player.stopAndWait(clearMedia: true);
+        // Reset already notifies UI; avoid reapplying subtitle properties.
+        _subtitleManager.clearExternalSubtitle(notifyListenersToo: false);
+      } else if (player.state != PlaybackState.stopped) {
         _logMacOSHdrResetTrace('set player.state=stopped');
         player.state = PlaybackState.stopped;
       }
 
       // 释放纹理，确保资源被正确释放
-      if (player.textureId.value != null) {
+      if (!globals.isHarmonyOS && player.textureId.value != null) {
         // Keep the null check for reading
         _disposeTextureResources();
         // player.textureId.value = null; // COMMENTED OUT
@@ -248,10 +274,12 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
 
       _notifyListeners();
+      debugPrint('[PlayerReset] completed');
       _logMacOSHdrResetTrace(
         'resetPlayer notifyListeners path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
     } catch (e) {
+      debugPrint('[PlayerReset] failed: $e');
       _logMacOSHdrResetTrace('resetPlayer error error=$e');
       //debugPrint('重置播放器时出错: $e');
       rethrow;

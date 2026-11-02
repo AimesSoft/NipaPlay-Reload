@@ -581,6 +581,7 @@ int _exactEndStreak = 0;
 
   // 添加重置标志，防止在重置过程中更新历史记录
   bool _isResetting = false;
+  Future<void>? _playerResetFuture;
   final String _lastVideoKey = 'last_video_path';
   final String _lastPositionKey = 'last_video_position';
   final String _videoPositionsKey = 'video_positions';

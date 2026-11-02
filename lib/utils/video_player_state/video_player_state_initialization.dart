@@ -147,6 +147,8 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
           _playerKernelSwapApplied < _playerKernelSwapRequested) {
         final targetGeneration = _playerKernelSwapRequested;
         try {
+          await _playerResetFuture;
+          if (_isDisposed) return;
           await PlayerKernelManager.performPlayerKernelHotSwap(this);
         } catch (error, stackTrace) {
           debugPrint(
