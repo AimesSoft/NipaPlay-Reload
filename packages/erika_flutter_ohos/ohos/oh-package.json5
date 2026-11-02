@@ -1,0 +1,11 @@
+{
+  "name": "erika_flutter",
+  "version": "0.3.3",
+  "description": "liberika media engine Flutter plugin for OpenHarmony",
+  "main": "index.ets",
+  "author": "Aimesoft",
+  "license": "MPL-2.0",
+  "dependencies": {
+    "@ohos/flutter_ohos": "file:./har/flutter.har"
+  }
+}

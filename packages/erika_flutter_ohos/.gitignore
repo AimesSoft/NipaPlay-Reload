@@ -1,0 +1,6 @@
+ohos/.cxx/
+ohos/.hvigor/
+ohos/build/
+ohos/oh_modules/
+ohos/BuildProfile.ets
+ohos/oh-package-lock.json5

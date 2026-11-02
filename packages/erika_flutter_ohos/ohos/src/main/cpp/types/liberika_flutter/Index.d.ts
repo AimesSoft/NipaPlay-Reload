@@ -1,0 +1,9 @@
+export const nativeCreate: (outputMode: number, headroom: number, upscaler: number, videoAlphaMode?: number) => number;
+export const nativeLastError: () => string | null;
+export const nativeDestroy: (playerId: number) => void;
+export const nativeInvoke: (playerId: number, method: string, argumentsJson: string) => string;
+export const nativeAttachSurface: (playerId: number, surfaceId: number, width: number, height: number, scale: number) => number;
+export const nativeResizeSurface: (playerId: number, width: number, height: number, scale: number) => number;
+export const nativeDetachSurface: (playerId: number) => number;
+export const nativeRenderTick: (playerId: number, timeSeconds: number) => string;
+export const nativePollEvent: (playerId: number) => string | null;

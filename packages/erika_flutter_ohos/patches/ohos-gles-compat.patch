@@ -1,0 +1,22 @@
+diff --git a/crates/erika/src/renderer/wgpu.rs b/crates/erika/src/renderer/wgpu.rs
+index a74fca5..31d3d0b 100644
+--- a/crates/erika/src/renderer/wgpu.rs
++++ b/crates/erika/src/renderer/wgpu.rs
+@@ -965,6 +965,17 @@ fn wgpu_backend_candidates() -> Vec<WgpuBackendCandidate> {
+     }
+     #[cfg(target_env = "ohos")]
+     {
++        // Some HarmonyOS Mali drivers crash inside vkCreateGraphicsPipelines
++        // for the video shader, before a recoverable wgpu error is returned.
++        // Keep AVCodec hardware decoding and render its planes through GLES.
++        if option_env!("ERIKA_OHOS_GLES_ONLY") == Some("1") {
++            return vec![WgpuBackendCandidate {
++                label: "ohos-gles-compat",
++                backends: wgpu::Backends::GL,
++                force_fallback_adapter: false,
++                ohos_native_buffer_interop: false,
++            }];
++        }
+         let mut candidates = Vec::new();
+         if ohos_vulkan_video_enabled() {
+             candidates.push(WgpuBackendCandidate {

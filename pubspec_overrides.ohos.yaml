@@ -76,6 +76,9 @@ dependency_overrides:
   # property. Keep the fix local until it is released upstream.
   fvp:
     path: packages/fvp-0.37.3
+  # Build the pinned runtime with GLES to avoid Mali Vulkan shader crashes.
+  erika_flutter:
+    path: packages/erika_flutter_ohos
   # Adds a fallback branch for TargetPlatform.ohos.
   fluent_ui:
     path: packages/fluent_ui-4.15.1

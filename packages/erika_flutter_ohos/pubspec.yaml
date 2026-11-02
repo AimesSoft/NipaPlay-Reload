@@ -1,0 +1,35 @@
+name: erika_flutter
+description: Cross-platform Flutter media player powered by liberika, with hardware decoding, HDR video, ASS subtitles, danmaku, and system media controls.
+version: 0.3.3
+
+homepage: https://github.com/AimesSoft/liberika
+repository: https://github.com/AimesSoft/liberika
+issue_tracker: https://github.com/AimesSoft/liberika/issues
+documentation: https://github.com/AimesSoft/liberika/tree/main/docs
+
+topics:
+  - video-player
+  - media-player
+  - ffmpeg
+  - rust
+  - hdr
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  ffi: ^2.1.4
+  flutter:
+    sdk: flutter
+  flutter_plugin_android_lifecycle: ^2.0.26
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      ohos:
+        pluginClass: ErikaFlutterPlugin
