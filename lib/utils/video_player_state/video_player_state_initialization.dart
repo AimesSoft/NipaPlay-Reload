@@ -25,6 +25,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   }
 
   Future<void> _initialize() async {
+    debugPrint('[DeviceProfile] ${globals.deviceProfileDiagnostics}');
     // Subscribe before optional device plugins; a missing brightness reply
     // must not leave kernel switching permanently disconnected.
     _subscribeToKernelChanges();
