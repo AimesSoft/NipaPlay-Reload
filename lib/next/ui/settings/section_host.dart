@@ -560,7 +560,10 @@ class NipaSectionState extends State<NipaSection> {
   /// the wire comes with its template, never from the address.
   static const _templates = [
     _Template('DeepSeek', 'https://api.deepseek.com', 'deepseek-flash',
-        UiModelApi.chat, 'high', {
+        UiModelApi.responses, 'high', {
+      // DeepSeek reads a developer message as the user's.
+      'supportsDeveloperRole': false,
+    }, {
       'supportsStore': false,
       'supportsDeveloperRole': false,
       'maxTokensField': 'max_tokens',
@@ -987,7 +990,16 @@ class NipaSectionState extends State<NipaSection> {
                                       style: NextText.sans(12.5, color: c))
                                 ),
                             ],
-                            onChanged: (v) => _edit(() => _api = v),
+                            onChanged: (v) => _edit(() {
+                              _api = v;
+                              // A template's models keep what they need on
+                              // the wire chosen instead.
+                              for (final t in templates) {
+                                if (t.name == _provider.trim()) {
+                                  _compat = t.compatFor(v) ?? _compat;
+                                }
+                              }
+                            }),
                           )),
                       _field(
                           '思考',
@@ -1369,10 +1381,16 @@ class NipaSectionState extends State<NipaSection> {
 /// need from it.
 class _Template {
   const _Template(this.name, this.baseUrl, this.model, this.api, this.reasoning,
-      this.compat);
+      this.compat, [this.otherWire]);
   final String name, baseUrl, model, reasoning;
   final UiModelApi api;
   final Map<String, Object?> compat;
+
+  /// What its models need on the other wire, for a person who switches.
+  final Map<String, Object?>? otherWire;
+
+  Map<String, Object?>? compatFor(UiModelApi wire) =>
+      wire == api ? compat : otherWire;
 }
 
 /// A memory note as it is written: change it and save, or forget it.

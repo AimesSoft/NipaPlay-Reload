@@ -260,8 +260,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     final saved = data.host.saved.single;
     expect((saved.api, saved.reasoning, saved.baseUrl, saved.model),
-        (UiModelApi.chat, 'high', 'https://api.deepseek.com', 'deepseek-flash'));
-    expect(saved.compat!['thinkingFormat'], 'deepseek');
+        (UiModelApi.responses, 'high', 'https://api.deepseek.com', 'deepseek-flash'));
+    expect(saved.compat, {'supportsDeveloperRole': false});
     // Saving a model with no runtime starts the download.
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('取消'), findsOneWidget);
@@ -272,6 +272,16 @@ void main() {
     expect(find.text('已就绪'), findsOneWidget);
     expect(find.text('0.2.1-rc.2'), findsOneWidget);
     expect(find.text('正在用 deepseek-flash'), findsOneWidget);
+
+    // Switching the wire brings what DeepSeek's models need on that one.
+    await tester.ensureVisible(find.text('Chat Completions'));
+    await tester.tap(find.text('Chat Completions'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('保存'));
+    await tester.tap(find.text('保存'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(data.host.saved.last.api, UiModelApi.chat);
+    expect(data.host.saved.last.compat!['thinkingFormat'], 'deepseek');
 
     // Codex is the other runtime, one choice away; its cards come back.
     expect(find.byType(FoldButton), findsNothing);
