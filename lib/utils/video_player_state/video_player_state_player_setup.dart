@@ -1223,7 +1223,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
           // 同时隐藏系统UI
           try {
-            await SystemChrome.setEnabledSystemUIMode(
+            await ScreenOrientationManager.instance.setSystemUiMode(
               SystemUiMode.immersiveSticky,
             );
           } catch (e) {

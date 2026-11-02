@@ -13,9 +13,17 @@ class ScreenOrientationManager {
   static ScreenOrientationManager get instance =>
       _instance ??= ScreenOrientationManager._();
 
-  ScreenOrientationManager._();
+  ScreenOrientationManager._() : _isHarmonyOSOverride = null;
+
+  @visibleForTesting
+  ScreenOrientationManager.forTesting({required bool isHarmonyOS})
+      : _isHarmonyOSOverride = isHarmonyOS;
+
+  final bool? _isHarmonyOSOverride;
 
   bool _isTransitioning = false;
+  Future<void> _orientationTail = Future<void>.value();
+  int _pendingOrientations = 0;
   bool _initialWasLandscape = false; // 记录进入播放器时的初始屏幕方向
   bool _isTabletDevice = false; // 记录是否为平板设备（基于进入时的判断，固定不变）
 
@@ -27,7 +35,24 @@ class ScreenOrientationManager {
   }
 
   // 是否正在转换中
-  bool get isTransitioning => _isTransitioning;
+  bool get isTransitioning => _isTransitioning || _pendingOrientations > 0;
+
+  Future<void> _queueOrientation(Future<void> Function() change) {
+    _pendingOrientations++;
+    final operation = _orientationTail.then((_) => change()).whenComplete(() {
+      _pendingOrientations--;
+    });
+    _orientationTail = operation.then<void>((_) {}, onError: (Object _) {});
+    return operation;
+  }
+
+  /// OHOS can apply a system-bar change without replying on the channel.
+  /// All playback callers must use the same bounded wait, including tablet
+  /// startup, fullscreen controls and the final step of resetPlayer.
+  Future<void> setSystemUiMode(SystemUiMode mode) => _awaitSystemChromeCall(
+        SystemChrome.setEnabledSystemUIMode(mode),
+        'enable ${mode.name} system UI',
+      );
 
   // 设置初始屏幕方向（进入播放器时调用）
   Future<void> setInitialOrientation() async {
@@ -136,7 +161,11 @@ class ScreenOrientationManager {
 
   // 设置横屏并锁定
   // allowTransientPortrait 用于从竖屏过渡到横屏时的短暂放开（某些设备需要）。
-  Future<void> _setLandscapeOnly({bool allowTransientPortrait = true}) async {
+  Future<void> _setLandscapeOnly({bool allowTransientPortrait = true}) =>
+      _queueOrientation(() => _applyLandscapeOnly(
+          allowTransientPortrait: allowTransientPortrait));
+
+  Future<void> _applyLandscapeOnly({required bool allowTransientPortrait}) async {
     try {
       if (allowTransientPortrait) {
         await _awaitSystemChromeCall(
@@ -159,16 +188,10 @@ class ScreenOrientationManager {
 
       if (_isTabletDevice) {
         // 平板设备不自动隐藏系统UI，由全屏按钮控制
-        await _awaitSystemChromeCall(
-          SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
-          'enable edge-to-edge system UI',
-        );
+        await setSystemUiMode(SystemUiMode.edgeToEdge);
       } else {
         // 手机设备隐藏系统UI
-        await _awaitSystemChromeCall(
-          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
-          'enable immersive system UI',
-        );
+        await setSystemUiMode(SystemUiMode.immersiveSticky);
       }
 
       await Future.delayed(const Duration(milliseconds: 300));
@@ -178,7 +201,9 @@ class ScreenOrientationManager {
   }
 
   // 设置竖屏并锁定
-  Future<void> _setPortraitOnly() async {
+  Future<void> _setPortraitOnly() => _queueOrientation(_applyPortraitOnly);
+
+  Future<void> _applyPortraitOnly() async {
     try {
       await _awaitSystemChromeCall(
         SystemChrome.setPreferredOrientations([
@@ -195,10 +220,7 @@ class ScreenOrientationManager {
         ]),
         'lock portrait orientation',
       );
-      await _awaitSystemChromeCall(
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
-        'enable edge-to-edge system UI',
-      );
+      await setSystemUiMode(SystemUiMode.edgeToEdge);
       await Future.delayed(const Duration(milliseconds: 300));
     } catch (e) {
       debugPrint('设置竖屏时出错: $e');
@@ -219,10 +241,7 @@ class ScreenOrientationManager {
         ]),
         'enable free rotation',
       );
-      await _awaitSystemChromeCall(
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
-        'enable edge-to-edge system UI',
-      );
+      await setSystemUiMode(SystemUiMode.edgeToEdge);
     } catch (e) {
       debugPrint('恢复自由旋转时出错: $e');
     }
@@ -232,7 +251,7 @@ class ScreenOrientationManager {
     Future<void> operation,
     String description,
   ) async {
-    if (!globals.isHarmonyOS) {
+    if (!(_isHarmonyOSOverride ?? globals.isHarmonyOS)) {
       await operation;
       return;
     }

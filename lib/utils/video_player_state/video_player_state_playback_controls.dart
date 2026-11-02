@@ -37,7 +37,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       if (_isAppBarHidden) {
         // 进入全屏状态，隐藏系统UI
         try {
-          await SystemChrome.setEnabledSystemUIMode(
+          await ScreenOrientationManager.instance.setSystemUiMode(
             SystemUiMode.immersiveSticky,
           );
         } catch (e) {
@@ -46,7 +46,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       } else {
         // 退出全屏状态，显示系统UI
         try {
-          await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+          await ScreenOrientationManager.instance
+              .setSystemUiMode(SystemUiMode.edgeToEdge);
         } catch (e) {
           debugPrint('显示系统UI时出错: $e');
         }
@@ -226,7 +227,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 重置系统UI显示状态
       if (globals.isTabletLikeMobile) {
         try {
-          await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+          await ScreenOrientationManager.instance
+              .setSystemUiMode(SystemUiMode.edgeToEdge);
         } catch (e) {
           debugPrint('重置系统UI时出错: $e');
         }
