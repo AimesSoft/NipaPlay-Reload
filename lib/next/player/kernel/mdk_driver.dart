@@ -87,9 +87,31 @@ final class MdkDriver implements KernelDriver, MdkNative, KernelFrameFeatures {
     }
     final watch = Stopwatch()..start();
     _player = (create ?? mdk.Player.new)();
-    _player.onStateChanged(_stateChanged);
-    _player.onMediaStatus(_statusChanged);
-    _player.onEvent(_event);
+    // Mainline FVP uses callback registrars; the OHOS fork exposes streams.
+    final Object states = _player.onStateChanged;
+    if (states
+        is Stream<({mdk.PlaybackState oldValue, mdk.PlaybackState newValue})>) {
+      states.listen((event) => _stateChanged(event.oldValue, event.newValue));
+    } else {
+      (states as void Function(
+        void Function(mdk.PlaybackState, mdk.PlaybackState),
+      ))(_stateChanged);
+    }
+    final Object statuses = _player.onMediaStatus;
+    if (statuses
+        is Stream<({mdk.MediaStatus oldValue, mdk.MediaStatus newValue})>) {
+      statuses.listen((event) => _statusChanged(event.oldValue, event.newValue));
+    } else {
+      (statuses as void Function(
+        bool Function(mdk.MediaStatus, mdk.MediaStatus),
+      ))(_statusChanged);
+    }
+    final Object events = _player.onEvent;
+    if (events is Stream<mdk.MediaEvent>) {
+      events.listen(_event);
+    } else {
+      (events as void Function(void Function(mdk.MediaEvent)))(_event);
+    }
     _times['createUs'] = watch.elapsedMicroseconds;
   }
 
