@@ -151,7 +151,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 > **⚠️ 高风险实验性软件 · 仅供具备相关技术经验的用户测试**
 >
 > NipaPlay Next 2.0 是一项探索 Agentic Software 的
-> 实验性项目，目前不面向普通消费者。
+> 实验性项目，目前不面向普通用户。
 >
 > Next 引入具有完整用户级系统权限的 AI Agent。
 > 启用后，Agent 可以在当前账户权限范围内：
@@ -184,7 +184,6 @@ Next 还引入个人 Git Harness、跨设备 Mesh、
 这是一次关于 Agentic Native Software 的公开实验，
 其行为、可靠性和安全边界仍在持续研究和验证中。
 
-**NipaPlay Classic 仍然是推荐给普通用户的稳定版本。**
 
 ### 参与开发者预览
 
