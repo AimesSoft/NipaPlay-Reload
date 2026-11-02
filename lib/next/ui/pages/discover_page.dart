@@ -45,7 +45,7 @@ class _DiscoverPageState extends State<DiscoverPage> implements DiscoverDebug {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _shell = NextShellScope.of(context);
-    final shown = TickerMode.valuesOf(context).enabled;
+    final shown = TickerMode.of(context);
     final loadedAt = _loadedAt;
     if (shown &&
         (loadedAt == null || DateTime.now().difference(loadedAt) > _stale)) {

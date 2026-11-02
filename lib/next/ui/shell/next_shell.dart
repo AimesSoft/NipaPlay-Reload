@@ -127,7 +127,7 @@ class _NextShellState extends State<NextShell> {
     // for waits as a card either way: over the video the player tells of
     // it, and no window covers the picture.
     final playing = widget.playing;
-    final visible = TickerMode.valuesOf(context).enabled;
+    final visible = TickerMode.of(context);
     _onScreen = !playing && visible;
     _services.logins.showing = () => visible && mounted;
     WorkDetailBridge.attach(this, (id) async {

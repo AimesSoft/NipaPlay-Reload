@@ -78,7 +78,8 @@ class _CategoryEditorState extends State<CategoryEditor> {
         child: ReorderableListView.builder(
           buildDefaultDragHandles: false,
           itemCount: _order.length,
-          onReorderItem: _reorder,
+          onReorder: (from, target) =>
+              _reorder(from, target > from ? target - 1 : target),
           proxyDecorator: (child, index, animation) => DecoratedBox(
             decoration: BoxDecoration(
               color: const Color(0xF21C1C24),
