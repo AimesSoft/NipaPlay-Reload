@@ -12,7 +12,7 @@
 - 服务端、状态投影和种子 nipa 保留普通公开链接及非秘密查询参数。带 userinfo、令牌、签名、凭据查询/片段及已知秘密仍脱敏；没有修改 Classic 的 SecretRedactor。
 - `ui.capture` 默认长边至多 1280 像素，不放大小图；`originalSize:true` 返回原尺寸。结果包含 originalWidth/originalHeight 和实例事实。
 
-接口说明见 [ui_data/README.md](../../lib/next/ui_data/README.md)。没有修改 `lib/next/ui/`、依赖、用户 Codex 配置、登录钥匙串或真实应用数据；没有 commit/push。全部构建在本 worktree，实验直接运行其可执行文件，保持安静，没有激活窗口、像素点击、按应用名查找或启动安装的应用。
+接口说明见 [ui_data/README.md](../../../lib/next/ui_data/README.md)。没有修改 `lib/next/ui/`、依赖、用户 Codex 配置、登录钥匙串或真实应用数据；没有 commit/push。全部构建在本 worktree，实验直接运行其可执行文件，保持安静，没有激活窗口、像素点击、按应用名查找或启动安装的应用。
 
 ## 2. 决策
 
@@ -26,7 +26,7 @@
 
 ## 3. 实验与真实输出
 
-完整逐次输出见 [operations.json](evidence/x34/operations.json)、[experiment.log](evidence/x34/experiment.log)，全部界面事实与同进程 UiWork 原样输出见 [UI_FACTS.md](evidence/x34/UI_FACTS.md)。真实 Agent 协议轨迹见 [chat-events.jsonl](evidence/x34/chat-events.jsonl.gz)，脚本见 [x34_experiment.py](../../scripts/next/x34_experiment.py)。以下 JSON 是真实输出的字段摘录。
+完整逐次输出见 [operations.json](evidence/x34/operations.json)、[experiment.log](evidence/x34/experiment.log)，全部界面事实与同进程 UiWork 原样输出见 [UI_FACTS.md](evidence/x34/UI_FACTS.md)。真实 Agent 协议轨迹见 [chat-events.jsonl](evidence/x34/chat-events.jsonl.gz)，脚本见 [x34_experiment.py](../../../scripts/next/x34_experiment.py)。以下 JSON 是真实输出的字段摘录。
 
 ### 实例、选择与隔离
 

@@ -143,7 +143,7 @@ final class UiSetting {
   /// Nipa changed it last, and it has not been touched since. The
   /// registry calls MCP callers `agent`; Nipa in NipaPlay (her
   /// conversations and helpers) and other agents' CLI calls still arrive
-  /// as `harness_cli…` (Y8_REPORT).
+  /// as `harness_cli…` (docs/next/archive/Y8_REPORT.md).
   bool get byNipa =>
       changedBy == 'agent' || (changedBy?.startsWith('harness_cli') ?? false);
 
@@ -197,7 +197,7 @@ final class UiSetting {
     final format = row['format'] ?? row['x-format'];
     final secret = row['x-secret'] == true || row['writeOnly'] == true;
     final pattern = row['pattern'] as String?;
-    // The registry does not mark paths yet (see Y8_REPORT): `format` when it
+    // The registry does not mark paths yet (see docs/next/archive/Y8_REPORT.md): `format` when it
     // does, the key's own word until then.
     // (webdavQuick's folders are on the server, not this computer.)
     final namedPath = format == null &&

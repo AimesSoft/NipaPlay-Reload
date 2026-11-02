@@ -11,7 +11,7 @@
 - 复用现有后续派发：会话忙时排队，不中断活动回合，不切换用户当前会话；已经开始但确认丢失时仍按既有 marker 查历史，不重开回合。自动输入仅交付事实，不安排播放、绑定、继续等待等动作。
 - 下载种子事实已写明自动返回、排队、批量及显式后续去重。入口是既有 `download.add` Action，无新增 GUI 功能。
 
-核心实现：[download_returns.dart](../../lib/next/followups/download_returns.dart)、[download_service.dart](../../lib/next/downloads/download_service.dart)。契约见 [followups/README.md](../../lib/next/followups/README.md) 和 [downloads/README.md](../../lib/next/downloads/README.md)。未修改 `lib/next/ui/`、X41/X43 部分或 Classic 下载实现；保留 GeneratedPluginRegistrant 的既有生成改动，构建生成的 Podfile.lock 变化已恢复。
+核心实现：[download_returns.dart](../../../lib/next/followups/download_returns.dart)、[download_service.dart](../../../lib/next/downloads/download_service.dart)。契约见 [followups/README.md](../../../lib/next/followups/README.md) 和 [downloads/README.md](../../../lib/next/downloads/README.md)。未修改 `lib/next/ui/`、X41/X43 部分或 Classic 下载实现；保留 GeneratedPluginRegistrant 的既有生成改动，构建生成的 Podfile.lock 变化已恢复。
 
 ## 2. 决策
 

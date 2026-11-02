@@ -15,7 +15,7 @@
 - 种子 AGENTS.md 只补了一条关于 ui.present/ui.shelves.put 及观众文字的事实。
 - SQLite v11 只追加 presentations、shelves、cache 三张表；v0–v10 升级与旧数据保留纳入约束检查。
 
-界面接入、输入示例及状态映射见 [ui_data/README.md](../../lib/next/ui_data/README.md)。
+界面接入、输入示例及状态映射见 [ui_data/README.md](../../../lib/next/ui_data/README.md)。
 
 ## 2. 决策
 

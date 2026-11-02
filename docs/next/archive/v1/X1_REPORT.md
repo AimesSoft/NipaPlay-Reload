@@ -15,7 +15,7 @@
 - 弹幕来源和会话的登录提示改为平台与当前状态，不再包含设置导航；内置 WebView、会话存储、注销和请求流程保持原有机制。
 - 添加可复现的本机 Codex 探测脚本：`scripts/next/verify_codex_workspace.py`。
 
-没有 commit、push、pub get、新依赖或构建配置修改。Classic 代码仅改了实验室开关。未操作原有 `macos/Podfile.lock` 修改；执行期间出现的外部 `docs/next/TEAM.md` 修改也未覆盖。
+没有 commit、push、pub get、新依赖或构建配置修改。Classic 代码仅改了实验室开关。未操作原有 `macos/Podfile.lock` 修改；执行期间出现的外部 `docs/next/archive/TEAM.md` 修改也未覆盖。
 
 ## 2. 决策
 

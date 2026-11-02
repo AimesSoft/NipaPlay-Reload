@@ -27,7 +27,7 @@
 5. 播放接受来源和条目 ID，避免 Agent 复制 CLI 已脱敏的流 URL，也保留 Classic 的共享播放身份与历史上下文。指定起点通过现有播放器端口执行。
 6. 检查成功/失败都核对来源是否在请求期间被修改，避免旧请求覆写新配置状态。对端清理先拉取真实目录状态，再调用 Classic Provider 清理，避免依赖过期缓存。
 
-新增实现集中在 [sync.dart](../../lib/next/media_sources/sync.dart)、[remote_admin.dart](../../lib/next/media_sources/remote_admin.dart)。注册和 Provider/播放器附接涉及多人可能共同修改的 `lib/next/next_core.dart`、`lib/next/next_runtime.dart`；变更限于本批注册、排序回调、远程来源播放回调，已撤掉无关格式化。
+新增实现集中在 [sync.dart](../../../lib/next/media_sources/sync.dart)、[remote_admin.dart](../../../lib/next/media_sources/remote_admin.dart)。注册和 Provider/播放器附接涉及多人可能共同修改的 `lib/next/next_core.dart`、`lib/next/next_runtime.dart`；变更限于本批注册、排序回调、远程来源播放回调，已撤掉无关格式化。
 
 Classic 路径的修改都是新增入口或保留原默认值：弹弹play地址配置/探测，媒体服务器地址探测及可选搜索排序参数，共享 URL 探测，Provider 排序持久化入口，地址变化事实。`LocalMediaManagementApi` 新增 Next 调用的刮削入口；原有调用的 `migrateProgress` 默认仍为 false。没有改变 Classic 的登录、默认查询、原刮削或下载路径。
 

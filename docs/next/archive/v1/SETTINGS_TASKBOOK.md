@@ -1,6 +1,6 @@
 # 设置注册表任务书：让设置成为 Agent 的接口
 
-> 工作方式见 `docs/next/TEAM.md`。调研输入：`research/CAPABILITY_COVERAGE.md`（R7，尤其 §3、§4）。
+> 工作方式见 `docs/next/archive/TEAM.md`。调研输入：`research/CAPABILITY_COVERAGE.md`（R7，尤其 §3、§4）。
 
 ## 目标
 

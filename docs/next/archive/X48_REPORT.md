@@ -24,8 +24,8 @@
   可经 `ui.open` 播放。已绑定服务器剧集也通过同一 `MediaSourcesService.play`
   激活正确服务器并调用原播放入口。服务器图片缓存为真实本机文件路径。
 - 入口、条件语义、ID、分页和持久化约定见
-  [ui_data README](../../lib/next/ui_data/README.md)，来源接线见
-  [media_sources README](../../lib/next/media_sources/README.md)。
+  [ui_data README](../../../lib/next/ui_data/README.md)，来源接线见
+  [media_sources README](../../../lib/next/media_sources/README.md)。
 
 ## 决策
 

@@ -11,7 +11,7 @@ sourceEpisodeId，共享未绑定文件用 media.sources.play {sourceId,itemId}�
 搜索条目另带本机缓存 `poster` 和已绑定作品的 `workTitle`，无缓存为 null，搜索不下载图片。
 `media.sources.artwork {sourceId,itemId}` 显式懒加载海报，经 X48 的原认证客户端落到
 本机缓存后只返回路径，不返回带认证的地址。宿主未接入图片供应者则返回 unavailable。
-能力族契约见 `nipa describe media.sources`，界面接线见 `docs/next/X56_REPORT.md`。
+能力族契约见 `nipa describe media.sources`，界面接线见 `docs/next/archive/X56_REPORT.md`。
 `add/update` 配置地址与用户名，`login` 独立发起登录。
 
 登录默认选择 Jellyfin Quick Connect（启用时），否则打开应用内密码窗口。
@@ -42,7 +42,7 @@ SMB/WebDAV parentId 为来源内目录路径。共享来源省略 parentId 列�
 文件定位与 Classic 一致；发现不创建观看历史或推断作品身份。
 Next 索引按 `sourceId` 隔离远程位置，Jellyfin/Emby 另包括实际 serverId；同类两台服务器即使返回相同 item ID，也得到不同
 `fileId`。绑定时使用此 fileId，播放时继续使用原 path。无来源归属的旧记录保留为独立证据。
-完整 schema 以实时 Harness 列表为准。实现及实验见 docs/next/X12_REPORT.md。
+完整 schema 以实时 Harness 列表为准。实现及实验见 docs/next/archive/X12_REPORT.md。
 
 X48 的片库入口为 `core.libraryData/libraryActions`，能力为 `ui.library.*`，见
 `../ui_data/README.md`。原样浏览复用上述客户端，Jellyfin/Emby 使用独立单页

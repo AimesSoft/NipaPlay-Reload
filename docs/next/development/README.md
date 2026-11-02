@@ -11,11 +11,11 @@
 - [完整 Action 参考](ACTION_REFERENCE.md)：逐项查阅应用动作的用途、影响和源码。
 - [Action 覆盖核对](ACTION_COVERAGE.md)：目录如何提取、动态注册与校验边界。
 - [界面、书架与图片能力](UI_CAPABILITIES.md)：首页主视觉、分类排列、图片覆盖与设备归属。
-- [研究纲领](../RESEARCH.md)：核心假设、Classic 隔离与个人 harness。
+- [研究纲领](../archive/RESEARCH.md)：核心假设、Classic 隔离与个人 harness。
 - [可观测性契约](../OBSERVABILITY_CONTRACT.md)：运行状态与诊断。
 - [DSH 高级配置](../DSH_ADVANCED_CONFIG.md) · [Headless](../HEADLESS.md)。
-- [发布流程与平台说明](../ALPHA_RELEASE.md) · [开发者预览说明](../DEVELOPER_PREVIEW.md)。
+- [发布流程与平台说明](../archive/ALPHA_RELEASE.md) · [开发者预览说明](../DEVELOPER_PREVIEW.md)。
 - [源码架构入口](../../../lib/next/README.md)：各领域的实现与子目录文档。
-- [历史研究与实验索引](history/README.md)：阶段报告、审计与早期设计。
+- [历史研究与实验索引](../archive/README.md)：阶段报告、审计与早期设计。
 
 返回[用户文档](../README.md)。

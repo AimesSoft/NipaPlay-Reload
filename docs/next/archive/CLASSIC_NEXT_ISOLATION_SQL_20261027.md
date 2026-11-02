@@ -48,7 +48,7 @@ headless 可执行文件编译通过，`git diff --check` 通过。改动文件�
 用户随后要求补齐专用工具，已新增 `media.management.merge_work` 与
 `media.management.undo_merge`。上文 v24 和 339 项是第一轮隔离/SQL 的验证记录；
 本次在其上追加 **v25** 的 `media_entity_aliases` 与 `media_work_merges`，没有运行
-存量数据自动清理。完整参数与示例见 [媒体能力原语](../../lib/next/media/README.md#重复作品合并)。
+存量数据自动清理。完整参数与示例见 [媒体能力原语](../../../lib/next/media/README.md#重复作品合并)。
 
 合并先预览、再携 `expectedPlan` 原子提交；来源与目标为同一拥有者设备的原始 work ID，
 季和集由 Agent 明确映射，不按名称或集号自动猜。预览列实体迁移、外部身份、文件区间、

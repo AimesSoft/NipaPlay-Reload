@@ -35,7 +35,7 @@
 原因是 X52 重启 app-server 的 `_applyModel()` 直接调用 `thread/resume`，没有
 X50 在 `_select()` 中添加的项目 hook 哈希信任。新进程没有旧线程的内存覆盖。
 
-在 [chat_host.dart](../../lib/next/chat/chat_host.dart) 的三个直接恢复入口补入
+在 [chat_host.dart](../../../lib/next/chat/chat_host.dart) 的三个直接恢复入口补入
 `_projectHookConfig()`：模型切换的前台恢复、切换后的帮手恢复、读取跨 home
 rollout 的按需恢复。保留帮手的 `NIPAPLAY_CHAT` 来源覆盖，不写持久 hook state，
 也不批准用户或全局 hook。
@@ -51,7 +51,7 @@ rollout 的按需恢复。保留帮手的 `NIPAPLAY_CHAT` 来源覆盖，不写�
 的会话索引，因此“刚才”误报最近会话无。
 [观察](evidence/x57/hook-fixed/failure-events.json)。原主线程 rollout 实际可读。
 
-[recent.dart](../../lib/next/memory/recent.dart) 在原有按 updated_at 排序的候选
+[recent.dart](../../../lib/next/memory/recent.dart) 在原有按 updated_at 排序的候选
 后补入未列出的持久主线程；只有前面的候选没有可用对话时才用它。仍最多检查
 30 个候选，仍跳过帮手，不创建摘要或第二份聊天记录。这个修复保证本轮来源
 切换后的已有主会话能进入“刚才”；没有宣称合并所有 home 的完整会话目录。
@@ -63,18 +63,18 @@ rollout 的按需恢复。保留帮手的 `NIPAPLAY_CHAT` 来源覆盖，不写�
 [修复前窗口](evidence/x57/before-ui-fix/devices.jpg)、
 [同时读取的真实值](evidence/x57/before-ui-fix/summary.json)。
 
-[section_host.dart](../../lib/next/ui/settings/section_host.dart) 仅移除程序权限卡
+[section_host.dart](../../../lib/next/ui/settings/section_host.dart) 仅移除程序权限卡
 外层的 `m.available` 条件。组网开关保持不可用，程序授权直接显示和修改
 `runtime.hostSettings` 的值。这样用户在不能加入组网的版本也能看到、撤销
 已有授权；没有扩大程序权限，也没有更改默认值。
 
 ## 3. 实验与真实输出
 
-驱动：[x57_experiment.py](../../scripts/next/x57_experiment.py)，复用 X52 的
+驱动：[x57_experiment.py](../../../scripts/next/x57_experiment.py)，复用 X52 的
 WebSocket VM 客户端和脚本内凭据读取。窗口号由
-[x57_window.swift](../../scripts/next/x57_window.swift) 根据本次 Popen PID 查询，
+[x57_window.swift](../../../scripts/next/x57_window.swift) 根据本次 Popen PID 查询，
 只调用 `screencapture -x -o -t jpg -l<窗口号>`。审计驱动：
-[x57_audit.py](../../scripts/next/x57_audit.py)。
+[x57_audit.py](../../../scripts/next/x57_audit.py)。
 
 所有实例直接运行本 worktree 构建的可执行文件，独立临时 `NIPAPLAY_PROFILE`，
 默认安静。未启动安装版、按应用名查找、激活窗口、移动鼠标或像素点击。

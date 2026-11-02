@@ -12,7 +12,7 @@
 - 帮手 `ui.present` 原卡片在帮手自己的实际回合。结果后续派发时，卡片引用也幂等复制到发起会话的实际后续回合；状态仍实时解析。没有改 `lib/next/ui/`。
 - 种子增加一条帮手事实，列出独立线程、共同 harness、取消、结果返回和并发上限，没有加入派发时机或分工策略。
 
-能力与宿主细节见 [chat/README](../../lib/next/chat/README.md)，界面契约见 [ui_data/README](../../lib/next/ui_data/README.md)。NextCore 的改动仅为注册执行器、服务和能力；state/views 的改动仅为公开任务与后续中的帮手事实，不涉及 X35 的作品／图片或 X36 的工具文件。
+能力与宿主细节见 [chat/README](../../../lib/next/chat/README.md)，界面契约见 [ui_data/README](../../../lib/next/ui_data/README.md)。NextCore 的改动仅为注册执行器、服务和能力；state/views 的改动仅为公开任务与后续中的帮手事实，不涉及 X35 的作品／图片或 X36 的工具文件。
 
 ## 2. 决策与契约
 
@@ -44,7 +44,7 @@
 
 ### 协议并发
 
-[x37_protocol.py](../../scripts/next/x37_protocol.py) 使用无凭据回环 Responses provider 暂停两个请求，观察的仍是真实 Codex 进程及 JSON-RPC，不宣称调用了真实模型。[全部收发](evidence/x37/protocol.jsonl)、[摘要](evidence/x37/protocol-summary.json)。app-server PID=68572，同一进程在 provider 释放前已发出两次请求，相差约 0.5ms。两次 turn/start 原返回：
+[x37_protocol.py](../../../scripts/next/x37_protocol.py) 使用无凭据回环 Responses provider 暂停两个请求，观察的仍是真实 Codex 进程及 JSON-RPC，不宣称调用了真实模型。[全部收发](evidence/x37/protocol.jsonl)、[摘要](evidence/x37/protocol-summary.json)。app-server PID=68572，同一进程在 provider 释放前已发出两次请求，相差约 0.5ms。两次 turn/start 原返回：
 
 ```json
 {"id":4,"result":{"turn":{"id":"01a12ed7-1a25-7823-8e09-e1dca9f4bdab","items":[],"itemsView":"notLoaded","status":"inProgress","error":null,"startedAt":null,"completedAt":null,"durationMs":null}}}

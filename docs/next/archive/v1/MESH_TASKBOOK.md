@@ -1,6 +1,6 @@
 # 凭据保险库 + 最小版 Mesh 任务书
 
-> 工作方式见 `docs/next/TEAM.md`。设计依据：`DESIGN.md` §2.3、§3（NextCore）、§9 第 3 项与第 6 项。调研输入：`research/VAULT_AND_MESH.md`（R6）与 `research/LAN_SECURITY.md`（R1）。
+> 工作方式见 `docs/next/archive/TEAM.md`。设计依据：`DESIGN.md` §2.3、§3（NextCore）、§9 第 3 项与第 6 项。调研输入：`research/VAULT_AND_MESH.md`（R6）与 `research/LAN_SECURITY.md`（R1）。
 
 ## 目标
 

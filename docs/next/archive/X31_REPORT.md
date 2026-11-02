@@ -12,7 +12,7 @@
 - `agent.wake` 接受 instruction/facts 和可选 threadId，默认主会话；复用 X25 的持久一次性派发、忙时排队、回执丢失时查历史的逻辑，不 interrupt。`activity.report` 接受 title/source/facts，记录真实调用来源和 invocationId，不自动唤醒；没有追番专用结构。
 - 种子 AGENTS.md 与 hooks/README 补上上述事实和巡查建议，去掉“开始会话先做什么”等步骤。脚本的来源、频率和判断策略仍由 Agent 写在自己的 harness。
 
-接口说明见 [chat/README](../../lib/next/chat/README.md) 和 [hooks/README](../../assets/next/harness/hooks/README.md)。
+接口说明见 [chat/README](../../../lib/next/chat/README.md) 和 [hooks/README](../../../assets/next/harness/hooks/README.md)。
 
 ## 2. 决策
 
@@ -25,7 +25,7 @@
 
 ## 3. 实验与真实输出
 
-实验驱动为 [x31_experiment.py](../../scripts/next/x31_experiment.py)，只走 Debug lab VM 扩展和真实 harness 端点。失败部分修正后只补测该部分；没有重复完整行为观察或整套控制实验。
+实验驱动为 [x31_experiment.py](../../../scripts/next/x31_experiment.py)，只走 Debug lab VM 扩展和真实 harness 端点。失败部分修正后只补测该部分；没有重复完整行为观察或整套控制实验。
 
 ### DeepSeek 自主巡查观察
 
@@ -77,7 +77,7 @@ RSS fixture 的服务脚本不在工作区，我会把解析写成防御式。�
 no rollout found for thread id 01a12ca6-2925-7513-b676-147f227695e3
 ```
 
-独立协议诊断没有模型回合。未命名线程 rolloutBeforeName=false、rolloutAfterName=false，重启 resume 失败；命名线程从 false → true，重启 resumeError=null 且 resumedId 相同：[真实对照](evidence/x31/empty-rollout-probe.json)，[诊断脚本](../../scripts/next/x31_protocol_probe.py)。修复后的真实应用在没有发送第一句话的情况下：
+独立协议诊断没有模型回合。未命名线程 rolloutBeforeName=false、rolloutAfterName=false，重启 resume 失败；命名线程从 false → true，重启 resumeError=null 且 resumedId 相同：[真实对照](evidence/x31/empty-rollout-probe.json)，[诊断脚本](../../../scripts/next/x31_protocol_probe.py)。修复后的真实应用在没有发送第一句话的情况下：
 
 ```json
 {"before":"01a12ca9-88df-7282-9a9d-3e826345a40e","after":"01a12ca9-88df-7282-9a9d-3e826345a40e"}

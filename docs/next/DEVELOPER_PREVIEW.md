@@ -173,4 +173,4 @@ NipaPlay Next 是由 AimesSoft 发布的实验性开发者预览，依据项目 
 
 **NipaPlay Next 主要开发：Shinokawa · AimesSoft**
 
-[文档入口](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md) · [能力使用指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/NIPA_CAPABILITIES.md) · [技术架构](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/ARCHITECTURE.md) · [研究纲领](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/RESEARCH.md)
+[文档入口](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md) · [能力使用指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/NIPA_CAPABILITIES.md) · [技术架构](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/ARCHITECTURE.md) · [研究纲领](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/archive/RESEARCH.md)

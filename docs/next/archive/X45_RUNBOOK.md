@@ -83,7 +83,7 @@ env -u DANDANPLAY_APP_SECRET -u DANDANPLAY_APP_SECRET_URLS \
 ```
 
 网关访问走 Clash 系统代理，回环直连。X45 主控已确认弹弹play 测试令牌字段是
-`/UserId`（大小写敏感）；X46 已把协调服务默认值改为它。可用 [Mesh README 的声明名诊断](../../lib/next/mesh/README.md#主控本机端到端验收)
+`/UserId`（大小写敏感）；X46 已把协调服务默认值改为它。可用 [Mesh README 的声明名诊断](../../../lib/next/mesh/README.md#主控本机端到端验收)
 重启自己的 Mac profile，只输出名称和类型；或协调程序
 `--inspect-account-claim-names` 从私有流程的 stdin 取 token，先验证再输出名称。
 不要在终端复制令牌、解码打印 payload。没有稳定 ID 声明时停止，交主控裁定；不改限流或账号约束。
@@ -117,7 +117,7 @@ Windows→WSL 的 47823 使用 WSL 默认 localhost 转发。
 转发监听端口。每条转发的终点必须是节点，逐段核对所有 localhost 自动映射；仅凭
 `ExitOnForwardFailure` 不能发现成功绑定后的自环。不要同时使用旧拓扑。WSL 默认 NAT 不能假定
 `127.0.0.1` 能连接 Windows 的反向 SSH listener，因此另准备了仅转发字节的
-[ssh_stdio_forward.py](../../tool/next/ssh_stdio_forward.py)。Mac 分别开三个前台终端：
+[ssh_stdio_forward.py](../../../tool/next/ssh_stdio_forward.py)。Mac 分别开三个前台终端：
 
 ```sh
 python3 tool/next/ssh_stdio_forward.py --listen-port 18082 --target-port 18082
@@ -227,7 +227,7 @@ env NIPAPLAY_PROFILE=x46-controller \
 ```
 
 保留默认安静行为，不设 `NIPAPLAY_LAB_QUIET=0`，不激活或像素点击。用该实例自己的
-Debug VM extension 连接对话，接口见 [chat README](../../lib/next/chat/README.md)
+Debug VM extension 连接对话，接口见 [chat README](../../../lib/next/chat/README.md)
 及 `scripts/next/x23_vm.py`；连接文件明确指向该 profile。
 
 Windows cmd（可由 Mac 的单次 SSH 前台会话执行，以下是远端命令）：

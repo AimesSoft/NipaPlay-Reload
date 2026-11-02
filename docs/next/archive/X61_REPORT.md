@@ -131,7 +131,7 @@
 
 ### 本 worktree 的真实隔离实例
 
-脚本：[x61_experiment.py](../../scripts/next/x61_experiment.py)，
+脚本：[x61_experiment.py](../../../scripts/next/x61_experiment.py)，
 结果：[lab.json](evidence/x61/lab.json)。
 
 只由脚本在内存读用户 `~/.codex/config.toml` 的 cpa 地址、当前模型和凭据。

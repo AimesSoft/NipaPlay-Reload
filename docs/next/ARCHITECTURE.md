@@ -1,6 +1,6 @@
 # NipaPlay Next 架构
 
-本文描述 `next` 分支在 2026-10-28 的实现边界。Next 是 Developer Preview 和研究项目；运行时目录、目标设备事实和实际回执优先于本文。研究假设见 [RESEARCH.md](RESEARCH.md)，能力入口见 [CAPABILITIES.md](CAPABILITIES.md)。
+本文描述 `next` 分支在 2026-10-28 的实现边界。Next 是 Developer Preview 和研究项目；运行时目录、目标设备事实和实际回执优先于本文。研究假设见 [RESEARCH.md](archive/RESEARCH.md)，能力入口见 [CAPABILITIES.md](CAPABILITIES.md)。
 
 ## 判断与执行
 

@@ -1,6 +1,6 @@
 # M2 任务书：Task Engine 与应用内下载
 
-> 工作方式见 `docs/next/TEAM.md`。设计背景见 `docs/next/DESIGN.md`，调研输入见 `docs/next/research/LONG_RUNNING_OPERATIONS.md`（R2）。
+> 工作方式见 `docs/next/archive/TEAM.md`。设计背景见 `docs/next/DESIGN.md`，调研输入见 `docs/next/research/LONG_RUNNING_OPERATIONS.md`（R2）。
 > 2026-10-11：固定判断流程由 DESIGN §2.3 与架构复审定稿替代。存量 Decision 任务与选项保留兼容恢复；新原语不通过固定判断节点编排 Agent。
 
 ## 目标

@@ -147,7 +147,7 @@ scripts/next/player_core_f_lab.py
 scripts/next/player_core_f_lab.zsh
 test/next/player/features_test.dart
 test/next/player/feature_schema_test.dart
-docs/next/PLAYER_CORE_F_REPORT.md
+docs/next/archive/PLAYER_CORE_F_REPORT.md
 ```
 
 公共文件全部为增量，由主控合并时保留其它线实现：

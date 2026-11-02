@@ -7,4 +7,4 @@
 - [设备模型](device-model.md)：宿主角色、Mesh、设备数据与界面归属。
 - [Agent 模型](agent-model.md)：对话运行器、个人 harness、记忆和授权。
 
-按实际任务操作可读[任务指南](../development/guides/README.md)；项目的设计假设在[研究纲领](../RESEARCH.md)。
+按实际任务操作可读[任务指南](../development/guides/README.md)；项目的设计假设在[研究纲领](../archive/RESEARCH.md)。

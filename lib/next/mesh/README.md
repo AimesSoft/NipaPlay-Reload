@@ -10,7 +10,7 @@ Mesh 不依赖 Labs 端点开关。X53 让目标设备的领域、设置、账�
 认证设备自描述携带同一份事实。Mesh 查询和转发也可远程调用；信任配置与秘密
 登记仍通过宿主接口完成，没有新增接受秘密或改写宿主授权的 Action。
 远程登录可打开目标设备的用户登录交互；程序执行仍由目标 program.json 授权。
-逐族理由与观察见 [X53_REPORT](../../../docs/next/X53_REPORT.md)。
+逐族理由与观察见 [X53_REPORT](../../../docs/next/archive/X53_REPORT.md)。
 
 `program.run` 由目标宿主 `<next-data>/program.json` 的 `enabled:true` 独立授权，
 默认 false、重启生效；不注册为 Agent 设置。普通用户进程在目标 harness 执行，

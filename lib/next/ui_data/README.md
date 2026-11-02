@@ -17,7 +17,7 @@ X56 搜索经 `media.library.search_merged` 读取同一合并目录投影，返
 剧集标题与身份键也随 compose 维护。内存 Unicode 1–3 字符倒排索引只对文字变化
 更新 posting，进度/在线事实更新不重建文字 posting；搜索仅交集候选并返回有界结果。
 首次读会准备目录，后续随五秒目录刷新；不从 UI 的 library.merged 全量视图筛选。
-详细接线说明在 `docs/next/X56_REPORT.md`。
+详细接线说明在 `docs/next/archive/X56_REPORT.md`。
 
 入口是 `core.libraryData`（实现 `NextLibraryData`）和 `core.libraryActions`
 （实现 `NextLibraryActions`），后端为 `LibraryDataService`。不需要界面解析 Action
@@ -115,7 +115,7 @@ sourceInfo 并走同一个播放入口和续播位置。来源原样引用自动
 
 服务器图片经原客户端的认证请求取回，解码后原子发布到 `source-artwork`，
 缓存键包含来源、实际服务器、条目、图片种类和 tag。海报、背景和 still 都为本机
-路径；缓存及回执不保存认证图片/播放 URL。证据和限制见 X48_REPORT.md。
+路径；缓存及回执不保存认证图片/播放 URL。证据和限制见 [X48 报告](../../../docs/next/archive/X48_REPORT.md)。
 
 `workId / episodeId / taskId` 和书架 `id` 用于点击、定位和调用能力，不是显示文字。其余文字为作品元数据、简短的观看提示或 Agent 的短句。普通任务标题由任务类型与关联作品生成；还不知道作品的下载用它自己的名字（种子名或磁链显示名，原样，去掉 `.torrent`），名字只是 info hash 时只写“下载”；帮手使用 Agent 给的简短标题。
 

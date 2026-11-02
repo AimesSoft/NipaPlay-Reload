@@ -75,4 +75,4 @@ nipaplay-headless --model-check
 
 ## 卸载
 
-用户级从安装目录运行 `~/.local/share/nipaplay-headless/app/uninstall.sh`（自定义 XDG 目录以实际路径为准）；系统级使用 `sudo /opt/nipaplay-headless/app/uninstall.sh`。默认保留数据；`--purge` 同时删除数据和秘密，无法恢复。历史开发与实验记录见[归档](development/history/headless-development-notes.md)，不是安装指南。
+用户级从安装目录运行 `~/.local/share/nipaplay-headless/app/uninstall.sh`（自定义 XDG 目录以实际路径为准）；系统级使用 `sudo /opt/nipaplay-headless/app/uninstall.sh`。默认保留数据；`--purge` 同时删除数据和秘密，无法恢复。历史开发与实验记录见[归档](archive/headless-development-notes.md)，不是安装指南。

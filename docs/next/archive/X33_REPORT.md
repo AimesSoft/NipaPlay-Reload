@@ -9,7 +9,7 @@
 - `ui.open` 接受 `workId`，也继续接受作品的 `entityId`。Next 可见时调用已有 `NextShellController.openWork`，返回 `interface: next`；不可见时走原 Classic 作品详情，返回 `classic`。直接 animeId、其他 Classic 页面/窗口和文件/剧集播放入口保持原语义。
 - 主视觉弹幕取消短语白名单。从目录第一集开头取真实原文，不足六句才扩到第二、第三集的开头。新增设置 schema `next.heroOpeningSeconds`，默认 180 秒，范围 30–300 秒，Agent 可用 settings.get/set，GUI 可用同一 schema。
 
-接口与保留策略见 [chat/README](../../lib/next/chat/README.md)，弹幕与路由契约见 [ui_data/README](../../lib/next/ui_data/README.md)。
+接口与保留策略见 [chat/README](../../../lib/next/chat/README.md)，弹幕与路由契约见 [ui_data/README](../../../lib/next/ui_data/README.md)。
 
 ## 2. 决策
 
@@ -27,7 +27,7 @@
 
 ## 3. 实验与真实输出
 
-主驱动为 [x33_experiment.py](../../scripts/next/x33_experiment.py)，回环 Responses 模型为 [x33_provider.py](../../scripts/next/x33_provider.py)。模型名称为 `deepseek-v4.1-flash`；这是无凭据假模型，不声称访问了真实 DeepSeek。它发出工具请求，命令实际由嵌入的 Codex app-server 执行。临时配置含独立 CODEX_HOME、公共 CA 副本、NO_PROXY，不借用用户 auth/config。
+主驱动为 [x33_experiment.py](../../../scripts/next/x33_experiment.py)，回环 Responses 模型为 [x33_provider.py](../../../scripts/next/x33_provider.py)。模型名称为 `deepseek-v4.1-flash`；这是无凭据假模型，不声称访问了真实 DeepSeek。它发出工具请求，命令实际由嵌入的 Codex app-server 执行。临时配置含独立 CODEX_HOME、公共 CA 副本、NO_PROXY，不借用用户 auth/config。
 
 完整能力返回：[operations.json](evidence/x33/operations.json)，真实宿主事件：[chat.jsonl](evidence/x33/chat.jsonl)。
 
@@ -62,7 +62,7 @@ cookie=[redacted]
 
 第三轮 Authorization 的输出已被现有脱敏器变为 CredentialRef 占位。其重复脱敏会把占位文字进一步改写成多层 `CredentialRef(diagnostic, secret)`；完整原返回保留在 operations.json，没有改造成较好看的输出。三份过程均断言不存在合成的 `synthetic-private-value`。
 
-读历史时发现 Codex 其实保存了一项**合并后的摘要**，它的 ID 与实时两个摘要 ID 不同；只按相同 ID 合并会出现三项思考。修正为已保留过程替换历史过程类别，保留消息类别。只对这个改动重放已有真实事件，没有重跑三轮模型实验：[x33_history_replay.dart](../../scripts/next/x33_history_replay.dart)、[history-replay.jsonl](evidence/x33/history-replay.jsonl)。最终输出三轮均为：
+读历史时发现 Codex 其实保存了一项**合并后的摘要**，它的 ID 与实时两个摘要 ID 不同；只按相同 ID 合并会出现三项思考。修正为已保留过程替换历史过程类别，保留消息类别。只对这个改动重放已有真实事件，没有重跑三轮模型实验：[x33_history_replay.dart](../../../scripts/next/x33_history_replay.dart)、[history-replay.jsonl](evidence/x33/history-replay.jsonl)。最终输出三轮均为：
 
 ```json
 {"commands":1,"summaries":2,"messagesPreserved":true}
@@ -87,7 +87,7 @@ cookie=[redacted]
 
 随后读到旧临时集成实验的“长安十二时辰 S01E01.xml”，16197 条，开头 1057 条，投影挑出了打卡文字。这份文件原始获取来源无法核实，因此它只用于缓存规模与接口观察，不作为“真实观众来源”的证据。其原记录标签 existing-real-cache 是当时的判断，最终结论不依赖这个标签。创建 Classic fixture 时还遇到了 runtime 已创建 watch_history 表的冲突；改实验准备为 IF NOT EXISTS，失败和清理记录保留在 [initial-history-fixture-failure](evidence/x33/initial-history-fixture-failure/experiment.log)。
 
-最终只补做来源和弹幕投影，不重跑对话、详情开关或截图：[x33_public_cache.py](../../scripts/next/x33_public_cache.py)、[完整返回](evidence/x33/public-cache/operations.json)。公开目录接口确认《雪宝带你看电影》第一集“雪宝带你看《小美人鱼》”，CID 1034761585、BV1WA411y7yS；公开 comment XML 取得 161 条，缓存 SHA-256 为 `0273e385f9ddf86ac529d7f948c13c9adc0853ba0788c98068443520ccd1ef7e`。[原缓存](evidence/x33/public-cache/episode-1.xml) 保留供核对。
+最终只补做来源和弹幕投影，不重跑对话、详情开关或截图：[x33_public_cache.py](../../../scripts/next/x33_public_cache.py)、[完整返回](evidence/x33/public-cache/operations.json)。公开目录接口确认《雪宝带你看电影》第一集“雪宝带你看《小美人鱼》”，CID 1034761585、BV1WA411y7yS；公开 comment XML 取得 161 条，缓存 SHA-256 为 `0273e385f9ddf86ac529d7f948c13c9adc0853ba0788c98068443520ccd1ef7e`。[原缓存](evidence/x33/public-cache/episode-1.xml) 保留供核对。
 
 来源：`https://api.bilibili.com/pgc/view/web/season?season_id=44813` 与 `https://comment.bilibili.com/1034761585.xml`。这是实验输入的公开文件获取，再用应用已有 danmaku.import/Classic 解析器保存缓存；没有在 Next 代码新增 Bilibili 客户端。绑定的本地作品/文件仍是隔离 fixture，未把制造的 Classic 身份 33002 宣称为官方身份。PID 68890 的真实实例返回：
 

@@ -18,33 +18,33 @@
 
 ## 2. NipaPlay 与 Codex 绑在哪里
 
-以下位置均为本次基线；链接指向文件，行号写在标签中。读取的 [chat README](../../../lib/next/chat/README.md) 有局部陈旧描述：Windows 原生启动和 collab 过程保存已经在代码中实现，须以代码为准。
+以下位置均为本次基线；链接指向文件，行号写在标签中。读取的 [chat README](../../../../lib/next/chat/README.md) 有局部陈旧描述：Windows 原生启动和 collab 过程保存已经在代码中实现，须以代码为准。
 
 | 耦合点 | 实际依赖和迁移影响 | 代码位置 |
 |---|---|---|
-| 后台进程与握手 | 具体类 `ChatHost` 启动 `codex app-server`；POSIX 继承登录 shell 环境，Windows 找原生 exe。换行 JSON-RPC、请求 ID、`initialize`/`initialized`，`experimentalApi`、`config/read`、`model/list` 都是 Codex 协议 | [chat_host.dart:24、123、215、315](../../../lib/next/chat/chat_host.dart) |
-| 项目运行语义 | 每次传 `cwd`、`sandbox: danger-full-access`、`approvalPolicy: never`。不同工具权限模式不等价，不能透传字符串 | [chat_host.dart:649](../../../lib/next/chat/chat_host.dart) |
-| 创建与发送 | `thread/start`、`thread/resume`、`turn/start`；busy 时不能启动新 turn。结果及通知以 `threadId`/`turnId` 关联 | [chat_host.dart:655、685](../../../lib/next/chat/chat_host.dart) |
-| 引导 | `turn/steer` 带 `expectedTurnId`，目标是正在运行的 turn；不等于将消息排到下一回合 | [chat_host.dart:821](../../../lib/next/chat/chat_host.dart) |
-| 中断与问题 | `turn/interrupt` 指定 thread/turn。只回答 `item/tool/requestUserInput` 的问题；其他服务端请求返回 `-32601`，现有 host 并不是完整审批客户端 | [chat_host.dart:883、888](../../../lib/next/chat/chat_host.dart) |
-| 会话列表和主会话 | `thread/list` 的 `data`/`nextCursor`、`preview`、更新时间；本地主/当前会话映射。空线程用 `thread/name/set` 落盘，避免为登记线程发付费“你好” | [chat_host.dart:720–806](../../../lib/next/chat/chat_host.dart)、[session_store.dart:14](../../../lib/next/chat/session_store.dart) |
-| 冷恢复与历史 | `thread/read includeTurns`；`thread/resume`；实验性 rollout `path`。`chat-rollouts.json` 记原路径，切换独立模型 home 后恢复同一线程。不能假定其他工具 ID 与磁盘路径相通 | [chat_host.dart:610、634、828](../../../lib/next/chat/chat_host.dart) |
-| 条目白名单 | `userMessage`、`agentMessage`、`reasoning`、`commandExecution`、`fileChange`、`mcpToolCall`、`collabAgentToolCall`、`plan`、`webSearch`；未知类型忽略。UI 认识的部分类型如 `dynamicToolCall` 不在 host 白名单 | [chat_host.dart:523](../../../lib/next/chat/chat_host.dart) |
-| 推理显示 | 接受 `item/reasoning/summaryTextDelta` **及 `textDelta`**，100ms 合并为 `host/reasoning`。已有过程持久化只存 summary，但实时显示可能收到原始 reasoning；不能把现状概括为始终只显示摘要 | [chat_host.dart:552、556](../../../lib/next/chat/chat_host.dart)、[turn_process_store.dart:85](../../../lib/next/chat/turn_process_store.dart) |
-| 压缩 | 显式 `thread/compact/start`，并读 Codex 状态/通知；X49 已观察到 compact 后记忆 hook 在下一回合生效。自动压缩由 Codex 自己管理 | [chat_host.dart:847](../../../lib/next/chat/chat_host.dart)、[X49](../X49_REPORT.md) |
-| hook 与信任 | 内联 TOML `projects` 表设 harness trusted；`hooks/list` 找 harness `.codex` 项目 hook 的 enabled/currentHash，写每线程 `hooks.state[...].trusted_hash`。项目信任与 hook 哈希信任是两道门，不能用一个布尔字段代替 | [chat_host.dart:177、184](../../../lib/next/chat/chat_host.dart)、[X50](../X50_REPORT.md) |
-| SessionStart 记忆 | 种子 `.codex/hooks.json` matcher 为 startup/resume/clear/compact；Python 接 `session_id`，调用 `nipa memory.context`，输出 `hookSpecificOutput.additionalContext`。同 server 对已加载线程 resume 不重跑 hook；进程真正重启后 resume 才重跑，这是 X49 实测 | [hooks.json](../../../assets/next/harness/.codex/hooks.json)、[session_start.py](../../../assets/next/harness/hooks/session_start.py)、[X49](../X49_REPORT.md) |
-| `CODEX_HOME` 与模型 | X52 两种 source 为“Codex 自身配置”及“NipaPlay 管理”。后者建立独立 codex-home、`wire_api=responses`、`env_key`、`requires_openai_auth=false`、ephemeral auth、禁用 shell snapshot，shell环境排除模型key；模型切换要所有线程与帮手 idle，重启 transport 并恢复 | [host_settings_service.dart:161、199、238](../../../lib/next/settings/host_settings_service.dart)、[model_launch.dart](../../../lib/next/chat/model_launch.dart)、[chat_host.dart:338](../../../lib/next/chat/chat_host.dart)、[X52](../X52_REPORT.md) |
-| 回合过程保存 | Codex 历史不保证保留本次 UI 所需过程，所以旁存 reasoning summary、command、collab；按类型顺序补回原 history。60 turns/4MiB、最多128条过程，输出有截断；完成态才有较完整输出，突然退出可能不知 exitCode | [turn_process_store.dart:8、42、85、196](../../../lib/next/chat/turn_process_store.dart) |
-| 活跃状态 | liveness 直接识别 Codex method、turn/status；transport 活着不等于模型请求或后台子任务活着 | [liveness.dart:20](../../../lib/next/chat/liveness.dart) |
-| 主控帮手 | `Helpers` 直接调用 `ChatHost` 建/续帮手线程，最多2个并发；有持久任务回执和 followup，恢复时不重放不确定执行 | [helpers.dart:14](../../../lib/next/chat/helpers.dart) |
-| 原生子代理 | `NativeHelpers` 解析 collab 的工具、receiver threads，source 为 codexNative；把 spawn/sendInput/wait/adopt 接到任务系统，避免同一次 child start 重复登记 | [native_helpers.dart:19、72、118](../../../lib/next/chat/native_helpers.dart) |
-| 近期记忆 | `recentMemoryFacts(ChatHost ...)` 查最多30个线程，按更新时间读原生 turns/items，过滤帮手，取最近6条消息及未完成工作。原生 history 字段渗入记忆服务 | [recent.dart:8](../../../lib/next/memory/recent.dart) |
-| 生命周期装配 | `next_runtime.dart` 实例化具体 ChatHost，能力、记忆、帮手依赖它；只改 ChatPort 无法消除下层耦合 | [next_runtime.dart:508](../../../lib/next/next_runtime.dart) |
+| 后台进程与握手 | 具体类 `ChatHost` 启动 `codex app-server`；POSIX 继承登录 shell 环境，Windows 找原生 exe。换行 JSON-RPC、请求 ID、`initialize`/`initialized`，`experimentalApi`、`config/read`、`model/list` 都是 Codex 协议 | [chat_host.dart:24、123、215、315](../../../../lib/next/chat/chat_host.dart) |
+| 项目运行语义 | 每次传 `cwd`、`sandbox: danger-full-access`、`approvalPolicy: never`。不同工具权限模式不等价，不能透传字符串 | [chat_host.dart:649](../../../../lib/next/chat/chat_host.dart) |
+| 创建与发送 | `thread/start`、`thread/resume`、`turn/start`；busy 时不能启动新 turn。结果及通知以 `threadId`/`turnId` 关联 | [chat_host.dart:655、685](../../../../lib/next/chat/chat_host.dart) |
+| 引导 | `turn/steer` 带 `expectedTurnId`，目标是正在运行的 turn；不等于将消息排到下一回合 | [chat_host.dart:821](../../../../lib/next/chat/chat_host.dart) |
+| 中断与问题 | `turn/interrupt` 指定 thread/turn。只回答 `item/tool/requestUserInput` 的问题；其他服务端请求返回 `-32601`，现有 host 并不是完整审批客户端 | [chat_host.dart:883、888](../../../../lib/next/chat/chat_host.dart) |
+| 会话列表和主会话 | `thread/list` 的 `data`/`nextCursor`、`preview`、更新时间；本地主/当前会话映射。空线程用 `thread/name/set` 落盘，避免为登记线程发付费“你好” | [chat_host.dart:720–806](../../../../lib/next/chat/chat_host.dart)、[session_store.dart:14](../../../../lib/next/chat/session_store.dart) |
+| 冷恢复与历史 | `thread/read includeTurns`；`thread/resume`；实验性 rollout `path`。`chat-rollouts.json` 记原路径，切换独立模型 home 后恢复同一线程。不能假定其他工具 ID 与磁盘路径相通 | [chat_host.dart:610、634、828](../../../../lib/next/chat/chat_host.dart) |
+| 条目白名单 | `userMessage`、`agentMessage`、`reasoning`、`commandExecution`、`fileChange`、`mcpToolCall`、`collabAgentToolCall`、`plan`、`webSearch`；未知类型忽略。UI 认识的部分类型如 `dynamicToolCall` 不在 host 白名单 | [chat_host.dart:523](../../../../lib/next/chat/chat_host.dart) |
+| 推理显示 | 接受 `item/reasoning/summaryTextDelta` **及 `textDelta`**，100ms 合并为 `host/reasoning`。已有过程持久化只存 summary，但实时显示可能收到原始 reasoning；不能把现状概括为始终只显示摘要 | [chat_host.dart:552、556](../../../../lib/next/chat/chat_host.dart)、[turn_process_store.dart:85](../../../../lib/next/chat/turn_process_store.dart) |
+| 压缩 | 显式 `thread/compact/start`，并读 Codex 状态/通知；X49 已观察到 compact 后记忆 hook 在下一回合生效。自动压缩由 Codex 自己管理 | [chat_host.dart:847](../../../../lib/next/chat/chat_host.dart)、[X49](../X49_REPORT.md) |
+| hook 与信任 | 内联 TOML `projects` 表设 harness trusted；`hooks/list` 找 harness `.codex` 项目 hook 的 enabled/currentHash，写每线程 `hooks.state[...].trusted_hash`。项目信任与 hook 哈希信任是两道门，不能用一个布尔字段代替 | [chat_host.dart:177、184](../../../../lib/next/chat/chat_host.dart)、[X50](../X50_REPORT.md) |
+| SessionStart 记忆 | 种子 `.codex/hooks.json` matcher 为 startup/resume/clear/compact；Python 接 `session_id`，调用 `nipa memory.context`，输出 `hookSpecificOutput.additionalContext`。同 server 对已加载线程 resume 不重跑 hook；进程真正重启后 resume 才重跑，这是 X49 实测 | [hooks.json](../../../../assets/next/harness/.codex/hooks.json)、[session_start.py](../../../../assets/next/harness/hooks/session_start.py)、[X49](../X49_REPORT.md) |
+| `CODEX_HOME` 与模型 | X52 两种 source 为“Codex 自身配置”及“NipaPlay 管理”。后者建立独立 codex-home、`wire_api=responses`、`env_key`、`requires_openai_auth=false`、ephemeral auth、禁用 shell snapshot，shell环境排除模型key；模型切换要所有线程与帮手 idle，重启 transport 并恢复 | [host_settings_service.dart:161、199、238](../../../../lib/next/settings/host_settings_service.dart)、[model_launch.dart](../../../../lib/next/chat/model_launch.dart)、[chat_host.dart:338](../../../../lib/next/chat/chat_host.dart)、[X52](../X52_REPORT.md) |
+| 回合过程保存 | Codex 历史不保证保留本次 UI 所需过程，所以旁存 reasoning summary、command、collab；按类型顺序补回原 history。60 turns/4MiB、最多128条过程，输出有截断；完成态才有较完整输出，突然退出可能不知 exitCode | [turn_process_store.dart:8、42、85、196](../../../../lib/next/chat/turn_process_store.dart) |
+| 活跃状态 | liveness 直接识别 Codex method、turn/status；transport 活着不等于模型请求或后台子任务活着 | [liveness.dart:20](../../../../lib/next/chat/liveness.dart) |
+| 主控帮手 | `Helpers` 直接调用 `ChatHost` 建/续帮手线程，最多2个并发；有持久任务回执和 followup，恢复时不重放不确定执行 | [helpers.dart:14](../../../../lib/next/chat/helpers.dart) |
+| 原生子代理 | `NativeHelpers` 解析 collab 的工具、receiver threads，source 为 codexNative；把 spawn/sendInput/wait/adopt 接到任务系统，避免同一次 child start 重复登记 | [native_helpers.dart:19、72、118](../../../../lib/next/chat/native_helpers.dart) |
+| 近期记忆 | `recentMemoryFacts(ChatHost ...)` 查最多30个线程，按更新时间读原生 turns/items，过滤帮手，取最近6条消息及未完成工作。原生 history 字段渗入记忆服务 | [recent.dart:8](../../../../lib/next/memory/recent.dart) |
+| 生命周期装配 | `next_runtime.dart` 实例化具体 ChatHost，能力、记忆、帮手依赖它；只改 ChatPort 无法消除下层耦合 | [next_runtime.dart:508](../../../../lib/next/next_runtime.dart) |
 
 ### 2.1 UI 消费的具体字段
 
-**[仓库]** [chat_port.dart:58](../../../lib/next/ui/conversation/chat_port.dart) 的 `ChatHostPort` 返回原生 RPC 形状。[chat_turn.dart:288、444](../../../lib/next/ui/conversation/chat_turn.dart) 和 [nipa_chat.dart:133、667、799](../../../lib/next/ui/conversation/nipa_chat.dart) 直接消费：
+**[仓库]** [chat_port.dart:58](../../../../lib/next/ui/conversation/chat_port.dart) 的 `ChatHostPort` 返回原生 RPC 形状。[chat_turn.dart:288、444](../../../../lib/next/ui/conversation/chat_turn.dart) 和 [nipa_chat.dart:133、667、799](../../../../lib/next/ui/conversation/nipa_chat.dart) 直接消费：
 
 | UI 需求 | 当前 Codex 字段/事件 | 中立化时的要求 |
 |---|---|---|
@@ -319,7 +319,7 @@ native helpers与Nipa独立helpers使用同一个DelegationRecord（origin、par
 
 将X52 source拆成：runtimeKind（agent工具）；modelSource（runtime原有配置／Nipa管理）；ModelRoute（provider/region/account/protocol/base/model/catalog/credentialRef）；RuntimeBinding（exe/version/harness/权限）。`codex`不再同时代表工具与模型来源。vault按provider+规范化endpoint+账号类型作用域保存，UI仅显示hasKey，不能读回明文；避免同名provider换地址误用旧key。process环境注入时保留必要PATH和nipa来源，去掉无关provider凭据和覆盖变量；禁止snapshot/debug把key落盘。
 
-**[仓库／设计]** 当前实验室的 `LabModelVault` 实际只在内存保存模型key，因为原实验室vault会写明文文件（[host_settings_service.dart:460](../../../lib/next/settings/host_settings_service.dart)）。因此“一次填key跨重启使用”还不是现状；实现阶段若要记住key，应接入合适的系统安全存储并验证三平台行为，否则明确说明退出后需重新填写。三种工具的shell/tool子进程还要分别验证key排除机制，不能因Codex已有shell_environment_policy就推断Claude/DSH也会隔离。
+**[仓库／设计]** 当前实验室的 `LabModelVault` 实际只在内存保存模型key，因为原实验室vault会写明文文件（[host_settings_service.dart:460](../../../../lib/next/settings/host_settings_service.dart)）。因此“一次填key跨重启使用”还不是现状；实现阶段若要记住key，应接入合适的系统安全存储并验证三平台行为，否则明确说明退出后需重新填写。三种工具的shell/tool子进程还要分别验证key排除机制，不能因Codex已有shell_environment_policy就推断Claude/DSH也会隔离。
 
 界面明确“已保存／等待当前工作结束／当前生效”，当前工具版本、model/provider取运行握手或可观察响应，不从输入值推断。模型切换在所有受影响sessions/helpers idle后应用；工具切换只作用于新绑定，未完成helpers/followups继续由原工具拥有。新工具有独立main/current和native历史，用户可以回看原会话。跨工具继续使用同一份harness记忆及有界交接摘要，**不是原生历史无损迁移**。
 

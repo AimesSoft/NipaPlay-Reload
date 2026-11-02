@@ -106,7 +106,7 @@
 - new/metadata/2、3 的过程消息改用英文，旧版三次过程消息均中文；两版最终答复均中文。种子首段“用用户的语言回复”仍完整保留，实测却出现这条要求的退步。
 - 两版都猜错过参数、视图或把合并库 ID 当本地 ID；新版没有消除这些摩擦。三次重复不能给出显著性或覆盖长任务，不能宣称短提示普遍更好。这里不再为了使结论漂亮而追加未经实验的提示。
 
-完整脚本：[x50_experiment.py](../../scripts/next/x50_experiment.py)、[x50_score.py](../../scripts/next/x50_score.py)。每个样本目录含 summary/metrics、脱敏 trace.gz 和 PID 清理回执；`pilots/` 明确排除。
+完整脚本：[x50_experiment.py](../../../scripts/next/x50_experiment.py)、[x50_score.py](../../../scripts/next/x50_score.py)。每个样本目录含 summary/metrics、脱敏 trace.gz 和 PID 清理回执；`pilots/` 明确排除。
 
 ### 意外与失败
 

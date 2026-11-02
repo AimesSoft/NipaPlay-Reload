@@ -13,7 +13,7 @@
 - `activity` 包含登记、触发、待执行原因、派发、实际开启的回合和回合结果。执行记录保存实际 session 来源，facts 保留登记者来源。同时修正 activity 将 X23 无 invocationId 的回合边界日志强转为调用记录的问题。
 - 种子 AGENTS.md 只追加一条事实：“耗时操作是 NipaPlay 的后台任务：Agent 可以登记后续，让自己在任务结束时被唤醒。”
 
-接口实现与语义见 [followups/README.md](../../lib/next/followups/README.md)。例如：
+接口实现与语义见 [followups/README.md](../../../lib/next/followups/README.md)。例如：
 
 ```sh
 ./nipa call followup.register '{"when":{"jobId":"<jobId>"},"title":"下载完成后处理弹幕","instruction":"检查下载回执，再判断弹幕是否够用；不足时处理下一来源，然后告诉用户。"}'

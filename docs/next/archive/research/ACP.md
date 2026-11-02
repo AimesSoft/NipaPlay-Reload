@@ -277,7 +277,7 @@ pi 原生 RPC 已有 steering/follow-up/abort 等更丰富接口，并能以 `mo
 
 ## 6. 放在 X59 的哪一层
 
-`[仓库]` 当前 `ChatHost` 直接识别 Codex：启动/握手在 [chat_host.dart](../../../lib/next/chat/chat_host.dart)，显示类型白名单与reasoning合并约523行，steer约821行，interrupt约883行；[native_helpers.dart](../../../lib/next/chat/native_helpers.dart) 用collab receiver thread恢复/接管原生帮手；[helpers.dart](../../../lib/next/chat/helpers.dart) 则建立Nipa独立帮手。X59第2、7节已要求中立会话、事件、历史和能力，不应把ACP消息直接灌给Codex UI白名单。[N1]
+`[仓库]` 当前 `ChatHost` 直接识别 Codex：启动/握手在 [chat_host.dart](../../../../lib/next/chat/chat_host.dart)，显示类型白名单与reasoning合并约523行，steer约821行，interrupt约883行；[native_helpers.dart](../../../../lib/next/chat/native_helpers.dart) 用collab receiver thread恢复/接管原生帮手；[helpers.dart](../../../../lib/next/chat/helpers.dart) 则建立Nipa独立帮手。X59第2、7节已要求中立会话、事件、历史和能力，不应把ACP消息直接灌给Codex UI白名单。[N1]
 
 ```mermaid
 flowchart TD
@@ -394,6 +394,6 @@ flowchart TD
 | A12 | Vibe [v2.26.1 ACP实现](https://github.com/mistralai/mistral-vibe/blob/v2.26.1/vibe/acp/agent.py)、[ACP安装](https://github.com/mistralai/mistral-vibe/blob/v2.26.1/docs/acp-setup.md)、[README](https://github.com/mistralai/mistral-vibe/blob/v2.26.1/README.md)、[release](https://github.com/mistralai/mistral-vibe/releases/tag/v2.26.1)、[PyPI](https://pypi.org/pypi/mistral-vibe/2.26.1/json) |
 | A13 | [glm-acp-agent仓库](https://github.com/stefandevo/glm-acp-agent)、[固定npm1.15.0](https://registry.npmjs.org/glm-acp-agent/1.15.0)及其tarball README/LICENSE；这是一手**维护者**资料，不是智谱官方背书 |
 | A14 | Cline [v4.1.24源码中的ACP说明](https://github.com/cline/cline/blob/v4.1.24/docs/usage/acp.mdx)、[agent](https://github.com/cline/cline/blob/v4.1.24/apps/cli/src/acp/acpAgent.ts)、[CLI独立版本](https://github.com/cline/cline/blob/v4.1.24/apps/cli/package.json)、[npm3.0.71](https://registry.npmjs.org/cline/3.0.71)；未做CLI包与仓库源码的逐字同一性证明 |
-| N1 | [X59 AGENT_RUNTIMES.md](AGENT_RUNTIMES.md)第2、7、11节等；当前[chat源码](../../../lib/next/chat/)。Codex对照使用openai-docs技能获取的[官方manual](https://developers.openai.com/codex/codex-manual.md)，其中[App Server来源页](https://learn.chatgpt.com/docs/app-server.md)，原件只在tmp |
+| N1 | [X59 AGENT_RUNTIMES.md](AGENT_RUNTIMES.md)第2、7、11节等；当前[chat源码](../../../../lib/next/chat)。Codex对照使用openai-docs技能获取的[官方manual](https://developers.openai.com/codex/codex-manual.md)，其中[App Server来源页](https://learn.chatgpt.com/docs/app-server.md)，原件只在tmp |
 
 **剩余不确定性**：没有对每个agent逐项运行完整协议一致性套件；没有真实提供方对话；没有验证所有平台安装体积、原生帮手接管、长命令进程树取消和压缩后记忆barrier。源码提及但没有直接保证的项已写为条件式或`?`。公开GitHub API部分请求触发403限流、少量raw请求429/404；这些失败保留在来源索引，后续以固定tag的成功raw读取、包元数据或临时git checkout补足，**没有把失败页面当作已读证据**。

@@ -12,7 +12,7 @@ Classic 下载页使用 `core.downloads`，`NextRuntime` 把
 `app.capabilities` 返回当前宿主功能、provider/source 前置、设置键和逐 Action 的
 远程范围；`nipa describe app` 是此族说明。GUI 和纯 Dart 宿主共用在线 provider
 工厂与弹弹play网关客户端，秘密只通过宿主保险库引用读取。详情见
-[无界面宿主](../../docs/next/HEADLESS.md) 和 [X53 报告](../../docs/next/X53_REPORT.md)。
+[无界面宿主](../../docs/next/HEADLESS.md) 和 [X53 报告](../../docs/next/archive/X53_REPORT.md)。
 
 启动顺序：读取设备身份 → 打开并迁移 `next.db` → 创建领域运行时（索引文件；旧身份仅由显式
 `media.library.import_history` 导入）→ 收集全部执行器创建 TaskEngine → 向各领域注入同一引擎并收集

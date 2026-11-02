@@ -1,4 +1,4 @@
-> 历史开发记录：下文保留原始阶段、路径和验证状态，不是当前安装或操作规范。当前指南见 [Headless](../../HEADLESS.md)。
+> 历史开发记录：下文保留原始阶段、路径和验证状态，不是当前安装或操作规范。当前指南见 [Headless](../HEADLESS.md)。
 
 # NipaPlay 无界面宿主（X43 / X45 / X46 / X47c）
 
@@ -29,8 +29,8 @@ confirm 的 destructive ActionCall 前目标不变，确认时再次检查预览
 目录投影、进度、历史合并 ID 写在自己的 ui_cache；远端图片/播放附件缓存在
 mesh-artwork，源端弹幕导出在 mesh-assets。离线仍显示上次目录和缓存图片，
 来源 online=false、只能从该源播放的剧集 playable=false。每 5 秒刷新并触发本机
-changes；显式刷新和可读地址、进度原语见 [Mesh README](../../../../lib/next/mesh/README.md)。
-合并身份、时间和观看进度策略见 [ui_data README](../../../../lib/next/ui_data/README.md)。
+changes；显式刷新和可读地址、进度原语见 [Mesh README](../../../lib/next/mesh/README.md)。
+合并身份、时间和观看进度策略见 [ui_data README](../../../lib/next/ui_data/README.md)。
 
 X47c 在 macOS 回环上实测独立 Dart AOT + Rust C ABI 源进程，能响应目录、
 提供真实 TLS 文件范围并接收字幕。Windows/WSL 的 X45 二进制须重新构建才能具有
@@ -38,7 +38,7 @@ X47c 在 macOS 回环上实测独立 Dart AOT + Rust C ABI 源进程，能响应
 
 这是纯 Dart 的 Next 领域服务宿主，入口为 `bin/nipaplay_headless.dart`。
 不启动 Flutter 引擎或窗口。已在 macOS、Ubuntu 24.04 WSL x86_64、Windows x64
-运行源码和本机编译的 AOT 可执行文件；实验记录见 [X43_REPORT.md](../../X43_REPORT.md)。
+运行源码和本机编译的 AOT 可执行文件；实验记录见 [X43_REPORT.md](X43_REPORT.md)。
 
 当前可用：回环 MCP/`nipa`、独立片库与任务数据库、只读扫描、身份批量绑定、Bangumi
 公开资料和提供的元数据、图片缓存与色调、同名 XML/JSON 弹幕索引、数据卡片、hooks、
@@ -48,7 +48,7 @@ X45 增加 Rust Mesh 与 librqbit：独立设备身份、同账号加入、心�
 磁链/种子下载、预览、文件选择、逐文件校验/登记与事件。Mac 对话发起的远端下载会
 持久回传原会话；无界面脚本的 `agent.wake` 可按宿主配置路由到 Mac。
 Windows/Linux x64 原生库及 AOT 已编译，X45 运行检查只在 Mac 本机回环进行；
-工作站真机运行待主控执行，见 [X45_RUNBOOK.md](../../X45_RUNBOOK.md)。
+工作站真机运行待主控执行，见 [X45_RUNBOOK.md](X45_RUNBOOK.md)。
 
 当前缺口：播放器、Classic 账号与历史、完整弹弹play账号宿主、
 Classic 更新日历。Nipa 的对话见下文“Nipa 在无界面主机上”。无界面只接受宿主从 stdin 登记的组网测试 token，
@@ -71,7 +71,7 @@ X46 补充 `subtitle.tracks/import/select`、旁路字幕索引和 activity 视�
 记录内嵌轨道，不读取 Classic 偏好或自动决定默认语言。导入的文本字幕检查时序语法，
 不是完整的原生解析/可播放核验；idx/sub 与 sup 保留声明事实。UTF-16 等不兼容文本
 可由已授权的本地程序转换后交入；此宿主没有 Classic 原生字幕解析器。
-新增宿主可授权的 `program.run` 与 Git bundle 接收，详见 [X46_RUNBOOK.md](../../X46_RUNBOOK.md)。
+新增宿主可授权的 `program.run` 与 Git bundle 接收，详见 [X46_RUNBOOK.md](X46_RUNBOOK.md)。
 观看记录能力没有注册：这个独立数据库没有 Classic 历史，也没有播放器产生进度，
 不会将空的 Next 记录冒充用户历史。
 
@@ -367,7 +367,7 @@ Nipa 在后台起，`app.runtime` 里 `conversationHost` 说明她现在是 `dis
 agent 开关关掉时宿主停掉对话进程，所有对话入口都说明原因。
 
 **别的设备交来的任务。** 同账号设备上的 Nipa 可以用 `mesh.delegate` 把一件事交给这台主机上的
-Nipa（见 [Mesh README](../../../../lib/next/mesh/README.md) 的“委托”）。主机在本机 `<data>/harness` 里开一段
+Nipa（见 [Mesh README](../../../lib/next/mesh/README.md) 的“委托”）。主机在本机 `<data>/harness` 里开一段
 对话，开头写明来自哪台设备上的 Nipa 的委托，用本机的工具做完，最后一条回复交回去；这段对话和
 别的对话一样在 `chat.session.list` 里，主机上的人可以用 `./nipa chat read/say` 读它、插话。Nipa
 没有运行（agent 开关关着、没设模型或密钥、没装运行环境）时，委托立即失败，原因就是上面

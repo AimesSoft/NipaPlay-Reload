@@ -20,7 +20,7 @@ parser.add_argument('--windows-data', default='D:\\nipaplay-next\\x45-lab-data')
 parser.add_argument('--wsl-data', default='/home/labuser/nipaplay-next/x45-lab-data')
 args = parser.parse_args()
 assert args.profile.startswith('x45-') and '/' not in args.profile and '\\' not in args.profile
-assert (args.worktree/'docs/next/TEAM.md').is_file()
+assert (args.worktree/'docs/next/archive/TEAM.md').is_file()
 profile = Path.home()/'Library/Application Support/NipaPlay/LabProfiles'/args.profile
 endpoint = json.loads((profile/'endpoint.json').read_text())
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))

@@ -1,6 +1,6 @@
 # X39：同名弹幕成为身体的文件事实
 
-2026-10-12。实现与构建位于 `next/x39-sidecar-danmaku` worktree；没有 commit、push、新依赖或 `lib/next/ui/` 改动。本文对应实验 14 的后续实现与对比观察。实验脚本为 [x39_experiment.py](../../scripts/next/x39_experiment.py)；X35 的实际参考脚本是 `docs/next/evidence/x35/experiment.py`，任务书所列 `scripts/next/x35_experiment.py` 在本 worktree 不存在。
+2026-10-12。实现与构建位于 `next/x39-sidecar-danmaku` worktree；没有 commit、push、新依赖或 `lib/next/ui/` 改动。本文对应实验 14 的后续实现与对比观察。实验脚本为 [x39_experiment.py](../../../scripts/next/x39_experiment.py)；X35 的实际参考脚本是 `docs/next/evidence/x35/experiment.py`，任务书所列 `scripts/next/x35_experiment.py` 在本 worktree 不存在。
 
 ## 1. 完成了什么
 
@@ -14,7 +14,7 @@ Classic 的文件名候选规则已提取共用。Next 接入播放器时替换�
 
 播放时 Classic 自动匹配到的远程弹幕也纳入本批：复用已经取到的 Classic 原始缓存，作为 `automatic / playback` 写回 Next，保留条目实际声明的来源、原视频号，并复用当前播放器轨道。没有增加远程请求或第二套弹弹play 客户端。下一次播放与其他读取者因此能见到缓存记录。
 
-种子只修改了要求的两处弹幕事实：「你的工作」说明身体自动记录同名弹幕；「一部完整的作品」说明同名与播放时自动取得的弹幕成为记录，缺失仍以事实呈现。新增行为也写入 [danmaku README](../../lib/next/danmaku/README.md)。
+种子只修改了要求的两处弹幕事实：「你的工作」说明身体自动记录同名弹幕；「一部完整的作品」说明同名与播放时自动取得的弹幕成为记录，缺失仍以事实呈现。新增行为也写入 [danmaku README](../../../lib/next/danmaku/README.md)。
 
 ## 2. 决策
 

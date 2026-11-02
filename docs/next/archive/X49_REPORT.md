@@ -7,12 +7,12 @@
 - 重写前一会话的 JSON 记忆草稿，使用 harness 的普通 Markdown：`memory/preferences.md` 常驻偏好，`memory/MEMORY.md` 常驻索引，其他主题文件按需读取。记忆继续由 harness Git 管理，无额外数据库、抽取模型、向量库或会话切段。
 - 种子新增 `.codex/hooks.json` 和 `hooks/session_start.py`，匹配 SessionStart 的 startup/resume/clear/compact。每次从磁盘现读偏好与索引，并取得实时设置及现有数据的“刚才”。种子 `.codex/config.toml` 明确 `features.memories=false`。
 - `SettingsRegistry.preferences()` 提供用户或 Agent 改过的用户级设置当前值、最后修改时间、来源与理由；默认值、迁移、application 来源和运行时值不作为偏好复制。秘密经既有脱敏层处理。
-- `NextCore.memory` 的 `MemoryData` 与 `memory.list/read/edit/delete/context` Actions 已接入。设置页“Nipa 记得的事”可列出、读取、删除整个文件，或带 revision 提交剩余文本删除其中一条偏好。接口、调用方与限制写在 [chat README](../../lib/next/chat/README.md)。本任务没有 GUI。
+- `NextCore.memory` 的 `MemoryData` 与 `memory.list/read/edit/delete/context` Actions 已接入。设置页“Nipa 记得的事”可列出、读取、删除整个文件，或带 revision 提交剩余文本删除其中一条偏好。接口、调用方与限制写在 [chat README](../../../lib/next/chat/README.md)。本任务没有 GUI。
 - GUI 删改以 `NipaPlay User <user@localhost>` 提交目标文件，记录动态与 commit；Agent Action 保留真实调用来源，并以 Nipa 署名。不带走无关暂存内容；目标已有暂存修改或读取后已变化时拒绝覆盖。未跟踪文件的删除也有独立 Git 记录。
 - 每个线程保存已经见过的文件 revision，下一回合开头追加简短变化说明，请重读更新文件、停止使用删除或修改前的偏好。不改已有消息；切回同一个 app-server 中已加载的线程时保留未送达变化。
 - `memory.context {threadId?}` 是只读的上下文接口，含常驻文件、设置、最近会话 ID、原文摘录、截断标记和省略项。数据来自 Codex 历史、未结束任务、后续及 activity，未生成交接，也未保存第二份聊天记录。Debug lab VM 扩展补了 hooks/compact 和模拟 GUI 删改入口，生产不注册。
 
-主要实现：[记忆服务](../../lib/next/memory/service.dart)、[Actions](../../lib/next/memory/capability.dart)、[最近事实](../../lib/next/memory/recent.dart)、[SessionStart 脚本](../../assets/next/harness/hooks/session_start.py)。
+主要实现：[记忆服务](../../../lib/next/memory/service.dart)、[Actions](../../../lib/next/memory/capability.dart)、[最近事实](../../../lib/next/memory/recent.dart)、[SessionStart 脚本](../../../assets/next/harness/hooks/session_start.py)。
 
 ## 2. 决策
 
@@ -25,7 +25,7 @@
 
 ## 3. 实验与真实观察
 
-驱动：[x49_experiment.py](../../scripts/next/x49_experiment.py)，补测：[x49_supplement.py](../../scripts/next/x49_supplement.py)、[x49_restart.py](../../scripts/next/x49_restart.py)。只读汇总：[x49_analyze_evidence.py](../../scripts/next/x49_analyze_evidence.py)。主实验使用三个独立临时 profile，每项各三次；共 62 次真实模型请求。回环 relay 转发到已有 CPA，保留原模型、认证与请求协议，只保存脱敏后的模型输入和实际 usage；未保存认证头、配置、凭据或原始推理。完整原文与计算见 [summary.json](evidence/x49/summary.json)、[模型输入](evidence/x49/provider-inputs.json.gz)、[时间线](evidence/x49/timeline.json) 和 [实验日志](evidence/x49/experiment.log)。
+驱动：[x49_experiment.py](../../../scripts/next/x49_experiment.py)，补测：[x49_supplement.py](../../../scripts/next/x49_supplement.py)、[x49_restart.py](../../../scripts/next/x49_restart.py)。只读汇总：[x49_analyze_evidence.py](../../../scripts/next/x49_analyze_evidence.py)。主实验使用三个独立临时 profile，每项各三次；共 62 次真实模型请求。回环 relay 转发到已有 CPA，保留原模型、认证与请求协议，只保存脱敏后的模型输入和实际 usage；未保存认证头、配置、凭据或原始推理。完整原文与计算见 [summary.json](evidence/x49/summary.json)、[模型输入](evidence/x49/provider-inputs.json.gz)、[时间线](evidence/x49/timeline.json) 和 [实验日志](evidence/x49/experiment.log)。
 
 ### 六项主要实验
 

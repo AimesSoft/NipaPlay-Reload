@@ -1,6 +1,6 @@
 # X41：字幕成为 NipaPlay 的文件事实
 
-2026-10-13。实现、构建和实验均在 `next/x41-subtitles` worktree。没有 commit、push、新依赖、下载管理改动或 `lib/next/ui/` 改动。实验脚本：[x41_experiment.py](../../scripts/next/x41_experiment.py)。
+2026-10-13。实现、构建和实验均在 `next/x41-subtitles` worktree。没有 commit、push、新依赖、下载管理改动或 `lib/next/ui/` 改动。实验脚本：[x41_experiment.py](../../../scripts/next/x41_experiment.py)。
 
 ## 1. 完成了什么
 

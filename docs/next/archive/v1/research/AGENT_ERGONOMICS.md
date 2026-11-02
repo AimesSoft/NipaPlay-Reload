@@ -16,7 +16,7 @@
 3. 将来源定义改为“一组 Action 加数据输出契约”，允许来源自行提供适合平台的能力。
 4. 将完整能力目录与模型当前加载的工具集合分开管理，保留每个实际操作的 schema、Effect 和审批边界。
 
-这些建议对应 `docs/next/DESIGN.md:48` 的 §2.3、`docs/next/ARCHITECTURE_REVIEW.md:5` 的判断标准，以及 `docs/next/TEAM.md:40` 的工具体验要求。
+这些建议对应 `docs/next/DESIGN.md:48` 的 §2.3、`docs/next/ARCHITECTURE_REVIEW.md:5` 的判断标准，以及 `docs/next/archive/TEAM.md:40` 的工具体验要求。
 
 ### 1.1 工具数量的证据范围
 
@@ -171,7 +171,7 @@
 
 当前 `media.metadata.override` 在描述和执行中都要求 GUI origin。其目的是不让 Agent 冒充用户，但结果是用户让 Agent 修改标题时，工具也无法执行。
 
-证据：`lib/next/media/media_capability.dart:390`、`:536`。这与 `docs/next/TEAM.md:35` 的能力覆盖目标存在冲突。
+证据：`lib/next/media/media_capability.dart:390`、`:536`。这与 `docs/next/archive/TEAM.md:35` 的能力覆盖目标存在冲突。
 
 建议将“谁执行”和“修改是否具有持久覆盖语义”分开：
 

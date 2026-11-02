@@ -49,7 +49,7 @@ NIPAPLAY_PROFILE=x11test \
 | MoltenVK ICD | `AppDelegate` → `~/Library/Caches/vulkan/icd.d/MoltenVK_icd.json` | `<root>/cache/vulkan/icd.d/MoltenVK_icd.json` |
 | 直接文件导出、权限写入探测、任意下载目标、原生/第三方缓存、子进程写入 | 不全经 StorageService 或 path_provider；Metal 还会尝试系统用户缓存目录 | macOS 内核拒绝 profile 外的文件写入；直接子进程继承限制。无法改默认路径的原生缓存写入也被拒绝，未放行共享用户缓存目录 |
 
-主要实现入口：[lab_profile.dart](../../lib/utils/lab_profile.dart)、[SandboxMigration.swift](../../macos/Runner/SandboxMigration.swift)、[DesktopCredentialVault](../../lib/security/desktop_credential_vault.dart)、[torrent.rs](../../rust/src/api/torrent.rs)。
+主要实现入口：[lab_profile.dart](../../../lib/utils/lab_profile.dart)、[SandboxMigration.swift](../../../macos/Runner/SandboxMigration.swift)、[DesktopCredentialVault](../../../lib/security/desktop_credential_vault.dart)、[torrent.rs](../../../rust/src/api/torrent.rs)。
 
 ## 2. 决策
 

@@ -28,14 +28,14 @@ Next 的基本方向是 Agent 决策，宿主执行并保存事实，各设备�
 
 ### 共享数据不等于共享决策与生命周期
 
-[RESEARCH.md:21](/Users/sakiko/Desktop/NipaPlay-Reload/docs/next/RESEARCH.md:21) 明确“基础设施负责执行、续传与回执；Agent 负责决定”；[media/README.md:22](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/media/README.md:22) 明确“Next 的媒体识别判断属于 Agent”。更晚的 [player-core.md:17](/Users/sakiko/Desktop/NipaPlay-Reload/docs/next/design/player-core.md:17) 用户决定写明“两边隔离，只共用数据层”，并明确不借用 Classic 的播放器、界面和叠层。研究纲领里尚未拥有 Next 独立界面时的“两张脸”描述，不能用来推翻这项后续决定。
+[RESEARCH.md:21](../../../docs/next/archive/RESEARCH.md#L21) 明确“基础设施负责执行、续传与回执；Agent 负责决定”；[media/README.md:22](../../../lib/next/media/README.md#L22) 明确“Next 的媒体识别判断属于 Agent”。更晚的 [player-core.md:17](../../../docs/next/development/design/player-core.md#L17) 用户决定写明“两边隔离，只共用数据层”，并明确不借用 Classic 的播放器、界面和叠层。研究纲领里尚未拥有 Next 独立界面时的“两张脸”描述，不能用来推翻这项后续决定。
 
 当前有四条需要一起处理的代码路径：
 
-1. **界面只隐藏，没有隔离。** [next_ui_gate.dart:91](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/ui/shell/next_ui_gate.dart:91) 在 Next 下仍挂载 Classic；该文件的 `Offstage` / `TickerMode` 只控制显示与动画，不会阻止初始化、订阅或后台 Future。Classic 页的首帧回调仍会启动扫描。应让共享服务独立于界面存在，Next 不以隐藏 Classic 页面维持服务。
-2. **Next 默认允许 Classic 启动识别。** [next_core.dart:466](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/next_core.dart:466) 的判定是 `!nextOpen || automatic.startupScanEnabled`，而 [system_settings.dart:30](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/settings/system_settings.dart:30) 默认值为 true。随后 [scan_service.dart:240](/Users/sakiko/Desktop/NipaPlay-Reload/lib/services/scan_service.dart:240) 进入 Classic 智能刷新、哈希匹配与历史写入。这不是 Next 的纯文件索引。已有测试只覆盖把此开关设为 false，未证明默认 Next 隔离。
-3. **下载完成仍自动调用 Classic 匹配。** [download_library.dart:91](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/downloads/download_library.dart:91) 调用 `scanCompletedFiles`，后者使用 `ConcurrentVideoProcessor` 选择匹配并写 Classic 历史。该适配器没有 Next/Classic 识别模式隔离；共享下载执行器在文件完成及整项完成时调用它。Next 应登记完成文件、校验、索引并产生事实，由 Agent 或其已配置的自动化决定是否识别及绑定。
-4. **Classic 观察被隐式提升为 Next 身份。** [media_runtime.dart:32](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/media/media_runtime.dart:32) 在历史通知后同步，创建时也同步；[media_service.dart:528](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/media/media_service.dart:528) 在显式 bind 之前导入；[projection.dart:10](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/media/projection.dart:10) 在投递前后再次导入；下载 lookup 也会同步。只关闭启动开关或一个 listener 不足以隔离。进度同步、投影回读确认、旧库显式导入与新身份接受应分清，不能顺带创建或恢复 Next 作品归属。
+1. **界面只隐藏，没有隔离。** [next_ui_gate.dart:91](../../../lib/next/ui/shell/next_ui_gate.dart#L91) 在 Next 下仍挂载 Classic；该文件的 `Offstage` / `TickerMode` 只控制显示与动画，不会阻止初始化、订阅或后台 Future。Classic 页的首帧回调仍会启动扫描。应让共享服务独立于界面存在，Next 不以隐藏 Classic 页面维持服务。
+2. **Next 默认允许 Classic 启动识别。** [next_core.dart:466](../../../lib/next/next_core.dart#L466) 的判定是 `!nextOpen || automatic.startupScanEnabled`，而 [system_settings.dart:30](../../../lib/next/settings/system_settings.dart#L30) 默认值为 true。随后 [scan_service.dart:240](../../../lib/services/scan_service.dart#L240) 进入 Classic 智能刷新、哈希匹配与历史写入。这不是 Next 的纯文件索引。已有测试只覆盖把此开关设为 false，未证明默认 Next 隔离。
+3. **下载完成仍自动调用 Classic 匹配。** [download_library.dart:91](../../../lib/next/downloads/download_library.dart#L91) 调用 `scanCompletedFiles`，后者使用 `ConcurrentVideoProcessor` 选择匹配并写 Classic 历史。该适配器没有 Next/Classic 识别模式隔离；共享下载执行器在文件完成及整项完成时调用它。Next 应登记完成文件、校验、索引并产生事实，由 Agent 或其已配置的自动化决定是否识别及绑定。
+4. **Classic 观察被隐式提升为 Next 身份。** [media_runtime.dart:32](../../../lib/next/media/media_runtime.dart#L32) 在历史通知后同步，创建时也同步；[media_service.dart:528](../../../lib/next/media/media_service.dart#L528) 在显式 bind 之前导入；[projection.dart:10](../../../lib/next/media/projection.dart#L10) 在投递前后再次导入；下载 lookup 也会同步。只关闭启动开关或一个 listener 不足以隔离。进度同步、投影回读确认、旧库显式导入与新身份接受应分清，不能顺带创建或恢复 Next 作品归属。
 
 以上是当前调用链证据，不等于已确定 BanG 事故究竟由哪个入口触发；空 invocation/job 字段仍不足以还原该次调用。已有 `classic_match` 数据应保留并提供迁移/显式导入路径，不能用删除用户现有库来实现隔离。
 
@@ -45,11 +45,11 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 ### SQL 是正式通用能力，跨设备应直接提供
 
-`e39ab12d7` 明确写过 “Not offered to mesh peers”，[runtime.dart:29](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/runtime.dart:29) 当前也未允许 `db.*`。这是历史实现决策；用户现在的要求是保留 SQL，并让 Mesh 支持直接使用目标设备数据库，不能以旧限制作为拒绝理由。通过 `program.run` 绕到本地 CLI 证明该任务确有需求，也使“禁用远程 DB”没有形成一致的使用边界。
+`e39ab12d7` 明确写过 “Not offered to mesh peers”，[runtime.dart:29](../../../lib/next/mesh/runtime.dart#L29) 当前也未允许 `db.*`。这是历史实现决策；用户现在的要求是保留 SQL，并让 Mesh 支持直接使用目标设备数据库，不能以旧限制作为拒绝理由。通过 `program.run` 绕到本地 CLI 证明该任务确有需求，也使“禁用远程 DB”没有形成一致的使用边界。
 
 建议为 `db.describe/query/write/undo` 注册直接远程契约，使用目标设备同一 `DbService`、同一写入队列、现有预演/冲突核对/事务/审计/undo 和刷新机制。远程 SQL 作用于目标设备自己的 next.db，使用目标原始实体 ID；它不是对接收端合并视图或多个设备执行一个分布式事务。能力发现应准确显示这四项可路由，用户无需启用任意程序执行来完成 SQL 操作，也无需为同一已授权工作重复人工确认。
 
-不能只加入白名单就声称可靠远程写入已完成。当前 [db/service.dart:583](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/db/service.dart:583) 消耗内存 preview 后提交；响应丢失时重试该 preview 只会得到“已使用、过期或重启”，不能区分已提交与未提交。远程契约应补持久的操作键与可查询回执，将 preview 与目标/调用来源关联，并覆盖提交成功但响应丢失、目标重启、重复提交、过期预演及大响应。查询与提交结果沿用分块能力，断开不能表示撤销。这里是要补齐的行为，不是当前已经具备的保证。
+不能只加入白名单就声称可靠远程写入已完成。当前 [db/service.dart:583](../../../lib/next/db/service.dart#L583) 消耗内存 preview 后提交；响应丢失时重试该 preview 只会得到“已使用、过期或重启”，不能区分已提交与未提交。远程契约应补持久的操作键与可查询回执，将 preview 与目标/调用来源关联，并覆盖提交成功但响应丢失、目标重启、重复提交、过期预演及大响应。查询与提交结果沿用分块能力，断开不能表示撤销。这里是要补齐的行为，不是当前已经具备的保证。
 
 ### bind_batch 不是通用 work merge，SQL 不因领域原语增加而退出
 
@@ -65,7 +65,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P1，执行复现。**
 
-[runtime.dart:1650](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/runtime.dart:1650) 为所有 RPC 设置一小时 deadline。[runtime.dart:1948](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/runtime.dart:1948) 每接受一次请求保存 invocation ID 和 nonce 两项，达到 20000 项就拒绝新请求，并在分派前追加日志、执行 flush。[library.dart:917](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library.dart:917) 每读取最多 1 MiB 视频就发一次这样的 RPC。
+[runtime.dart:1650](../../../lib/next/mesh/runtime.dart#L1650) 为所有 RPC 设置一小时 deadline。[runtime.dart:1948](../../../lib/next/mesh/runtime.dart#L1948) 每接受一次请求保存 invocation ID 和 nonce 两项，达到 20000 项就拒绝新请求，并在分派前追加日志、执行 flush。[library.dart:917](../../../lib/next/mesh/library.dart#L917) 每读取最多 1 MiB 视频就发一次这样的 RPC。
 
 因此，所有调用设备合计每个未过期窗口最多接受 10000 次调用，目录、presence、continuation 和视频共享额度。仅计算满块视频，约 9.77 GiB 或一小时平均约 23.3 Mbit/s 就用尽；实际还需扣除目录等开销。之后连小型可达性探测也被拒绝，错误表现为 `Invalid or replayed Mesh request`，并非设备真的离线。
 
@@ -77,11 +77,11 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P1，执行复现。**
 
-[library_projection.dart:593](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library_projection.dart:593) 在作品合并时只加入 `file:<sample>`，丢弃文件时间范围；随后 [library_projection.dart:668](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library_projection.dart:668) 按季集号合并剧集，没有阻止不同明确身份被同一编号连在一起。
+[library_projection.dart:593](../../../lib/next/mesh/library_projection.dart#L593) 在作品合并时只加入 `file:<sample>`，丢弃文件时间范围；随后 [library_projection.dart:668](../../../lib/next/mesh/library_projection.dart#L668) 按季集号合并剧集，没有阻止不同明确身份被同一编号连在一起。
 
 复现输入：两台设备保存相同合辑文件。A 将 `[0,60000)` 绑定到 TMDB TV 作品 100 的 S1E1；B 将 `[60000,120000)` 绑定到作品 200 的 S1E1，两集有不同 provider episode ID 与各自 scope。范围输入符合现有绑定契约，跨设备也没有禁止此种归属。
 
-实际 `LibraryWorker.compose` 输出：两部作品变成一部，两集变成一集，两个源设备实体指向同一 mergedEpisodeId。再记录这条合并集的 0.5 进度，两个源引用都得到 0.5，见 [library_projection.dart:255](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library_projection.dart:255) 和 [library_projection.dart:737](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library_projection.dart:737)。已经超出显示去重，可能选错片段、污染续播和混淆管理目标。
+实际 `LibraryWorker.compose` 输出：两部作品变成一部，两集变成一集，两个源设备实体指向同一 mergedEpisodeId。再记录这条合并集的 0.5 进度，两个源引用都得到 0.5，见 [library_projection.dart:255](../../../lib/next/mesh/library_projection.dart#L255) 和 [library_projection.dart:737](../../../lib/next/mesh/library_projection.dart#L737)。已经超出显示去重，可能选错片段、污染续播和混淆管理目标。
 
 建议把文件摘要当作内容线索，连同时间范围、发行上下文和明确身份检查后才能建立等价关系；季集号只能在已确认同一作品与发行的范围内比较。不同明确身份存在冲突时保留分离并报告冲突，禁止传递合并跨越它。这个反例也说明不能用“同 fileId 一律折叠”修复 BanG 的重复。
 
@@ -89,7 +89,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P1，执行复现。**
 
-[harness_repository.dart:264](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/harness_repository.dart:264) 调用 `git merge --ff-only`，未指定 `--no-overwrite-ignore`。
+[harness_repository.dart:264](../../../lib/next/harness_repository.dart#L264) 调用 `git merge --ff-only`，未指定 `--no-overwrite-ignore`。
 
 在临时仓库中，让用户的 `tools/private.py` 被 `.gitignore` 忽略，随后官方种子增加同路径 tracked 文件。实际更新返回 `updated` 并声称保留个人文件，内容却被官方版本替换；原文件没有 Git 历史副本。普通 untracked 文件保护不能覆盖这个场景。
 
@@ -99,11 +99,11 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P1，执行复现。**
 
-[SandboxMigration.swift:496](/Users/sakiko/Desktop/NipaPlay-Reload/macos/Runner/SandboxMigration.swift:496) 用 `containsData` 决定是否接管整个数据组，[SandboxMigration.swift:528](/Users/sakiko/Desktop/NipaPlay-Reload/macos/Runner/SandboxMigration.swift:528) 以整个 `Documents/nipaplay` 发布。`9a18a82c4` 处理了完全空目录，但任意缓存文件仍可使候选有效。
+[SandboxMigration.swift:496](../../../macos/Runner/SandboxMigration.swift#L496) 用 `containsData` 决定是否接管整个数据组，[SandboxMigration.swift:528](../../../macos/Runner/SandboxMigration.swift#L528) 以整个 `Documents/nipaplay` 发布。`9a18a82c4` 处理了完全空目录，但任意缓存文件仍可使候选有效。
 
 使用真实 Swift 迁移实现的临时夹具：沙盒只有 `cache/image`，普通目录有有效 `next/next.db`。运行后普通目录被归档，活跃路径下的 Next 数据库消失。原字节仍在归档，不是不可恢复的物理删除，但用户会再次看到数据消失。
 
-第二个已复现子场景为 **P2**：[SandboxMigration.swift:523](/Users/sakiko/Desktop/NipaPlay-Reload/macos/Runner/SandboxMigration.swift:523) 只检查当前 SQLite family 是否存在；0 字节 current DB 会阻止旧布局中的有效 DB 被选中。另有非空配置时，最终发布的历史库仍为 0 字节。
+第二个已复现子场景为 **P2**：[SandboxMigration.swift:523](../../../macos/Runner/SandboxMigration.swift#L523) 只检查当前 SQLite family 是否存在；0 字节 current DB 会阻止旧布局中的有效 DB 被选中。另有非空配置时，最终发布的历史库仍为 0 字节。
 
 建议按数据库、配置、身份及凭据引用、持久弹幕、个人 Harness 等持久域检查有效性和代际一致性。缓存不能决定数据库来源；SQLite DB/WAL 必须作为同一代整体处理。保留现有归档、校验及中断恢复机制。
 
@@ -111,7 +111,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P1，高置信静态风险，未做实际播放器死锁复现。**
 
-[erika_media_io.rb:121](/Users/sakiko/Desktop/NipaPlay-Reload/macos/patches/erika_media_io.rb:121) 为五个 surface 入口加入等待门控，但当前依赖生成的 Swift 中，屏幕变更 observer 仍在主线程直接调用 `reportDisplayHeadroom()`，后者取得同一 `nativeCallLock`。
+[erika_media_io.rb:121](../../../macos/patches/erika_media_io.rb#L121) 为五个 surface 入口加入等待门控，但当前依赖生成的 Swift 中，屏幕变更 observer 仍在主线程直接调用 `reportDisplayHeadroom()`，后者取得同一 `nativeCallLock`。
 
 触发条件：播放器已有 NSView、相关 headroom native 符号可用，open/seek worker 持锁等待 Dart loopback 数据；此时跨屏移动或改变显示器参数，使主线程再次等该锁。该路径可重建原来的等待环。已有约 80 秒播放及 seek 成功不覆盖这个通知入口。
 
@@ -123,7 +123,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P2，执行复现，属于 `37c756a27` 新增路径。**
 
-[library.dart:912](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library.dart:912) 把 Socket 读方向 EOF 设置为 `disconnected`。客户端完整发送 GET 后只关闭发送方向、继续接收响应时，这个 EOF 不代表其放弃响应。
+[library.dart:912](../../../lib/next/mesh/library.dart#L912) 把 Socket 读方向 EOF 设置为 `disconnected`。客户端完整发送 GET 后只关闭发送方向、继续接收响应时，这个 EOF 不代表其放弃响应。
 
 从基线原样提取 `_serve`，仅用延迟数据替代远端 `_bytes`，以真实本机 TCP 对照：普通客户端得到 2 MiB 正文；发送端 half-close 得到 HTTP 200 但正文 0 字节，声明的 Content-Length 不变，`lastError` 仍为 null。应按写失败、连接重置或明确取消处理响应消费者退出，保留在途读取的有界期限。
 
@@ -131,7 +131,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P2，执行复现。**
 
-[runtime.dart:303](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/runtime.dart:303) 的 stop 先取消 watcher，再等操作队列；[runtime.dart:415](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/runtime.dart:415) 的启动在 await 返回后无 generation 检查便创建 watcher。
+[runtime.dart:303](../../../lib/next/mesh/runtime.dart#L303) 的 stop 先取消 watcher，再等操作队列；[runtime.dart:415](../../../lib/next/mesh/runtime.dart#L415) 的启动在 await 返回后无 generation 检查便创建 watcher。
 
 受控顺序为 start → token 读取阻塞 → stop → token 返回 null。两者完成后实际为 `status=disabled, loginWatchActive=true, coordinator=null`。之后的 tick 可改写禁用状态，或使用已清空的 coordinator。完整生命周期需要串行化或在每个异步边界检查 generation。
 
@@ -139,7 +139,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P2，执行复现。**
 
-[library_projection.dart:36](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library_projection.dart:36) 按对象与语言选择较新的一整条 source。设备 A 有 actors，设备 B 的同对象较新但只有 title/imageUrl，合并 sources 后演员消失。数据库原始快照未被删除。
+[library_projection.dart:36](../../../lib/next/mesh/library_projection.dart#L36) 按对象与语言选择较新的一整条 source。设备 A 有 actors，设备 B 的同对象较新但只有 title/imageUrl，合并 sources 后演员消失。数据库原始快照未被删除。
 
 `b8b855ab3` 的单机逐字段补齐没有沿用到跨设备投影。应共用带来源时间和字段 provenance 的合并规则，而非整条 latest-wins。
 
@@ -147,7 +147,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P2，执行复现。**
 
-[identity_store.dart:1115](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/media/identity_store.dart:1115) 跳过空列表和空 Map。旧快照 actors 非空，新快照 actors=[]，实际 `sources.fields.actors=[]`，而综合 `fields.actors` 仍为旧演员。
+[identity_store.dart:1115](../../../lib/next/media/identity_store.dart#L1115) 跳过空列表和空 Map。旧快照 actors 非空，新快照 actors=[]，实际 `sources.fields.actors=[]`，而综合 `fields.actors` 仍为旧演员。
 
 应区分未提供、明确空值、明确删除和抓取失败。已证实的是 `[]` 两视图矛盾；没有假定当前协议中所有 null 都代表来源删除。
 
@@ -155,7 +155,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P2，执行复现。**
 
-[automatic.dart:141](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/danmaku/automatic.dart:141) 等待 hash 后，只重新检查弹幕绑定，没有重新读取媒体身份与 FileEpisode 关系。
+[automatic.dart:141](../../../lib/next/danmaku/automatic.dart#L141) 等待 hash 后，只重新检查弹幕绑定，没有重新读取媒体身份与 FileEpisode 关系。
 
 复现：文件原先无准确身份，hash 挂起；期间确认 Dandanplay episode 9999；hash 返回候选 7101。实际仍自动绑定并抓取 7101，之后可能持续优先复用这条错误弹幕绑定。自动提交应核对媒体身份修订和关联集合，并让后来明确确认的身份胜出。
 
@@ -163,7 +163,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P2，执行复现。**
 
-[service.dart:523](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/danmaku/service.dart:523) 的远端分支逐条安装，绕过本机 [service.dart:630](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/danmaku/service.dart:630) 的同视频选择。[library.dart:601](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library.dart:601) 把 File 和 Episode 的 accepted 绑定都打包。
+[service.dart:523](../../../lib/next/danmaku/service.dart#L523) 的远端分支逐条安装，绕过本机 [service.dart:630](../../../lib/next/danmaku/service.dart#L630) 的同视频选择。[library.dart:601](../../../lib/next/mesh/library.dart#L601) 把 File 和 Episode 的 accepted 绑定都打包。
 
 相同平台/视频的 File 与 Episode 两份持久池，本机挂 1 条，远端挂 2 条。旧池、不同偏移或控制状态可能重新参与；显示层可能折叠部分内容，不能据此保证绑定语义一致。应共用一个带来源优先级、时间范围和控制状态的播放挂载计划。
 
@@ -171,13 +171,13 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 **P2，确定性调度复现。**
 
-[harness_repository.dart:259](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/harness_repository.dart:259) 校验 HEAD 和 branch 后另起进程执行 merge。临时 Git wrapper 在此边界切到 other 分支，结果原 main 未更新、other 被 fast-forward，回执仍为 updated。
+[harness_repository.dart:259](../../../lib/next/harness_repository.dart#L259) 校验 HEAD 和 branch 后另起进程执行 merge。临时 Git wrapper 在此边界切到 other 分支，结果原 main 未更新、other 被 fast-forward，回执仍为 updated。
 
 这不是自然并发概率测试。它证明末尾一次检查不是工作区事务。需要明确更新期间的工作区所有权、目标 ref 和提交，并在回执中记录实际更新对象。
 
 ## BanG 历史事故的独立核对
 
-用户提供的 Agent 记录及 [个人记忆](/Users/sakiko/nipaplay-harness/memory/mesh-remote-library.md) 是事故线索，不能将其中全部推论视为已经证实的根因。
+用户提供的 Agent 记录及 个人记忆（`~/nipaplay-harness/memory/mesh-remote-library.md`） 是事故线索，不能将其中全部推论视为已经证实的根因。
 
 2026 年 10 月 27 日约 18:21（台北时间），通过现有 Nipa CLI 对工作站做只读核验：
 
@@ -202,7 +202,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 另一个测试证明：Classic work 有 2 个文件、目标 work 只有其中 1 个时，`[work adopt, episode adopt]` 在上层采用处拒绝且完全回滚；独立提交那个精确匹配 episode 可以成功。对 BanG 的两边同 13 文件、同范围情况，完整预览后按 work → release → episode 组织采用有对应实现，但不应声称它自动清除所有旧实体。
 
-身份协调计划应列出保留实体、迁移绑定、文件范围、冲突、需保留的弹幕/字幕/手工覆盖/历史别名及将退休的空壳，原子提交并留下可审计的恢复依据。Agent 可以用 SQL 或已有原语表达计划，再按真实使用证据决定是否沉淀专用工具。直接 SQL 有预演与 undo；[db/table_docs.dart:250](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/db/table_docs.dart:250) 也明确它不写 Classic 投影 outbox，不自动生成完整领域事件或递增所有修订。这些是需要公开并完善的语义，不能据此撤掉 SQL 或要求所有整理只能使用专用原语。
+身份协调计划应列出保留实体、迁移绑定、文件范围、冲突、需保留的弹幕/字幕/手工覆盖/历史别名及将退休的空壳，原子提交并留下可审计的恢复依据。Agent 可以用 SQL 或已有原语表达计划，再按真实使用证据决定是否沉淀专用工具。直接 SQL 有预演与 undo；[db/table_docs.dart:250](../../../lib/next/db/table_docs.dart#L250) 也明确它不写 Classic 投影 outbox，不自动生成完整领域事件或递增所有修订。这些是需要公开并完善的语义，不能据此撤掉 SQL 或要求所有整理只能使用专用原语。
 
 ### 个人记忆中的错误推论会影响后续 Agent
 
@@ -218,13 +218,13 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 
 ## Mesh 仍需收紧的设计边界
 
-**目录提交不应依赖全部图片成功。** [library.dart:210](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library.dart:210) 在发布新目录前等待所有 artwork/still 缓存。单张图片源文件缺失，就能阻止新目录发布；首次同步没有旧目录时，视频即使可读也没有可用的新目录。路径静态确认，未另做集成注入。应原子发布已验证的结构目录，图片独立加载并报告局部失败。
+**目录提交不应依赖全部图片成功。** [library.dart:210](../../../lib/next/mesh/library.dart#L210) 在发布新目录前等待所有 artwork/still 缓存。单张图片源文件缺失，就能阻止新目录发布；首次同步没有旧目录时，视频即使可读也没有可用的新目录。路径静态确认，未另做集成注入。应原子发布已验证的结构目录，图片独立加载并报告局部失败。
 
-**内容目录、富资料与进度需要分开版本。** [library_projection.dart:160](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library_projection.dart:160) 把 progress revision 放进目录版本，每个新版本重新包含全部 records 和 watch observations；接收端每五秒轮询。持续播放会反复搬运富元数据，并额外消耗 F01 的 RPC 容量。可按内容 revision 同步目录，按对象 revision 获取富资料，按独立游标传播进度观察。
+**内容目录、富资料与进度需要分开版本。** [library_projection.dart:160](../../../lib/next/mesh/library_projection.dart#L160) 把 progress revision 放进目录版本，每个新版本重新包含全部 records 和 watch observations；接收端每五秒轮询。持续播放会反复搬运富元数据，并额外消耗 F01 的 RPC 容量。可按内容 revision 同步目录，按对象 revision 获取富资料，按独立游标传播进度观察。
 
 **固定版本需要活动传输租约和字节预算。** 当前只保留最近 4 份 publication，无活动传输 pin、总字节预算或 TTL。慢接收方的版本可被其他设备的新请求淘汰。现实现会拒绝并保留旧目录，不会静默混合版本；风险是反复失败和无法收敛。
 
-**目录接收需要全程上限。** [library_transfer.dart:37](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/mesh/library_transfer.dart:37) 连续保存 base64 页面，到收完后才检查总长度；没有总页数、总字节数和整个同步 deadline。多个表示还会同时占内存。按设备串行刷新，以及 close 先等待同步，使一个慢来源影响其他来源和关闭。应提前验证声明长度、逐页累计计费、支持取消和整轮时限。
+**目录接收需要全程上限。** [library_transfer.dart:37](../../../lib/next/mesh/library_transfer.dart#L37) 连续保存 base64 页面，到收完后才检查总长度；没有总页数、总字节数和整个同步 deadline。多个表示还会同时占内存。按设备串行刷新，以及 close 先等待同步，使一个慢来源影响其他来源和关闭。应提前验证声明长度、逐页累计计费、支持取消和整轮时限。
 
 **Continuation 是有界滞留，仍需生命周期清理。** `response_chunks.dart` 有 64 MiB、8 条总预算、设备隔离及 5 分钟有效期，读取检查长度和 SHA256。过期数据只在下一次 describe 或 close 时清除，stop 不清；不能称无限泄漏，但应主动回收。Continuation 只获取已完成结果，不重新执行原操作，这个设计应保留。
 
@@ -244,7 +244,7 @@ Next 正常识别流程已有对应原语：文件枚举/探测/哈希 → `medi
 4. **统一生命周期与诊断。** start/stop/close 用 generation 和单一所有权管理；操作状态区分已发送、已执行、结果尚未取回，断开不冒充撤销。公开状态包含实际失败阶段、请求/结果字节数、队列和预算，不只是一句 outcome_unknown。
 5. **把记忆更新和数据恢复纳入研究方法。** Agent 经验必须能被新证据取代；迁移、备份与恢复覆盖整个 Next 持久数据组。现有 Classic backup/sync 不包含完整 next.db 与弹幕正文，不能把“已有备份能力”视为 Next 完整恢复能力。
 
-界面当前生命周期也需在产品契约中保持清楚：[next_core.dart:781](/Users/sakiko/Desktop/NipaPlay-Reload/lib/next/next_core.dart:781) 关闭 Next 会暂停其服务并停止 Mesh。这是当前明确行为，不是本轮认定的 bug；若要“打开 Classic 仍持续作为媒体来源”，需明确改变宿主服务寿命，不能仅靠发现层补重连。
+界面当前生命周期也需在产品契约中保持清楚：[next_core.dart:781](../../../lib/next/next_core.dart#L781) 关闭 Next 会暂停其服务并停止 Mesh。这是当前明确行为，不是本轮认定的 bug；若要“打开 Classic 仍持续作为媒体来源”，需明确改变宿主服务寿命，不能仅靠发现层补重连。
 
 ## 九个范围的审核结果
 

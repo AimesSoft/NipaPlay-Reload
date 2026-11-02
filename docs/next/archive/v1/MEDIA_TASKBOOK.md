@@ -1,6 +1,6 @@
 # 媒体智能任务书：多来源身份、Agent 刮削与多平台弹幕
 
-> 工作方式见 `docs/next/TEAM.md`。调研输入见 `research/METADATA_IDENTIFICATION.md`（R4）与 `research/DANMAKU_AGGREGATION.md`（R5）。
+> 工作方式见 `docs/next/archive/TEAM.md`。调研输入见 `research/METADATA_IDENTIFICATION.md`（R4）与 `research/DANMAKU_AGGREGATION.md`（R5）。
 > 2026-10-11：识别与来源契约按 DESIGN §2.3 和架构复审定稿更新；历史任务书的固定判断流程已被能力原语取代。
 
 ## 目标

@@ -19,10 +19,10 @@
   有未结束的获取任务时延后；导入唯一副本不参与预算。被回收池的绑定指针清空，Action 刷新播放。
 - 更新种子弹幕一条的存储位置及生命周期事实，以及弹幕 README。
 
-实现入口：[files.dart](../../lib/next/danmaku/files.dart)、
-[store.dart](../../lib/next/danmaku/store.dart)、
-[next_database.dart](../../lib/next/next_database.dart)。
-实验脚本：[x42_experiment.py](../../scripts/next/x42_experiment.py)。
+实现入口：[files.dart](../../../lib/next/danmaku/files.dart)、
+[store.dart](../../../lib/next/danmaku/store.dart)、
+[next_database.dart](../../../lib/next/next_database.dart)。
+实验脚本：[x42_experiment.py](../../../scripts/next/x42_experiment.py)。
 
 ## 2. 决策
 
@@ -56,7 +56,7 @@ VACUUM 的持久标记在成功后清除，整理失败/中断下次重试；因
 `next.db` 或 `next/artwork/`，也不包含新的 `next/danmaku/`。Mesh 调用不是文件复制/数据同步。
 本轮没有扩展 Classic 备份格式或同步协议；只拷数据库已不能保留交入弹幕。离线备份 Next 应在
 退出应用后同时保留 `next.db` 与 `next/danmaku/`（以及其他 Next 资产目录）。这一事实已写入
-[弹幕 README](../../lib/next/danmaku/README.md)。
+[弹幕 README](../../../lib/next/danmaku/README.md)。
 
 ## 3. 实验与验证
 
