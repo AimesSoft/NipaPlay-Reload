@@ -72,3 +72,7 @@ docs/error.txt
 android/.kotlin/errors
 *.log
 /.codex_work
+
+# Python bytecode
+__pycache__/
+*.pyc
