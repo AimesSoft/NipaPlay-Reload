@@ -9,6 +9,8 @@ import 'package:nipaplay/settings/adaptive_settings_scope.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
+import 'package:nipaplay/player_abstraction/erika_player_adapter.dart'
+    show ErikaPlayerAdapter;
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:flutter/foundation.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dropdown.dart';
@@ -413,43 +415,45 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                   height: 1),
             ],
             if (visibleKernelType == PlayerKernelType.erika) ...[
-              Consumer<VideoPlayerState>(
-                builder: (context, videoState, child) {
-                  final currentMode = videoState.erikaUpscalerMode;
-                  final items = PlayerUpscalerMode.values
-                      .map(
-                        (mode) => DropdownMenuItemData(
-                          title: _getErikaUpscalerTitle(mode),
-                          value: mode,
-                          isSelected: mode == currentMode,
-                          description: _getErikaUpscalerDescription(mode),
-                        ),
-                      )
-                      .toList();
-                  return AdaptiveSettingsTile.dropdown(
-                    title: 'Erika 超分辨率',
-                    subtitle: '使用 Erika ART-CNN 对视频帧做实时超分',
-                    icon: Ionicons.sparkles_outline,
-                    items: items,
-                    onChanged: (dynamic value) async {
-                      if (value is! PlayerUpscalerMode) return;
-                      await videoState.setErikaUpscalerMode(value);
-                      if (!context.mounted) return;
-                      final option = _getErikaUpscalerTitle(value);
-                      BlurSnackBar.show(
-                        context,
-                        value == PlayerUpscalerMode.off
-                            ? '已关闭 Erika 超分辨率'
-                            : 'Erika 超分辨率已切换为$option',
-                      );
-                    },
-                    dropdownKey: _erikaUpscalerDropdownKey,
-                  );
-                },
-              ),
-              Divider(
-                  color: colorScheme.onSurface.withValues(alpha: 0.12),
-                  height: 1),
+              if (ErikaPlayerAdapter.supportsNeuralUpscaler) ...[
+                Consumer<VideoPlayerState>(
+                  builder: (context, videoState, child) {
+                    final currentMode = videoState.erikaUpscalerMode;
+                    final items = PlayerUpscalerMode.values
+                        .map(
+                          (mode) => DropdownMenuItemData(
+                            title: _getErikaUpscalerTitle(mode),
+                            value: mode,
+                            isSelected: mode == currentMode,
+                            description: _getErikaUpscalerDescription(mode),
+                          ),
+                        )
+                        .toList();
+                    return AdaptiveSettingsTile.dropdown(
+                      title: 'Erika 超分辨率',
+                      subtitle: '使用 Erika ART-CNN 对视频帧做实时超分',
+                      icon: Ionicons.sparkles_outline,
+                      items: items,
+                      onChanged: (dynamic value) async {
+                        if (value is! PlayerUpscalerMode) return;
+                        await videoState.setErikaUpscalerMode(value);
+                        if (!context.mounted) return;
+                        final option = _getErikaUpscalerTitle(value);
+                        BlurSnackBar.show(
+                          context,
+                          value == PlayerUpscalerMode.off
+                              ? '已关闭 Erika 超分辨率'
+                              : 'Erika 超分辨率已切换为$option',
+                        );
+                      },
+                      dropdownKey: _erikaUpscalerDropdownKey,
+                    );
+                  },
+                ),
+                Divider(
+                    color: colorScheme.onSurface.withValues(alpha: 0.12),
+                    height: 1),
+              ],
               if (!kIsWeb && Platform.isAndroid) ...[
                 AdaptiveSettingsTile.dropdown(
                   title: 'Erika Android 输出',

@@ -11,6 +11,7 @@ import 'package:nipaplay/next/settings/application_settings.dart';
 import 'package:nipaplay/next/settings/capability.dart';
 import 'package:nipaplay/next/settings/denylist.dart';
 import 'package:nipaplay/next/settings/registry.dart';
+import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/player_abstraction/mdk_player_adapter.dart';
@@ -752,6 +753,8 @@ void main() {
 
   test('settings for another kernel stay listed with applicability facts',
       () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     final previousKernel = ApplicationSettings.currentKernel;
     ApplicationSettings.currentKernel = () => PlayerKernelType.mediaKit.name;
     addTearDown(() => ApplicationSettings.currentKernel = previousKernel);
@@ -781,5 +784,27 @@ void main() {
       'value': 'erikaArtCnnC4F32',
     });
     expect(saved['value'], 'erikaArtCnnC4F32');
+  });
+
+  test('Erika upscaling is not offered on Android', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final previousKernel = ApplicationSettings.currentKernel;
+    ApplicationSettings.currentKernel = () => PlayerKernelType.erika.name;
+    addTearDown(() => ApplicationSettings.currentKernel = previousKernel);
+
+    final described = await call('settings.describe', {
+      'keys': ['player.erikaUpscalerMode'],
+      'fields': ['key', 'appliesTo', 'appliesNow', 'reason'],
+    });
+    final row = (described['settings'] as List).single as Map;
+    expect(row['appliesNow'], false);
+    expect(row['appliesTo'], {
+      'platforms': ['desktop', 'ios']
+    });
+    expect(row['reason'], contains('超分辨率'));
+    expect(ApplicationSettings.locallyVisible('player.erikaUpscalerMode'),
+        isFalse);
+    expect(ErikaPlayerAdapter.supportsNeuralUpscaler, isFalse);
   });
 }

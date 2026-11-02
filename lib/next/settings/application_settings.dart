@@ -9,6 +9,8 @@ import 'package:nipaplay/danmaku_next/next2_platform_support.dart';
 import 'package:nipaplay/l10n/app_locale_utils.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
+import 'package:nipaplay/player_abstraction/erika_player_adapter.dart'
+    show ErikaPlayerAdapter;
 import 'package:nipaplay/player_abstraction/hwdec_type.dart';
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
@@ -183,7 +185,13 @@ abstract final class ApplicationSettings {
     }.contains(key)) {
       return kernels(const ['mediaKit']);
     }
-    if (key == 'player.erikaUpscalerMode') return kernels(const ['erika']);
+    if (key == 'player.erikaUpscalerMode') {
+      if (!ErikaPlayerAdapter.supportsNeuralUpscaler) {
+        return platforms(const ['desktop', 'ios'], false,
+            '此设备上的 Erika 暂不提供超分辨率。');
+      }
+      return kernels(const ['erika']);
+    }
     if (key == 'player.useHardwareDecoder') {
       return kernels(const ['mdk', 'mediaKit']);
     }
@@ -412,7 +420,8 @@ abstract final class ApplicationSettings {
       return kernel == PlayerKernelType.mediaKit;
     }
     if (key == 'player.erikaUpscalerMode') {
-      return kernel == PlayerKernelType.erika;
+      return kernel == PlayerKernelType.erika &&
+          ErikaPlayerAdapter.supportsNeuralUpscaler;
     }
     if (key == 'player.useHardwareDecoder') {
       return kernel == PlayerKernelType.mdk ||

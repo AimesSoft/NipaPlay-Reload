@@ -1470,9 +1470,20 @@ class ErikaPlayerAdapter
     }
   }
 
-  bool get supportsUpscaler => _isSupported;
+  /// Where Erika's neural upscaler is offered. On Android and OpenHarmony it
+  /// runs as portable scalar wgpu kernels, far too slow for phone GPUs in
+  /// real time (liberika#193), so it is not offered there until they are.
+  static bool get supportsNeuralUpscaler =>
+      _isSupported &&
+      defaultTargetPlatform != TargetPlatform.android &&
+      !_isHarmonyOS;
+
+  bool get supportsUpscaler => supportsNeuralUpscaler;
 
   Future<void> setUpscaler(PlayerUpscalerMode mode) async {
+    // Where it is not offered the status stays as it is, so a read-back
+    // says the request did not take.
+    if (!supportsNeuralUpscaler) return;
     _lastUpscalerStatus = PlayerUpscalerStatus(
       requestedMode: mode,
       activeBackend: mode == PlayerUpscalerMode.off
@@ -1483,7 +1494,6 @@ class ErikaPlayerAdapter
       lastEncodeDuration: _lastUpscalerStatus.lastEncodeDuration,
       lastGpuDuration: _lastUpscalerStatus.lastGpuDuration,
     );
-    if (!_isSupported) return;
     try {
       await _player.setUpscaler(_toNativeUpscalerMode(mode));
       _lastUpscalerStatus = await getUpscalerStatus();
