@@ -1,54 +1,58 @@
 # 已知问题
 
-Next 是开发者预览，问题和验证范围会随版本变化。本页跟随 `next` 开发分支更新；每条注明从哪个版本起存在、在哪个版本修复。反馈时请写明实际版本和构建号（「设置」→「关于」）。
+本页跟随 `next` 分支更新，每条注明出现的版本。反馈时写明版本和构建号（「设置」→「关于」）。
 
 ## 当前限制
 
 ### 播放器
 
-- **快捷键固定**（Alpha 2）：Next 播放器使用固定快捷键，还不读取「设置」→「快捷键」。
-- **跳过时间**（Alpha 2）：Classic 的「跳过时间」还没有接入 Next 播放器。
-- **字体库与弹幕匹配入口**（Alpha 2）：字体库的导入界面、播放器内手动匹配弹幕的入口还没有完成。弹幕可以在作品详情的剧集菜单「弹幕…」里搜索和添加。
-- **字幕样式**（Alpha 2）：Erika 不支持调整字幕高度；MDK 只应用字幕颜色与粗细。菜单里只显示当前内核能改的项。
+| 项目 | 版本 | 说明 |
+|---|---|---|
+| 快捷键 | Alpha 2 | Next 播放器使用固定快捷键，不读取「设置」→「快捷键」 |
+| 跳过时间 | Alpha 2 | Classic 的「跳过时间」未接入 Next 播放器 |
+| 字体库导入、播放器内匹配弹幕 | Alpha 2 | 界面未完成；弹幕可在剧集菜单「弹幕…」中搜索和添加 |
+| 字幕样式 | Alpha 2 | Erika 不支持调整字幕高度；MDK 只应用字幕颜色与粗细 |
 
 ### 数据
 
-- **没有完整的产品内备份恢复**（Alpha 1 起）：试用和升级前按[数据与恢复](../advanced/data-and-recovery.md)自行备份，不要指望回退应用就能恢复全部数据。
+| 项目 | 版本 | 说明 |
+|---|---|---|
+| 备份与恢复 | Alpha 1 | 没有完整的产品内备份恢复，按[数据与恢复](../advanced/data-and-recovery.md)备份 |
 
 ### 组网
 
-- **只支持直连**（Alpha 1 起）：两台设备需要网络互通，不提供 NAT 穿透和中继。切换网络、睡眠唤醒和长时间播放，可能受设备和网络环境影响。
-- **iPhone/iPad 不在本机运行梨花**（Alpha 1 起）：要用另一台设备上的梨花，见[多台设备](../use/devices.md#在-ipadiphone-上使用梨花)。
-
-### 资料
-
-- **资料不一定完整**（Alpha 1 起）：支持某个字段，不等于每个来源都提供它。演职人员、评分等缺项可能是来源本身没有。
+| 项目 | 版本 | 说明 |
+|---|---|---|
+| 连接方式 | Alpha 1 | 仅支持设备直连，不提供 NAT 穿透和中继；切换网络、睡眠唤醒、长时间播放的表现取决于设备和网络环境 |
+| 移动设备 | Alpha 1 | iPhone、iPad 本机不运行梨花，使用其他设备上的梨花，见[多台设备](../use/devices.md#在-ipadiphone-上使用梨花) |
 
 ### 梨花
 
-- **DSH 高级配置**（Alpha 1 起）：配置格式和部分预算会校验，但原生插件的参数仍可能在运行器重启时才报错，不保证任意插件组合都能启动。见 [DSH 高级配置](../advanced/dsh-config.md)。
-- **模型差异**：不同模型的工具调用能力和安全策略差别很大，部分模型可能拒绝 BT 资源相关的请求。见[常见问题](faq.md#梨花拒绝帮我下载)。
+| 项目 | 版本 | 说明 |
+|---|---|---|
+| DSH 插件参数 | Alpha 1 | 原生插件的参数在运行器重启时校验，见 [DSH 高级配置](../advanced/dsh-config.md) |
+| 模型差异 | — | 各模型的工具调用能力和安全策略不同，部分模型会拒绝 BT 资源相关的请求，见[常见问题](faq.md#梨花拒绝帮我下载) |
 
 ### 平台
 
-- macOS 和 Windows 是主要验证平台，Linux 构建是实验性的。
-- iPhone/iPad：TestFlight 的开放情况以[发行页](https://github.com/AimesSoft/NipaPlay-Reload/releases)为准；GitHub 上的 IPA 没有签名，需要自行签名侧载。
-- 目前不分发 Android、tvOS 和 HarmonyOS 版本。
+- macOS 和 Windows 为主要验证平台，Linux 构建为实验性质。
+- iPhone、iPad：TestFlight 以[发行页](https://github.com/AimesSoft/NipaPlay-Reload/releases)说明为准；GitHub 上的 IPA 未签名，需自行签名侧载。
+- 不分发 Android、tvOS 和 HarmonyOS 版本。
 
 ## 已修复
 
 ### Alpha 2
 
-- 点击播放后停在原页面，等待地址解析和 Mesh 请求；现在立即进入播放画面。
-- 右方向键的行为与 Classic 不一致；现在单击快进，长按按设定倍速播放。
-- Erika 需要在实验室开启；现在是正式的内核选项。
-- 梨花读取图片前先探测模型是否支持图片输入；现在直接发送，由服务商报告不支持。
-- 收起提醒要等远端调用完成；现在在本机立即生效。
+- 点击播放后立即进入播放画面，地址解析和组网请求在后台进行。
+- 右方向键与 Classic 一致：单击快进，长按按设定倍速播放。
+- Erika 成为常规内核选项，无须实验室开关。
+- 图片直接随请求发送给模型，服务商不支持时返回错误。
+- 收起提醒在本机立即生效。
 
 完整列表见[更新说明](../release-notes.md)。
 
 ---
 
-提交 [Bug 报告](https://github.com/AimesSoft/NipaPlay-Reload/issues/new?template=bug_report.yml) 前，先按[故障排查](troubleshooting.md)收集诊断信息。
+提交 [Bug 报告](https://github.com/AimesSoft/NipaPlay-Reload/issues/new?template=bug_report.yml) 前，按[故障排查](troubleshooting.md)收集诊断信息。
 
-上一篇：[故障排查](troubleshooting.md) · **➡️ 回到[文档首页](../README.md)**
+上一篇：[故障排查](troubleshooting.md) · 回到[文档首页](../README.md)

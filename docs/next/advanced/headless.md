@@ -1,6 +1,6 @@
-# NipaPlay Linux 无界面版
+# Linux 无界面版
 
-无界面宿主提供媒体目录、下载、Mesh 和可选的本机梨花，不提供播放器窗口。它使用独立数据目录，不与 GUI 共用数据库。发行包、平台和版本以 [GitHub 发行页](https://github.com/AimesSoft/nipaplay-reload/releases) 为准；包内 README 是安装脚本的配套说明。
+无界面宿主提供媒体目录、下载、组网和可选的本机梨花，没有播放器窗口，使用独立的数据目录。发行包见 [GitHub 发行页](https://github.com/AimesSoft/nipaplay-reload/releases)，包内 README 说明安装脚本。
 
 ## 要求与安装
 
@@ -29,7 +29,7 @@ systemctl --user start nipaplay-headless
 journalctl --user -u nipaplay-headless -f
 ```
 
-系统服务去掉 `--user`。无 systemd 或使用 `--no-service` 时，运行 `nipaplay-headless` 前台启动，在另一终端用 `nipaplay-headless --stop` 请求停止；同一数据目录不能同时启动服务和前台实例。服务日志在 journal，`data/endpoint.json` 包含本机连接凭据，不要分享。
+系统服务去掉 `--user`。无 systemd 或使用 `--no-service` 时，运行 `nipaplay-headless` 前台启动，在另一终端用 `nipaplay-headless --stop` 请求停止；同一数据目录不能同时启动服务和前台实例。服务日志在 journal；`data/endpoint.json` 为本机连接凭据。
 
 ## 登录与 Mesh
 
@@ -40,13 +40,13 @@ journalctl --user -u nipaplay-headless -f
 systemctl --user restart nipaplay-headless
 ```
 
-系统服务使用对应用户运行登录命令并重启系统服务。成功状态以命令输出为准；令牌保存在数据目录的保险库中。设备网使用同账号认证，媒体和调用需要设备间网络可达，并不保证 NAT 穿透或中继。
+系统服务以对应用户运行登录命令，然后重启服务。登录结果见命令输出，令牌保存在数据目录的保险库中。组网使用同账号认证，调用和媒体经设备直连传输，不提供 NAT 穿透和中继。
 
-加入 Mesh 意味着信任同账号认证设备访问本机开放的能力及进程可访问的文件，不只是共享媒体库；仅加入可信设备。默认监听策略和地址可在数据目录的 `mesh.json` 配置，例如 `{"enabled":false}` 关闭组网，`{"loopbackOnly":true}` 限制本机监听，或设置 `{"port":32123}` 固定端口；修改后重启。防火墙需允许实际使用的连接，远程运行程序另受目标宿主授权。
+加入组网即信任同账号的已认证设备访问本机开放的能力和进程可访问的文件。监听策略和地址在数据目录的 `mesh.json` 中配置：`{"enabled":false}` 关闭组网，`{"loopbackOnly":true}` 只监听本机，`{"port":32123}` 固定端口；修改后重启。防火墙需放行实际使用的端口。其他设备在本机运行程序需本机另行授权。
 
 ## 本机梨花（可选）
 
-运行需要 Agent 开关、已安装的 DSH 运行环境和配置好的模型。按架构以运行环境状态和发行包说明为准；运行环境不支持时宿主其他能力仍可使用。
+本机梨花需要开启 Agent、安装 DSH 运行环境并配置模型。运行环境不支持当前架构时，宿主的其他能力照常可用。
 
 ```sh
 nipaplay-headless --dsh-install
@@ -54,7 +54,7 @@ nipaplay-headless --dsh-status
 nipaplay-headless --dsh-check
 ```
 
-模型地址和名称由服务商提供；在 Bash 中可不回显地输入密钥：
+在 Bash 中不回显地输入密钥：
 
 ```bash
 read -r -s -p 'API key: ' model_key; echo
@@ -65,13 +65,13 @@ nipaplay-headless --model-status
 nipaplay-headless --model-check
 ```
 
-替换占位符并按服务商选择接口；`--model-check` 会向模型发送请求，可能产生费用。对话及任务所需内容可能发送给所选服务商。用 `--agent-status` 查看状态，`--agent-disable` / `--agent-enable` 控制本机梨花。主机启动过且梨花可用后，可运行 `nipaplay-headless nipa chat say "检查磁盘空间" --wait 120`；系统安装需以数据所有者执行。
+将占位符替换为服务商的地址和模型 ID。`--model-check` 向模型发送一次检查请求。`--agent-status` 查看状态，`--agent-disable`、`--agent-enable` 关闭或开启本机梨花。宿主启动且梨花可用后，`nipaplay-headless nipa chat say "检查磁盘空间" --wait 120` 发送一条消息；系统级安装以数据所有者执行。
 
 ## 备份、升级与恢复
 
-停止服务或前台进程，备份整个实际数据目录及需要保留的外部媒体文件；备份包含数据库、harness、设备身份及保险库秘密，应限制访问。升级时解压新包，使用与原安装相同的模式重新运行 `install.sh`，并重新提供所需的 `--data`、`--media-root` 等选项。脚本替换程序目录并保留数据，数据库可能随版本迁移。
+停止服务或前台进程，备份整个数据目录和需要保留的媒体文件。备份包含数据库、harness、设备身份和保险库中的秘密，需限制访问权限。升级时解压新包，使用与原安装相同的模式重新运行 `install.sh`，并重新提供所需的 `--data`、`--media-root` 等选项。脚本替换程序目录并保留数据，数据库可能随版本迁移。
 
-回退前停止服务，保留现状副本，再用升级前的整目录备份在同一机器恢复并安装旧包；不要让旧程序直接打开已迁移的数据库。跨机器不要复制身份到同时在线的设备；迁移边界见[数据与恢复](data-and-recovery.md)。
+回退时停止服务，另存当前数据，用升级前的整目录备份恢复，再安装旧包；已迁移的数据库只由新版本打开。设备身份只在一台设备上使用，迁移见[数据与恢复](data-and-recovery.md)。
 
 ## 卸载
 
@@ -79,4 +79,4 @@ nipaplay-headless --model-check
 
 ---
 
-上一篇：[数据与恢复](data-and-recovery.md) · **➡️ 下一篇：[常见问题](../help/faq.md)**
+上一篇：[数据与恢复](data-and-recovery.md) · 下一篇：[常见问题](../help/faq.md)
