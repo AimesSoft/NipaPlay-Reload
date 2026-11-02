@@ -35,6 +35,7 @@ jobs:
 
       - name: Check Next documentation contracts
         run: |
+          python3 scripts/next/check_docs.py
           python3 scripts/next/check_capability_docs.py
           python3 scripts/next/build_knowledge.py --check
           python3 -B -m unittest discover -s scripts/next -p 'test_build_knowledge.py'

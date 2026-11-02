@@ -9,10 +9,16 @@ import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DOCUMENTS = [
-    'README.md', 'QUICKSTART.md', 'USER_GUIDE.md', 'NIPA_CAPABILITIES.md',
-    'CAPABILITIES.md', 'ARCHITECTURE.md', 'DATA_AND_RECOVERY.md',
-    'OBSERVABILITY_CONTRACT.md', 'DSH_ADVANCED_CONFIG.md', 'HEADLESS.md',
-    'KNOWN_ISSUES.md', 'KNOWLEDGE.md',
+    'README.md',
+    'start/install.md', 'start/setup-nipa.md', 'start/first-day.md',
+    'use/nipa.md', 'use/library.md', 'use/playback.md', 'use/downloads.md',
+    'use/home.md', 'use/devices.md', 'use/examples.md',
+    'advanced/automation.md', 'advanced/dsh-config.md', 'advanced/data-and-recovery.md',
+    'advanced/headless.md',
+    'help/faq.md', 'help/troubleshooting.md', 'help/known-issues.md',
+    'development/principles.md', 'development/ARCHITECTURE.md',
+    'development/CAPABILITIES.md', 'development/KNOWLEDGE.md',
+    'development/OBSERVABILITY_CONTRACT.md',
     'development/ACTION_REFERENCE.md', 'development/ACTION_COVERAGE.md',
     'development/guides/README.md', 'development/guides/playback.md',
     'development/guides/mesh.md', 'development/guides/media-identity.md',
@@ -20,9 +26,13 @@ DOCUMENTS = [
     'development/guides/downloads-sources.md', 'development/guides/library-presentation.md',
     'development/guides/automation-memory.md', 'development/guides/maintenance-accounts.md',
     'development/UI_CAPABILITIES.md', 'development/TOOL_GUIDANCE.md',
-    'reference/README.md', 'reference/media-model.md', 'reference/execution-model.md',
-    'reference/device-model.md', 'reference/agent-model.md',
+    'development/reference/README.md', 'development/reference/media-model.md',
+    'development/reference/execution-model.md', 'development/reference/device-model.md',
+    'development/reference/agent-model.md',
 ]
+CONCEPTS = ('development/reference/', 'development/ARCHITECTURE.md', 'development/principles.md')
+TOOL_REFERENCES = ('development/CAPABILITIES.md', 'development/ACTION_REFERENCE.md',
+                   'development/TOOL_GUIDANCE.md')
 # Every public Action family must have a task entry. This is a navigation
 # check, not a claim that every operation has been executed or semantically audited.
 FAMILY_GUIDES = {}
@@ -38,7 +48,7 @@ for guide, families in {
 }.items():
     for family in families.split():
         FAMILY_GUIDES[family] = 'development/guides/' + guide + '.md'
-FAMILY_GUIDES.update({'knowledge': 'KNOWLEDGE.md', 'capability': 'development/TOOL_GUIDANCE.md',
+FAMILY_GUIDES.update({'knowledge': 'development/KNOWLEDGE.md', 'capability': 'development/TOOL_GUIDANCE.md',
                       'window': 'development/guides/maintenance-accounts.md'})
 
 OUTPUT = ROOT / 'assets/next/knowledge/catalog.json'
@@ -70,9 +80,9 @@ def build(version=None, commit=None, dirty=None):
         if len(content.encode()) > 512 * 1024:
             raise ValueError(f'Document exceeds 512 KiB: {path}')
         documents.append(dict(id=path, title=content.splitlines()[0].lstrip('# '),
-                              kind=('concept' if name.startswith('reference/') or name == 'ARCHITECTURE.md'
+                              kind=('concept' if name.startswith(CONCEPTS)
                                     else 'guide' if name.startswith('development/guides/')
-                                    else 'tool-reference' if name in ('CAPABILITIES.md', 'development/ACTION_REFERENCE.md', 'development/TOOL_GUIDANCE.md')
+                                    else 'tool-reference' if name in TOOL_REFERENCES
                                     else 'reference' if name.startswith('development/') else 'current'),
                               sha256=hashlib.sha256(content.encode()).hexdigest(), content=content))
     # Source references are navigation candidates, never synthesized Action schemas.

@@ -15,7 +15,7 @@ class KnowledgeBuildTest(unittest.TestCase):
         self.addCleanup(mock.stop)
 
     def test_untracked_inputs_override_external_clean_stamp(self):
-        with patch.object(knowledge, 'git', side_effect=lambda *args: 'a' * 40 if args == ('rev-parse', 'HEAD') else '?? docs/next/KNOWLEDGE.md'):
+        with patch.object(knowledge, 'git', side_effect=lambda *args: 'a' * 40 if args == ('rev-parse', 'HEAD') else '?? docs/next/development/KNOWLEDGE.md'):
             self.assertTrue(knowledge.build(commit='a' * 40, dirty=False)['sourceDirty'])
         with patch.object(knowledge, 'git', return_value=None):
             self.assertIsNone(knowledge.build(commit='a' * 40, dirty=False)['sourceDirty'])
@@ -51,7 +51,7 @@ class KnowledgeBuildTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'no installed task entry'):
                 knowledge.build(version='test')
         self.assertIn('development/UI_CAPABILITIES.md', knowledge.DOCUMENTS)
-        self.assertIn('reference/media-model.md', knowledge.DOCUMENTS)
+        self.assertIn('development/reference/media-model.md', knowledge.DOCUMENTS)
 
     def test_both_packaging_paths_include_knowledge(self):
         root = knowledge.ROOT
