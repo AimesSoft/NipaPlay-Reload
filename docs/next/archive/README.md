@@ -88,6 +88,7 @@
 ## 实验、专项报告与审计
 
 - [Headless 开发与实验原始记录](headless-development-notes.md)
+- [工具指引的实验依据](tool-guidance-basis.md)
 
 - [EXPERIMENTS](EXPERIMENTS.md)
 - [CAPABILITY_GAPS](CAPABILITY_GAPS.md)

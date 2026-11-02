@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
-/// Colours from `docs/next/design/visual/concept.html` (`:root`).
+/// Colours from `docs/next/development/design/visual/concept.html` (`:root`).
 abstract final class NextColors {
   static const ink = Color(0xFF000000);
   static const ink2 = Color(0xFF0F0F14);

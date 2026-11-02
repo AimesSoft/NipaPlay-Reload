@@ -18,4 +18,4 @@
 
 `outcome_unknown` 时保留原设备、请求 ID 和来源，先查询任务、绑定及相关回执；只按目标 Action 明示的幂等契约重试。批量中部分成功时不要把整批当作未执行。
 
-参考：[字幕能力](../../../../lib/next/subtitles/README.md)、[弹幕能力](../../../../lib/next/danmaku/capability.dart)、[过程事实契约](../../OBSERVABILITY_CONTRACT.md)。
+参考：[字幕能力](../../../../lib/next/subtitles/README.md)、[弹幕能力](../../../../lib/next/danmaku/capability.dart)、[过程事实契约](../OBSERVABILITY_CONTRACT.md)。

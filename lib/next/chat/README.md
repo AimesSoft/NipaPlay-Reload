@@ -6,7 +6,7 @@ Next 支持 DeepSeek Harness（DSH）和 Codex 两种会话运行器。通常默
 
 `AgentRuntimeFixed` 优先读取环境变量 `NIPAPLAY_AGENT_RUNTIME`，再读取实验配置的 `agent-runtime.json`；没有固定值时使用设备设置的 `runtime.json`，再使用宿主默认值。正常桌面默认 DSH；实验 profile 若已有独立 `codex-home/config.toml`，默认保留 Codex。非法运行器或不完整的自定义 DSH 路径报错，不静默切换。见 [dsh_runtime.dart](dsh_runtime.dart)、[host_settings_service.dart](../settings/host_settings_service.dart) 和 [next_runtime.dart](../next_runtime.dart)。
 
-DSH 需要模型路由和可用运行环境；宿主可以下载固定清单的 Node.js 和 DSH，也可通过环境指定安装。模型地址、协议、名称和密钥由宿主管理，密钥通过环境交给 DSH，不能放入仓库、补丁或日志。配置、安装平台和生效方式见 [DSH 高级配置](../../../docs/next/DSH_ADVANCED_CONFIG.md)。Codex 由宿主启动 app-server，使用 Nipa 的 `nipa-base.md`；DSH 通过 SDK profile、Nipa 插件及 persona 前后缀接入。二者读取个人 harness 的 `AGENTS.md`。提示词和插件安装入口见 [next_runtime.dart](../next_runtime.dart)，DSH patch 见 [dsh_runtime.dart](dsh_runtime.dart)。
+DSH 需要模型路由和可用运行环境；宿主可以下载固定清单的 Node.js 和 DSH，也可通过环境指定安装。模型地址、协议、名称和密钥由宿主管理，密钥通过环境交给 DSH，不能放入仓库、补丁或日志。配置、安装平台和生效方式见 [DSH 高级配置](../../../docs/next/advanced/dsh-config.md)。Codex 由宿主启动 app-server，使用 Nipa 的 `nipa-base.md`；DSH 通过 SDK profile、Nipa 插件及 persona 前后缀接入。二者读取个人 harness 的 `AGENTS.md`。提示词和插件安装入口见 [next_runtime.dart](../next_runtime.dart)，DSH patch 见 [dsh_runtime.dart](dsh_runtime.dart)。
 
 桌面宿主随 Next 和本机端点生命周期启动或关闭；切换运行器或 harness 会重新连接相应会话。iOS/iPadOS 是 body-only，不启动本地对话宿主，可连接另一台设备的梨花。headless 可在配置运行环境、模型和 Agent 后提供自己的会话；各设备能力与运行状态以实时目录和 `mesh.devices` 为准。
 
@@ -30,4 +30,4 @@ DSH 需要模型路由和可用运行环境；宿主可以下载固定清单的 
 
 桌面运行器在用户权限下工作，不是隔离沙箱；DSH 使用 `danger-full-access`，Codex 的宿主启动参数也指定该权限和关闭自动审批。它可以操作进程可访问的文件、程序和网络；用户明确授权与宿主强制确认是两层不同的事，不能绕过宿主拒绝。Mesh 加入同账号设备意味着信任设备访问开放能力和可访问文件；远端运行程序另需目标设备授权。具体行为以目标设备的能力与回执为准。
 
-`app.runtime`、`app.capabilities`、`task`、`followup` 和 `diagnostics.operations` 提供不同范围的状态与过程；结果未知不等于失败或回滚。跨设备和 SQL 回执的恢复规则见 [过程事实契约](../../../docs/next/OBSERVABILITY_CONTRACT.md)。日志与反馈需先移除密钥和个人信息。
+`app.runtime`、`app.capabilities`、`task`、`followup` 和 `diagnostics.operations` 提供不同范围的状态与过程；结果未知不等于失败或回滚。跨设备和 SQL 回执的恢复规则见 [过程事实契约](../../../docs/next/development/OBSERVABILITY_CONTRACT.md)。日志与反馈需先移除密钥和个人信息。

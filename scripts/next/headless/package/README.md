@@ -212,4 +212,4 @@ sudo /opt/nipaplay-headless/app/uninstall.sh                 # 系统级
 | `downloads/`、`torrent-session/` | 下载目录和 BT 会话 |
 | `endpoint.json`、`running.json`、`instance.lock` | 运行时文件；一个数据目录同时只能有一个实例 |
 
-更多说明见源码仓库的 `docs/next/HEADLESS.md`。
+更多说明见源码仓库的 `docs/next/advanced/headless.md`。

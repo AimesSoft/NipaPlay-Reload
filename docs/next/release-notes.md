@@ -133,7 +133,7 @@ Alpha 2 补齐了播放器菜单与 Classic 的差距，让 Erika 成为可选�
 - 应用能力通过 `nipa` 命令行发现和调用；`list`、`describe` 可以查询目标设备当前提供的工具及参数，`--device` 指定 Mesh 设备。
 - 保留本机及跨设备 SQL：查询结构与数据、预演修改、提交、查看回执，以及在满足条件时撤回。领域工具和 SQL 可用于不同粒度的整理任务。
 - 提供任务、设备、来源、网络和播放器诊断，记录操作过程与关联标识，帮助梨花解释失败发生在哪一步。支持回执恢复的写入可以在响应丢失后查询提交结果。
-- [逐项 Action 参考](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/development/ACTION_REFERENCE.md)收录 315 个源码动作；[场景指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/NIPA_CAPABILITIES.md)提供更适合直接提出的请求示例。
+- [逐项 Action 参考](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/development/ACTION_REFERENCE.md)列出全部源码动作；[场景指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/use/examples.md)提供更适合直接提出的请求示例。
 
 ### Alpha 1 的修复
 
@@ -146,20 +146,20 @@ Release 附件提供以下版本：
 - **macOS**：Apple Silicon、Intel 和 Universal，提供 DMG、PKG 与 ZIP。
 - **Windows x64**：安装程序、ZIP 便携包与 MSIX。
 - **Linux**：amd64 和 arm64 的 DEB、RPM 与 tar.gz；amd64 另提供 AppImage。
-- **Linux headless**：amd64、arm64 的无界面宿主包，见 [Headless 指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/HEADLESS.md)。
+- **Linux headless**：amd64、arm64 的无界面宿主包，见 [Headless 指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/advanced/headless.md)。
 - **iPhone / iPad**：当前附件为需自行签名侧载的 IPA；TestFlight 分发正在准备，开放信息将在发行页更新。
 
 本次发行不包含 Android、tvOS 和 HarmonyOS。
 
 安装后，在 Classic 的「设置 → 实验室」开启 NipaPlay Next，阅读风险提示并选择「我了解风险，开启」，即可直接进入 Next。桌面用户进入「设置 → 梨花」配置运行环境和模型服务，保存并测试连接后即可开始对话。iPhone/iPad 用户先在另一台设备上运行梨花，让两台设备同账号加入 Mesh，再选择远端梨花。
 
-完整步骤见[快速开始](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/QUICKSTART.md)。模型服务由用户自行配置，API 使用费用按所选服务商计费。
+完整步骤见[下载与开启 Next](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/install.md)和[配置梨花](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/setup-nipa.md)。模型服务由用户自行配置，API 使用费用按所选服务商计费。
 
 ## 当前范围与已知问题
 
-Next 目前仍以桌面体验和设备直连为重点。Mesh 需要双方地址可达，目前不提供 NAT 穿透或中继；移动端使用远端梨花，本机不运行 Agent。完整的 Next 产品内备份恢复仍在开发，试用前请按[数据与恢复指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/DATA_AND_RECOVERY.md)保留应用数据和个人 harness 的副本。
+Next 目前仍以桌面体验和设备直连为重点。Mesh 需要双方地址可达，目前不提供 NAT 穿透或中继；移动端使用远端梨花，本机不运行 Agent。完整的 Next 产品内备份恢复仍在开发，试用前请按[数据与恢复指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/advanced/data-and-recovery.md)保留应用数据和个人 harness 的副本。
 
-持续更新的使用限制见[已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/KNOWN_ISSUES.md)。欢迎提交 [Bug 报告](https://github.com/AimesSoft/NipaPlay-Reload/issues/new?template=bug_report.yml)，附版本、系统、复现步骤和关于页的诊断信息。Mesh 问题请附两端信息；公开内容请移除密钥、令牌及其他个人信息。
+持续更新的使用限制见[已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/known-issues.md)。欢迎提交 [Bug 报告](https://github.com/AimesSoft/NipaPlay-Reload/issues/new?template=bug_report.yml)，附版本、系统、复现步骤和关于页的诊断信息。Mesh 问题请附两端信息；公开内容请移除密钥、令牌及其他个人信息。
 
 Alpha 2 中仍有以下差距：Next 播放器使用固定快捷键，尚不读取「快捷键」设置；Classic 的「跳过时间」未接入；字体库的导入界面和播放器内的手动匹配弹幕入口尚未完成（可在作品详情页的剧集管理中搜索匹配弹幕）；Erika 不支持调整字幕高度，MDK 只应用字幕颜色与粗细。
 
@@ -173,4 +173,4 @@ NipaPlay Next 是由 AimesSoft 发布的实验性开发者预览，依据项目 
 
 **NipaPlay Next 主要开发：Shinokawa · AimesSoft**
 
-[文档入口](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md) · [能力使用指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/NIPA_CAPABILITIES.md) · [技术架构](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/ARCHITECTURE.md) · [研究纲领](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/archive/RESEARCH.md)
+[文档入口](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md) · [能力使用指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/use/examples.md) · [技术架构](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/development/ARCHITECTURE.md) · [设计原则](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/development/principles.md)

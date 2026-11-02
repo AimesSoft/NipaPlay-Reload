@@ -12,7 +12,7 @@ Classic 下载页使用 `core.downloads`，`NextRuntime` 把
 `app.capabilities` 返回当前宿主功能、provider/source 前置、设置键和逐 Action 的
 远程范围；`nipa describe app` 是此族说明。GUI 和纯 Dart 宿主共用在线 provider
 工厂与弹弹play网关客户端，秘密只通过宿主保险库引用读取。详情见
-[无界面宿主](../../docs/next/HEADLESS.md) 和 [X53 报告](../../docs/next/archive/X53_REPORT.md)。
+[无界面宿主](../../docs/next/advanced/headless.md)。
 
 启动顺序：读取设备身份 → 打开并迁移 `next.db` → 创建领域运行时（索引文件；旧身份仅由显式
 `media.library.import_history` 导入）→ 收集全部执行器创建 TaskEngine → 向各领域注入同一引擎并收集
@@ -70,6 +70,6 @@ Core 注册 `harness.hook` 执行器；NextRuntime 仅在 Next 开启时订阅�
 中断 hooks 不重跑。复现实验见 `scripts/next/x3_experiment.dart`；测试守住凭据
 隔离、仓库不改写、去重与失败回执等数据约束。
 
-能力执行的过程事实契约见 [可观测性契约](../../docs/next/OBSERVABILITY_CONTRACT.md)。
+能力执行的过程事实契约见 [可观测性契约](../../docs/next/development/OBSERVABILITY_CONTRACT.md)。
 `diagnostics.operations` 给当前进程的调用阶段与关联 ID；`db.receipt` 给同一来源的持久 SQL 提交证明。
 传输完成、Action 返回、数据库提交、界面更新与播放成功分别观察，不互相替代。

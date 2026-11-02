@@ -15,7 +15,7 @@ Next 保存文件、作品层级、来源身份与展示资料等不同事实。
 
 来源快照保留各提供方的字段和来源事实；展示资料可汇总来源，也可有用户或 Agent 的覆盖。刷新来源不必改变身份，清除覆盖也不等于删除来源或磁盘文件。图片、文字覆盖与原始来源快照有各自生命周期。是否有完整标题、简介、海报或剧集截图，应查询实际展示事实，不能仅从来源已绑定推断。
 
-同一项资料往往有几个来源：TMDB、Bangumi、弹弹play 各有标题、简介、评分、标签和演职人员。合并资料按一份可改的展示规则选来源（本机一份、单部作品可再有一份），评分按规则筛选排序，详情页的区块按规则排列；规则存在 `media_presentation` 和 `media_overrides`（field `presentation`）。来源快照本身不因规则改变，换规则随时可以换回。位置与字段的对照见[首页、媒体库分类与图片](../development/guides/library-presentation.md)。
+同一项资料往往有几个来源：TMDB、Bangumi、弹弹play 各有标题、简介、评分、标签和演职人员。合并资料按一份可改的展示规则选来源（本机一份、单部作品可再有一份），评分按规则筛选排序，详情页的区块按规则排列；规则存在 `media_presentation` 和 `media_overrides`（field `presentation`）。来源快照本身不因规则改变，换规则随时可以换回。位置与字段的对照见[首页、媒体库分类与图片](../guides/library-presentation.md)。
 
 ## Classic、投影与合并
 
@@ -25,4 +25,4 @@ Classic 与 Next 共享明确约定的数据，例如观看记录和续播进度
 
 常见误解：**目录里显示海报**不证明文件可播放；**资料来源已接受**不证明字幕或弹幕已取得；**扫描成功**不证明识别正确；**投影尚未更新**不证明提交回滚。通过领域读取、任务与回执分别核验。
 
-源码：[媒体能力与契约](../../../lib/next/media/README.md)、[媒体实体与文件 schema](../../../lib/next/media/media_capability.dart)、[身份存储](../../../lib/next/media/identity_store.dart)、[跨设备目录投影](../../../lib/next/mesh/library_projection.dart)、[媒体库展示](../../../lib/next/ui_data/library_service.dart)。
+源码：[媒体能力与契约](../../../../lib/next/media/README.md)、[媒体实体与文件 schema](../../../../lib/next/media/media_capability.dart)、[身份存储](../../../../lib/next/media/identity_store.dart)、[跨设备目录投影](../../../../lib/next/mesh/library_projection.dart)、[媒体库展示](../../../../lib/next/ui_data/library_service.dart)。

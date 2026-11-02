@@ -11,7 +11,7 @@ body:
         - [故障排查文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/main/Documentation/troubleshooting.md)
         - [完整使用文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/main/Documentation/index.md)
 
-        - [Next 开发者预览与已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/KNOWN_ISSUES.md)
+        - Next 开发者预览：[常见问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/faq.md)、[故障排查](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/troubleshooting.md)、[已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/known-issues.md)
 
         如果你能附上日志、截图或录屏，通常会大幅提升排查效率。
 

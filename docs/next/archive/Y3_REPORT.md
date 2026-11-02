@@ -2,7 +2,7 @@
 
 2026-10-12，worktree `y3-panel`，分支 `next/y3-panel`。没有 commit、push，也没有改依赖。前半段由一位同伴完成，他因网络问题中断，我接手完成剩余部分。合并了两次 `next/capability-layer`，第二次合并到 d232b5a8，包含 Y2 详情页、Y4 顶栏和 X31 主会话。合并结果在暂存区，我的改动都没有暂存，新文件未跟踪。实验只用了自己的 `y3-dev` 实验配置，同一时间只开一个实例。结束时已按进程号退出实例和假模型服务，并删除了 `y3-dev`。没有启动正式应用，没有碰 `ui-demo`，也没有改 `~/.codex`。
 
-规范依据：`docs/next/design/INTERACTION.md` 的「对话侧面板」节；「打开与工作过程（2026-10-12 补充）」只在主仓库未跟踪的 `docs/next/proposals/visual/INTERACTION.md` 里有，本分支的规范还没有这一节（见第 5 节）。
+规范依据：`docs/next/development/design/INTERACTION.md` 的「对话侧面板」节；「打开与工作过程（2026-10-12 补充）」只在主仓库未跟踪的 `docs/next/proposals/visual/INTERACTION.md` 里有，本分支的规范还没有这一节（见第 5 节）。
 
 ## 1. 完成了什么
 

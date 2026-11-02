@@ -608,7 +608,7 @@ final class PlaybackWorker {
    
    这些都通过 `ext.nipaplay.player.perf`（read/reset）暴露，汇总也写进 `runtime.diagnostics`。
 2. **单元预算测试** `test/next/player/budget_test.dart`：用 FakeDriver 按真实内核的频率模拟 10 分钟事件，加上 3 万条弹幕，断言 B1–B3；CI 上阈值放宽 3 倍，用来防回归。
-3. **成品验收脚本** `scripts/next/player_accept.py`：在实验配置（`NIPAPLAY_PROFILE`）的 profile 构建上，经端点和 VM service 跑每个阶段的场景，期间同时跑一个 Nipa 回合；结束时拉取 perf 数据，超出预算就判失败；结果记入 `docs/next/archive/EXPERIMENTS.md`。
+3. **成品验收脚本** `scripts/next/player_accept.py`：在实验配置（`NIPAPLAY_PROFILE`）的 profile 构建上，经端点和 VM service 跑每个阶段的场景，期间同时跑一个 Nipa 回合；结束时拉取 perf 数据，超出预算就判失败；结果写入本地实验记录，不进入用户文档。
 
 ---
 

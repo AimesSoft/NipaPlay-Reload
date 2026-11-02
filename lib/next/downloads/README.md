@@ -204,7 +204,7 @@ Unidentified files retain that fact. Headless has no player, recent-directory
 history or destructive disk-delete Action. Its health includes native peer
 facts and selection support; Classic's in-process observation timing fields
 are not synthesized. DHT/tracker/local discovery/public peers remain normal
-defaults; host-only switches are documented in `docs/next/HEADLESS.md`.
+defaults; host-only switches are documented in `docs/next/advanced/headless.md`.
 
 Cross-device conversation returns use authenticated host-issued tickets and
 durable batches; see `../followups/README.md`. Files remain on the downloading

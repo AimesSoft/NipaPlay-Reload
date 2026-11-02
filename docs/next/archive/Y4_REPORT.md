@@ -130,7 +130,7 @@
 | `test/next/ui_gate_test.dart` | 偏好关闭时不调用窗口通道 |
 | 新增 `lib/next/ui/shell/window_chrome.dart` | 通道、布局与“是否显示”的通知、作用域、`NextLabBadge` |
 
-`docs/next/design/INTERACTION.md` 的改动来自主控（悬停预览规范），`macos/Podfile.lock` 是构建自动改的，这两项都没有动。
+`docs/next/development/design/INTERACTION.md` 的改动来自主控（悬停预览规范），`macos/Podfile.lock` 是构建自动改的，这两项都没有动。
 
 ## 6. 截图
 

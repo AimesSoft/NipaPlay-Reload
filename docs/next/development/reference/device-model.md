@@ -22,4 +22,4 @@ Next 的首页书架和媒体库分类排列属于当前设备的展示数据；
 
 常见误解：**远端列表可见**不等于当前在线；**相同作品标题**不等于同一源设备 ID；**缓存海报存在**不证明源文件可播放；**能远程调用一个 Action**不证明所有动作都可远程调用。
 
-源码：[iOS 角色](../../../lib/next/body/next_body.dart)、[Headless 组合](../../../lib/next/headless/core.dart)、[Mesh 路由](../../../lib/next/mesh/runtime.dart)、[跨设备目录](../../../lib/next/mesh/library_capability.dart)、[本机媒体库布局](../../../lib/next/ui_data/library_service.dart)。
+源码：[iOS 角色](../../../../lib/next/body/next_body.dart)、[Headless 组合](../../../../lib/next/headless/core.dart)、[Mesh 路由](../../../../lib/next/mesh/runtime.dart)、[跨设备目录](../../../../lib/next/mesh/library_capability.dart)、[本机媒体库布局](../../../../lib/next/ui_data/library_service.dart)。

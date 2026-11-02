@@ -263,7 +263,7 @@ void main() {
     expect(entries.length, greaterThan(10));
     expect(
         entries.any(
-            (d) => (d as Map)['documentId'] == 'docs/next/ARCHITECTURE.md'),
+            (d) => (d as Map)['documentId'] == 'docs/next/development/ARCHITECTURE.md'),
         true);
     expect(
         entries.any(

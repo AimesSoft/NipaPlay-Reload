@@ -1,8 +1,8 @@
 # Next 能力使用参考
 
-本页按用户任务介绍入口；逐项 Action 请看 [完整源码参考](development/ACTION_REFERENCE.md) 与 [覆盖方法和缺口](development/ACTION_COVERAGE.md)。能力、平台、配置和远程权限随版本与宿主变化；先对实际目标执行 `nipa list`、`nipa describe`，并查 `app.capabilities` 的 `supported`、`available`、前置和 `remoteCallable`。可用反映声明的宿主前置；部分能力会检查本地凭据是否已配置，但不证明第三方服务可达或凭据在服务端有效。
+本页按用户任务介绍入口；逐项 Action 请看 [完整源码参考](ACTION_REFERENCE.md) 与 [覆盖方法和缺口](ACTION_COVERAGE.md)。能力、平台、配置和远程权限随版本与宿主变化；先对实际目标执行 `nipa list`、`nipa describe`，并查 `app.capabilities` 的 `supported`、`available`、前置和 `remoteCallable`。可用反映声明的宿主前置；部分能力会检查本地凭据是否已配置，但不证明第三方服务可达或凭据在服务端有效。
 
-Action 目录只是 Agent 工具的一层。`nipa` CLI 还提供 status、list、describe、query、watch 等入口，状态视图通过 `state.describe` 发现；[种子工具说明](../../assets/next/harness/tools/README.md) 介绍随仓库提供的脚本；[harness 使用说明](../../assets/next/harness/AGENTS.md) 说明 CLI，[无界面宿主](HEADLESS.md) 和 [DSH 配置](DSH_ADVANCED_CONFIG.md) 说明各自入口。Codex 或 DSH 运行器还提供各自的原生工具，其工具集随运行器和配置变化；参见 [会话宿主说明](../../lib/next/chat/README.md) 与上面的 DSH 配置。个人 harness 可添加自己的脚本和 hooks；这些不等同于宿主 Action，也不由 Action 数量覆盖。
+Action 目录只是 Agent 工具的一层。`nipa` CLI 还提供 status、list、describe、query、watch 等入口，状态视图通过 `state.describe` 发现；[种子工具说明](../../../assets/next/harness/tools/README.md) 介绍随仓库提供的脚本；[harness 使用说明](../../../assets/next/harness/AGENTS.md) 说明 CLI，[无界面宿主](../advanced/headless.md) 和 [DSH 配置](../advanced/dsh-config.md) 说明各自入口。Codex 或 DSH 运行器还提供各自的原生工具，其工具集随运行器和配置变化；参见 [会话宿主说明](../../../lib/next/chat/README.md) 与上面的 DSH 配置。个人 harness 可添加自己的脚本和 hooks；这些不等同于宿主 Action，也不由 Action 数量覆盖。
 
 在运行 Next 的设备上，从个人 harness 使用：
 

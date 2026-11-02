@@ -71,8 +71,12 @@ nipaplay-headless --model-check
 
 停止服务或前台进程，备份整个实际数据目录及需要保留的外部媒体文件；备份包含数据库、harness、设备身份及保险库秘密，应限制访问。升级时解压新包，使用与原安装相同的模式重新运行 `install.sh`，并重新提供所需的 `--data`、`--media-root` 等选项。脚本替换程序目录并保留数据，数据库可能随版本迁移。
 
-回退前停止服务，保留现状副本，再用升级前的整目录备份在同一机器恢复并安装旧包；不要让旧程序直接打开已迁移的数据库。跨机器不要复制身份到同时在线的设备；迁移边界见[数据与恢复](DATA_AND_RECOVERY.md)。
+回退前停止服务，保留现状副本，再用升级前的整目录备份在同一机器恢复并安装旧包；不要让旧程序直接打开已迁移的数据库。跨机器不要复制身份到同时在线的设备；迁移边界见[数据与恢复](data-and-recovery.md)。
 
 ## 卸载
 
-用户级从安装目录运行 `~/.local/share/nipaplay-headless/app/uninstall.sh`（自定义 XDG 目录以实际路径为准）；系统级使用 `sudo /opt/nipaplay-headless/app/uninstall.sh`。默认保留数据；`--purge` 同时删除数据和秘密，无法恢复。历史开发与实验记录见[归档](archive/headless-development-notes.md)，不是安装指南。
+用户级从安装目录运行 `~/.local/share/nipaplay-headless/app/uninstall.sh`（自定义 XDG 目录以实际路径为准）；系统级使用 `sudo /opt/nipaplay-headless/app/uninstall.sh`。默认保留数据；`--purge` 同时删除数据和秘密，无法恢复。
+
+---
+
+上一篇：[数据与恢复](data-and-recovery.md) · **➡️ 下一篇：[常见问题](../help/faq.md)**

@@ -21,7 +21,7 @@ iPhone/iPad 计划上传 TestFlight，实际上传、Apple 处理和测试组状
 
 本次用户选择从 `next` 的已提交 revision 运行 `main.yml`，直接构建并公开 GitHub prerelease，版本为 `v2.0.0-alpha.1`，定位为 Developer Preview。`submit_ios_for_review=false`；Next 预发布不分发 Android、tvOS 或 HarmonyOS。流程的成功与各平台产物、实机验收须分别确认；启动工作流不代表发布已成功。
 
-此前运行已取消。当前运行请查看 [Build & Release 的 next 分支记录](https://github.com/AimesSoft/NipaPlay-Reload/actions/workflows/main.yml?query=branch%3Anext)，以该运行的 SHA 为发行源码。CI 将使用 [DEVELOPER_PREVIEW.md](../DEVELOPER_PREVIEW.md) 作为预发布正文并命名 Developer Preview；完成后核对标签、prerelease 标记和实际附件。
+此前运行已取消。当前运行请查看 [Build & Release 的 next 分支记录](https://github.com/AimesSoft/NipaPlay-Reload/actions/workflows/main.yml?query=branch%3Anext)，以该运行的 SHA 为发行源码。CI 将使用 [DEVELOPER_PREVIEW.md](../release-notes.md) 作为预发布正文并命名 Developer Preview；完成后核对标签、prerelease 标记和实际附件。
 
 ## 可供未来使用的独立候选流程
 

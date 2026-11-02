@@ -21,4 +21,4 @@ SQL 的持久回执以原 write previewId 或 undo requestId 查询；`unknown` 
 
 常见误解：**Action 返回**不等于后台任务结束；**断线**不等于未提交；**已取消**不等于撤销已发生的效果；**短期诊断里找不到**不证明历史操作不存在。
 
-源码：[Action 与 effect](../../../packages/nipa_harness/lib/src/action.dart)、[任务引擎](../../../packages/nipa_harness/lib/src/tasks/engine.dart)、[SQL 能力](../../../lib/next/db/capability.dart)、[过程观察](../../../lib/next/system/operation_observations.dart)。更多恢复边界见[过程事实契约](../OBSERVABILITY_CONTRACT.md)。
+源码：[Action 与 effect](../../../../packages/nipa_harness/lib/src/action.dart)、[任务引擎](../../../../packages/nipa_harness/lib/src/tasks/engine.dart)、[SQL 能力](../../../../lib/next/db/capability.dart)、[过程观察](../../../../lib/next/system/operation_observations.dart)。更多恢复边界见[过程事实契约](../OBSERVABILITY_CONTRACT.md)。

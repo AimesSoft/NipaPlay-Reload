@@ -8,7 +8,7 @@
 
 `settings.describe/get/set` 读取和修改受支持设置；比较保存值与实际生效值，部分需重启或下次打开媒体。某些敏感路由和证书设置使用 `settings.set.request` 由用户确认。Classic 与 Next 共享部分设置。
 
-`storage.status` 查实际用量，`cache.plan` 预览可回收项，`cache.prune` 执行前重新核对；持久弹幕、字幕及用户下载不当成可重取缓存自动清理。Classic `.npb` 的 `backup.export/preview/restore` 只覆盖指定类别，不是完整 Next 备份；恢复会合并或改写数据。先备份并查看[数据与恢复](../../DATA_AND_RECOVERY.md)。
+`storage.status` 查实际用量，`cache.plan` 预览可回收项，`cache.prune` 执行前重新核对；持久弹幕、字幕及用户下载不当成可重取缓存自动清理。Classic `.npb` 的 `backup.export/preview/restore` 只覆盖指定类别，不是完整 Next 备份；恢复会合并或改写数据。先备份并查看[数据与恢复](../../advanced/data-and-recovery.md)。
 
 ## 排错与系统操作
 

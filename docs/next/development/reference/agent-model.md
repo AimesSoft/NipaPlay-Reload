@@ -20,4 +20,4 @@ Next 的对话运行器帮助用户表达意图、查询实时事实、选择方
 
 推荐不等于执行；订阅需要用户明确提出；删除、覆盖或其他难以撤回的操作按实际意图与动作确认契约处理。用户已明确授权的工作不应重复要求同一确认。失败或响应未知时保留原请求与证据，按领域恢复契约查询，而不是凭对话记忆推断未执行。
 
-源码：[会话宿主与运行器](../../../lib/next/chat/README.md)、[个人种子合并](../../../lib/next/harness_repository.dart)、[DSH 记忆插件](../../../assets/next/agent/dsh/nipa-memory.mjs)、[持久后续](../../../lib/next/followups/README.md)、[种子指导](../../../assets/next/harness/AGENTS.md)。
+源码：[会话宿主与运行器](../../../../lib/next/chat/README.md)、[个人种子合并](../../../../lib/next/harness_repository.dart)、[DSH 记忆插件](../../../../assets/next/agent/dsh/nipa-memory.mjs)、[持久后续](../../../../lib/next/followups/README.md)、[种子指导](../../../../assets/next/harness/AGENTS.md)。

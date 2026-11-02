@@ -1,6 +1,14 @@
 # DSH 高级配置（Alpha）
 
-设置 → 梨花 → 选择 DeepSeek Harness 后，提供「DSH 高级配置 · Alpha」。
+DSH（DeepSeek Harness）是梨花默认的运行环境：它把对话交给模型、执行模型要求的工具调用、管理对话历史和上下文压缩。[配置梨花](../start/setup-nipa.md)里填写的模型和地址就够日常使用，**大多数人不需要这一页**。
+
+需要调整的典型情况：
+
+- 长对话经常触发压缩，或者压缩后梨花忘了前面的约定：调整压缩预算和摘要模型（`compaction`）。
+- 想用另一个便宜的模型专门做摘要：设置 `summarizationProvider` 和 `summarizationModel`。
+- 想开关 DSH 插件，例如网页抓取（`plugins`）。
+
+「设置」→「梨花」→ 运行环境选 DeepSeek Harness 后，下方有「DSH 高级配置 · Alpha」。
 常用控件和 JSON 编辑器修改同一个文档；可直接用「打开配置文件」交给系统文本编辑器。
 
 配置源是 **Next 数据根目录下的 `dsh-config.json`**，设置页显示实际绝对路径。
@@ -87,3 +95,7 @@ API 地址、协议、模型 ID 和主密钥仍在模型设置中管理；不允
 `compaction.modelPolicies` 支持按 `provider` + `model` 精确覆盖，宿主 provider ID 为 `nipaplay`。
 摘要目标的 `summarizationProvider` 和 `summarizationModel` 必须成对设置或成对清空；
 所指模型必须在 DSH 中可用，本文件不会注册额外模型路由。
+
+---
+
+上一篇：[自动化与个人工具](automation.md) · **➡️ 下一篇：[数据与恢复](data-and-recovery.md)**

@@ -475,8 +475,8 @@ jobs:
           RELEASE_VERSION: ${{ needs.Gatekeeper.outputs.version }}
         run: |
           set -euo pipefail
-          test -s docs/next/DEVELOPER_PREVIEW.md
-          cp docs/next/DEVELOPER_PREVIEW.md release_notes.md
+          test -s docs/next/release-notes.md
+          cp docs/next/release-notes.md release_notes.md
           printf '\n构建版本：`%s` · 源码：`%s`\n' "$RELEASE_VERSION" "$RELEASE_REVISION" >> release_notes.md
 
       - name: Upload generated release notes for downstream publishing

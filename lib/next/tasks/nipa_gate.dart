@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:nipa_harness/nipa_harness.dart';
 
 /// Nipa runs only while Next's interface is open: in Classic there is no
-/// Nipa (user decision D1, docs/next/design/player-core.md). Her own work
+/// Nipa (user decision D1, docs/next/development/design/player-core.md). Her own work
 /// waits for it to open, without polling.
 final class NipaGate {
   Completer<void>? _closed = Completer<void>();

@@ -7,7 +7,7 @@
 新增纯 Dart 入口 `bin/nipaplay_headless.dart`，由
 `lib/next/headless/core.dart` 组合现有 Next 领域服务。macOS、WSL Ubuntu 24.04 x86_64、
 Windows x64 都已运行源码、本机编译的 AOT 程序和 Python `nipa`，完成真实共享媒体
-的扫描、身份绑定与 `ui_facts` 读取。运行说明见 [HEADLESS.md](../HEADLESS.md)。
+的扫描、身份绑定与 `ui_facts` 读取。运行说明见 [HEADLESS.md](../advanced/headless.md)。
 
 这批交付是可运行的片库/任务宿主，目标尚有明确缺口：下载传输、Mesh 和账号配置未
 接入；没有播放器或内嵌模型对话。下载任务返回明确的 `unavailable` 失败回执。

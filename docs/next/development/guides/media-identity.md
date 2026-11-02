@@ -45,7 +45,7 @@ Next 启动、扫描与下载完成不会隐式运行 Classic 识别。旧 Class
 
 合并及撤回有同来源、同 requestId 的持久回执契约：响应丢失时保留目标设备与完全相同输入，按该 Action 契约取回原结果，不换键重做。其他动作先检查各自幂等及任务回执；没有该契约不能自动重试。SQL 可通过 `db.describe/query/write/undo/receipt` 在目标库预演、提交和核查；SQL 与专用能力并存，回执 unknown 不等于未提交。
 
-参考：[媒体能力实现说明](../../../../lib/next/media/README.md)、[合并实现](../../../../lib/next/media/work_merge.dart)、[过程事实契约](../../OBSERVABILITY_CONTRACT.md)。
+参考：[媒体能力实现说明](../../../../lib/next/media/README.md)、[合并实现](../../../../lib/next/media/work_merge.dart)、[过程事实契约](../OBSERVABILITY_CONTRACT.md)。
 
 ### 扫描在 probe 阶段失败
 

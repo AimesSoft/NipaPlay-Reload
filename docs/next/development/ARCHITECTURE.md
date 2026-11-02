@@ -1,6 +1,6 @@
 # NipaPlay Next 架构
 
-本文描述 `next` 分支在 2026-10-28 的实现边界。Next 是 Developer Preview 和研究项目；运行时目录、目标设备事实和实际回执优先于本文。研究假设见 [RESEARCH.md](archive/RESEARCH.md)，能力入口见 [CAPABILITIES.md](CAPABILITIES.md)。
+本文描述 `next` 分支在 2026-10-28 的实现边界。Next 是 Developer Preview 和研究项目；运行时目录、目标设备事实和实际回执优先于本文。设计原则见 [principles.md](principles.md)，能力入口见 [CAPABILITIES.md](CAPABILITIES.md)。
 
 ## 判断与执行
 
@@ -22,9 +22,9 @@
 ## 宿主和运行器
 
 - **桌面 GUI** 提供 Next 自己的首页、媒体库、对话和播放界面，并接入本机媒体、任务与用户在场的操作。Classic 与 Next 不互相隐藏挂载：切换时关闭当前播放会话并保存进度，另一边不自动续播。
-- **Headless** 提供无界面的 Core、端点、Mesh 和可配置的对话宿主，适合持有媒体的设备；没有桌面窗口或本地 GUI 播放器就不能假定这些能力可用。安装、数据目录和 DSH 前置见 [HEADLESS.md](HEADLESS.md)。
+- **Headless** 提供无界面的 Core、端点、Mesh 和可配置的对话宿主，适合持有媒体的设备；没有桌面窗口或本地 GUI 播放器就不能假定这些能力可用。安装、数据目录和 DSH 前置见 [Linux 无界面版](../advanced/headless.md)。
 - **iOS / iPad 的 body-only 角色**：`NextBody.bodyOnly` 在 iOS 为真，提供 Next 界面、能力层、播放器和 Mesh，不启动本地 Agent 端点或对话宿主；对话可选择连接其他设备的 Agent。该角色过滤 `window.*`、`program.*`、`chat.*`、`agent.*`、`memory.*`、`app.quit` 和 `app.restart`，界面不提供本机下载器。具体能力仍以设备的 `app.capabilities` 为准；源码路径不代表所有移动设备已有实机覆盖。
-- **会话运行器** 负责模型交互与会话生命周期。代码接入 Codex 和 DeepSeek Harness（DSH）；DSH 使用固定版本和宿主插件，模型、凭据及运行环境需配置。高级配置的生效和恢复边界见 [DSH_ADVANCED_CONFIG.md](DSH_ADVANCED_CONFIG.md)。运行器选择不改变 Action 的领域契约，也不保证任意模型或插件组合可用。
+- **会话运行器** 负责模型交互与会话生命周期。代码接入 Codex 和 DeepSeek Harness（DSH）；DSH 使用固定版本和宿主插件，模型、凭据及运行环境需配置。高级配置的生效和恢复边界见 [DSH 高级配置](../advanced/dsh-config.md)。运行器选择不改变 Action 的领域契约，也不保证任意模型或插件组合可用。
 
 默认个人仓库为 `~/nipaplay-harness`，也可配置路径。启动时宿主先预览官方种子合入并保护个人分支、索引和文件；冲突或中断会暴露状态，不强制覆盖。认证凭据位于仓库外。hooks 把事件交给仓库中的程序，输出记入任务回执；中断的 hook 不自动重跑。
 
@@ -42,4 +42,4 @@
 
 ## 规范与验证
 
-本文描述架构和能力边界；实际注册、权限和运行结果以目标设备的实时目录及回执为准。历史 X/Y 报告记录特定版本和环境下的实验，不是当前版本实机验收的证明。已知限制和当前验收状态见 [已知问题](KNOWN_ISSUES.md)。
+本文描述架构和能力边界；实际注册、权限和运行结果以目标设备的实时目录及回执为准。历史 X/Y 报告记录特定版本和环境下的实验，不是当前版本实机验收的证明。已知限制和当前验收状态见 [已知问题](../help/known-issues.md)。

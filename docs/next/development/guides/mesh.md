@@ -18,6 +18,6 @@ Mesh 使用同账号、经认证的设备。先用 `mesh.devices` 查看设备 I
 
 - `not_delivered` 表示本次未找到可交付连接，不证明更早的同类请求未执行。`outcome_unknown` 或响应续传不可用表示结果未知，不等于回滚。
 - 保留目标设备、来源和原请求键，先查目标 `task.get` / `task.wait`、领域回执和 `diagnostics.operations`。只读数据可重新取；没有持久幂等契约的写操作不要自动重做。
-- SQL 写入通过原 previewId 查 `db.receipt`，撤回通过原 requestId 查；`unknown` 仍可能在途或键/来源不符。提交后通知尚未完成也与事务提交分开报告。详见 [过程事实契约](../../OBSERVABILITY_CONTRACT.md)。
+- SQL 写入通过原 previewId 查 `db.receipt`，撤回通过原 requestId 查；`unknown` 仍可能在途或键/来源不符。提交后通知尚未完成也与事务提交分开报告。详见 [过程事实契约](../OBSERVABILITY_CONTRACT.md)。
 
 实现参考：[Mesh 能力](../../../../lib/next/mesh/capability.dart)、[设备文件](../../../../lib/next/mesh/files.dart)、[目录状态](../../../../lib/next/mesh/library_capability.dart)。
