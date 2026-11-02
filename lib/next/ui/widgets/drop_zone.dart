@@ -61,7 +61,7 @@ class _NextDropZoneState extends State<NextDropZone> {
 
   @override
   Widget build(BuildContext context) {
-    _live = widget.enabled && TickerMode.valuesOf(context).enabled;
+    _live = widget.enabled && TickerMode.of(context);
     return DropTarget(
         enable: _live,
         onDragEntered: (_) => _set(true),

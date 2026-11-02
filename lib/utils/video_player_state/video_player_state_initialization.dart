@@ -25,6 +25,10 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   }
 
   Future<void> _initialize() async {
+    debugPrint('[DeviceProfile] ${globals.deviceProfileDiagnostics}');
+    // Subscribe before optional device plugins; a missing brightness reply
+    // must not leave kernel switching permanently disconnected.
+    _subscribeToKernelChanges();
     await _loadDanmakuVisible(); // 在耗时的平台初始化前恢复弹幕开关
     if (globals.isMobilePlatform) {
       // 使用新的屏幕方向管理器设置初始方向
@@ -96,9 +100,6 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
     await _loadScreenshotSaveTarget();
     await _loadScreenshotSaveDirectory();
 
-    // 订阅内核切换事件
-    _subscribeToKernelChanges();
-
     // Ensure wakelock is disabled on initialization
     try {
       _setWakelockSafely(false);
@@ -147,6 +148,8 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
           _playerKernelSwapApplied < _playerKernelSwapRequested) {
         final targetGeneration = _playerKernelSwapRequested;
         try {
+          await _playerResetFuture;
+          if (_isDisposed) return;
           await PlayerKernelManager.performPlayerKernelHotSwap(this);
         } catch (error, stackTrace) {
           debugPrint(
@@ -169,7 +172,10 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   Future<void> _loadInitialBrightness() async {
     if (!globals.isMobilePlatform) return;
     try {
-      _currentBrightness = await ScreenBrightness().current;
+      final brightness = ScreenBrightness().current;
+      _currentBrightness = globals.isHarmonyOS
+          ? await brightness.timeout(const Duration(milliseconds: 500))
+          : await brightness;
       _initialDragBrightness =
           _currentBrightness; // Initialize drag brightness too
       //debugPrint("Initial screen brightness loaded: $_currentBrightness");
@@ -193,7 +199,10 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
         _ensurePlayerVolumeMatchesPlatformPolicy();
         _systemVolumeController ??= VolumeController.instance;
         _systemVolumeController!.showSystemUI = false;
-        final currentSystemVolume = await _systemVolumeController!.getVolume();
+        final volume = _systemVolumeController!.getVolume();
+        final currentSystemVolume = globals.isHarmonyOS
+            ? await volume.timeout(const Duration(milliseconds: 500))
+            : await volume;
         // 系统音量由用户和系统管理，启动时只读取，不能恢复应用内的旧值。
         final initialVolume = currentSystemVolume.clamp(0.0, 1.0);
         _currentVolume = initialVolume;

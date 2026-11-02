@@ -38,6 +38,15 @@ bool _startupDeviceProfileInitialized = false;
 bool _startupTabletLike = false;
 bool _startupAndroidTv = false;
 bool _startupIPad = false;
+_DisplayMetrics? _startupDisplayMetrics;
+double? _startupDevicePixelRatio;
+bool? _forcedTabletLikeForTesting;
+
+/// Used only by a separate regression-test entry point; never persisted.
+@visibleForTesting
+void forceTabletLikeForTesting(bool tabletLike) {
+  _forcedTabletLikeForTesting = tabletLike;
+}
 
 class _DisplayMetrics {
   const _DisplayMetrics({
@@ -84,6 +93,8 @@ Future<void> initializeStartupDeviceProfile() async {
   if (_startupDeviceProfileInitialized) return;
 
   final metrics = _readDisplayMetrics();
+  _startupDevicePixelRatio =
+      WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
   var startupMetrics = metrics;
   var isAndroidTv = false;
 
@@ -118,16 +129,31 @@ Future<void> initializeStartupDeviceProfile() async {
   }
 
   _startupAndroidTv = isAndroidTv;
-  _startupTabletLike = _resolveTabletLike(
-    isAndroidTv: isAndroidTv,
-    metrics: startupMetrics,
-  );
+  _startupDisplayMetrics = startupMetrics;
+  _startupTabletLike = _forcedTabletLikeForTesting ??
+      _resolveTabletLike(
+        isAndroidTv: isAndroidTv,
+        metrics: startupMetrics,
+      );
   _startupIPad = isIPad ||
       (!kIsWeb &&
           Platform.isIOS &&
           !platform_identity.isTvOS &&
           _startupTabletLike);
   _startupDeviceProfileInitialized = true;
+}
+
+/// Report logical dimensions without equating the adaptive layout to a
+/// physical device type. Useful when startup density differs from later UI.
+String get deviceProfileDiagnostics {
+  final current = _readDisplayMetrics();
+  final startup = _startupDisplayMetrics;
+  return 'tabletLike=$isTablet '
+      'forcedForTest=$_forcedTabletLikeForTesting '
+      'startupDp=${startup?.widthDp}x${startup?.heightDp} '
+      'startupDpr=$_startupDevicePixelRatio '
+      'currentDp=${current.widthDp}x${current.heightDp} '
+      'currentDpr=${WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio}';
 }
 
 bool get isMobilePlatform {

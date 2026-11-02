@@ -8,6 +8,7 @@ export './abstract_player.dart'
         AsyncDisposablePlayer,
         AsyncExternalSubtitlePlayer,
         AsyncSeekPlayer,
+        AsyncStopPlayer,
         BufferingAwarePlayer,
         GifExportCapablePlayer,
         GifExportQuality,
@@ -382,6 +383,17 @@ class Player
   // 直接播放控制方法
   Future<void> playDirectly() => _delegate.playDirectly();
   Future<void> pauseDirectly() => _delegate.pauseDirectly();
+
+  Future<void> stopAndWait({bool clearMedia = false}) async {
+    final delegate = _delegate;
+    if (delegate is core_player.AsyncStopPlayer) {
+      await (delegate as core_player.AsyncStopPlayer)
+          .stopAndWait(clearMedia: clearMedia);
+    } else {
+      delegate.state = core_enums.PlayerPlaybackState.stopped;
+      if (clearMedia) delegate.media = '';
+    }
+  }
 
   // 逐帧控制方法
   void stepForward() => _delegate.stepForward();

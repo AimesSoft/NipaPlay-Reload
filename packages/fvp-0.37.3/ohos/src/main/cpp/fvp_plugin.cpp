@@ -7,21 +7,18 @@
 #include <napi/native_api.h>
 #include <native_window/external_window.h>
 #include <rawfile/raw_file_manager.h>
-#include <mdk/Player.h>
-#include "callbacks.h"
+#include <mdk/c/Player.h>
+#include <mdk/c/global.h>
 #include <iostream>
 #include <unordered_map>
 
 using namespace std;
 
-class TexturePlayer final : public mdk::Player {
-public:
-    explicit TexturePlayer(int64_t handle)
-        : mdk::Player(reinterpret_cast<mdkPlayerAPI*>(handle))
-        , handle(handle)
-    {}
-
-    const int64_t handle;
+struct TexturePlayer {
+    // Dart owns this player. Even a non-owning mdk::Player wrapper calls
+    // mdkPlayerAPI_reset on destruction, resetting a newly prepared video
+    // when its previous texture is released during reopen.
+    const mdkPlayerAPI* api = nullptr;
     int width = 0;
     int height = 0;
     OHNativeWindow* window = nullptr;
@@ -52,17 +49,13 @@ static napi_value NativeSetSurface(napi_env env, napi_callback_info info)
     if (!playerHandle || !surfaceId) {
         if (auto it = players.find(texId); it != players.end()) {
             auto& player = it->second;
-            const auto handle = player->handle;
-            player->updateNativeSurface(nullptr);
+            player->api->updateNativeSurface(
+                player->api->object, nullptr, -1, -1, MDK_SurfaceType_Auto);
             if (player->window) {
                 OH_NativeWindow_DestroyNativeWindow(player->window);
                 player->window = nullptr;
             }
             players.erase(it);
-            // Destroying the non-owning MDK wrapper clears callbacks on the
-            // player that Dart reuses for the next video. Restore them only
-            // after the wrapper is gone, preserving status and subtitle events.
-            MdkCallbacksRearm(handle);
         } else {
             clog << "FvpPlugin: player not found (already removed?) for texId " << texId << endl;
         }
@@ -76,13 +69,13 @@ static napi_value NativeSetSurface(napi_env env, napi_callback_info info)
         return nullptr;
     }
 
-    // A failed surface allocation must not create/destroy a temporary wrapper,
-    // which would reset callbacks on the still-live native player as well.
-    auto player = make_shared<TexturePlayer>(playerHandle);
+    auto player = make_shared<TexturePlayer>();
+    player->api = reinterpret_cast<const mdkPlayerAPI*>(playerHandle);
     player->width = w;
     player->height = h;
     player->window = window;
-    player->updateNativeSurface(window, w, h);
+    player->api->updateNativeSurface(
+        player->api->object, window, w, h, MDK_SurfaceType_Auto);
     players[texId] = player;
 
     return nullptr;
@@ -98,7 +91,7 @@ static napi_value NativeSetResourceManager(napi_env env, napi_callback_info info
 
     NativeResourceManager* nativeRm = OH_ResourceManager_InitNativeResourceManager(env, args[0]);
     if (nativeRm) {
-        mdk::SetGlobalOption("resourceManager", nativeRm);
+        MDK_setGlobalOptionPtr("resourceManager", nativeRm);
     }
     return nullptr;
 }

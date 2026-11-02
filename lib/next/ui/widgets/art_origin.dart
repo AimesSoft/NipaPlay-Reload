@@ -80,7 +80,7 @@ class ArtOrigin extends StatefulWidget {
 
 class ArtOriginState extends State<ArtOrigin> {
   ArtOrigins? _registry;
-  ValueListenable<TickerModeData>? _onstage;
+  ValueListenable<bool>? _onstage;
   bool _hidden = false;
   double _dpr = 2;
 
@@ -101,7 +101,7 @@ class ArtOriginState extends State<ArtOrigin> {
       _registry?._origins.remove(this);
       _registry = registry?.._origins.add(this);
     }
-    _onstage = TickerMode.getValuesNotifier(context);
+    _onstage = TickerMode.getNotifier(context);
   }
 
   @override
@@ -113,7 +113,7 @@ class ArtOriginState extends State<ArtOrigin> {
   /// The picture's frame relative to [reference]; null while it is not on
   /// screen (an offstage section or route, or not laid out).
   ArtFrame? frame(RenderBox reference) {
-    if (!mounted || !(_onstage?.value.enabled ?? true)) return null;
+    if (!mounted || !(_onstage?.value ?? true)) return null;
     final box = context.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return null;
     if (!reference.attached || box.size.isEmpty) return null;

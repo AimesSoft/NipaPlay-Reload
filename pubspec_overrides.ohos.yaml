@@ -20,10 +20,8 @@ dependency_overrides:
   desktop_multi_window:
     path: packages/desktop_multi_window_ohos
   shared_preferences:
-    git:
-      url: https://gitcode.com/openharmony-tpc/flutter_packages.git
-      ref: br_shared_preferences-v2.5.4_ohos
-      path: packages/shared_preferences/shared_preferences
+    # OHOS restores whole-valued doubles as ints after a process restart.
+    path: packages/shared_preferences_ohos_compat
   path_provider:
     git:
       url: https://gitcode.com/openharmony-tpc/flutter_packages.git
@@ -76,6 +74,9 @@ dependency_overrides:
   # property. Keep the fix local until it is released upstream.
   fvp:
     path: packages/fvp-0.37.3
+  # Build the pinned runtime with GLES to avoid Mali Vulkan shader crashes.
+  erika_flutter:
+    path: packages/erika_flutter_ohos
   # Adds a fallback branch for TargetPlatform.ohos.
   fluent_ui:
     path: packages/fluent_ui-4.15.1

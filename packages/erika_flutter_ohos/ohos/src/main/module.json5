@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "erika_flutter",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ]
+  }
+}

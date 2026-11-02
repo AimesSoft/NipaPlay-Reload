@@ -597,7 +597,7 @@ class _FadeState extends State<_Fade> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) => SizeTransition(
         sizeFactor: _size,
-        alignment: Alignment.topCenter,
+        axisAlignment: -1,
         child: FadeTransition(opacity: _opacity, child: widget.child),
       );
 }

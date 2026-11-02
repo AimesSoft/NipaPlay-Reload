@@ -353,10 +353,10 @@ class _NextHomePageState extends State<NextHomePage> {
     // for a moment, the avatar's dot goes away.
     if (c.unseen &&
         line == c.latestLine &&
-        TickerMode.valuesOf(context).enabled) {
+        TickerMode.of(context)) {
       _seenTimer ??= Timer(const Duration(seconds: 3), () {
         _seenTimer = null;
-        if (mounted && TickerMode.valuesOf(context).enabled) c.markSeen();
+        if (mounted && TickerMode.of(context)) c.markSeen();
       });
     }
     final top = ConstrainedBox(

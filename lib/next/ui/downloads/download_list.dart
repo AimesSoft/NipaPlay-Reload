@@ -54,7 +54,7 @@ class DownloadListState extends State<DownloadList>
     _load();
     _poll?.cancel();
     _poll = Timer.periodic(const Duration(milliseconds: 1500), (_) {
-      if (TickerMode.valuesOf(context).enabled) _load();
+      if (TickerMode.of(context)) _load();
     });
   }
 

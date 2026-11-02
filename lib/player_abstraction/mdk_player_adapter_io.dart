@@ -214,6 +214,7 @@ class MdkPlayerAdapter
         AbstractPlayer,
         AsyncDisposablePlayer,
         AsyncSeekPlayer,
+        AsyncStopPlayer,
         BufferingAwarePlayer {
   final ValueNotifier<bool> _buffering = ValueNotifier<bool>(false);
 
@@ -232,6 +233,7 @@ class MdkPlayerAdapter
   // disposeAsync，必须合并为同一次 teardown，杜绝 double mdkPlayerAPI_delete。
   bool _isDisposed = false;
   Future<void>? _disposeAsyncFuture;
+  Future<void>? _pendingStop;
   final Set<String> _callsAfterTeardown = {};
   // Bumped by every seek, so a resume seek stops asking again once anything
   // has asked for another position.
@@ -530,7 +532,7 @@ class MdkPlayerAdapter
   Future<void> prepare() async {
     if (_released('prepare')) return;
     try {
-      _mdkPlayer.prepare();
+      await _mdkPlayer.prepare().timeout(const Duration(seconds: 10));
       // prepare后重新应用播放速度，确保设置生效
       if (_playbackRate != 1.0) {
         _mdkPlayer.playbackRate = _playbackRate;
@@ -546,6 +548,28 @@ class MdkPlayerAdapter
     if (_released('seek')) return;
     _seekGeneration++;
     _mdkPlayer.seek(position: position);
+  }
+
+  @override
+  Future<void> stopAndWait({bool clearMedia = false}) {
+    if (_released('stopAndWait')) return Future<void>.value();
+    return _pendingStop = (_pendingStop ?? Future<void>.value())
+        .then((_) => _stopNative(clearMedia: clearMedia));
+  }
+
+  Future<void> _stopNative({required bool clearMedia}) async {
+    debugPrint('[PlayerReset] MDK native stop requested');
+    await _mdkPlayer.setStateOffThread(mdk.PlaybackState.stopped);
+    debugPrint('[PlayerReset] MDK native stop completed');
+    if (clearMedia) {
+      _buffering.value = false;
+      _activeVideoDecoder = null;
+      _activeAudioDecoder = null;
+      _internalAudioTrackCount = 0;
+      debugPrint('[PlayerReset] MDK media clear requested');
+      await _mdkPlayer.setMediaOffThread('');
+      debugPrint('[PlayerReset] MDK media clear completed');
+    }
   }
 
   /// MDK cancels a seek (-2), or turns it away (-10), while a seek of its own
@@ -597,12 +621,16 @@ class MdkPlayerAdapter
 
   Future<void> _disposeAsyncInternal() async {
     _isDisposed = true;
-    _buffering.dispose();
-    _settleSeek();
-    await _mediaStatusSubscription?.cancel();
-    PlayerKernelManager.traceHotSwapStage('mdk teardown: begin');
-    await Future<void>.sync(_mdkPlayer.dispose);
-    PlayerKernelManager.traceHotSwapStage('mdk teardown: complete');
+    try {
+      await _pendingStop;
+    } finally {
+      _buffering.dispose();
+      _settleSeek();
+      await _mediaStatusSubscription?.cancel();
+      PlayerKernelManager.traceHotSwapStage('mdk teardown: begin');
+      await Future<void>.sync(_mdkPlayer.dispose);
+      PlayerKernelManager.traceHotSwapStage('mdk teardown: complete');
+    }
   }
 
   @override

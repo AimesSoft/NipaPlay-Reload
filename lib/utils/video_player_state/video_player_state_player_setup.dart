@@ -30,6 +30,13 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     bool manualMatchHandled = false,
     bool episodeFileSelectionHandled = false,
   }) async {
+    final previousReset = _playerResetFuture;
+    if (previousReset != null) {
+      debugPrint('[PlayerSetup] waiting for previous playback reset');
+      await previousReset;
+      debugPrint('[PlayerSetup] previous playback reset completed');
+    }
+    if (_isDisposed) return;
     if (globals.nextPlaybackRedirect case final redirect?) {
       final item = PlayableItem(videoPath: videoPath, historyItem: historyItem,
           actualPlayUrl: actualPlayUrl, playbackSession: playbackSession,
@@ -1201,12 +1208,19 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       await applyAnime4KProfileToCurrentPlayer();
       await applyErikaUpscalerModeToCurrentPlayer();
 
+      if (_isDisposed || initializationGeneration != _playbackGeneration) {
+        return;
+      }
+
       // 使用屏幕方向管理器设置播放时的屏幕方向
       if (globals.isMobilePlatform) {
         debugPrint(
-          'VideoPlayerState: Device is phone. Setting video playing orientation.',
+          '[PlayerSetup] setting playback orientation tabletLike=${globals.isTablet}',
         );
         await ScreenOrientationManager.instance.setVideoPlayingOrientation();
+        if (_isDisposed || initializationGeneration != _playbackGeneration) {
+          return;
+        }
         await _restoreSystemUiOverlayStyleIfNeeded();
 
         if (globals.isPhone) {
@@ -1223,7 +1237,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
           // 同时隐藏系统UI
           try {
-            await SystemChrome.setEnabledSystemUIMode(
+            await ScreenOrientationManager.instance.setSystemUiMode(
               SystemUiMode.immersiveSticky,
             );
           } catch (e) {
