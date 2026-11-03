@@ -4,7 +4,7 @@ NipaPlay Next 是 NipaPlay 的 Agent 模式。媒体库、播放器、下载器�
 
 Next 处于开发者预览阶段。梨花以当前系统用户的权限运行，可以读写和删除文件、运行程序、访问网络，风险说明见[下载与开启](start/install.md#风险)。
 
-> 本文档跟随 `next` 分支。Alpha 2 对应的文档见 [v2.0.0-alpha.2](https://github.com/AimesSoft/NipaPlay-Reload/tree/v2.0.0-alpha.2/docs/next)，版本变化见[更新说明](release-notes.md)。
+> 本文档跟随 `next` 分支，适用于各预览版本；只适用于特定版本的内容会注明版本。版本变化见[更新说明](release-notes.md)，各版本的限制见[已知问题](help/known-issues.md)。
 
 ## 入门
 
