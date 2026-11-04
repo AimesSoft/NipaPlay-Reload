@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -31,7 +32,7 @@ class SMBProxyService {
   Future<void>? _initializing;
 
   Future<void> initialize() async {
-    if (_isRunning || kIsWeb) return;
+    if (kIsWeb) return;
     final pending = _initializing ??= _initialize();
     try {
       await pending;
@@ -40,12 +41,51 @@ class SMBProxyService {
     }
   }
 
+  /// 回前台自愈入口：仅在代理自认运行中时校验端口并就地重启，
+  /// 不负责把从未启动过的代理拉起。
+  Future<void> ensureAliveIfRunning() async {
+    if (kIsWeb || !_isRunning) return;
+    await initialize();
+  }
+
+  /// 探测本机监听是否真的可连（HTTP GET /health 且返回 ok）。
+  ///
+  /// iOS 后台挂起会回收 shelf 的监听 socket，而 Dart 侧 `_isRunning` 仍是
+  /// true；沿用旧状态会把 `smb://` 解析成已失效的回环端口（Connection
+  /// refused）。用 HTTP 探测自己的 health 路由，同时排除端口被占用的场景。
+  Future<bool> _listenerAlive() async {
+    final port = _port;
+    if (port <= 0) return false;
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 800);
+    try {
+      final request = await client
+          .get(InternetAddress.loopbackIPv4.address, port, '/smb/health')
+          .timeout(const Duration(seconds: 2));
+      final response = await request.close().timeout(const Duration(seconds: 2));
+      final body = await response
+          .transform(utf8.decoder)
+          .join()
+          .timeout(const Duration(seconds: 2));
+      return response.statusCode == 200 && body.trim() == 'ok';
+    } catch (_) {
+      return false;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   Future<void> _initialize() async {
     if (kIsWeb) {
       return;
     }
+    if (_isRunning && await _listenerAlive()) return;
     if (_isRunning) {
-      return;
+      debugPrint(
+        'SMBProxyService: 本地代理端口 $_port 已失效（多为后台挂起被系统回收），'
+        '就地重启；优先复用已保存端口，保持已生成 URL 有效',
+      );
+      await _teardown();
     }
 
     await SMBService.instance.initialize();
@@ -97,10 +137,26 @@ class SMBProxyService {
 
   Future<void> stop() async {
     await _initializing;
-    await _server?.close(force: true);
+    await _teardown();
+  }
+
+  Future<void> _teardown() async {
+    try {
+      await _server?.close(force: true);
+    } catch (_) {}
     _server = null;
     _port = 0;
     _isRunning = false;
+  }
+
+  /// 测试专用：只关闭底层监听 socket，保留“运行中”状态标记，
+  /// 复现 iOS 后台挂起回收端口后的现场（状态仍是运行中，端口不可连）。
+  @visibleForTesting
+  Future<void> simulateListenerReclaimedForTest() async {
+    try {
+      await _server?.close(force: true);
+    } catch (_) {}
+    _server = null;
   }
 
   String buildStreamUrl(SMBConnection connection, String smbPath) {

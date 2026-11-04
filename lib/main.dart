@@ -81,6 +81,8 @@ import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/services/webdav_proxy_service.dart';
 import 'package:nipaplay/services/file_log_service.dart';
 import 'package:nipaplay/services/file_association_service.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
@@ -144,6 +146,18 @@ void _installFrameTimingTrace() {
   });
 }
 
+/// iOS 后台挂起会回收本地回环代理（WebDAV/SMB 认证代理）的监听 socket，
+/// 而 Dart 侧的“运行中”标记不会失效，恢复前台后继续解析出的旧回环端口
+/// 会 Connection refused。回前台时先自愈，再继续播放/换集。
+void _installLocalProxyResumeHeal() {
+  if (kIsWeb) return;
+  AppLifecycleListener(onStateChange: (state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(WebDAVProxyService.instance.ensureAliveIfRunning());
+    unawaited(SMBProxyService.instance.ensureAliveIfRunning());
+  });
+}
+
 bool get _macosHdrVideoOnlyMode {
   return !kIsWeb &&
       (Platform.isMacOS || Platform.isWindows) &&
@@ -197,6 +211,7 @@ void main(List<String> args) async {
     }
   }
   _installFrameTimingTrace();
+  _installLocalProxyResumeHeal();
   await ensureLinuxSystemFontLoaded();
   await globals.initializeStartupDeviceProfile();
   await AppleNativeMediaControl.initialize();
