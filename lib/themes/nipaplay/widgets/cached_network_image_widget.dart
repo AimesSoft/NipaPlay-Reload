@@ -195,8 +195,10 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
       widget.imageUrl,
       targetWidth: targetWidth,
       targetHeight: targetHeight,
-      cacheOnDisk: widget.loadMode == CachedImageLoadMode.legacy ||
-          widget.shouldCompress,
+      // 磁盘缓存与 loadMode/shouldCompress 解耦：镜像/远程封面本来就慢，
+      // shouldCompress:false 的调用方若连原始字节都不落盘，向下滚动就要
+      // 整页重新走网络，表现为“只加载当前画面、下滑不续载甚至失败”。
+      cacheOnDisk: true,
     );
   }
 
