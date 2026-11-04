@@ -14,6 +14,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/android_tv_remote_key_scope.dar
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_scaffold_layout.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_tab_panel.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/large_screen_settings_panel.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/utils/theme_notifier.dart';
 import 'package:provider/provider.dart';
@@ -64,7 +65,8 @@ void main() {
     }
   });
 
-  Future<void> openApp(WidgetTester tester, {int index = 1}) async {
+  Future<void> openApp(WidgetTester tester,
+      {int index = 1, Widget? content}) async {
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -113,9 +115,10 @@ void main() {
                         Text('Library')
                       ],
                       tabController: DefaultTabController.of(context),
-                      content: const Focus(
-                          autofocus: true,
-                          child: Center(child: Text('content'))),
+                      content: content ??
+                          const Focus(
+                              autofocus: true,
+                              child: Center(child: Text('content'))),
                     )),
                   )),
         ),
@@ -143,6 +146,55 @@ void main() {
       )!
           .popDisposition;
 
+  testWidgets(
+      'hidden panels cannot take focus and settings restores the content target',
+      (tester) async {
+    videoState.hasVideoValue = false;
+    final a = FocusNode(debugLabel: 'visible-action-a');
+    final b = FocusNode(debugLabel: 'visible-action-b');
+    addTearDown(a.dispose);
+    addTearDown(b.dispose);
+    await openApp(tester,
+        index: 0,
+        content: Column(children: [
+          TextButton(
+              focusNode: a, onPressed: () {}, child: const Text('Action A')),
+          TextButton(
+              focusNode: b, onPressed: () {}, child: const Text('Action B')),
+        ]));
+    b.requestFocus();
+    await tester.pumpAndSettle();
+    final panelContext =
+        tester.element(find.byType(NipaplayLargeScreenSettingsPanel));
+    expect(Focus.of(panelContext).descendantsAreFocusable, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(isPanelOpen(tester, NipaplayLargeScreenTabPanel), isTrue);
+    expect(b.canRequestFocus, isFalse);
+    for (var i = 0; i < 3; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(isPanelOpen(tester, NipaplayLargeScreenSettingsPanel), isTrue);
+    expect(isPanelOpen(tester, NipaplayLargeScreenTabPanel), isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(
+        FocusManager.instance.primaryFocus!.ancestors.any((node) =>
+            node.debugLabel == 'nipaplay_large_screen_settings_content'),
+        isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    expect(isPanelOpen(tester, NipaplayLargeScreenSettingsPanel), isFalse);
+    expect(b.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(a.hasFocus, isTrue);
+    await disposeApp(tester);
+  });
+
   testWidgets('Android root advertises playback back handling to the system',
       (tester) async {
     await openApp(tester);
@@ -155,6 +207,32 @@ void main() {
             .arguments,
         isTrue);
     expect(getDidExit(), isFalse);
+    await disposeApp(tester);
+  });
+
+  testWidgets('Tab and Right operate on the highlighted navigation row',
+      (tester) async {
+    videoState.hasVideoValue = false;
+    await openApp(tester, index: 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<NipaplayLargeScreenTabPanel>(
+                find.byType(NipaplayLargeScreenTabPanel))
+            .focusedIndex,
+        2);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(isPanelOpen(tester, NipaplayLargeScreenTabPanel), isFalse);
+    expect(
+        DefaultTabController.of(
+                tester.element(find.byType(NipaplayLargeScreenScaffoldLayout)))
+            .index,
+        2);
     await disposeApp(tester);
   });
 
