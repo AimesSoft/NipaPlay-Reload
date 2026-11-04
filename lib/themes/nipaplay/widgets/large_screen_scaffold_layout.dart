@@ -1416,7 +1416,8 @@ class _NipaplayLargeScreenScaffoldLayoutState
                 child: NipaplayLargeScreenPlayerMenuPanel(
                   initialFocusNode: _playerMenuInitialFocusNode,
                   onExitPlayback: () {
-                    unawaited(_exitPlaybackFromPlayerMenu());
+                    unawaited(_exitPlaybackFromPlayerMenu(
+                        returnToMediaLibrary: true));
                   },
                   onSendDanmaku: () {
                     unawaited(_sendDanmakuFromPlayerMenu());

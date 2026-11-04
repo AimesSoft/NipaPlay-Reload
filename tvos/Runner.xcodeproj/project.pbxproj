@@ -141,6 +141,7 @@
 				A12000000000000000000001 /* Use AOT Flutter engine on Release simulator */,
 				AAF50000000000000000F00D /* Sign Flutter.framework */,
 				673C87D86BD3FB0C35538A8B /* [CP] Embed Pods Frameworks */,
+				A12000000000000000000002 /* Embed vendor privacy manifests */,
 			);
 			buildRules = (
 			);
@@ -207,6 +208,18 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		A12000000000000000000002 /* Embed vendor privacy manifests */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Embed vendor privacy manifests";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/usr/bin/python3 \"${PROJECT_DIR}/../tool/copy_tvos_privacy_manifests.py\" --app \"${CODESIGNING_FOLDER_PATH}\" --plugins \"${PROJECT_DIR}/../.flutter-plugins-dependencies\"\n";
+		};
 		31241E5E0EDE223C8AE2968B /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;

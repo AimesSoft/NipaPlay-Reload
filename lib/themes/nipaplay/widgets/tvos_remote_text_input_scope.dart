@@ -495,6 +495,9 @@ class _TvOSRemoteTextInputScopeState extends State<TvOSRemoteTextInputScope> {
       }
     } finally {
       _isOpening = false;
+      // UIKit can consume the opening button's release while its keyboard is
+      // visible. Do not leave the next Select blocked by that missing release.
+      _openingKey = null;
       if (mounted &&
           target.element.mounted &&
           origin?.context != null &&
