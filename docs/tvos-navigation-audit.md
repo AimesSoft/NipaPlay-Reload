@@ -30,6 +30,8 @@ here.
 - Content focus is restored only to a currently attached, traversable control.
   When login replaces its prompt with results, reopening/closing navigation
   chooses an actual content action instead of a detached node or scroll scope.
+- WebDAV/SMB form actions and password-visibility buttons show a visible focus
+  border and background instead of silently suppressing focus feedback.
 - Debug builds remove any stale AOT App.framework left by a preceding Release
   build, so simulator checks execute the current Dart kernel.
 
@@ -42,7 +44,7 @@ here.
 | Settings | Category/content traversal, left return, close and focus restoration | All 11 categories reached; Right entered content, arrows traversed actions/sliders, Left returned to categories (sliders retain horizontal adjustment); About reached with its update action focused |
 | Playback | Player controls, menu/content traversal, switches, sliders and remote input | Generated HTTP test video played and paused; all 11 menu categories reached; final build returned from playback to Media Library with focus on its header action |
 | Playlist | HTTP/HTTPS do not read a local directory or display URL tokens | Final build showed tv.mp4 as the current network stream with host-only subtitle and no local-directory error |
-| Media libraries | Media-server detail focus and shared-library metadata fallback | Media Library remote/add-media controls and all six source choices reached; NipaPlay client picker opened; authenticated server/file browsing still needs service-specific data |
+| Media libraries | Media-server detail focus and shared-library metadata fallback | Media Library remote/add-media controls and all six source choices reached; NipaPlay client picker opened; Jellyfin, Emby and Dandanplay connection buttons reached; WebDAV cancel/test/add and SMB cancel/save reached with visible focus, SMB scrolled to its final fields; authenticated server/file browsing still needs service-specific data |
 | Storage | Writable directory and reopening files without Documents | Physical-device restriction addressed from plugin diagnostics; physical hardware not available |
 
 The first focused run passed 88 cases; tvOS policy checks passed 7 cases. The
@@ -81,3 +83,9 @@ five expected privacy declarations. The app-icon catalog remains identical to
 the previously corrected main assets. Physical-device Siri Remote gestures and
 authenticated third-party server combinations remain outside this simulator
 verification.
+
+A final form pass found suppressed focus feedback on standard WebDAV/SMB
+buttons. After adding focused borders/backgrounds, the simulator showed visible
+selection for cancel, test, add/save, and long SMB forms scrolled to their final
+controls. The existing text-input/server-dialog regression run passed 15 cases.
+These changes supersede build 1104.2; replacement build 1104.3 is being prepared.
