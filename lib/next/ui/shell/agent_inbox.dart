@@ -158,7 +158,12 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
       _error = null;
     });
     try {
-      await _call(action, {'id': row['id'], ...input}, row['_peer'] as String?);
+      final result = await _call(
+          action, {'id': row['id'], ...input}, row['_peer'] as String?);
+      if (mounted && const {'read', 'answered', 'cancelled'}.contains(result['state'])) {
+        setState(() => _items.removeWhere((item) =>
+            item['id'] == row['id'] && item['_peer'] == row['_peer']));
+      }
       _text.clear();
       await _load();
     } catch (e) {
@@ -307,16 +312,21 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
                 NextIconButton(
                     key: const Key('agent-inbox.collapse'),
                     glyph: NextGlyph.close,
-                    label: '收起',
+                    label: pending ? '收起' : '关闭提醒',
                     size: 36,
-                    onTap: () => setState(() {
-                          // Closing the panel is local, even while a remote
-                          // answer is pending. Only new arrivals reopen it.
-                          _collapsedIds.addAll(_items
-                              .map((r) => '${r['_peer']}:${r['id']}'));
-                          _expanded = false;
-                          _error = null;
-                        })),
+                    onTap: () {
+                      setState(() {
+                        _collapsedIds.addAll(_items
+                            .map((r) => '${r['_peer']}:${r['id']}'));
+                        _expanded = false;
+                        _error = null;
+                      });
+                      // Notices are read when closed. Questions stay pending;
+                      // hiding one never supplies an answer or consent.
+                      if (row != null && row['kind'] == 'notice') {
+                        unawaited(_act(row, 'ui.inbox.dismiss', {}));
+                      }
+                    }),
               ]),
               if (_error != null) ...[
                 const SizedBox(height: 10),
@@ -375,6 +385,11 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
                     _Quiet('复制完整错误',
                         onTap: () => Clipboard.setData(
                             ClipboardData(text: '${row['body']}'))),
+                  if (!pending)
+                    _Quiet('清除提醒',
+                        onTap: _acting
+                            ? null
+                            : () => _act(row, 'ui.inbox.dismiss', {})),
                   _Quiet('查看对话', arrow: true, onTap: () => _open(row)),
                   if (pending)
                     _Quiet('取消问题',

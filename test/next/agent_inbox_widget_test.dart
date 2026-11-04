@@ -47,6 +47,35 @@ void main() {
     await world.events.close();
   });
 
+  for (final closeWithX in [true, false]) {
+    testWidgets('notice is cleared durably, closeWithX=$closeWithX', (tester) async {
+      final world = _Inbox();
+      world.rows.single.addAll({
+        'kind': 'notice', 'state': 'unread', 'title': '普通提醒',
+        'body': '任务结果', 'options': <String>[],
+      });
+      await tester.pumpWidget(world.widget());
+      await tester.pump();
+      if (closeWithX) {
+        await tester.tap(find.byKey(const Key('agent-inbox.collapse')));
+      } else {
+        await tester.tap(find.text('清除提醒'));
+      }
+      await tester.pump();
+      expect(world.rows.single['state'], 'read');
+      expect(world.answers, isEmpty);
+      expect(find.textContaining('梨花提醒'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      // Reopening the overlay uses persisted state, not local collapsed IDs.
+      await tester.pumpWidget(world.widget());
+      await tester.pump();
+      expect(find.text('普通提醒'), findsNothing);
+      expect(find.textContaining('梨花提醒'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      await world.events.close();
+    });
+  }
+
   testWidgets(
       'new notifications do not steal focus or erase an unfinished answer',
       (tester) async {
@@ -208,7 +237,13 @@ class _Capability implements Capability {
                 world.answers.add(Map.of(input));
                 row['state'] = 'answered';
               }
-              if (op == 'dismiss') row['hidden'] = true;
+              if (op == 'dismiss') {
+                row['hidden'] = true;
+                if (row['state'] == 'unread') row['state'] = 'read';
+                if (input['cancel'] == true && row['state'] == 'pending') {
+                  row['state'] = 'cancelled';
+                }
+              }
               return row;
             }),
         ];
