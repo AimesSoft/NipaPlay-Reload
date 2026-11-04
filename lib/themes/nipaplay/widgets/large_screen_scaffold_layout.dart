@@ -518,10 +518,12 @@ class _NipaplayLargeScreenScaffoldLayoutState
   }
 
   bool _moveContentFocus(TraversalDirection direction) {
-    final focusScope = FocusScope.of(context);
     final focusedNode = FocusManager.instance.primaryFocus;
-    if (focusedNode == null || focusedNode == _inputFocusNode) {
-      final moved = focusScope.nextFocus();
+    if (focusedNode == null ||
+        focusedNode == _inputFocusNode ||
+        focusedNode is FocusScopeNode ||
+        !_contentFocusScope.traversalDescendants.contains(focusedNode)) {
+      final moved = _requestFirstContentFocus();
       if (moved) {
         _ensurePrimaryFocusVisible();
       }
@@ -567,6 +569,16 @@ class _NipaplayLargeScreenScaffoldLayoutState
     }
   }
 
+  bool _requestFirstContentFocus() {
+    final candidates = _contentFocusScope.traversalDescendants
+        .where((node) => node is! FocusScopeNode);
+    final first = ReadingOrderTraversalPolicy()
+        .sortDescendants(candidates, _contentFocusScope)
+        .firstOrNull;
+    first?.requestFocus();
+    return first != null;
+  }
+
   void _ensureContentFocus() {
     // Wait until hidden panels have been excluded from the focus tree. Never
     // steal focus back from a dialog opened by the activated menu item.
@@ -580,11 +592,13 @@ class _NipaplayLargeScreenScaffoldLayoutState
       }
       final previous = _lastContentFocus;
       if (previous?.context != null &&
-          previous!.canRequestFocus &&
-          previous.ancestors.contains(_contentFocusScope)) {
+          previous is! FocusScopeNode &&
+          !previous!.skipTraversal &&
+          previous.canRequestFocus &&
+          _contentFocusScope.traversalDescendants.contains(previous)) {
         previous.requestFocus();
-      } else if (!_contentFocusScope.hasFocus) {
-        _contentFocusScope.nextFocus();
+      } else {
+        _requestFirstContentFocus();
       }
       _ensurePrimaryFocusVisible();
     });

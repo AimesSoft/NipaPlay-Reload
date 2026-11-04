@@ -195,6 +195,43 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets(
+      'closing navigation recovers after the old content action is removed',
+      (tester) async {
+    videoState.hasVideoValue = false;
+    final login = FocusNode(debugLabel: 'removed-login-action');
+    final loaded = FocusNode(debugLabel: 'loaded-content-action');
+    addTearDown(login.dispose);
+    addTearDown(loaded.dispose);
+    late StateSetter updateContent;
+    var loggedIn = false;
+    await openApp(tester, index: 0, content: StatefulBuilder(
+      builder: (context, setState) {
+        updateContent = setState;
+        return Column(children: [
+          if (!loggedIn)
+            TextButton(
+                focusNode: login, onPressed: () {}, child: const Text('Login'))
+          else
+            TextButton(
+                focusNode: loaded,
+                onPressed: () {},
+                child: const Text('Loaded')),
+        ]);
+      },
+    ));
+    login.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+    await tester.pumpAndSettle();
+    updateContent(() => loggedIn = true);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(loaded.hasFocus, isTrue);
+    await disposeApp(tester);
+  });
+
   testWidgets('Android root advertises playback back handling to the system',
       (tester) async {
     await openApp(tester);
