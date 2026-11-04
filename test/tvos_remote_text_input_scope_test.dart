@@ -19,6 +19,143 @@ Widget _testApp({required Widget home}) {
 }
 
 void main() {
+  const keyboardChannel = MethodChannel('nipaplay/tvos_keyboard');
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(keyboardChannel, (_) async {
+      throw MissingPluginException();
+    });
+  });
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(keyboardChannel, null);
+  });
+
+  testWidgets(
+      'tvOS native editor preserves input options and restores field focus',
+      (tester) async {
+    const channel = MethodChannel('nipaplay/tvos_keyboard');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    MethodCall? call;
+    messenger.setMockMethodCallHandler(channel, (method) async {
+      call = method;
+      return {'value': '  password with spaces  '};
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final controller = TextEditingController(text: 'old');
+    final node = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(node.dispose);
+    await tester.pumpWidget(_testApp(
+        home: TvOSRemoteTextInputScope(
+      preferNativeKeyboard: true,
+      child: Scaffold(
+          body: TvOSRemoteTextInputAnchor(
+        title: '密码',
+        child: NipaplayLargeScreenFocusableAction(
+            focusNode: node,
+            onActivate: () {},
+            child: TextField(
+                controller: controller,
+                obscureText: true,
+                readOnly: true,
+                canRequestFocus: false)),
+      )),
+    )));
+    node.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(call!.method, 'editText');
+    expect(call!.arguments, containsPair('obscureText', true));
+    expect(call!.arguments, containsPair('title', '密码'));
+    expect(controller.text, '  password with spaces  ');
+    expect(node.hasFocus, isTrue);
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('native keyboard edits a TV field without a phone or web server',
+      (tester) async {
+    final controller = TextEditingController(text: '12');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+    var value = '';
+    await tester.pumpWidget(_testApp(
+      home: TvOSRemoteTextInputScope(
+        preferNativeKeyboard: true,
+        child: Scaffold(
+            body: TvOSRemoteTextInputAnchor(
+          title: '端口',
+          child: NipaplayLargeScreenFocusableAction(
+            focusNode: focusNode,
+            onActivate: () {},
+            child: TextField(
+              controller: controller,
+              readOnly: true,
+              canRequestFocus: false,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (text) => value = text,
+            ),
+          ),
+        )),
+      ),
+    ));
+    focusNode.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    final editor = find.descendant(
+        of: find.byType(AlertDialog), matching: find.byType(TextField));
+    await tester.enterText(editor, '34');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(controller.text, '34');
+    expect(value, '34');
+    expect(focusNode.hasFocus, isTrue);
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('cancel native input preserves password and restores TV focus',
+      (tester) async {
+    final controller = TextEditingController(text: 'original');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+    await tester.pumpWidget(_testApp(
+      home: TvOSRemoteTextInputScope(
+        preferNativeKeyboard: true,
+        child: Scaffold(
+            body: TvOSRemoteTextInputAnchor(
+          title: '密码',
+          child: NipaplayLargeScreenFocusableAction(
+            focusNode: focusNode,
+            onActivate: () {},
+            child: TextField(
+                controller: controller,
+                readOnly: true,
+                canRequestFocus: false,
+                obscureText: true),
+          ),
+        )),
+      ),
+    ));
+    focusNode.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    final editor = find.descendant(
+        of: find.byType(AlertDialog), matching: find.byType(TextField));
+    expect(tester.widget<TextField>(editor).obscureText, isTrue);
+    await tester.enterText(editor, 'do not save');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(controller.text, 'original');
+    expect(focusNode.hasFocus, isTrue);
+  });
+
   test('tvOS platform keeps remote input enabled when an overlay loses scope',
       () {
     expect(

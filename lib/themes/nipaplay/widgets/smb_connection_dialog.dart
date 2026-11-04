@@ -81,6 +81,15 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
         }
         return resolvedBase;
       }),
+      backgroundColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.focused)
+              ? _accentColor.withValues(alpha: 0.18)
+              : Colors.transparent),
+      side: WidgetStateProperty.resolveWith((states) => BorderSide(
+          color: states.contains(WidgetState.focused)
+              ? _accentColor
+              : Colors.transparent,
+          width: 2)),
       overlayColor: MaterialStateProperty.all(Colors.transparent),
       splashFactory: NoSplash.splashFactory,
       padding: MaterialStateProperty.all(
@@ -251,6 +260,17 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
                   },
                   style: IconButton.styleFrom(
                     overlayColor: Colors.transparent,
+                  ).copyWith(
+                    backgroundColor: WidgetStateProperty.resolveWith((states) =>
+                        states.contains(WidgetState.focused)
+                            ? _accentColor.withValues(alpha: 0.18)
+                            : Colors.transparent),
+                    side: WidgetStateProperty.resolveWith((states) =>
+                        BorderSide(
+                            color: states.contains(WidgetState.focused)
+                                ? _accentColor
+                                : Colors.transparent,
+                            width: 2)),
                   ),
                 ),
               ),
@@ -314,8 +334,10 @@ class _SMBConnectionFormState extends State<_SMBConnectionForm> {
             : keyboardType,
         autocorrect: fieldId != 'password',
         enableSuggestions: fieldId != 'password',
-        smartDashesType: fieldId == 'password' ? SmartDashesType.disabled : null,
-        smartQuotesType: fieldId == 'password' ? SmartQuotesType.disabled : null,
+        smartDashesType:
+            fieldId == 'password' ? SmartDashesType.disabled : null,
+        smartQuotesType:
+            fieldId == 'password' ? SmartQuotesType.disabled : null,
         obscureText: obscureText,
         cursorColor: _accentColor,
         style: TextStyle(color: _textColor),
