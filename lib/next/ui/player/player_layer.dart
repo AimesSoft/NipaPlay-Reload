@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:window_manager/window_manager.dart';
 
@@ -15,6 +16,7 @@ import '../../ui_data/ui_data.dart'
 import '../conversation/nipa_chat.dart';
 import '../data/login_requests.dart';
 import '../shell/nipa_setup.dart';
+import '../shell/phone_dock.dart' show PhoneGlassCircle, phoneGlass;
 import '../shell/shell_controller.dart';
 import '../shell/window_buttons.dart';
 import '../shell/window_chrome.dart';
@@ -77,7 +79,8 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   final bool _touch = NextPlayerLayer.debugTouch ?? globals.isTouch;
   bool _tapHidden = false;
 
-  /// A phone turns sideways for full screen ([PhoneOrientation]).
+  /// A phone plays sideways, full screen ([PhoneOrientation]), its controls
+  /// on glass.
   final bool _phone =
       NextPlayerLayer.debugPhone ?? (!globals.isDesktop && globals.isPhone);
   _Menu? _menu;
@@ -96,7 +99,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
-    if (_phone) unawaited(PhoneOrientation.video());
+    if (_phone) unawaited(PhoneOrientation.fullScreen(true));
   }
 
   @override
@@ -179,6 +182,25 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
       if (mounted && _menu != null) _menuFocus.requestFocus();
     });
   }
+
+  Widget _menuOf(
+          _Menu which, NextPlayback playback, NextShellController shell) =>
+      switch (which) {
+        _Menu.subtitles => SubtitleMenu(
+            key: _subtitles,
+            playback: playback,
+            settings: shell.services.settings,
+            onDone: _closeMenu),
+        _Menu.episodes =>
+          EpisodeMenu(playback: playback, shell: shell, onDone: _closeMenu),
+        _Menu.more => MoreMenu(
+            key: _more,
+            playback: playback,
+            settings: shell.services.settings,
+            calls: shell.services.calls,
+            onScreenshot: () => unawaited(_screenshot()),
+            onPictureInPicture: _pictureInPicture),
+      };
 
   void _closeMenu() {
     if (_menu == null) return;
@@ -300,13 +322,13 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                 left: 0,
                 right: 0,
                 top: 0,
-                height: 150,
+                height: _phone ? 110 : 150,
                 child: _Shade(shown: shown, top: true)),
             Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
-                height: 280,
+                height: _phone ? 150 : 280,
                 child: _Shade(shown: shown, top: false)),
             Positioned(
               left: 0,
@@ -315,11 +337,13 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
               child: _Fade(
                 shown: shown,
                 from: const Offset(0, -0.12),
-                child: MouseRegion(
-                  onEnter: (_) => _hoverChrome(true),
-                  onExit: (_) => _hoverChrome(false),
-                  child: _TopBar(onBack: _back, shell: shell),
-                ),
+                child: _phone
+                    ? _PhoneTop(onBack: _back, shell: shell)
+                    : MouseRegion(
+                        onEnter: (_) => _hoverChrome(true),
+                        onExit: (_) => _hoverChrome(false),
+                        child: _TopBar(onBack: _back, shell: shell),
+                      ),
               ),
             ),
             Positioned(
@@ -329,19 +353,26 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
               child: _Fade(
                 shown: shown,
                 from: const Offset(0, 0.08),
-                child: MouseRegion(
-                  onEnter: (_) => _hoverChrome(true),
-                  onExit: (_) => _hoverChrome(false),
-                  child: _BottomBar(
-                    playback: playback,
-                    shell: shell,
-                    menu: _menu,
-                    onMenu: _toggleMenu,
-                    onScrub: _scrub,
-                    touch: _touch,
-                    phone: _phone,
-                  ),
-                ),
+                child: _phone
+                    ? _PhoneBar(
+                        playback: playback,
+                        shell: shell,
+                        menu: _menu,
+                        onMenu: _toggleMenu,
+                        onScrub: _scrub,
+                      )
+                    : MouseRegion(
+                        onEnter: (_) => _hoverChrome(true),
+                        onExit: (_) => _hoverChrome(false),
+                        child: _BottomBar(
+                          playback: playback,
+                          shell: shell,
+                          menu: _menu,
+                          onMenu: _toggleMenu,
+                          onScrub: _scrub,
+                          touch: _touch,
+                        ),
+                      ),
               ),
             ),
             if (_flash > 0 && !NextMotion.reduced(context))
@@ -377,77 +408,58 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
                   onTap: _closeMenu,
                 ),
               ),
+              // A phone turned sideways: a sheet at the right, over the
+              // capsule's end, where its button is.
+              if (_phone)
+                Positioned(
+                  right: math.max(28, MediaQuery.paddingOf(context).right + 2),
+                  top: math.max(72, MediaQuery.paddingOf(context).top + 66),
+                  bottom: _PhoneBar.raise(context) + 10,
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: PlayerMenuSheet(
+                      width: 340,
+                      child: _menuOf(_menu!, playback, shell),
+                    ),
+                  ),
+                )
               // Under a finger: a sheet at the foot.
-              if (_touch)
+              else if (_touch)
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: MediaQuery.paddingOf(context).bottom + 8,
                   child: Center(
                     child: PlayerMenuSheet(
-                      child: switch (_menu!) {
-                        _Menu.subtitles => SubtitleMenu(
-                            key: _subtitles,
-                            playback: playback,
-                            settings: shell.services.settings,
-                            onDone: _closeMenu),
-                        _Menu.episodes => EpisodeMenu(
-                            playback: playback,
-                            shell: shell,
-                            onDone: _closeMenu),
-                        _Menu.more => MoreMenu(
-                            key: _more,
-                            playback: playback,
-                            settings: shell.services.settings,
-                            calls: shell.services.calls,
-                            onScreenshot: () => unawaited(_screenshot()),
-                            onPictureInPicture: _pictureInPicture),
-                      },
+                      child: _menuOf(_menu!, playback, shell),
                     ),
                   ),
                 )
               else
-              // Under its button, wherever the bar's width put it.
-              Positioned.fill(
-                child: LayoutBuilder(
-                  builder: (context, room) => Stack(children: [
-                    Positioned(
-                      right: _BottomBar.menuRight(_menu!, room.maxWidth),
-                      bottom: _BottomBar.height + 2,
-                      child: CallbackShortcuts(
-                        bindings: {
-                          const SingleActivator(LogicalKeyboardKey.escape):
-                              _escape,
-                        },
-                        child: Focus(
-                          focusNode: _menuFocus,
-                          child: MouseRegion(
-                            onEnter: (_) => _hoverChrome(true),
-                            child: switch (_menu!) {
-                              _Menu.subtitles => SubtitleMenu(
-                                  key: _subtitles,
-                                  playback: playback,
-                                  settings: shell.services.settings,
-                                  onDone: _closeMenu),
-                              _Menu.episodes => EpisodeMenu(
-                                  playback: playback,
-                                  shell: shell,
-                                  onDone: _closeMenu),
-                              _Menu.more => MoreMenu(
-                                  key: _more,
-                                  playback: playback,
-                                  settings: shell.services.settings,
-                                  calls: shell.services.calls,
-                                  onScreenshot: () => unawaited(_screenshot()),
-                                  onPictureInPicture: _pictureInPicture),
-                            },
+                // Under its button, wherever the bar's width put it.
+                Positioned.fill(
+                  child: LayoutBuilder(
+                    builder: (context, room) => Stack(children: [
+                      Positioned(
+                        right: _BottomBar.menuRight(_menu!, room.maxWidth),
+                        bottom: _BottomBar.height + 2,
+                        child: CallbackShortcuts(
+                          bindings: {
+                            const SingleActivator(LogicalKeyboardKey.escape):
+                                _escape,
+                          },
+                          child: Focus(
+                            focusNode: _menuFocus,
+                            child: MouseRegion(
+                              onEnter: (_) => _hoverChrome(true),
+                              child: _menuOf(_menu!, playback, shell),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ]),
+                    ]),
+                  ),
                 ),
-              ),
             ],
           ],
         ]);
@@ -778,7 +790,6 @@ class _BottomBar extends StatelessWidget {
     required this.onMenu,
     required this.onScrub,
     this.touch = false,
-    this.phone = false,
   });
   final NextPlayback playback;
   final NextShellController shell;
@@ -788,9 +799,6 @@ class _BottomBar extends StatelessWidget {
 
   /// Under a finger the volume is a drag on the picture, not a slider.
   final bool touch;
-
-  /// Full screen is the phone turned sideways.
-  final bool phone;
 
   static const _side = 40.0;
   static const _button = 40.0;
@@ -954,21 +962,6 @@ class _BottomBar extends StatelessWidget {
                     onTap: () => onMenu(_Menu.more),
                   ),
                   const SizedBox(width: _gap),
-                  if (phone)
-                    Builder(builder: (context) {
-                      final full = MediaQuery.orientationOf(context) ==
-                          Orientation.landscape;
-                      return _BarButton(
-                        glyph: full
-                            ? NextGlyph.exitFullscreen
-                            : NextGlyph.fullscreen,
-                        label: full ? '退出全屏' : '全屏',
-                        size: 19,
-                        onTap: () =>
-                            unawaited(PhoneOrientation.fullScreen(!full)),
-                      );
-                    })
-                  else
                   PlaybackSelector<bool>(
                     playback: playback,
                     selector: (s) => s.fullscreen,
@@ -989,6 +982,215 @@ class _BottomBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A phone's top over the video: back on glass, what plays, and Nipa on
+/// glass across from it.
+class _PhoneTop extends StatelessWidget {
+  const _PhoneTop({required this.onBack, required this.shell});
+  final VoidCallback onBack;
+  final NextShellController shell;
+
+  @override
+  Widget build(BuildContext context) {
+    final safe = MediaQuery.paddingOf(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(math.max(28, safe.left + 2),
+          math.max(18, safe.top + 6), math.max(28, safe.right + 2), 0),
+      child: Row(children: [
+        PhoneGlassCircle(
+          label: '返回',
+          onTap: onBack,
+          child: const NextIcon(NextGlyph.chevronLeft,
+              size: 22, color: NextColors.paper, stroke: 2),
+        ),
+        const SizedBox(width: 14),
+        const Expanded(child: _Title()),
+        const SizedBox(width: 14),
+        PhoneGlassCircle(child: _Nipa(shell: shell)),
+      ]),
+    );
+  }
+}
+
+/// A phone's controls: one capsule of glass at the foot. Play, the time
+/// and the timeline with the danmaku's heat over it, the length; then
+/// danmaku, subtitles, episodes and ⋯, whose menus rise as sheets.
+class _PhoneBar extends StatelessWidget {
+  const _PhoneBar({
+    required this.playback,
+    required this.shell,
+    required this.menu,
+    required this.onMenu,
+    required this.onScrub,
+  });
+  final NextPlayback playback;
+  final NextShellController shell;
+  final _Menu? menu;
+  final void Function(_Menu which) onMenu;
+  final ValueChanged<bool> onScrub;
+
+  static const height = 58.0;
+
+  /// The capsule's top, from the screen's foot.
+  static double raise(BuildContext context) =>
+      math.max(16, MediaQuery.paddingOf(context).bottom + 2) + height;
+
+  @override
+  Widget build(BuildContext context) {
+    final safe = MediaQuery.paddingOf(context);
+    final time = NextText.num(12.5, color: NextColors.p2);
+    return GestureDetector(
+      // Taps between the controls do not reach the picture.
+      behavior: HitTestBehavior.opaque,
+      onTap: () {},
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(math.max(28, safe.left + 2), 0,
+            math.max(28, safe.right + 2), math.max(16, safe.bottom + 2)),
+        child: SizedBox(
+          height: height,
+          child: Stack(clipBehavior: Clip.none, children: [
+            // The glass is drawn under the row, so the time over the
+            // timeline and its preview may rise out of it.
+            const Positioned.fill(
+              child: GlassContainer(
+                shape: LiquidRoundedSuperellipse(borderRadius: height / 2),
+                settings: phoneGlass,
+                quality: GlassQuality.standard,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 10, 0),
+              child: Row(children: [
+                PlaybackSelector<bool>(
+                  playback: playback,
+                  selector: (s) => s.playIntent,
+                  builder: (context, playing, _) => _BarButton(
+                    glyph: playing ? NextGlyph.pause : NextGlyph.play,
+                    label: playing ? '暂停' : '播放',
+                    size: 20,
+                    onTap: playback.togglePlay,
+                  ),
+                ),
+                _NextEpisode(playback: playback, shell: shell),
+                const SizedBox(width: 8),
+                PlaybackSelector<int>(
+                  playback: playback,
+                  selector: (s) => s.position.inSeconds,
+                  builder: (context, t, _) =>
+                      Text(playerTime(Duration(seconds: t)), style: time),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: height,
+                    child: Stack(clipBehavior: Clip.none, children: [
+                      // The track on the capsule's middle, the heat over it.
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: height / 2 - 28,
+                        child: PlaybackSelector<(int, int, int)>(
+                          playback: playback,
+                          selector: (s) => (
+                            s.duration.inMilliseconds,
+                            s.buffered.inMilliseconds,
+                            s.danmakuVersion.value,
+                          ),
+                          builder: (context, t, _) => PlayerTimeline(
+                            live: () => playback.position,
+                            repaint: playback.frame,
+                            duration: Duration(milliseconds: t.$1),
+                            buffered: Duration(milliseconds: t.$2),
+                            heat: playback.heat(),
+                            onSeek: playback.seek,
+                            onScrub: onScrub,
+                            preview: switch (playback) {
+                              SessionPlayback(:final preview, :final session)
+                                  when preview.enabled && session != null =>
+                                (at) => preview.at(session.source.uri, at),
+                              _ => null,
+                            },
+                          ),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                PlaybackSelector<int>(
+                  playback: playback,
+                  selector: (s) => s.duration.inSeconds,
+                  builder: (context, t, _) =>
+                      Text(playerTime(Duration(seconds: t)), style: time),
+                ),
+                const SizedBox(width: 10),
+                if (playback.offersDanmaku)
+                  PlaybackSelector<bool>(
+                    playback: playback,
+                    selector: (s) => s.danmakuVisible,
+                    builder: (context, on, _) =>
+                        _DanmakuPill(on: on, onTap: playback.toggleDanmaku),
+                  ),
+                if (playback.offersSubtitles)
+                  _BarButton(
+                    glyph: NextGlyph.subtitles,
+                    label: '字幕',
+                    lit: menu == _Menu.subtitles,
+                    onTap: () => onMenu(_Menu.subtitles),
+                  ),
+                _BarButton(
+                  glyph: NextGlyph.episodes,
+                  label: '剧集',
+                  lit: menu == _Menu.episodes,
+                  onTap: () => onMenu(_Menu.episodes),
+                ),
+                _BarButton(
+                  glyph: NextGlyph.more,
+                  label: '更多',
+                  lit: menu == _Menu.more,
+                  onTap: () => onMenu(_Menu.more),
+                ),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// 弹: the danmaku on (crimson) or off.
+class _DanmakuPill extends StatelessWidget {
+  const _DanmakuPill({required this.on, required this.onTap});
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: onTap,
+        semanticLabel: on ? '关闭弹幕' : '显示弹幕',
+        pressScale: 0.92,
+        builder: (context, _) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: on ? NextColors.accent : const Color(0x00000000),
+              border: Border.all(
+                  color: on ? NextColors.accent : const Color(0x40F5F1EA)),
+            ),
+            child: Text('弹',
+                style: NextText.sans(13,
+                    weight: FontWeight.w700,
+                    color: on ? NextColors.paper : NextColors.p3)),
+          ),
+        ),
+      );
 }
 
 /// 下一集. A file the library knows: the first episode after it in its

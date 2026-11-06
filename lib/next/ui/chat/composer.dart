@@ -13,6 +13,7 @@ import '../conversation/underway.dart';
 import '../conversation/nipa_chat.dart';
 import '../shell/nipa_setup.dart';
 import '../theme/tokens.dart';
+import '../theme/layout.dart';
 import '../widgets/artwork.dart';
 import '../widgets/attachments.dart';
 import '../widgets/buttons.dart';
@@ -81,6 +82,26 @@ class _ChatComposerState extends State<ChatComposer>
     if (mounted) setState(() {});
   }
 
+  ValueNotifier<bool>? _voiceRequest;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final request = NextShellScope.of(context).voiceRequest;
+    if (identical(request, _voiceRequest)) return;
+    _voiceRequest?.removeListener(_voiceRequested);
+    _voiceRequest = request..addListener(_voiceRequested);
+    // Asked for before this composer was built (the conversation opening).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _voiceRequested());
+  }
+
+  void _voiceRequested() {
+    final request = _voiceRequest;
+    if (!mounted || request == null || !request.value) return;
+    request.value = false;
+    if (!_dictating) unawaited(_toggleVoice());
+  }
+
   Future<void> _toggleVoice() async {
     if (_dictating) {
       await _voice.stop();
@@ -146,6 +167,7 @@ class _ChatComposerState extends State<ChatComposer>
 
   @override
   void dispose() {
+    _voiceRequest?.removeListener(_voiceRequested);
     WidgetsBinding.instance.removeObserver(this);
     _voiceModels.removeListener(_voiceChanged);
     _voice.removeListener(_voiceChanged);
@@ -262,6 +284,16 @@ class _ChatComposerState extends State<ChatComposer>
                 ),
               ),
               const SizedBox(width: 10),
+              // A phone talks first: with nothing typed, the send button is
+              // a large microphone.
+              if (NextLayout.compact(context) &&
+                  VoiceModelStore.supported &&
+                  (empty || _dictating) &&
+                  !chat.running)
+                _BigMic(
+                    listening: _dictating,
+                    onTap: chat.acceptsTyping ? _toggleVoice : null)
+              else ...[
               if (_voiceModels.enabled && VoiceModelStore.supported)
                 Pressable(
                   semanticLabel: _dictating ? '结束听写' : '语音输入',
@@ -283,12 +315,77 @@ class _ChatComposerState extends State<ChatComposer>
                 onSend: _send,
                 onStop: chat.stop,
               ),
+              ],
             ]),
           ],
         ),
       ),
     ]);
   }
+}
+
+/// A phone's microphone: crimson, under the thumb; while it listens it
+/// breathes.
+class _BigMic extends StatefulWidget {
+  const _BigMic({required this.listening, this.onTap});
+  final bool listening;
+  final VoidCallback? onTap;
+
+  @override
+  State<_BigMic> createState() => _BigMicState();
+}
+
+class _BigMicState extends State<_BigMic> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1400));
+
+  @override
+  void didUpdateWidget(_BigMic old) {
+    super.didUpdateWidget(old);
+    if (widget.listening && !_c.isAnimating) _c.repeat();
+    if (!widget.listening) _c.stop();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: widget.onTap,
+        semanticLabel: widget.listening ? '结束听写' : '说话',
+        pressScale: 0.92,
+        builder: (context, _) => AnimatedBuilder(
+          animation: _c,
+          builder: (context, child) {
+            final t = widget.listening ? _c.value : 0.0;
+            return Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: NextColors.accent,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                      color: NextColors.accent.withValues(alpha: 0.45),
+                      blurRadius: 18),
+                  if (widget.listening)
+                    BoxShadow(
+                        color: NextColors.accent
+                            .withValues(alpha: 0.35 * (1 - t)),
+                        spreadRadius: 14 * t),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: child,
+            );
+          },
+          child: const NextIcon(NextGlyph.mic,
+              size: 21, color: Color(0xFFFFFFFF), stroke: 1.9),
+        ),
+      );
 }
 
 /// Enter sends, Shift-Enter is a new line; while an input method is

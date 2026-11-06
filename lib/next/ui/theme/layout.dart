@@ -14,8 +14,14 @@ abstract final class NextLayout {
   /// A phone's side margin, where a window has [NextMetrics.gutter].
   static const compactGutter = 20.0;
 
-  /// The sections' bar at a phone's foot, above the home indicator.
-  static const tabBar = 56.0;
+  /// The sections' glass bar at a phone's foot, above the home indicator.
+  static const tabBar = 62.0;
+
+  /// The line to Nipa above the sections, the gap between them, and the
+  /// dock's side margin.
+  static const dockLine = 50.0;
+  static const dockGap = 10.0;
+  static const dockSide = 16.0;
 
   static bool compact(BuildContext context) =>
       MediaQuery.sizeOf(context).width < compactWidth;
@@ -39,7 +45,9 @@ abstract final class NextLayout {
 
   /// Room a page leaves at its foot for the sections' bar and the home
   /// indicator; none in a window.
-  static double foot(BuildContext context) => compact(context)
-      ? tabBar + MediaQuery.paddingOf(context).bottom
-      : 0;
+  static double foot(BuildContext context) {
+    if (!compact(context)) return 0;
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return dockLine + dockGap + tabBar + (bottom > 0 ? bottom - 8 : 12) + 12;
+  }
 }

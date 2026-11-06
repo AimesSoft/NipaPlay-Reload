@@ -80,6 +80,7 @@ class NextButton extends StatelessWidget {
     this.leading,
     this.onTap,
     this.height = 46,
+    this.expand = false,
   });
   const NextButton.ghost({
     super.key,
@@ -87,6 +88,7 @@ class NextButton extends StatelessWidget {
     this.leading,
     this.onTap,
     this.height = 46,
+    this.expand = false,
   }) : kind = NextButtonKind.ghost;
 
   final String label;
@@ -94,6 +96,10 @@ class NextButton extends StatelessWidget {
   final Widget? leading;
   final VoidCallback? onTap;
   final double height;
+
+  /// Fills the width it is given, its words in the middle (a phone's
+  /// main action under the thumb).
+  final bool expand;
 
   @override
   Widget build(BuildContext context) {
@@ -104,6 +110,7 @@ class NextButton extends StatelessWidget {
       builder: (context, hovered) => AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         height: height,
+        alignment: expand ? Alignment.center : null,
         padding: const EdgeInsets.symmetric(horizontal: 22),
         decoration: BoxDecoration(
           color: primary
@@ -131,14 +138,17 @@ class NextButton extends StatelessWidget {
 
 /// "播放 第 1 集": play glyph plus label with SF numbers.
 class PlayButton extends StatelessWidget {
-  const PlayButton({super.key, required this.label, this.onTap});
+  const PlayButton(
+      {super.key, required this.label, this.onTap, this.expand = false});
   final String label;
   final VoidCallback? onTap;
+  final bool expand;
 
   @override
   Widget build(BuildContext context) => NextButton(
         label: label,
         onTap: onTap,
+        expand: expand,
         leading:
             const NextIcon(NextGlyph.play, size: 14, color: Color(0xFF111111)),
       );

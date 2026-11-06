@@ -98,7 +98,9 @@ class _EpisodeRowState extends State<EpisodeRow> {
   }
 
   @override
-  Widget build(BuildContext context) => SizedBox(
+  Widget build(BuildContext context) {
+    if (NextLayout.compact(context)) return _phone(context);
+    return SizedBox(
         height: EpisodeRow.height,
         child: ListView.separated(
           controller: _scroll ??= _controller(MediaQuery.sizeOf(context).width),
@@ -123,6 +125,126 @@ class _EpisodeRowState extends State<EpisodeRow> {
           },
         ),
       );
+  }
+
+  /// A phone's episodes stand in a column: the still with its progress and
+  /// heat line, the number, title and runtime beside it.
+  Widget _phone(BuildContext context) => Padding(
+        padding: EdgeInsets.only(
+            left: NextLayout.gutter(context), right: NextLayout.end(context)),
+        child: Column(children: [
+          for (final episode in widget.episodes)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: _PhoneEpisode(
+                work: widget.work,
+                episode: episode,
+                current: episode.episodeId == widget.currentId,
+                onPlay: episode.playable ? () => widget.onPlay(episode) : null,
+                onMore: widget.onMore == null
+                    ? null
+                    : () => widget.onMore!(episode),
+                moreLink: widget.moreLink?.call(episode),
+              ),
+            ),
+        ]),
+      );
+}
+
+class _PhoneEpisode extends StatelessWidget {
+  const _PhoneEpisode({
+    required this.work,
+    required this.episode,
+    required this.current,
+    required this.onPlay,
+    this.onMore,
+    this.moreLink,
+  });
+  final UiWork work;
+  final UiEpisode episode;
+  final bool current;
+  final VoidCallback? onPlay;
+  final VoidCallback? onMore;
+  final LayerLink? moreLink;
+
+  static const still = 152.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final number = Words.episode(episode.number);
+    final runtime = Words.runtime(episode.runtime);
+    final caption = [
+      if (number != null) number,
+      if (current) '看到这里',
+    ].join(' · ');
+    return Opacity(
+      opacity: onPlay == null ? 0.5 : 1,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPlay,
+        onLongPress: onMore,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(
+            width: still,
+            child: Column(children: [
+              CompositedTransformTarget(
+                link: moreLink ?? LayerLink(),
+                child: WideCard(
+                  image: episode.still,
+                  tint: work.artwork.tint,
+                  width: still,
+                  height: still * 9 / 16,
+                  progress: episode.progress,
+                  selected: current,
+                  onOpen: onPlay,
+                  onPlay: onPlay,
+                ),
+              ),
+              const SizedBox(height: 5),
+              SizedBox(
+                height: 12,
+                width: still,
+                child: episode.heat == null || episode.heat!.isEmpty
+                    ? null
+                    : CustomPaint(painter: HeatPainter(episode.heat!)),
+              ),
+            ]),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (caption.isNotEmpty)
+                    Text(caption,
+                        style: NextText.sans(11.5,
+                            color: current ? NextColors.accent : NextColors.p3)),
+                  const SizedBox(height: 3),
+                  Text(episode.title ?? '',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: NextText.sans(14,
+                          weight: FontWeight.w600, height: 1.45)),
+                  const SizedBox(height: 5),
+                  Row(children: [
+                    if (episode.device case final device?) ...[
+                      DeviceMark([device]),
+                      const SizedBox(width: 8),
+                    ],
+                    if (runtime != null)
+                      NumText(runtime,
+                          style: NextText.sans(11.5, color: NextColors.p3)),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
 /// `.ep`: 16:9 still with the big number, title and runtime, the danmaku

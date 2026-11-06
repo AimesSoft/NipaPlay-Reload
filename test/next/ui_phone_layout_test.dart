@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/next/ui/player/menu_controls.dart';
 import 'package:nipaplay/next/ui/player/player_layer.dart';
 import 'package:nipaplay/next/ui/shell/next_shell.dart';
-import 'package:nipaplay/next/ui/shell/top_bar.dart';
+import 'package:nipaplay/next/ui/shell/phone_dock.dart';
 import 'package:nipaplay/next/ui/widgets/buttons.dart';
 import 'package:nipaplay/utils/video_player_state.dart' show PlayerStatus;
 
@@ -33,23 +33,48 @@ void main() {
       (tester) async {
     await pumpPlayer(tester, size: const Size(430, 932));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byType(NextTabBar), findsOneWidget);
+    final dock = find.byType(PhoneDock);
+    expect(dock, findsOneWidget);
     for (final label in ['首页', '发现', '媒体库', '动态']) {
-      expect(
-          find.descendant(
-              of: find.byType(NextTabBar), matching: button(label)),
-          findsOneWidget,
+      // The bar draws the selected one twice (its glass lens over it).
+      expect(find.descendant(of: dock, matching: find.text(label)),
+          findsWidgets,
           reason: label);
     }
-    // What is always at hand stays on the bar: search, the menu, Nipa.
-    for (final label in ['搜索', '菜单', '梨花']) {
+    // Nipa and the microphone on the dock's line; the menu at the top.
+    for (final label in ['和梨花说话', '说话', '菜单']) {
       expect(button(label).hitTestable(), findsOneWidget, reason: label);
     }
     await tester.pumpWidget(const SizedBox.shrink());
 
     await pumpPlayer(tester, size: const Size(1440, 900));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byType(NextTabBar), findsNothing);
+    expect(find.byType(PhoneDock), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+      'a phone plays sideways: its controls on one capsule, its menus a '
+      'sheet at the right above it', (tester) async {
+    NextPlayerLayer.debugTouch = true;
+    NextPlayerLayer.debugPhone = true;
+    await pumpPlayer(tester,
+        status: PlayerStatus.playing, size: const Size(932, 430));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(button('暂停').hitTestable(), findsOneWidget);
+    expect(button('返回').hitTestable(), findsOneWidget);
+    expect(button('全屏'), findsNothing, reason: 'always full screen');
+    await tester.tap(button('字幕'));
+    await tester.pump(const Duration(milliseconds: 400));
+    final sheet = find.byType(PlayerMenuSheet);
+    expect(sheet, findsOneWidget);
+    final box = tester.getRect(find
+        .descendant(of: sheet, matching: find.byType(PlayerMenuSurface))
+        .first);
+    final more = tester.getRect(button('字幕'));
+    expect(box.right, closeTo(932 - 28, 1), reason: 'at the right');
+    expect(box.bottom, lessThan(more.top), reason: 'above the capsule');
+    expect(box.width, closeTo(340 + 20, 1));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

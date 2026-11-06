@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../accounts/login_dialog.dart';
+import '../../next_runtime.dart';
 import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
 import '../chat/chat_frame.dart';
@@ -343,6 +344,24 @@ abstract final class NextUiDebug {
             secondary: p['button'] == 'secondary');
         await _settle();
         return {...result, ..._status(shell)};
+      case 'point':
+        // A finger's tap at a point, where no tile is (the player's video).
+        final at = Offset(double.parse(p['x']!), double.parse(p['y']!));
+        final binding = GestureBinding.instance;
+        final viewId = View.of(_context!).viewId;
+        binding.handlePointerEvent(PointerDownEvent(
+            viewId: viewId,
+            pointer: 9001,
+            kind: PointerDeviceKind.touch,
+            position: at));
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        binding.handlePointerEvent(PointerUpEvent(
+            viewId: viewId,
+            pointer: 9001,
+            kind: PointerDeviceKind.touch,
+            position: at));
+        await _settle();
+        return _status(shell);
       case 'manage':
         final page = _detail();
         if (page == null) throw StateError('No detail page is showing');
@@ -395,6 +414,12 @@ abstract final class NextUiDebug {
             : await shell.services.data.work(id);
         if (work == null) throw StateError('No such work');
         shell.play(work);
+      case 'file':
+        // A local file through Next's own playback, for looking at the
+        // player where the scripted world has nothing to play.
+        await _context!
+            .read<NextRuntime>()
+            .openExternalFile(p['path']!, stillActive: () => _shell != null);
       case 'escape':
         shell.escape();
       case 'ask':

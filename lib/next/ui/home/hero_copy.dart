@@ -114,13 +114,28 @@ class HeroCopy extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 26),
-          Wrap(runSpacing: 12, children: [
-            if (work.next?.playable ?? false) ...[
-              PlayButton(label: Words.play(work), onTap: onPlay),
-              const SizedBox(width: 12),
-            ],
-            NextButton.ghost(label: '详情', onTap: onDetail),
-          ]),
+          // A phone's play fills the row, under the thumb.
+          if (NextLayout.compact(context))
+            Padding(
+              padding: EdgeInsets.only(right: NextLayout.end(context)),
+              child: Row(children: [
+                if (work.next?.playable ?? false) ...[
+                  Expanded(
+                      child: PlayButton(
+                          label: Words.play(work), onTap: onPlay, expand: true)),
+                  const SizedBox(width: 12),
+                ],
+                NextButton.ghost(label: '详情', onTap: onDetail),
+              ]),
+            )
+          else
+            Wrap(runSpacing: 12, children: [
+              if (work.next?.playable ?? false) ...[
+                PlayButton(label: Words.play(work), onTap: onPlay),
+                const SizedBox(width: 12),
+              ],
+              NextButton.ghost(label: '详情', onTap: onDetail),
+            ]),
         ],
       ),
     );

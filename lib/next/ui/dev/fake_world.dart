@@ -167,6 +167,17 @@ final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
   /// whether they answer now (`device` in `ext.nipaplay.nextui` flips one).
   final _online = <String, bool>{'工作站': true, '旧笔记本': false};
 
+  /// The devices as `mesh.agentDevices` lists them: Nipa runs on each.
+  Future<List<JsonMap>> agentDevices() async => [
+        for (final MapEntry(key: name, value: online) in _online.entries)
+          {
+            'deviceId': 'device:$name',
+            'name': name,
+            'online': online,
+            'agent': {'runs': true, 'busy': false},
+          },
+      ];
+
   /// Where a work's episodes are when not here: from episode n on, on that
   /// device. 莉可丽丝 starts here and goes on on the workstation.
   static const _elsewhere = <String, (int, String)>{

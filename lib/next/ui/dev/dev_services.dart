@@ -6,6 +6,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/utils/lab_profile.dart';
 import 'package:provider/provider.dart';
 
+import '../../mesh/nipa_peers.dart';
 import '../../next_runtime.dart';
 import '../conversation/chat_port.dart';
 import '../data/gui_calls.dart';
@@ -78,6 +79,14 @@ abstract final class NextUiDev {
       discover: world,
       library: world.catalog,
       libraryActions: world.catalog,
+      // A phone runs no Nipa of its own: it picks a device's, as the real
+      // one does.
+      peers: simulator == null
+          ? null
+          : NipaPeers(
+              root: Directory('${Directory.systemTemp.path}/fake-peers'),
+              devices: world.agentDevices,
+              hostChanges: const Stream.empty()),
       search: world.search,
       settings: settings,
       manage: world.manage,

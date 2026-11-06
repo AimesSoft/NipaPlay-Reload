@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/widgets.dart';
 
 import '../../voice/model_store.dart';
@@ -49,7 +51,7 @@ class LabsSection extends StatelessWidget {
                       const SizedBox(height: 10),
                       Text(
                           '录音仅用于本机转写，文字留在输入框，确认后发送。每次录音最长 3 分钟。'
-                          ' Linux 需安装 PulseAudio 工具（parecord）。',
+                          '${Platform.isLinux ? ' Linux 需安装 PulseAudio 工具（parecord）。' : ''}',
                           style: NextText.sans(12, color: NextColors.p3)),
                       const SizedBox(height: 12),
                       Wrap(spacing: 10, children: [

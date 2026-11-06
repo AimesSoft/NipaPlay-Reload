@@ -90,6 +90,11 @@ class NextShellController extends ChangeNotifier {
   final panelOpen = ValueNotifier<bool>(false);
   final panelFocus = FocusNode(debugLabel: 'next.panel');
 
+  /// The phone's microphone asked to be heard: the conversation's composer
+  /// takes it (it may only now be built, as the conversation opens) and
+  /// starts listening.
+  final voiceRequest = ValueNotifier<bool>(false);
+
   /// Content scrolled under the top bar: show its scrim.
   final scrolled = ValueNotifier<bool>(false);
 
@@ -177,7 +182,7 @@ class NextShellController extends ChangeNotifier {
     if (value) {
       popover = NextPopover.none;
       closeSearch(restoreFocus: false);
-    } else if (panelOpen.value && onHome) {
+    } else if (panelOpen.value && onHome && !globals.isPhone) {
       _closePanel();
       homeChatOpen.value = true;
     } else if (services.logins.pending.isNotEmpty && !chatShown) {
@@ -220,7 +225,7 @@ class NextShellController extends ChangeNotifier {
       notifyListeners();
     }
     if (about != null) chat.setAbout(about);
-    if (onHome) {
+    if (onHome && !globals.isPhone) {
       homeChatOpen.value = true;
       if (!globals.isPhone) {
         WidgetsBinding.instance
@@ -234,6 +239,12 @@ class NextShellController extends ChangeNotifier {
     if (globals.isPhone) return;
     WidgetsBinding.instance
         .addPostFrameCallback((_) => panelFocus.requestFocus());
+  }
+
+  /// The phone's microphone: the conversation, listening.
+  void speak() {
+    openChat();
+    voiceRequest.value = true;
   }
 
   /// The avatar: opens the conversation, or puts it away.
@@ -449,6 +460,7 @@ class NextShellController extends ChangeNotifier {
     panelFocus.dispose();
     panelOpen.dispose();
     homeChatOpen.dispose();
+    voiceRequest.dispose();
     homeChatFocus.dispose();
     super.dispose();
   }

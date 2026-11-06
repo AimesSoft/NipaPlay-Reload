@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../ui_data/library.dart';
 import '../../ui_data/ui_data.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/cards.dart';
 import '../widgets/devices.dart';
@@ -323,14 +324,18 @@ class CategoryGrid extends StatelessWidget {
   Widget build(BuildContext context) => SliverLayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.crossAxisExtent;
-          final columns = ((width + gap) / (maxTile + gap)).ceil();
+          // A phone shows three posters a row, close together.
+          final phone = NextLayout.compact(context);
+          final gap = phone ? 12.0 : CategoryGrid.gap;
+          final max = phone ? 120.0 : maxTile;
+          final columns = ((width + gap) / (max + gap)).ceil();
           final tile = (width - gap * (columns - 1)) / columns;
           return ListenableBuilder(
             listenable: items,
             builder: (context, _) => SliverGrid(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
-                mainAxisSpacing: 28,
+                mainAxisSpacing: phone ? 20 : 28,
                 crossAxisSpacing: gap,
                 // Poster, title, and the device line when there may be one.
                 mainAxisExtent: tile * 3 / 2 + 12 + 22 + (deviceLine ? 21 : 0),

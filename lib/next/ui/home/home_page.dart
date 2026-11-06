@@ -266,13 +266,8 @@ class _NextHomePageState extends State<NextHomePage> {
             RepaintBoundary(
               child: HeroBackdrop(
                 workId: backdropWork?.workId,
-                // A phone stands the poster up; a window spreads the
-                // backdrop.
-                image: compact
-                    ? backdropWork?.artwork.poster ??
-                        backdropWork?.artwork.backdrop
-                    : backdropWork?.artwork.backdrop ??
-                        backdropWork?.artwork.poster,
+                image: backdropWork?.artwork.backdrop ??
+                    backdropWork?.artwork.poster,
                 soft: backdropWork != null &&
                     !compact &&
                     backdropWork.artwork.backdrop == null,
@@ -359,8 +354,12 @@ class _NextHomePageState extends State<NextHomePage> {
         if (mounted && TickerMode.of(context)) c.markSeen();
       });
     }
+    // A phone gives the work most of its first screen; what Nipa is doing
+    // is on the line at its foot.
+    final compact = NextLayout.compact(context);
     final top = ConstrainedBox(
-      constraints: BoxConstraints(minHeight: h - 338, minWidth: size.width),
+      constraints: BoxConstraints(
+          minHeight: compact ? h * 0.64 : h - 338, minWidth: size.width),
       child: Align(
         alignment: Alignment.bottomLeft,
         child: Padding(
@@ -387,13 +386,13 @@ class _NextHomePageState extends State<NextHomePage> {
                             ),
                       child: HeroCopy(
                         work: hero,
-                        line: line,
+                        line: compact ? null : line,
                         leadWithTitle: line != null && line == heroNote,
                         mood: c.mood,
                         moodSentence: c.moodSentence,
                         onPlay: () => shell.play(hero),
                         onDetail: () => shell.openWork(hero),
-                        preparing: active.isEmpty
+                        preparing: active.isEmpty || compact
                             ? null
                             : PreparingLine(
                                 tasks: active,
@@ -405,6 +404,14 @@ class _NextHomePageState extends State<NextHomePage> {
         ),
       ),
     );
+    // A phone talks to Nipa from the line at its foot.
+    if (NextLayout.compact(context)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [top, const SizedBox(height: 26)],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
