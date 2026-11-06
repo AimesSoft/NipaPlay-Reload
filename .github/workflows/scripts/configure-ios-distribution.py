@@ -17,7 +17,7 @@ def configure(project, export_options, team):
     available = set(re.findall(r'([A-Fa-f0-9]{40}) "(?:Apple|iPhone) Distribution:', identities))
     available = {value.upper() for value in available}
     candidates = []
-    for path in (Path.home() / 'Library/MobileDevice/Provisioning Profiles').glob('*.mobileprovision'):
+    for path in [Path(os.environ['IOS_DISTRIBUTION_PROFILE'])]:
         profile = plistlib.loads(subprocess.check_output(['security', 'cms', '-D', '-i', str(path)]))
         entitlements = profile.get('Entitlements', {})
         certificates = {hashlib.sha1(cert).hexdigest().upper() for cert in profile.get('DeveloperCertificates', [])}
