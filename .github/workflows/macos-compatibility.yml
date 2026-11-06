@@ -30,6 +30,8 @@ jobs:
     with:
       architectures: '["universal"]'
       unsigned: true
+    secrets:
+      NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
   existing-build:
     if: inputs.artifact_run_id != ''
@@ -94,6 +96,9 @@ jobs:
           run = api(f'actions/runs/{run_id}')
           assert run['head_branch'] == 'next' and run['path'] == '.github/workflows/main.yml', 'Use a Next release build'
           assert run['status'] == 'completed', 'The source build must have finished'
+          jobs = api(f'actions/runs/{run_id}/jobs?per_page=100')['jobs']
+          assert any(step['name'] == 'Validate built-in TMDB credential' and step['conclusion'] == 'success'
+                     for job in jobs for step in job.get('steps', [])), 'Source build did not validate its built-in TMDB credential; rebuild it'
           sha = run['head_sha']
           pubspec = base64.b64decode(api(f'contents/pubspec.yaml?ref={sha}')['content']).decode()
           version = re.search(r'^version:\s*(\S+)', pubspec, re.M).group(1)

@@ -59,6 +59,8 @@ runs:
         FLUTTER_XCODE_IPHONEOS_DEPLOYMENT_TARGET: '15.0'
         XCODE_SDK: 'iphoneos'
       run: |
+        python3 .github/workflows/scripts/built-in-credentials.py prepare "$RUNNER_TEMP/nipaplay-defines.json"
+        defines=("--dart-define-from-file=$RUNNER_TEMP/nipaplay-defines.json")
         echo "开始iOS构建流程..."
         echo "当前工作目录: $(pwd)"
 
@@ -97,18 +99,19 @@ runs:
           echo "开始第一次构建尝试..."
           if ! flutter build ios --release --no-codesign --verbose \
             --dart-define=FLUTTER_XCODE_SDK=$AVAILABLE_SDK \
-            --obfuscate --split-debug-info=build/symbols-ios; then
+            --obfuscate --split-debug-info=build/symbols-ios "${defines[@]}"; then
             echo "⚠️ 第一次构建失败，等待30秒后重试..."
             sleep 30
             echo "开始第二次构建尝试..."
             flutter build ios --release --no-codesign --verbose \
-              --obfuscate --split-debug-info=build/symbols-ios
+              --obfuscate --split-debug-info=build/symbols-ios "${defines[@]}"
           fi
         else
           echo "未检测到iOS SDK，使用默认构建..."
           flutter build ios --release --no-codesign --verbose \
-            --obfuscate --split-debug-info=build/symbols-ios
+            --obfuscate --split-debug-info=build/symbols-ios "${defines[@]}"
         fi
+        python3 .github/workflows/scripts/built-in-credentials.py verify build/ios/iphoneos/Runner.app/Frameworks/App.framework/App
         python3 .github/workflows/scripts/verify-ios-agent-assets.py build/ios/iphoneos/Runner.app
         sh thin-payload.sh build/ios/iphoneos/*.app
         cd build

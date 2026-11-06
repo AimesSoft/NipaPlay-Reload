@@ -9,6 +9,9 @@ on:
         default: false
         type: boolean
     secrets:
+      NIPAPLAY_TMDB_TOKEN:
+        description: 'TMDB credential NipaPlay ships with'
+        required: false
       IOS_DISTRIBUTION_CERTIFICATE_BASE64:
         description: '包含 Apple Distribution 证书和私钥 of the P12 (Base64)'
         required: false
@@ -146,6 +149,8 @@ jobs:
       - name: Build unsigned iOS IPA
         id: unsigned_build
         uses: ./.github/actions/build-ios
+        env:
+          NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
         with:
           app-version: ${{ steps.setup.outputs.version }}
 

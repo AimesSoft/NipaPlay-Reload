@@ -433,12 +433,10 @@ runs:
           $flutterArgs += "--verbose"
         }
         # Built-in credentials go through a file so no log line carries them.
-        if ($env:NIPAPLAY_TMDB_TOKEN) {
-          $definesPath = Join-Path $env:RUNNER_TEMP "nipaplay-defines.json"
-          @{ NIPAPLAY_TMDB_TOKEN = $env:NIPAPLAY_TMDB_TOKEN } | ConvertTo-Json -Compress |
-            Set-Content -Path $definesPath -Encoding utf8NoBOM
-          $flutterArgs += "--dart-define-from-file=$definesPath"
-        }
+        $definesPath = Join-Path $env:RUNNER_TEMP "nipaplay-defines.json"
+        python .github/workflows/scripts/built-in-credentials.py prepare $definesPath
+        if ($LASTEXITCODE -ne 0) { throw "Built-in credential preparation failed" }
+        $flutterArgs += "--dart-define-from-file=$definesPath"
         Write-Host "Running: flutter $($flutterArgs -join ' ')"
         & flutter @flutterArgs
         $flutterExitCode = $LASTEXITCODE
@@ -451,6 +449,8 @@ runs:
         $version = "${{ inputs.app-version }}"
         $DestDir = "build\windows\NipaPlay_${version}_Windows_x64"
         $SrcDir = "build\windows\x64\runner\Release"
+        python .github/workflows/scripts/built-in-credentials.py verify "$SrcDir\data\app.so"
+        if ($LASTEXITCODE -ne 0) { throw "Built-in credential verification failed" }
         $CustomLib = "windows\libmpv-2.dll"
         if (!(Test-Path $SrcDir)) {
           throw "Windows 构建输出目录不存在：$SrcDir"

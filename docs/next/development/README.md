@@ -19,6 +19,8 @@
 
 ## 运行与诊断
 
+- [发布流程](RELEASING.md)：正式构建、内置凭据校验与产物补发。
+
 - [可观测性契约](OBSERVABILITY_CONTRACT.md)：运行状态、回执与诊断的统一约定。
 - [安装包内的知识参考](KNOWLEDGE.md)：打包进应用、供梨花检索的只读知识，以及版本边界。
 - [自动化与个人工具](../advanced/automation.md) · [DSH 高级配置](../advanced/dsh-config.md) · [Linux 无界面版](../advanced/headless.md)

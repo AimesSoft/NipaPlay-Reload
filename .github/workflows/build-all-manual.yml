@@ -43,6 +43,7 @@ jobs:
       APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
   Build-macOS:
     name: Build macOS
@@ -76,6 +77,8 @@ jobs:
   Build-Headless:
     name: Build headless Linux packages
     uses: ./.github/workflows/build-headless.yml
+    secrets:
+      NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
   Build-HarmonyOS:
     name: Build HarmonyOS sideload package

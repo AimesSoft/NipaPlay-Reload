@@ -7,6 +7,7 @@
 #
 # 在已经 `flutter pub get` 过的仓库根目录运行，需要 dart（Flutter 自带的即可）和 Rust 工具链。
 # 环境变量（都可选）：
+#   NIPAPLAY_TMDB_TOKEN=值   内置 TMDB 凭据（官方 Next CI 必需）
 #   DART=路径            dart 可执行文件（默认 PATH 里的 dart）
 #   HEADLESS_EXE=路径    已经编好的 nipaplay-headless（跳过 dart compile）
 #   HEADLESS_NATIVE_LIB=路径   已经编好的 libnipaplay_headless_native.so（跳过 cargo）
@@ -50,12 +51,14 @@ if [ -z "$exe" ]; then
   echo "== dart compile exe（linux/$dart_arch）"
   "$dart" compile exe --target-os linux --target-arch "$dart_arch" \
     --packages=.dart_tool/package_config.json \
+    -DNIPAPLAY_TMDB_TOKEN="${NIPAPLAY_TMDB_TOKEN:-}" \
     -DNIPAPLAY_VERSION="$version" \
     -DNIPAPLAY_SOURCE_COMMIT="$knowledge_commit" \
     -DNIPAPLAY_SOURCE_DIRTY="$knowledge_dirty" \
     bin/nipaplay_headless.dart -o "$exe"
 fi
 [ -f "$exe" ] || { echo "找不到程序：$exe" >&2; exit 1; }
+python3 .github/workflows/scripts/built-in-credentials.py verify "$exe"
 
 # ---- 原生库 ----
 lib=${HEADLESS_NATIVE_LIB:-}

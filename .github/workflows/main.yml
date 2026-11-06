@@ -50,6 +50,11 @@ jobs:
       version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate built-in TMDB credential
+        if: github.ref_name == 'next'
+        env:
+          NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
+        run: python3 .github/workflows/scripts/built-in-credentials.py check
       - name: Check release title
         id: check
         env:
@@ -116,6 +121,7 @@ jobs:
       APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
   Build-macOS:
     name: Build macOS
@@ -155,6 +161,8 @@ jobs:
     needs: Gatekeeper
     if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' }}
     uses: ./.github/workflows/build-headless.yml
+    secrets:
+      NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
   Build-HarmonyOS:
     name: Build HarmonyOS sideload package
