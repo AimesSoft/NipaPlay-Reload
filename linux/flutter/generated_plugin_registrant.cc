@@ -16,6 +16,7 @@
 #include <hotkey_manager_linux/hotkey_manager_linux_plugin.h>
 #include <media_kit_libs_linux/media_kit_libs_linux_plugin.h>
 #include <media_kit_video/media_kit_video_plugin.h>
+#include <record_linux/record_linux_plugin.h>
 #include <rust_lib_nipaplay/rust_lib_nipaplay_plugin.h>
 #include <screen_retriever_linux/screen_retriever_linux_plugin.h>
 #include <tray_manager/tray_manager_plugin.h>
@@ -55,6 +56,9 @@ void fl_register_plugins(FlPluginRegistry* registry) {
   g_autoptr(FlPluginRegistrar) media_kit_video_registrar =
       fl_plugin_registry_get_registrar_for_plugin(registry, "MediaKitVideoPlugin");
   media_kit_video_plugin_register_with_registrar(media_kit_video_registrar);
+  g_autoptr(FlPluginRegistrar) record_linux_registrar =
+      fl_plugin_registry_get_registrar_for_plugin(registry, "RecordLinuxPlugin");
+  record_linux_plugin_register_with_registrar(record_linux_registrar);
   g_autoptr(FlPluginRegistrar) rust_lib_nipaplay_registrar =
       fl_plugin_registry_get_registrar_for_plugin(registry, "RustLibNipaplayPlugin");
   rust_lib_nipaplay_plugin_register_with_registrar(rust_lib_nipaplay_registrar);

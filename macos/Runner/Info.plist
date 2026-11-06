@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>将你的语音在本机转为梨花对话输入文字；仅在点击麦克风时录音。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>NipaPlay 需要使用相机扫描远程访问二维码以连接共享客户端。</string>
 	<key>CFBundleDevelopmentRegion</key>

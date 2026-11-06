@@ -19,6 +19,7 @@ import 'section_host.dart';
 import 'section_misc.dart';
 import 'section_peer.dart';
 import 'section_more.dart';
+import 'section_labs.dart';
 import 'settings_layout.dart';
 
 /// Where `/settings` opens: a section, and a setting in it to show.
@@ -93,6 +94,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     SettingsSection.storage: '存储 缓存 清理 截图 空间 磁盘 缩略图',
     SettingsSection.shortcuts: '快捷键 按键 键盘',
     SettingsSection.plugins: '插件 扩展 市场 安装 脚本 js 弹幕源',
+    SettingsSection.labs: '实验室 语音 输入 离线 录音 麦克风 模型 下载',
     SettingsSection.about: '关于 版本 更新 检查更新 新版本',
     SettingsSection.classic: '经典 classic 旧界面',
   };
@@ -285,6 +287,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
           more: _isMore(section),
           onMore: () => _toggleMore(section),
           highlight: _highlight),
+      SettingsSection.labs => LabsSection(model: model, highlight: _highlight),
       SettingsSection.about => AboutSection(
           key: _about,
           data: data,

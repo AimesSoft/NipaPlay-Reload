@@ -24,6 +24,10 @@ String _label(String key, Object? value) {
 }
 
 const _byKey = <String, Map<String, String>>{
+  'labs.voiceModel': {
+    'xasr-zh-en': '中英双语 · X-ASR（含标点，约 128 MiB）',
+    'zipformer-zh-small': '中文轻量 · Zipformer CTC（约 20 MiB）',
+  },
     'library.fileOrganization': {'ask': '询问我', 'off': '保持原样', 'auto': '按规则自动整理'},
     'network.dandanplayMode': {'auto': '自动', 'hongKong': '香港', 'china': '国内', 'custom': '自定义'},
     'appearance.classicLibrarySection': {'local_library': '本地', 'local_management': '本地管理', 'webdav_library': 'WebDAV', 'webdav_management': 'WebDAV 管理', 'smb_library': 'SMB', 'smb_management': 'SMB 管理', 'shared_library': '共享', 'shared_management': '共享管理', 'dandanplay': '弹弹play', 'jellyfin': 'Jellyfin', 'emby': 'Emby'},

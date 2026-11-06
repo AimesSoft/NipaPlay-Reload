@@ -16,6 +16,7 @@ enum SettingsSection {
   general('通用'),
   shortcuts('快捷键'),
   plugins('插件'),
+  labs('实验室'),
   about('关于'),
   classic('经典界面');
 
@@ -26,7 +27,7 @@ enum SettingsSection {
     [accounts, sources],
     [playback, danmaku, downloads, network, storage],
     [devices, sync, nipa],
-    [general, shortcuts, plugins, about],
+    [general, shortcuts, plugins, labs, about],
     [classic],
   ];
 }
@@ -77,6 +78,7 @@ abstract final class SettingsLayout {
   static const hidden = {'labs_use_next_interface', 'plugins.enabled.*'};
 
   static const _sections = <(String, SettingsSection)>[
+    ('labs.', SettingsSection.labs),
     ('player.screenshot*', SettingsSection.storage),
     ('player.', SettingsSection.playback),
     ('playback.', SettingsSection.playback),
@@ -219,6 +221,10 @@ abstract final class SettingsLayout {
       SettingsGroup('提醒与整理', ['notification.agentPopups', 'library.organizeAddedFolders', 'library.fileOrganization', 'library.fileOrganizationRules', 'library.notifyNipaEnabled']),
       SettingsGroup('文件夹', ['next.'], folded: true),
     ],
+    SettingsSection.labs: [
+      SettingsGroup('离线语音输入', ['labs.voiceModel', 'labs.voiceEnabled']),
+      SettingsGroup('其他实验', ['labs.']),
+    ],
     SettingsSection.general: [
       SettingsGroup('', [
         'language.mode',
@@ -227,7 +233,6 @@ abstract final class SettingsLayout {
       ]),
       SettingsGroup('启动', ['general.startup*'], folded: true),
       SettingsGroup('诊断', ['diagnostics.'], folded: true),
-      SettingsGroup('实验', ['labs.'], folded: true),
       SettingsGroup('其他', ['general.', 'language.', '*'], folded: true),
     ],
     SettingsSection.shortcuts: [

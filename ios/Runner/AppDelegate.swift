@@ -6,6 +6,8 @@ import Photos
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private var voiceAudioSession: (AVAudioSession.Category, AVAudioSession.Mode,
+                                  AVAudioSession.CategoryOptions, Double)?
   private var fileAssociationChannel: FlutterMethodChannel?
   private var pendingOpenFiles: [String] = []
   private var pendingOpenErrors: [String] = []
@@ -35,6 +37,39 @@ import Photos
     let messenger = registrar.messenger()
     NipaKeychain.register(with: messenger)
     NipaMeshBonjour.register(with: messenger)
+
+    // Dictation temporarily uses playAndRecord; restore the player's audio
+    // category after recording so it does not retain the microphone route.
+    let voiceSessionChannel = FlutterMethodChannel(
+      name: "nipaplay/voice_audio_session", binaryMessenger: messenger)
+    voiceSessionChannel.setMethodCallHandler { [weak self] call, result in
+      guard let self else { result(nil); return }
+      let session = AVAudioSession.sharedInstance()
+      do {
+        switch call.method {
+        case "begin":
+          if self.voiceAudioSession == nil {
+            self.voiceAudioSession = (session.category, session.mode,
+                                     session.categoryOptions, session.preferredSampleRate)
+          }
+        case "end":
+          if let saved = self.voiceAudioSession {
+            self.voiceAudioSession = nil
+            // Another audio owner may already have changed the category.
+            if session.category == .playAndRecord {
+              try session.setCategory(saved.0, mode: saved.1, options: saved.2)
+              if saved.3 > 0 { try session.setPreferredSampleRate(saved.3) }
+            }
+          }
+        default:
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        result(nil)
+      } catch {
+        result(FlutterError(code: "voice_audio_session", message: error.localizedDescription, details: nil))
+      }
+    }
 
     registrar.register(
       AirPlayRoutePickerFactory(messenger: messenger),

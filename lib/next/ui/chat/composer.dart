@@ -1,8 +1,14 @@
-import 'package:flutter/material.dart' show InputDecoration, TextField;
+import 'dart:async';
+
+import 'package:flutter/material.dart' show Icons, InputDecoration, TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/ui_data.dart';
+import '../../voice/input.dart';
+import '../../voice/model_store.dart';
+import '../shell/shell_controller.dart';
+import '../settings/settings_layout.dart';
 import '../conversation/underway.dart';
 import '../conversation/nipa_chat.dart';
 import '../shell/nipa_setup.dart';
@@ -42,10 +48,80 @@ class ChatComposer extends StatefulWidget {
   State<ChatComposer> createState() => _ChatComposerState();
 }
 
-class _ChatComposerState extends State<ChatComposer> {
+class _ChatComposerState extends State<ChatComposer>
+    with WidgetsBindingObserver {
+  late final VoiceInput _voice;
+  final _voiceModels = VoiceModelStore.instance;
+  TextEditingValue? _beforeVoice;
+  TextEditingController? _voiceController;
+  Object? _voiceThread;
+  bool get _dictating => _voice.active || _voice.busy;
+
+  void _transcription(String text) {
+    if (text.isEmpty ||
+        !mounted ||
+        _voiceController != widget.controller ||
+        _voiceThread != widget.chat.thread ||
+        _beforeVoice == null) {
+      return;
+    }
+    final original = _beforeVoice!;
+    final selection = original.selection.isValid
+        ? original.selection
+        : TextSelection.collapsed(offset: original.text.length);
+    final value =
+        original.text.replaceRange(selection.start, selection.end, text);
+    widget.controller.value = TextEditingValue(
+        text: value,
+        selection:
+            TextSelection.collapsed(offset: selection.start + text.length));
+  }
+
+  void _voiceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleVoice() async {
+    if (_dictating) {
+      await _voice.stop();
+      return;
+    }
+    if (!_voiceModels.installed) {
+      NextShellScope.of(context).openSettings(section: SettingsSection.labs);
+      return;
+    }
+    _beforeVoice = widget.controller.value;
+    _voiceController = widget.controller;
+    _voiceThread = widget.chat.thread;
+    await _voice.start();
+  }
+
+  Future<void> _cancelVoice() async {
+    await _voice.cancel();
+    if (mounted &&
+        _voiceController == widget.controller &&
+        _voiceThread == widget.chat.thread &&
+        _beforeVoice != null) {
+      widget.controller.value = _beforeVoice!;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_voice.active && state != AppLifecycleState.resumed) {
+      unawaited(_voice.stop());
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _voice = VoiceInput(onText: _transcription)..addListener(_voiceChanged);
+    _voiceModels.addListener(_voiceChanged);
+    unawaited(_voiceModels.load().catchError((Object error) {
+      debugPrint('[VoiceInput] settings unavailable: $error');
+    }));
+    WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_changed);
     widget.focusNode.onKeyEvent = _key;
   }
@@ -53,6 +129,11 @@ class _ChatComposerState extends State<ChatComposer> {
   @override
   void didUpdateWidget(ChatComposer old) {
     super.didUpdateWidget(old);
+    if (_dictating &&
+        (_voiceThread != widget.chat.thread ||
+            old.controller != widget.controller)) {
+      unawaited(_voice.cancel());
+    }
     if (old.controller != widget.controller) {
       old.controller.removeListener(_changed);
       widget.controller.addListener(_changed);
@@ -65,6 +146,10 @@ class _ChatComposerState extends State<ChatComposer> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _voiceModels.removeListener(_voiceChanged);
+    _voice.removeListener(_voiceChanged);
+    _voice.dispose();
     widget.controller.removeListener(_changed);
     if (widget.focusNode.onKeyEvent == _key) widget.focusNode.onKeyEvent = null;
     super.dispose();
@@ -76,6 +161,7 @@ class _ChatComposerState extends State<ChatComposer> {
       composerKey(widget.controller, event, _send);
 
   void _send() {
+    if (_dictating) return;
     final chat = widget.chat;
     final text = widget.controller.text.trim();
     if ((text.isEmpty && chat.attachments.isEmpty) || !chat.acceptsTyping) {
@@ -123,6 +209,27 @@ class _ChatComposerState extends State<ChatComposer> {
                 ]),
               ),
             const NipaSetupChip(padding: EdgeInsets.only(bottom: 8)),
+            if (_dictating || _voice.error != null)
+              Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(children: [
+                    Expanded(
+                        child: Text(
+                            _voice.error ??
+                                (_voice.active
+                                    ? '正在本机听写… 点击麦克风结束，文字确认后发送'
+                                    : '正在准备或结束听写…'),
+                            style: NextText.sans(12, color: NextColors.p2))),
+                    if (_dictating)
+                      Pressable(
+                          semanticLabel: '取消听写',
+                          onTap: _cancelVoice,
+                          builder: (_, hovered) => Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Text('取消',
+                                  style: NextText.sans(12,
+                                      color: NextColors.p2)))),
+                  ])),
             Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Expanded(
                 child: Padding(
@@ -130,13 +237,14 @@ class _ChatComposerState extends State<ChatComposer> {
                   child: ChatInputPaste(
                     key: ValueKey(chat.thread),
                     controller: widget.controller,
-                    enabled: chat.acceptsTyping,
+                    enabled: chat.acceptsTyping && !_dictating,
                     onImages: chat.attach,
                     builder: (contextMenuBuilder) => TextField(
                       contextMenuBuilder: contextMenuBuilder,
                       controller: widget.controller,
                       focusNode: widget.focusNode,
                       enabled: chat.acceptsTyping,
+                      readOnly: _dictating,
                       minLines: 1,
                       maxLines: 6,
                       keyboardType: TextInputType.multiline,
@@ -154,6 +262,22 @@ class _ChatComposerState extends State<ChatComposer> {
                 ),
               ),
               const SizedBox(width: 10),
+              if (_voiceModels.enabled && VoiceModelStore.supported)
+                Pressable(
+                  semanticLabel: _dictating ? '结束听写' : '语音输入',
+                  onTap: chat.acceptsTyping ? _toggleVoice : null,
+                  builder: (_, hovered) => Container(
+                    width: 36,
+                    height: 36,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _dictating ? NextColors.accentSoft : null),
+                    child: Icon(_dictating ? Icons.mic : Icons.mic_none,
+                        size: 20,
+                        color: _dictating ? NextColors.accent : NextColors.p2),
+                  ),
+                ),
               SendOrStop(
                 stop: chat.running && empty,
                 onSend: _send,

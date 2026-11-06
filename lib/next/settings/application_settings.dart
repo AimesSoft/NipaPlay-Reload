@@ -30,6 +30,7 @@ import 'package:path/path.dart' as p;
 import 'effective.dart';
 import '../player/danmaku/settings.dart';
 import 'registry.dart';
+import '../voice/settings.dart';
 import 'setting_descriptions.dart';
 import '../tasks/user_consent.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
@@ -2386,6 +2387,7 @@ abstract final class ApplicationSettings {
         path: true,
         directory: true,
         visible: () => !kIsWeb);
+    builders.addAll(voiceSettings().map((entry) => () => entry));
     return builders;
   }
 }
