@@ -34,6 +34,7 @@ class DevicesSectionState extends State<DevicesSection> {
   UiMeshSetup? _mesh;
   bool? _programs;
   bool _saving = false;
+  bool _refreshingMesh = false;
   String? _error;
   StreamSubscription<void>? _changes;
   int _loadRevision = 0;
@@ -259,6 +260,18 @@ class DevicesSectionState extends State<DevicesSection> {
     await _load();
   }
 
+  Future<void> _refreshMesh() async {
+    setState(() { _refreshingMesh = true; _error = null; });
+    try {
+      await widget.host.refreshMesh();
+    } catch (error) {
+      if (mounted) setState(() => _error = rawFailureText(error));
+    } finally {
+      if (mounted) setState(() => _refreshingMesh = false);
+    }
+    if (mounted) await _load();
+  }
+
   /// Takes a device out of the account's devices; it loses access at once.
   Future<void> _remove(UiMeshDevice d) async {
     setState(() => _error = null);
@@ -317,6 +330,15 @@ class DevicesSectionState extends State<DevicesSection> {
               onChanged: usable ? (on) => _set(_choice(m, joined: on)) : null,
             ),
           ),
+          if (m.joined)
+            SettingsRow(
+              title: '刷新组网',
+              subtitle: '重新查询设备和连接地址；服务器限流时会等待后重试。',
+              trailing: PillButton(
+                label: _refreshingMesh ? '正在刷新…' : '刷新',
+                onTap: _refreshingMesh || _saving ? null : _refreshMesh,
+              ),
+            ),
           if (m.available)
             SettingsRow(
               title: '本机名',

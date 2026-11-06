@@ -6,6 +6,7 @@ final class MeshCapability implements Capability {
   MeshCapability(MeshRuntime runtime)
       : actions = [
           _MeshAction(runtime, 'devices', Effect.read),
+          _MeshAction(runtime, 'refresh', Effect.write),
           _MeshAction(runtime, 'invoke', Effect.write),
           _MeshAction(runtime, 'invoke_destructive', Effect.destructive),
         ];
@@ -22,13 +23,17 @@ final class _MeshAction extends Action<MeshJson, JsonEncodable> {
   ActionSpec get spec => ActionSpec(
       id: 'mesh.$operation',
       title: 'Mesh $operation',
-      description: operation == 'devices'
+      description: operation == 'refresh'
+          ? 'Refresh Mesh discovery on this device without restarting its listener or replaying business operations. Re-query device addresses and probe peers in the background. Concurrent requests are merged; repeated calls and server rate limits are respected. Returns runtime coordinator status, next retry times and refreshRequested. Use mesh.devices with includeCatalog:false to read the resulting reachability.'
+          : operation == 'devices'
           ? 'List same-account devices, authenticated self-descriptions, reachability, and Action catalogs. Filter by deviceIds, or set includeCatalog:false to omit schemas for topology queries. Self-descriptions include host roles, storage paths, read-only media roots and the device hosting Nipa. description.agent says whether Nipa runs on that device now (runs; reason when not; model, busy and conversations while she does), live on every call; firstSeenAt says when this device first saw a device. Remote access is authorized by each host; JSON responses remain bounded by the 1 MiB Mesh frame. mesh.delegate hands a task to the Nipa of another device.'
           : effect == Effect.destructive
               ? 'Invoke a destructive Action on an authorized device. Only disk-file deletion waits for the user in that device’s NipaPlay UI; other operations execute directly and are audited.'
               : 'Invoke a non-destructive Action on a same-account device authorized by its host. A download started from a conversation returns completion facts to that originating device and thread.',
       effect: effect,
-      input: operation == 'devices'
+      input: operation == 'refresh'
+          ? const ObjectSchema({})
+          : operation == 'devices'
           ? const ObjectSchema({
               'deviceIds': ArraySchema(StringSchema(minLength: 1)),
               'includeCatalog': BooleanSchema(),
@@ -48,6 +53,9 @@ final class _MeshAction extends Action<MeshJson, JsonEncodable> {
   @override
   Future<Outcome<JsonEncodable>> run(
       MeshJson input, Invocation invocation) async {
+    if (operation == 'refresh') {
+      return Completed(MeshJson(await runtime.refreshDiscovery()));
+    }
     if (operation == 'devices') {
       return Completed(MeshJson(await runtime.devices(
           deviceIds: (input.json['deviceIds'] as List?)?.cast<String>(),

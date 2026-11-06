@@ -225,6 +225,7 @@
 | `mesh.devices` | read | 列出设备、认证描述及能力 | 通用/组合 | 允许 | [源码](../../../lib/next/mesh/capability.dart) |
 | `mesh.invoke` | write | 调用目标设备非破坏性 Action | 通用/组合 | 允许 | [源码](../../../lib/next/mesh/capability.dart) |
 | `mesh.invoke_destructive` | destructive | 调用目标设备破坏性 Action，遵守目标确认契约 | 通用/组合 | 允许 | [源码](../../../lib/next/mesh/capability.dart) |
+| `mesh.refresh` | write | 刷新设备与地址并后台探测；合并重复请求、遵守冷却，不重启监听或重放业务操作 | 通用/组合 | 允许 | [源码](../../../lib/next/mesh/capability.dart) |
 | `network.check` | read | 检查网络来源 | 通用/组合 | 允许 | [源码](../../../lib/next/network/capability.dart) |
 | `network.status` | read | 网络路由与故障事实 | 通用/组合 | 允许 | [源码](../../../lib/next/network/capability.dart) |
 | `notification.cancel` | write | 取消系统通知 | Core | 允许 | [源码](../../../lib/next/system/desktop.dart) |

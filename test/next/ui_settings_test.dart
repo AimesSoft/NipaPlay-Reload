@@ -120,6 +120,18 @@ void main() {
     expect(host.forgotten, ['tv']);
   });
 
+  testWidgets('Mesh refresh uses discovery without changing configuration', (tester) async {
+    final host = _MeshHost();
+    await tester.pumpWidget(MaterialApp(home: Material(
+      child: SingleChildScrollView(child: DevicesSection(host: host)))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('刷新'));
+    await tester.pumpAndSettle();
+    expect(host.refreshes, 1);
+    expect(host.removed, isEmpty);
+    expect(find.text('iPad'), findsOneWidget);
+  });
+
   testWidgets('another device is removed from the devices in two taps; this one has no removal',
       (tester) async {
     final host = _MeshHost();
@@ -621,6 +633,9 @@ final class _DeviceHost implements NextHostSettings {
 
 /// A host that is in the mesh with another device, recording removals.
 final class _MeshHost extends _DeviceHost {
+  var refreshes = 0;
+  @override
+  Future<void> refreshMesh() async { refreshes++; }
   final removed = <String>[];
   @override
   Future<UiMeshSetup> mesh() async => UiMeshSetup(joined: true, name: '这台电脑', devices: [

@@ -58,7 +58,7 @@ put('media.artwork.set', 'lib/next/ui_data/capability.dart', 'write', '设置媒
 put('media.metadata.ui_facts', 'lib/next/ui_data/capability.dart', 'read', '读取作品资料完整性和来源')
 group('media.library.', 'readable refresh status progress', 'lib/next/mesh/library_capability.dart', 'readable refresh status', desc='读取或刷新跨设备目录、解析可读地址或记录进度')
 group('media.mesh_files.', 'readable begin chunk finish delete confirm cancel', 'lib/next/mesh/files.dart', 'readable', 'confirm', desc='跨设备读取、暂存传输或预览删除；覆盖或删除需用户同意后由调用方 confirm')
-group('mesh.', 'devices invoke invoke_destructive', 'lib/next/mesh/capability.dart', 'devices', 'invoke_destructive', desc='发现或调用经认证的目标设备能力')
+group('mesh.', 'devices refresh invoke invoke_destructive', 'lib/next/mesh/capability.dart', 'devices', 'invoke_destructive', desc='发现或调用经认证的目标设备能力')
 group('sync.', 'status configure login enable test run', 'lib/next/media_sources/sync.dart', 'status', desc='查看或管理远端同步；依赖来源配置')
 group('subtitle.', 'update remove reset_selection', 'lib/next/subtitles/edit_capability.dart', desc='修改或移除字幕记录、重置选择；文件处理看具体契约')
 group('notification.', 'status send list cancel', 'lib/next/system/desktop.dart', 'status list', desc='查询或管理系统通知；依赖宿主')
@@ -103,7 +103,7 @@ BASELINE_HASHES = {
  'lib/next/capabilities/download_capability.dart': '18e66aee3ccb0788165ddbea65c842b0b52c8d90aa09db3ed018caaf80e9472c',
  'lib/next/capabilities/download_metadata_capability.dart': '9c55fdf10875cbe97126d4d08e162efbc2fadd9538d32fec4044b35b945ec27a',
  'lib/next/capabilities/download_playback_capability.dart': '56f9b51ac7c8ee83cbc3192f1ff3dd9e27faa3575b55b69c48ec3a650a3eefcf',
- 'lib/next/capabilities/family_descriptions.dart': '0efe2fff86bcffd7778b932565842e3eb78cb5b38ad88dd12a8833f1f970b8c8',
+ 'lib/next/capabilities/family_descriptions.dart': '65c7ee2f40b1f9d4f54286f9be590f129d717248f43c0b34cf560f985bd050f0',
  'lib/next/capabilities/history_capability.dart': '16c32339022d69d1a86120694938820408a879120a22aae2e2cec1862893619f',
  'lib/next/capabilities/kernel_control.dart': 'f565296087c0709468ea14d526bedaca86af286b75751264d9ae07f13a5eb1d6',
  'lib/next/capabilities/library_capability.dart': '107685542a32791dbc7424b8a6dcf6d49a0d00a6c9d33ae2cfaccbe7e42a19d2',
@@ -135,11 +135,11 @@ BASELINE_HASHES = {
  'lib/next/media_sources/remote_admin.dart': 'c30bce4b74d697f0da26fb1b7de816dc6143f9b8b87da72a6a4e33bd93550267',
  'lib/next/media_sources/sync.dart': '24ecd6ca762da36152605b16967680bf44cb4e5e16c7638d4ec5d22a26aa1056',
  'lib/next/memory/capability.dart': '75a5b2b9da6f7fceade925cc76a2e776bc9478a4575b2f10786878da237800d1',
- 'lib/next/mesh/capability.dart': '7d016bd7ba62cdf8c8567bf926bd1e9a64d27d3441ba2ce8cb3906498cda12a9',
+ 'lib/next/mesh/capability.dart': '9cce3f25960e021ed8841daf7915fcf7f334130a8b3593e1396c31ef83ce0c53',
  'lib/next/mesh/delegation.dart': '7083cfde13976088d821b4c66671adc8d0cda91ae5396c13e46cfe1aead4d1e4',
  'lib/next/mesh/files.dart': '88bf2fb55f8d5a6404ca1955e1e430db11e417339dae7335144234992d0bf840',
  'lib/next/mesh/library_capability.dart': 'd9999630399b9aff79bb10f2f14ff2a902b80c572dc6f30edf8ec2f330b37240',
- 'lib/next/mesh/runtime.dart': 'b93133e15725a0168abe7b4eeea55ee712bb4cb4436baf783774fcb8a458990b',
+ 'lib/next/mesh/runtime.dart': '4662b946e313bc3019333945e4d4c757405c4578cb8f59d1f51684552b14645c',
  'lib/next/network/capability.dart': 'e90a88e9e5fe88dcd6c4b8e85c39bf2850eda56aa38c0810ecd03e7274f5c98a',
  'lib/next/next_core.dart': 'a2ed645d835ca5ba167a9bba8501b29cb4c380b0cba70843374ffe5f14b01768',
  'lib/next/next_runtime.dart': '3301110231a9cea45cbf22069f840560b0ab4eeafcfdcfc95113c576873fc0ba',

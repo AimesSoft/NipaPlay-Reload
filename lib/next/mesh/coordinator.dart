@@ -114,9 +114,30 @@ final class MeshCoordinator {
     if (response.statusCode != 200 || decoded['success'] != true) {
       throw Failure(FailureCode.unavailable,
           'Mesh coordinator: ${decoded['error'] ?? 'invalid_response'}.',
-          retryable: response.statusCode >= 500 || response.statusCode == 429);
+          retryable: response.statusCode >= 500 || response.statusCode == 429,
+          details: {
+            'httpStatus': response.statusCode,
+            if (response.statusCode == 429)
+              'retryAfterSeconds': _retryAfterSeconds(response.headers),
+          });
     }
     return decoded;
+  }
+
+  static int _retryAfterSeconds(HttpHeaders headers) {
+    final value = headers.value(HttpHeaders.retryAfterHeader);
+    final seconds = int.tryParse(value ?? '');
+    if (seconds != null && seconds > 0) return seconds;
+    if (value != null) {
+      try {
+        final remaining =
+            HttpDate.parse(value).difference(DateTime.now()).inSeconds;
+        if (remaining > 0) return remaining + 1;
+      } on FormatException {
+        // A missing or invalid Retry-After uses the normal rate-limit cooldown.
+      }
+    }
+    return 60;
   }
 
   void close() => _client.close(force: true);

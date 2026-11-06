@@ -16,6 +16,8 @@ Mesh 使用同账号、经认证的设备。先用 `mesh.devices` 查看设备 I
 
 ## 核验和恢复
 
+- 设备列表长时间未恢复时，调用 `mesh.refresh {}` 请求重新查询设备与地址，随后用 `mesh.devices {includeCatalog:false}` 核对实际可达性。刷新不重启监听、不重放业务调用；并发刷新合并，重复请求及服务器限流保留冷却。普通远端离线是正常状态，不要循环刷新。
+- `mesh.devices.runtime.coordinator` 区分 `syncPending`、最近上报尝试/成功时间、`nextSyncAt` 与 `addressLookupRetryAt`/`addressLookupError`；本机监听正常不等于已完成上报。离线设备的 `error` 保留本次探测失败原因。
 - `not_delivered` 表示本次未找到可交付连接，不证明更早的同类请求未执行。`outcome_unknown` 或响应续传不可用表示结果未知，不等于回滚。
 - 保留目标设备、来源和原请求键，先查目标 `task.get` / `task.wait`、领域回执和 `diagnostics.operations`。只读数据可重新取；没有持久幂等契约的写操作不要自动重做。
 - SQL 写入通过原 previewId 查 `db.receipt`，撤回通过原 requestId 查；`unknown` 仍可能在途或键/来源不符。提交后通知尚未完成也与事务提交分开报告。详见 [过程事实契约](../OBSERVABILITY_CONTRACT.md)。

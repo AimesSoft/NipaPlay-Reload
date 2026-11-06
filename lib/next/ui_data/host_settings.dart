@@ -189,6 +189,7 @@ abstract interface class NextHostSettings {
   Future<UiModelCheck> checkModel();
 
   Future<UiMeshSetup> mesh();
+  Future<void> refreshMesh();
   Future<void> setMesh(UiMeshChoice choice);
 
   /// Removes another device from the account's devices: it loses access at

@@ -10,6 +10,7 @@ import '../body/next_body.dart';
 import '../state/change_history.dart';
 import '../system/operation_observations.dart';
 import '../platform/lab_profile.dart';
+import 'address_lookup.dart';
 import 'coordinator.dart';
 import 'chat_guest_host.dart' show chatGuestMethods;
 import 'delegation_host.dart' show delegationMethods;
@@ -77,6 +78,7 @@ bool meshActionAllowed(String id) =>
       'db.undo',
       'db.receipt',
       'mesh.devices',
+      'mesh.refresh',
       'mesh.invoke',
       'mesh.invoke_destructive',
     }.contains(id);
@@ -129,7 +131,7 @@ final class MeshRuntime implements MeshDeviceSource {
 
   /// Coordinator address lookups for one peer. The library calls every peer
   /// every few seconds, so a peer that is offline would otherwise cost one
-  /// lookup per call and exhaust the account's 60 address requests per hour in
+  /// lookup per call and exhaust the account's address-query budget in
   /// minutes. A lookup is allowed when nothing is cached, when the peer was
   /// reached since the last lookup (its address probably changed: restart,
   /// new IP), or when the gap since the last one has passed; the gap starts at
@@ -185,7 +187,8 @@ final class MeshRuntime implements MeshDeviceSource {
   Timer? _networkPoll, _networkDebounce, _networkReport;
   bool _networkPolling = false, _networkWatching = false;
   String? _observedAddresses, _publishedAddresses;
-  DateTime? _lastAddressReportAt;
+  DateTime? _lastAddressReportAt, _lastAddressReportSuccessAt;
+  DateTime? _nextHeartbeatAt, _coordinatorRetryNotBefore;
   Future<void> _operations = Future.value();
   Future<void>? _receiver;
   String _status = 'disabled';
@@ -211,13 +214,14 @@ final class MeshRuntime implements MeshDeviceSource {
   final _seen = <String, int>{};
   final _descriptions = <String, JsonMap>{};
   final _unknownPeerCheckedAt = <String, DateTime>{};
-  final _candidateLookupAt = <String, DateTime>{};
-  final _candidateLookupGap = <String, Duration>{};
-  // A lookup the coordinator refused (an expired account token answers 401):
-  // when it was, and how long to leave the coordinator alone about this peer.
-  final _candidateLookupRefusedAt = <String, DateTime>{};
-  final _candidateLookupRefusedGap = <String, Duration>{};
-  final _reachedSinceLookup = <String>{};
+  late final _addressLookup = MeshAddressLookup(
+    cache: _peerCandidates,
+    baseDelay: candidateLookupBase,
+    maxDelay: candidateLookupInterval,
+    request: (peer) => _coordinator!.request(
+        'GET', '/mesh/v1/addresses?device_id=$peer'),
+    onChanged: () => unawaited(_persistRoutes()),
+  );
   bool _hostFactsLoaded = false;
   bool _routesLoaded = false;
   Future<void> _routeWrites = Future.value();
@@ -225,6 +229,8 @@ final class MeshRuntime implements MeshDeviceSource {
   bool _replayLoaded = false;
   Future<void>? _refreshingDevices;
   Future<void>? _settingsRefresh;
+  Future<JsonMap>? _discoveryRefresh;
+  DateTime? _discoveryRefreshAt;
   int _settingsRefreshGeneration = -1;
   DateTime _settingsRefreshAt = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastDevicesRefresh = DateTime.fromMillisecondsSinceEpoch(0);
@@ -344,6 +350,51 @@ final class MeshRuntime implements MeshDeviceSource {
     }).catchError((Object _) {}));
   }
 
+  /// Re-query discovery without replacing the listener or replaying any RPC.
+  Future<JsonMap> refreshDiscovery() {
+    if (_discoveryRefresh case final pending?) return pending;
+    if (_node == null || _closed || _stopping != null) {
+      throw const Failure(FailureCode.unavailable, 'Mesh is not running.');
+    }
+    final now = DateTime.now();
+    final last = _discoveryRefreshAt;
+    if (last != null && now.difference(last) < unknownPeerRefreshCooldown) {
+      return Future.value({'refreshRequested': false, 'runtime': runtimeFacts});
+    }
+    _discoveryRefreshAt = now;
+    final generation = _generation;
+    late final Future<JsonMap> work;
+    work = _queue(() async {
+      if (_generation != generation || _node == null || _stopping != null) return;
+      final reportAt = _lastAddressReportAt;
+      final reportAllowed = _coordinatorRetryNotBefore == null ||
+          !DateTime.now().isBefore(_coordinatorRetryNotBefore!);
+      if (reportAllowed && (reportAt == null ||
+          DateTime.now().difference(reportAt) >= networkReportMinGap)) {
+        await heartbeat(renew: false);
+        _scheduleHeartbeat();
+      } else if (reportAllowed &&
+          DateTime.now().difference(_lastDevicesRefresh) >= unknownPeerRefreshCooldown) {
+        await refreshDevices();
+      }
+    }).then((_) async {
+      // A settings probe already in flight may still be using the old route.
+      // The explicit refresh gets one fresh pass after that work finishes.
+      await _settingsRefresh;
+      if (!_closed && _stopping == null && _node != null && _generation == generation) {
+        _addressLookup.refresh(_active);
+        _settingsRefreshAt = DateTime.fromMillisecondsSinceEpoch(0);
+        _refreshSettingsDevices();
+        _hostChanges.add(null);
+      }
+      return {'refreshRequested': true, 'runtime': runtimeFacts};
+    }).whenComplete(() {
+      if (identical(_discoveryRefresh, work)) _discoveryRefresh = null;
+    });
+    _discoveryRefresh = work;
+    return work;
+  }
+
   Future<void> restartConfigured() async {
     await stop();
     await startConfigured();
@@ -381,6 +432,8 @@ final class MeshRuntime implements MeshDeviceSource {
     _reachability.clear();
     _coordinatorSyncPending = false;
     _retryAttempts = 0;
+    _coordinatorRetryNotBefore = null;
+    coordinatorNotice = null;
     status = 'disabled';
   }
 
@@ -732,6 +785,7 @@ final class MeshRuntime implements MeshDeviceSource {
       'candidates': candidates,
     });
     _publishedAddresses = signature;
+    _lastAddressReportSuccessAt = DateTime.now();
     return response;
   }
 
@@ -764,8 +818,7 @@ final class MeshRuntime implements MeshDeviceSource {
           }
           // Forget only lookup backoff, not authenticated roster or old routes:
           // an address change must not break otherwise usable LAN connections.
-          _candidateLookupAt.clear();
-          _candidateLookupGap.clear();
+          _addressLookup.refresh(_active);
           if (_broadcast || SystemBonjour.available) {
             try {
               await discovery.close();
@@ -1166,9 +1219,17 @@ final class MeshRuntime implements MeshDeviceSource {
     }
     _interval =
         max(900, response!['heartbeat_interval_seconds'] as int? ?? _interval);
+    final recovered = _coordinatorSyncPending;
     _coordinatorSyncPending = false;
     _retryAttempts = 0;
+    _coordinatorRetryNotBefore = null;
     coordinatorNotice = null;
+    if (recovered) {
+      _addressLookup.refresh(_active.where((id) => _reachability[id] != true));
+      // Let normal demand re-query stale addresses; recovery does not scan
+      // every offline peer or change any peer's observed reachability.
+      if (!_hostChanges.isClosed) _hostChanges.add(null);
+    }
   }
 
   Future<void> _renewCertificate(MeshIdentity own) async {
@@ -1205,6 +1266,10 @@ final class MeshRuntime implements MeshDeviceSource {
     coordinatorNotice = error is Failure
         ? error.message
         : 'Mesh coordinator returned an unexpected response.';
+    if (error is Failure && error.details['retryAfterSeconds'] is int) {
+      _coordinatorRetryNotBefore = DateTime.now().add(
+          Duration(seconds: error.details['retryAfterSeconds'] as int));
+    }
     final alreadyPending = _coordinatorSyncPending;
     _coordinatorSyncPending = true;
     if (!alreadyPending || _heartbeat?.isActive != true) {
@@ -1215,20 +1280,27 @@ final class MeshRuntime implements MeshDeviceSource {
   void _scheduleHeartbeat({bool retry = false}) {
     _heartbeat?.cancel();
     if (_closed || _node == null) return;
-    final Duration delay;
+    var delay = Duration.zero;
     if (retry || _coordinatorSyncPending) {
       final factor = 1 << min(_retryAttempts, 6);
       final retryMs = coordinatorRetryDelay.inMilliseconds * factor;
-      final maxMs = _interval * 1000;
+      final maxMs = const Duration(minutes: 2).inMilliseconds;
       delay = Duration(milliseconds: min(retryMs, maxMs));
       _retryAttempts++;
     } else {
       delay = Duration(
           seconds: _interval + _random.nextInt(max(1, _interval ~/ 10)));
     }
+    final now = DateTime.now();
+    final notBefore = _coordinatorRetryNotBefore;
+    if (notBefore != null && notBefore.isAfter(now.add(delay))) {
+      delay = notBefore.difference(now);
+    }
+    _nextHeartbeatAt = now.add(delay);
     _heartbeat = Timer(delay, () async {
+      _nextHeartbeatAt = null;
       await _queue(() => heartbeat());
-      if (!_closed && _node != null) {
+      if (!_closed && _node != null && _heartbeat?.isActive != true) {
         _scheduleHeartbeat(retry: _coordinatorSyncPending);
       }
     });
@@ -1437,6 +1509,19 @@ final class MeshRuntime implements MeshDeviceSource {
         'loginWatchActive': _loginWatch?.isActive == true,
         'stopping': _stopping != null,
         'closed': _closed,
+        'listenPort': port,
+        'nextDiscoveryRefreshAt': _discoveryRefreshAt
+            ?.add(unknownPeerRefreshCooldown).toUtc().toIso8601String(),
+        'coordinator': {
+          'syncPending': _coordinatorSyncPending,
+          'lastAddressReportAttemptAt': _lastAddressReportAt?.toUtc().toIso8601String(),
+          'lastAddressReportSuccessAt': _lastAddressReportSuccessAt?.toUtc().toIso8601String(),
+          'nextSyncAt': _nextHeartbeatAt?.toUtc().toIso8601String(),
+          if (coordinatorNotice != null) 'notice': coordinatorNotice,
+          'addressLookupRetryAt': _addressLookup.retryAt?.toUtc().toIso8601String(),
+          if (_addressLookup.failure case final failure?)
+            'addressLookupError': failure.toJson(),
+        },
         'replayGuard': {
           'retainedKeys': _seen.length,
           'maxKeys': 20000,
@@ -1459,7 +1544,6 @@ final class MeshRuntime implements MeshDeviceSource {
     await _joinWork;
     return {
       'status': status,
-      'runtime': runtimeFacts,
       if (discoveryNotice != null) 'discoveryNotice': discoveryNotice,
       'devices': [
         for (final device in _devices)
@@ -1468,7 +1552,8 @@ final class MeshRuntime implements MeshDeviceSource {
               ...await _describe(device, includeCatalog: includeCatalog),
               ..._joinFacts(device['device_id'] as String),
             },
-      ]
+      ],
+      'runtime': runtimeFacts,
     };
   }
 
@@ -1518,7 +1603,7 @@ final class MeshRuntime implements MeshDeviceSource {
         if (includeCatalog) 'actions': tools,
         'description': description
       };
-    } on Failure {
+    } on Failure catch (failure) {
       if (current != null && !current()) return device;
       _reachability[id] = false;
       return {
@@ -1526,6 +1611,7 @@ final class MeshRuntime implements MeshDeviceSource {
         'deviceId': id,
         'online': false,
         if (presence.of(id) case final fact?) 'presence': fact.toJson(),
+        'error': failure.toJson(),
         if (includeCatalog) 'actions': _catalogs[id] ?? <Object?>[]
       };
     }
@@ -1652,66 +1738,10 @@ final class MeshRuntime implements MeshDeviceSource {
             }));
   }
 
-  Future<List<JsonMap>> _coordinatorCandidatesFor(String peer) async {
-    final coordinator = _coordinator;
-    final cached = _peerCandidates[peer];
-    final lookedUp = _candidateLookupAt[peer];
-    if (coordinator == null) return cached ?? const [];
-    final refusedAt = _candidateLookupRefusedAt[peer];
-    if (refusedAt != null &&
-        DateTime.now().difference(refusedAt) <
-            (_candidateLookupRefusedGap[peer] ?? candidateLookupBase)) {
-      return cached ?? const [];
-    }
-    // With something cached, a coordinator known to be unreachable and the
-    // backoff window both mean "use it"; without any answer yet, try anyway.
-    if (cached != null &&
-        lookedUp != null &&
-        (_coordinatorSyncPending ||
-            !_reachedSinceLookup.contains(peer) &&
-                DateTime.now().difference(lookedUp) <
-                    (_candidateLookupGap[peer] ?? candidateLookupBase))) {
-      return cached;
-    }
-    try {
-      final response = await coordinator.request(
-          'GET', '/mesh/v1/addresses?device_id=$peer');
-      final list = (response['candidates'] as List)
-          .map((e) => Map<String, Object?>.from(e as Map))
-          .toList();
-      final unchanged =
-          cached != null && jsonEncode(cached) == jsonEncode(list);
-      final gap = _candidateLookupGap[peer] ?? candidateLookupBase;
-      _candidateLookupGap[peer] =
-          unchanged && !_reachedSinceLookup.contains(peer)
-              ? Duration(
-                  milliseconds: min(gap.inMilliseconds * 2,
-                      candidateLookupInterval.inMilliseconds))
-              : candidateLookupBase;
-      _reachedSinceLookup.remove(peer);
-      _candidateLookupRefusedAt.remove(peer);
-      _candidateLookupRefusedGap.remove(peer);
-      _peerCandidates[peer] = list;
-      _candidateLookupAt[peer] = DateTime.now();
-      unawaited(_persistRoutes());
-      return list;
-    } on Failure catch (failure) {
-      if (!failure.retryable) {
-        // The coordinator answered and said no (an account token that has
-        // expired, a device it no longer knows). Retrying every few seconds
-        // would only spend its rate limit: leave it alone for a while, longer
-        // each time, and let the call go on with what is known (the other
-        // routes, the remembered one).
-        final gap = _candidateLookupRefusedGap[peer] ?? candidateLookupBase;
-        _candidateLookupRefusedAt[peer] = DateTime.now();
-        _candidateLookupRefusedGap[peer] = Duration(
-            milliseconds: min(gap.inMilliseconds * 2,
-                candidateLookupInterval.inMilliseconds));
-      }
-      _noteCoordinatorFailure(failure);
-      return _peerCandidates[peer] ?? const [];
-    }
-  }
+  Future<List<JsonMap>> _coordinatorCandidatesFor(String peer) =>
+      _coordinator == null
+          ? Future.value(_peerCandidates[peer] ?? const <JsonMap>[])
+          : _addressLookup.resolve(peer);
 
   static bool _isConnectStageError(Object error) {
     if (error is SocketException) return true;
@@ -1901,7 +1931,7 @@ final class MeshRuntime implements MeshDeviceSource {
         candidates: candidates,
       );
       await _saveRoute(peer, winner.candidate);
-      _reachedSinceLookup.add(peer);
+      _addressLookup.reached(peer);
       return winner.result;
     } on Failure catch (failure) {
       if (failure.details['reason'] == 'read_timeout') {
@@ -2695,6 +2725,9 @@ final class MeshRuntime implements MeshDeviceSource {
   Future<void> _stopNode() async {
     _stopNetworkWatch();
     _heartbeat?.cancel();
+    _nextHeartbeatAt = null;
+    _addressLookup.reset();
+    _discoveryRefreshAt = null;
     final node = _node;
     _node = null;
     _generation++;

@@ -38,7 +38,7 @@ Alpha 4 升级 Erika 0.3.5，修复 Windows 播放控件被视频遮挡、部分
 
 - Mesh 协调服务将地址查询和地址上报的限额分开，避免频繁查询耗尽设备地址更新额度；此项已在服务端部署。
 - 同步主分支的平台修复，包括 macOS 应用分类，以及按发行渠道显示赞助入口。
-- Mesh 在协调服务恢复后仍可能暂时显示设备离线，客户端自动恢复问题继续跟踪于 [#1101](https://github.com/AimesSoft/NipaPlay-Reload/issues/1101)。遇到该情况可重启应用重试，详见[已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/known-issues.md)。
+- **组网恢复与手动刷新**：拆开设备地址查询与本机上报的失败状态，修复旧地址缓存阻碍恢复的问题。设备页新增「刷新组网」，梨花可通过 `mesh.refresh` 使用同一入口；无需重启应用。普通离线设备继续低频处理，并发查询合并，刷新遵守服务器限流。关联：[#1101](https://github.com/AimesSoft/NipaPlay-Reload/issues/1101)。
 
 ## 此前 Alpha 3 的主要更新
 

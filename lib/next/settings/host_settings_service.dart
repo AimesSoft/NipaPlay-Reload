@@ -658,13 +658,24 @@ final class HostSettingsService
     final value = await _read('mesh.json');
     final listed = await meshRuntime.settingsDevices(
         selfRemotePrograms: programs.enabled);
+    final coordinator = meshRuntime.runtimeFacts['coordinator'] as Map;
+    final notice = meshRuntime.coordinatorNotice ??
+        (coordinator['addressLookupError'] as Map?)?['message'] as String?;
+    final retryValue = meshRuntime.coordinatorSyncPending
+        ? coordinator['nextSyncAt'] : coordinator['addressLookupRetryAt'];
+    final retryAt = retryValue is String ? DateTime.tryParse(retryValue) : null;
+    final waiting = retryAt != null && retryAt.isAfter(DateTime.now());
+    final problem = notice == null ? null : waiting
+        ? '$notice（等待重试，预计 ${retryAt.toLocal().toIso8601String().substring(11, 19)}）'
+        : notice;
     return UiMeshSetup(
         joined: meshRuntime.status == 'online',
         available: meshRuntime.issuerAvailable,
         problem: !meshRuntime.issuerAvailable
             ? '此版本尚未配置组网签发者'
             : switch (meshRuntime.status) {
-                'online' || 'disabled' => null,
+                'online' => problem,
+                'disabled' => null,
                 'sign_in_required' => '请先登录弹弹play账号',
                 'device_revoked' => '这台设备的组网资格已撤销',
                 _ => '暂时无法加入组网',
@@ -692,6 +703,12 @@ final class HostSettingsService
                 roles: (device['roles'] as List?)?.cast<String>() ?? const [],
                 remotePrograms: device['remotePrograms'] == true)
         ]);
+  }
+
+  @override
+  Future<void> refreshMesh() async {
+    await meshRuntime.refreshDiscovery();
+    notify();
   }
 
   static String _addressText(Map address) {
@@ -866,6 +883,8 @@ final class PendingHostSettings implements NextHostSettings, NextHostDeviceSetti
   Future<UiModelCheck> checkModel() async => (await ready).checkModel();
   @override
   Future<UiMeshSetup> mesh() async => (await ready).mesh();
+  @override
+  Future<void> refreshMesh() async => (await ready).refreshMesh();
   @override
   Future<void> setMesh(UiMeshChoice choice) async =>
       (await ready).setMesh(choice);

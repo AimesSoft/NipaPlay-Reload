@@ -1339,6 +1339,9 @@ final class FakeHostSettings
   }
 
   @override
+  Future<void> refreshMesh() async {}
+
+  @override
   Future<void> setMesh(UiMeshChoice choice) async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     meshState = choice.joined ? 'online' : 'offline';

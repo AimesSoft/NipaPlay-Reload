@@ -355,6 +355,10 @@ final class UnavailableHostSettings implements NextHostSettings {
       const UiMeshSetup(available: false, problem: _problem);
 
   @override
+  Future<void> refreshMesh() async =>
+      throw const Failure(FailureCode.unavailable, _problem);
+
+  @override
   Future<void> setMesh(UiMeshChoice choice) async =>
       throw const Failure(FailureCode.unavailable, _problem);
 
