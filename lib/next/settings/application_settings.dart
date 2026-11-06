@@ -186,8 +186,12 @@ abstract final class ApplicationSettings {
     }.contains(key)) {
       return kernels(const ['mediaKit']);
     }
-    if (key == 'player.erikaUpscalerMode') {
-      if (!ErikaPlayerAdapter.supportsNeuralUpscaler) {
+    if (key == 'player.erikaUpscalerModelPath' &&
+        !ErikaPlayerAdapter.supportsNeuralUpscaler) {
+      return platforms(const ['desktop', 'ios'], false, '此设备暂不提供自定义超分模型。');
+    }
+    if (key == 'player.erikaUpscalerMode' || key == 'player.erikaUpscalerModelPath') {
+      if (ErikaPlayerAdapter.availableUpscalerModes.length <= 1) {
         return platforms(const ['desktop', 'ios'], false,
             '此设备上的 Erika 暂不提供超分辨率。');
       }
@@ -420,9 +424,12 @@ abstract final class ApplicationSettings {
     if (key == 'player.precacheBufferSizeMb') {
       return kernel == PlayerKernelType.mediaKit;
     }
+    if (key == 'player.erikaUpscalerModelPath') {
+      return kernel == PlayerKernelType.erika && ErikaPlayerAdapter.supportsNeuralUpscaler;
+    }
     if (key == 'player.erikaUpscalerMode') {
       return kernel == PlayerKernelType.erika &&
-          ErikaPlayerAdapter.supportsNeuralUpscaler;
+          ErikaPlayerAdapter.availableUpscalerModes.length > 1;
     }
     if (key == 'player.useHardwareDecoder') {
       return kernel == PlayerKernelType.mdk ||
@@ -1099,7 +1106,7 @@ abstract final class ApplicationSettings {
         'player.erikaUpscalerMode',
         'player.erikaUpscalerMode',
         StringSchema(
-            values: PlayerUpscalerMode.values.map((v) => v.name).toList()),
+            values: ErikaPlayerAdapter.availableUpscalerModes.map((v) => v.name).toList()),
         PlayerUpscalerMode.off.name,
         'erika_upscaler_mode', (value) async {
       await player.setErikaUpscalerMode(
@@ -1111,6 +1118,14 @@ abstract final class ApplicationSettings {
         scope: 'device',
         decode: (raw) => decodeIndexedEnum(
             raw, PlayerUpscalerMode.values, PlayerUpscalerMode.off));
+    add('player.erikaUpscalerModelPath', 'Erika 自定义超分模型',
+        const StringSchema(), '', 'erika_upscaler_model_path', (value) async {
+      await player.setErikaUpscalerModelPath(value as String);
+    },
+        setter: 'setErikaUpscalerModelPath',
+        source: 'lib/utils/video_player_state/video_player_state_preferences.dart',
+        scope: 'device',
+        path: true);
     add(
         'player.hwdecMode',
         'player.hwdecMode',

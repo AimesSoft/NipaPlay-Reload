@@ -596,11 +596,33 @@ class ErikaSubtitleMemoryFontStatus {
   }
 }
 
+/// Super-resolution mode. ArtCNN and Anime4K target anime; [fsr1] and
+/// [platformVideo] (NVIDIA RTX Video / Intel VSR on Windows, VideoToolbox on
+/// Apple platforms) suit live-action content. Unsupported modes fall back to
+/// native sampling and report [ErikaUpscalerBackendStatus.inactive].
 enum ErikaUpscalerMode {
   off(0),
   artCnnC4F16(1),
   artCnnC4F32(2),
-  artCnnC4F16Ds(3);
+  artCnnC4F16Ds(3),
+  artCnnC4F16Dn(4),
+  artCnnC4F32Ds(5),
+  artCnnC4F32Dn(6),
+  artCnnR8F64(7),
+  anime4kS(16),
+  anime4kM(17),
+  anime4kL(18),
+  anime4kVl(19),
+  anime4kUl(20),
+  anime4kDenoiseS(21),
+  anime4kDenoiseM(22),
+  anime4kDenoiseL(23),
+  anime4kDenoiseVl(24),
+  anime4kDenoiseUl(25),
+  fsr1(32),
+  platformVideo(48),
+  metalFxSpatial(49),
+  custom(64);
 
   const ErikaUpscalerMode(this.nativeValue);
 
@@ -611,6 +633,24 @@ enum ErikaUpscalerMode {
       1 => ErikaUpscalerMode.artCnnC4F16,
       2 => ErikaUpscalerMode.artCnnC4F32,
       3 => ErikaUpscalerMode.artCnnC4F16Ds,
+      4 => ErikaUpscalerMode.artCnnC4F16Dn,
+      5 => ErikaUpscalerMode.artCnnC4F32Ds,
+      6 => ErikaUpscalerMode.artCnnC4F32Dn,
+      7 => ErikaUpscalerMode.artCnnR8F64,
+      16 => ErikaUpscalerMode.anime4kS,
+      17 => ErikaUpscalerMode.anime4kM,
+      18 => ErikaUpscalerMode.anime4kL,
+      19 => ErikaUpscalerMode.anime4kVl,
+      20 => ErikaUpscalerMode.anime4kUl,
+      21 => ErikaUpscalerMode.anime4kDenoiseS,
+      22 => ErikaUpscalerMode.anime4kDenoiseM,
+      23 => ErikaUpscalerMode.anime4kDenoiseL,
+      24 => ErikaUpscalerMode.anime4kDenoiseVl,
+      25 => ErikaUpscalerMode.anime4kDenoiseUl,
+      32 => ErikaUpscalerMode.fsr1,
+      48 => ErikaUpscalerMode.platformVideo,
+      49 => ErikaUpscalerMode.metalFxSpatial,
+      64 => ErikaUpscalerMode.custom,
       _ => ErikaUpscalerMode.off,
     };
   }
@@ -621,7 +661,13 @@ enum ErikaUpscalerBackendStatus {
   inactive(1),
   building(2),
   scalar(3),
-  simdgroupMatrix(4);
+  simdgroupMatrix(4),
+  cooperativeMatrix(5),
+  linalgMatrix(6),
+  videoProcessor(7),
+  videoToolbox(8),
+  metalFx(9),
+  tensorOps(10);
 
   const ErikaUpscalerBackendStatus(this.nativeValue);
 
@@ -633,6 +679,12 @@ enum ErikaUpscalerBackendStatus {
       2 => ErikaUpscalerBackendStatus.building,
       3 => ErikaUpscalerBackendStatus.scalar,
       4 => ErikaUpscalerBackendStatus.simdgroupMatrix,
+      5 => ErikaUpscalerBackendStatus.cooperativeMatrix,
+      6 => ErikaUpscalerBackendStatus.linalgMatrix,
+      7 => ErikaUpscalerBackendStatus.videoProcessor,
+      8 => ErikaUpscalerBackendStatus.videoToolbox,
+      9 => ErikaUpscalerBackendStatus.metalFx,
+      10 => ErikaUpscalerBackendStatus.tensorOps,
       _ => ErikaUpscalerBackendStatus.off,
     };
   }
@@ -1331,6 +1383,36 @@ class ErikaPlayer {
       'playerId': playerId,
       'mode': mode.nativeValue,
     });
+  }
+
+  /// Loads a custom super-resolution network from memory.
+  ///
+  /// [data] is either an Erika `.esr` network or an mpv hook shader (FSRCNNX
+  /// or the Anime4K CNN dialect). FSRCNNX is not bundled with Erika for
+  /// licensing reasons; the host application supplies the file. Loading does
+  /// not enable the network: call
+  /// `setUpscaler(ErikaUpscalerMode.custom)` afterwards. Throws a
+  /// [PlatformException] carrying the native error when the model is rejected
+  /// or the native library predates custom model support.
+  Future<void> loadUpscalerModel(
+    Uint8List data, {
+    String name = 'custom',
+  }) async {
+    if (data.isEmpty) {
+      throw ArgumentError.value(data, 'data', 'must not be empty');
+    }
+    final playerId = await ensureCreated();
+    await _invoke('loadUpscalerModel', <String, Object?>{
+      'playerId': playerId,
+      'name': name,
+      'data': data,
+    });
+  }
+
+  /// Unloads the custom super-resolution network loaded by
+  /// [loadUpscalerModel].
+  Future<void> clearUpscalerModel() async {
+    await _invokeForPlayer('clearUpscalerModel');
   }
 
   Future<void> setSubtitleScale(double scale) async {

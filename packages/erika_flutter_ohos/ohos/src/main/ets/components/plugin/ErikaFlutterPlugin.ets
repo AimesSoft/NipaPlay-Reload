@@ -54,7 +54,6 @@ interface ErikaMediaNavigation {
 
 const PLAYER_CHANNEL: string = 'erika_flutter/player';
 const EVENT_CHANNEL: string = 'erika_flutter/events';
-const FRAME_INTERVAL_MS: number = 16;
 const STATE_CHANGED_EVENT_KIND: number = 1;
 const DURATION_CHANGED_EVENT_KIND: number = 2;
 const POSITION_CHANGED_EVENT_KIND: number = 3;
@@ -80,13 +79,16 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
   private currentSession: avSession.AVSession | null = null;
   private sessionPromise: Promise<avSession.AVSession | null> | null = null;
   private sessionGeneration: number = 0;
-  private frameTimer: number = -1;
+  private engineGeneration: number = 0;
+  private eventGeneration: number = 0;
+  private methodQueue: Promise<void> = Promise.resolve();
 
   getUniqueClassName(): string {
     return 'ErikaFlutterPlugin';
   }
 
   onAttachedToEngine(binding: FlutterPluginBinding): void {
+    this.engineGeneration += 1;
     this.binding = binding;
     const messenger = binding.getBinaryMessenger();
     this.methodChannel = new MethodChannel(
@@ -103,27 +105,31 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     this.eventChannel.setStreamHandler({
       onListen: (_args: ESObject, sink: EventSink): void => {
         this.eventSink = sink;
-        this.drainAllEvents();
+        this.eventGeneration += 1;
+        this.startFrameLoop();
       },
       onCancel: (_args: ESObject): void => {
         this.eventSink = null;
+        this.eventGeneration += 1;
+        this.startFrameLoop();
       },
     });
     this.startFrameLoop();
   }
 
   onDetachedFromEngine(_binding: FlutterPluginBinding): void {
+    this.engineGeneration += 1;
+    this.eventGeneration += 1;
     this.stopFrameLoop();
-    this.textures.forEach((texture: ErikaTexture, textureId: number): void => {
-      if (texture.playerId > 0) {
-        erikaNative.nativeDetachSurface(texture.playerId);
-      }
-      this.binding?.getTextureRegistry()?.unregisterTexture(textureId);
-    });
-    this.textures.clear();
+    // Native destroy joins without waiting for ArkUI/TSFN completions. Retain
+    // every Flutter texture until all producer references have been released.
     this.players.forEach((playerId: number): void => {
       erikaNative.nativeDestroy(playerId);
     });
+    this.textures.forEach((_texture: ErikaTexture, textureId: number): void => {
+      this.binding?.getTextureRegistry()?.unregisterTexture(textureId);
+    });
+    this.textures.clear();
     this.players.clear();
     this.mediaMetadata.clear();
     this.mediaStates.clear();
@@ -148,9 +154,35 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
   }
 
   onMethodCall(call: MethodCall, result: MethodResult): void {
+    const generation = this.engineGeneration;
+    // TSFN promises may settle after synchronous engine detach has joined the
+    // owners. Never send a late response through a retired Flutter messenger.
+    const guarded: MethodResult = {
+      success: (value: ESObject): void => {
+        if (generation === this.engineGeneration && this.binding !== null) result.success(value);
+      },
+      error: (code: string, message: string, details: ESObject): void => {
+        if (generation === this.engineGeneration && this.binding !== null) result.error(code, message, details);
+      },
+      notImplemented: (): void => {
+        if (generation === this.engineGeneration && this.binding !== null) result.notImplemented();
+      },
+    };
+    // Serialize surface bookkeeping across awaits, including texture takeover.
+    this.methodQueue = this.methodQueue.then(async (): Promise<void> => {
+      if (generation !== this.engineGeneration || this.binding === null) {
+        return;
+      }
+      await this.dispatchMethod(call, guarded);
+    }).catch((error: Error): void => {
+      guarded.error('ERIKA_ERROR', error.message, null);
+    });
+  }
+
+  private async dispatchMethod(call: MethodCall, result: MethodResult): Promise<void> {
     const args: Map<string, ESObject> = call.args as Map<string, ESObject>;
     if (call.method === 'create') {
-      this.createPlayer(args, result);
+      await this.createPlayer(args, result);
       return;
     }
     if (call.method === 'dispose') {
@@ -162,7 +194,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       return;
     }
     if (call.method === 'resizeTexture') {
-      this.resizeTexture(args, result);
+      await this.resizeTexture(args, result);
       return;
     }
     if (call.method === 'releaseTexture') {
@@ -170,15 +202,15 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       return;
     }
     if (call.method === 'attachView') {
-      this.attachView(args, result);
+      await this.attachView(args, result);
       return;
     }
     if (call.method === 'detachView') {
-      this.detachView(args, result);
+      await this.detachView(args, result);
       return;
     }
     if (call.method === 'screenshot') {
-      this.captureFrame(args, result);
+      await this.captureFrame(args, result);
       return;
     }
     if (call.method === 'setMediaMetadata') {
@@ -190,21 +222,25 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       return;
     }
     if (call.method === 'open') {
-      this.openPlayer(args, result);
+      await this.openPlayer(args, result);
       return;
     }
     if (call.method === 'registerSubtitleMemoryFont') {
-      this.registerSubtitleMemoryFont(args, result);
+      await this.registerSubtitleMemoryFont(args, result);
+      return;
+    }
+    if (call.method === 'loadUpscalerModel') {
+      await this.loadUpscalerModel(args, result);
       return;
     }
     if (this.isNativePlayerMethod(call.method)) {
-      this.invokePlayer(call.method, args, result);
+      await this.invokePlayer(call.method, args, result);
       return;
     }
     result.notImplemented();
   }
 
-  private createPlayer(args: Map<string, ESObject>, result: MethodResult): void {
+  private async createPlayer(args: Map<string, ESObject>, result: MethodResult): Promise<void> {
     const outputMode = this.numberArg(args, 'outputMode', 0);
     const headroom = this.numberArg(
       args,
@@ -213,7 +249,13 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     );
     const upscaler = this.numberArg(args, 'upscaler', 0);
     const videoAlphaMode = this.numberArg(args, 'videoAlphaMode', 0);
-    const playerId = erikaNative.nativeCreate(outputMode, headroom, upscaler, videoAlphaMode) as number;
+    const generation = this.engineGeneration;
+    const playerId = await erikaNative.nativeCreateAsync(outputMode, headroom, upscaler, videoAlphaMode);
+    if (generation !== this.engineGeneration || this.binding === null) {
+      if (playerId > 0) erikaNative.nativeDestroy(playerId);
+      result.error('ERIKA_ERROR', 'Erika plugin detached', null);
+      return;
+    }
     if (playerId <= 0) {
       result.error(
         'ERIKA_ERROR',
@@ -234,6 +276,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       previousEnabled: false,
       nextEnabled: false,
     });
+    this.startPlayerFrames(playerId);
     result.success(playerId);
   }
 
@@ -258,7 +301,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     result.success(null);
   }
 
-  private openPlayer(args: Map<string, ESObject>, result: MethodResult): void {
+  private async openPlayer(args: Map<string, ESObject>, result: MethodResult): Promise<void> {
     const metadataValue: ESObject = args.get('metadata');
     let metadata: ErikaMediaMetadata | null = null;
     if (metadataValue !== undefined && metadataValue !== null) {
@@ -271,7 +314,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     const playerId = this.numberArg(args, 'playerId', 0);
     const nativeArgs: Map<string, ESObject> = new Map<string, ESObject>(args);
     nativeArgs.delete('metadata');
-    if (!this.invokePlayerNative('open', nativeArgs, result)) {
+    if (!await this.invokePlayerNative('open', nativeArgs, result)) {
       return;
     }
     const state = this.mediaStates.get(playerId);
@@ -357,7 +400,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     result.success(textureId);
   }
 
-  private resizeTexture(args: Map<string, ESObject>, result: MethodResult): void {
+  private async resizeTexture(args: Map<string, ESObject>, result: MethodResult): Promise<void> {
     const textureId = this.numberArg(args, 'textureId', -1);
     const texture = this.textures.get(textureId);
     if (!texture) {
@@ -373,7 +416,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       texture.height,
     );
     if (texture.playerId > 0) {
-      const status = erikaNative.nativeResizeSurface(
+      const status = await erikaNative.nativeResizeSurfaceAsync(
         texture.playerId,
         texture.width,
         texture.height,
@@ -399,7 +442,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     result.success(null);
   }
 
-  private attachView(args: Map<string, ESObject>, result: MethodResult): void {
+  private async attachView(args: Map<string, ESObject>, result: MethodResult): Promise<void> {
     const playerId = this.numberArg(args, 'playerId', 0);
     const textureId = this.numberArg(args, 'viewId', -1);
     const texture = this.textures.get(textureId);
@@ -410,7 +453,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     if (texture.playerId > 0 && texture.playerId !== playerId) {
       erikaNative.nativeDetachSurface(texture.playerId);
     }
-    const status = erikaNative.nativeAttachSurface(
+    const status = await erikaNative.nativeAttachSurfaceAsync(
       playerId,
       texture.surfaceId,
       texture.width,
@@ -420,12 +463,19 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     if (!this.completeStatus(status, result, 'attach OpenHarmony surface')) {
       return;
     }
+    if (!this.players.has(playerId) || this.binding === null) {
+      result.error('ERIKA_ERROR', 'Erika player disposed', null);
+      return;
+    }
+    this.textures.forEach((other: ErikaTexture): void => {
+      if (other.playerId === playerId) other.playerId = 0;
+    });
     texture.playerId = playerId;
     result.success(null);
-    this.drainEvents(playerId);
+    // Events arrive through the native TSFN on ArkUI.
   }
 
-  private detachView(args: Map<string, ESObject>, result: MethodResult): void {
+  private async detachView(args: Map<string, ESObject>, result: MethodResult): Promise<void> {
     const playerId = this.numberArg(args, 'playerId', 0);
     const textureId = this.numberArg(args, 'viewId', -1);
     const texture = this.textures.get(textureId);
@@ -433,16 +483,15 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       result.success(null);
       return;
     }
-    const status = erikaNative.nativeDetachSurface(playerId) as number;
+    const status = await erikaNative.nativeDetachSurfaceAsync(playerId);
     texture.playerId = 0;
     if (!this.completeStatus(status, result, 'detach OpenHarmony surface')) {
       return;
     }
     result.success(null);
-    this.drainEvents(playerId);
   }
 
-  private captureFrame(args: Map<string, ESObject>, result: MethodResult): void {
+  private async captureFrame(args: Map<string, ESObject>, result: MethodResult): Promise<void> {
     const playerId = this.numberArg(args, 'playerId', 0);
     if (!this.players.has(playerId)) {
       result.error('ERIKA_ERROR', 'Unknown Erika player ' + playerId, null);
@@ -468,7 +517,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       return;
     }
 
-    const bytes = erikaNative.nativeCaptureFrame(
+    const bytes = await erikaNative.nativeCaptureFrameAsync(
       playerId,
       width,
       height,
@@ -476,12 +525,12 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     result.success(bytes);
   }
 
-  private invokePlayer(
+  private async invokePlayer(
     method: string,
     args: Map<string, ESObject>,
     result: MethodResult,
-  ): void {
-    if (!this.invokePlayerNative(method, args, result)) {
+  ): Promise<void> {
+    if (!await this.invokePlayerNative(method, args, result)) {
       return;
     }
     const playerId = this.numberArg(args, 'playerId', 0);
@@ -501,18 +550,22 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     }
   }
 
-  private invokePlayerNative(
+  private async invokePlayerNative(
     method: string,
     args: Map<string, ESObject>,
     result: MethodResult,
-  ): boolean {
+  ): Promise<boolean> {
     const playerId = this.numberArg(args, 'playerId', 0);
     if (!this.players.has(playerId)) {
       result.error('ERIKA_ERROR', 'Unknown Erika player ' + playerId, null);
       return false;
     }
     const argumentsJson = JSON.stringify(this.mapToObject(args));
-    const raw = erikaNative.nativeInvoke(playerId, method, argumentsJson) as string;
+    const raw = await erikaNative.nativeInvokeAsync(playerId, method, argumentsJson);
+    if (!this.players.has(playerId) || this.binding === null) {
+      result.error('ERIKA_ERROR', 'Erika player disposed', null);
+      return false;
+    }
     const response = JSON.parse(raw) as NativeResponse;
     if (!response.ok) {
       result.error(
@@ -523,7 +576,6 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       return false;
     }
     result.success(response.value ?? null);
-    this.drainEvents(playerId);
     return true;
   }
 
@@ -599,9 +651,9 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
   }
 
   private registerAVSessionCommands(session: avSession.AVSession): void {
-    session.on('play', (): void => this.invokeFromAVSession('play'));
-    session.on('pause', (): void => this.invokeFromAVSession('pause'));
-    session.on('stop', (): void => this.invokeFromAVSession('stop'));
+    session.on('play', (): void => { this.invokeFromAVSession('play'); });
+    session.on('pause', (): void => { this.invokeFromAVSession('pause'); });
+    session.on('stop', (): void => { this.invokeFromAVSession('stop'); });
     session.on('seek', (time: number): void => {
       this.invokeFromAVSession('seek', new Map<string, ESObject>([
         ['positionMicros', time * 1000],
@@ -627,7 +679,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     });
   }
 
-  private invokeFromAVSession(method: string, extra?: Map<string, ESObject>): void {
+  private async invokeFromAVSession(method: string, extra?: Map<string, ESObject>): Promise<void> {
     const playerId = this.currentPlayerId;
     if (!this.players.has(playerId)) {
       return;
@@ -635,15 +687,11 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     const args: Map<string, ESObject> =
       extra ?? new Map<string, ESObject>();
     args.set('playerId', playerId);
-    const raw = erikaNative.nativeInvoke(
+    await erikaNative.nativeInvokeAsync(
       playerId,
       method,
       JSON.stringify(this.mapToObject(args)),
-    ) as string;
-    const response = JSON.parse(raw) as NativeResponse;
-    if (response.ok) {
-      this.drainEvents(playerId);
-    }
+    );
   }
 
   private async publishMediaMetadata(
@@ -756,17 +804,17 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     session?.destroy().catch((): void => {});
   }
 
-  private registerSubtitleMemoryFont(
+  private async registerSubtitleMemoryFont(
     args: Map<string, ESObject>,
     result: MethodResult,
-  ): void {
+  ): Promise<void> {
     const playerId = this.numberArg(args, 'playerId', 0);
     if (!this.players.has(playerId)) {
       result.error('ERIKA_ERROR', 'Unknown Erika player ' + playerId, null);
       return;
     }
     const data = args.get('data') as Uint8Array;
-    const response = erikaNative.nativeRegisterSubtitleMemoryFont(
+    const response = await erikaNative.nativeRegisterSubtitleMemoryFontAsync(
       playerId,
       data,
     ) as Array<number>;
@@ -777,38 +825,37 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     result.success(response[1] ?? 0);
   }
 
+  private async loadUpscalerModel(
+    args: Map<string, ESObject>,
+    result: MethodResult,
+  ): Promise<void> {
+    const playerId = this.numberArg(args, 'playerId', 0);
+    if (!this.players.has(playerId)) {
+      result.error('ERIKA_ERROR', 'Unknown Erika player ' + playerId, null);
+      return;
+    }
+    const data = args.get('data') as Uint8Array;
+    const nameValue: ESObject = args.get('name');
+    const name = typeof nameValue === 'string' ? nameValue : 'custom';
+    const status = await erikaNative.nativeLoadUpscalerModelAsync(playerId, name, data) as number;
+    if (!this.completeStatus(status, result, 'load upscaler model')) {
+      return;
+    }
+    result.success(null);
+  }
+
   private startFrameLoop(): void {
-    if (this.frameTimer >= 0) {
-      return;
-    }
-    this.frameTimer = setInterval((): void => {
-      const frameTimeSeconds = Date.now() / 1000.0;
-      this.players.forEach((playerId: number): void => {
-        erikaNative.nativeRenderTick(playerId, frameTimeSeconds);
-        this.drainEvents(playerId);
-      });
-    }, FRAME_INTERVAL_MS);
+    this.players.forEach((playerId: number): void => this.startPlayerFrames(playerId));
   }
 
-  private stopFrameLoop(): void {
-    if (this.frameTimer >= 0) {
-      clearInterval(this.frameTimer);
-      this.frameTimer = -1;
-    }
-  }
-
-  private drainAllEvents(): void {
-    this.players.forEach((playerId: number): void => this.drainEvents(playerId));
-  }
-
-  private drainEvents(playerId: number): void {
-    const sink = this.eventSink;
-    if (!sink) {
-      return;
-    }
-    for (let index = 0; index < 64; index += 1) {
-      const raw = erikaNative.nativePollEvent(playerId) as string | null;
-      if (raw === null) {
+  private startPlayerFrames(playerId: number): void {
+    const generation = this.eventGeneration;
+    const engine = this.engineGeneration;
+    // Native steady_clock drives rendering. This callback only delivers copied
+    // events on ArkUI; no setInterval or render/poll call runs on the task loop.
+    erikaNative.nativeStartFrames(playerId, (raw: string): void => {
+      if (engine !== this.engineGeneration || generation !== this.eventGeneration ||
+        !this.players.has(playerId)) {
         return;
       }
       const response = JSON.parse(raw) as NativeResponse;
@@ -818,8 +865,12 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       const event: ESObject = response.value;
       event.playerId = playerId;
       this.observeMediaEvent(playerId, event);
-      sink.success(event);
-    }
+      this.eventSink?.success(event);
+    });
+  }
+
+  private stopFrameLoop(): void {
+    this.players.forEach((playerId: number): void => erikaNative.nativeStopFrames(playerId));
   }
 
   private observeMediaEvent(playerId: number, event: ESObject): void {
@@ -900,7 +951,8 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
   private isNativePlayerMethod(method: string): boolean {
     return [
       'open', 'play', 'pause', 'stop', 'close', 'seek',
-      'setPlaybackRate', 'setVolume', 'setUpscaler', 'setSubtitleScale',
+      'setPlaybackRate', 'setVolume', 'setUpscaler', 'clearUpscalerModel',
+      'setSubtitleScale',
       'selectSubtitleMemoryFonts', 'clearSubtitleMemoryFonts',
       'getSubtitleMemoryFontStatus',
       'getUpscalerStatus', 'getOutputStatus', 'getPresenterStats',

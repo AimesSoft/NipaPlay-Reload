@@ -1,3 +1,4 @@
+import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 
@@ -83,24 +84,15 @@ const mdkKernelSnapshot = [
 ];
 
 /// Erika's settings playback.set_kernel_properties takes, and their values.
-const erikaKernelSettings = <String, List<String>>{
-  'upscaler': ['off', 'artCnnC4F16', 'artCnnC4F32', 'artCnnC4F16Ds'],
+Map<String, List<String>> get erikaKernelSettings => <String, List<String>>{
+  'upscaler': ErikaPlayerAdapter.availableUpscalerModes.map((mode) => mode.nativeName).toList(),
   'debugHud': ['true', 'false'],
 };
 
-PlayerUpscalerMode erikaUpscalerMode(String name) => switch (name) {
-      'artCnnC4F16' => PlayerUpscalerMode.erikaArtCnnC4F16,
-      'artCnnC4F32' => PlayerUpscalerMode.erikaArtCnnC4F32,
-      'artCnnC4F16Ds' => PlayerUpscalerMode.erikaArtCnnC4F16Ds,
-      _ => PlayerUpscalerMode.off,
-    };
+PlayerUpscalerMode erikaUpscalerMode(String name) => PlayerUpscalerMode.values
+    .firstWhere((mode) => mode.nativeName == name);
 
-String erikaUpscalerName(PlayerUpscalerMode mode) => switch (mode) {
-      PlayerUpscalerMode.erikaArtCnnC4F16 => 'artCnnC4F16',
-      PlayerUpscalerMode.erikaArtCnnC4F32 => 'artCnnC4F32',
-      PlayerUpscalerMode.erikaArtCnnC4F16Ds => 'artCnnC4F16Ds',
-      PlayerUpscalerMode.off => 'off',
-    };
+String erikaUpscalerName(PlayerUpscalerMode mode) => mode.nativeName;
 
 /// What Erika keeps to itself, its diagnostics snapshot included;
 /// playback.kernel names them so their absence is not read as zero.

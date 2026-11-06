@@ -5,20 +5,64 @@ enum PlayerErikaAndroidOutputMode {
   extendedLinearHdr,
 }
 
+// The first four indices are persisted by older releases; append new modes.
 enum PlayerUpscalerMode {
-  off,
-  erikaArtCnnC4F16,
-  erikaArtCnnC4F32,
-  erikaArtCnnC4F16Ds,
+  off('off', '关闭', '不启用超分辨率'),
+  erikaArtCnnC4F16('artCnnC4F16', 'ArtCNN C4F16', '轻量 2 倍神经网络超分'),
+  erikaArtCnnC4F32('artCnnC4F32', 'ArtCNN C4F32', '更宽的 2 倍超分网络，GPU 开销较高'),
+  erikaArtCnnC4F16Ds(
+      'artCnnC4F16Ds', 'ArtCNN C4F16 DS', 'ArtCNN C4F16 的 DS 模型'),
+  erikaArtCnnC4F16Dn('artCnnC4F16Dn', 'ArtCNN C4F16 DN', 'ArtCNN C4F16 降噪模型'),
+  erikaArtCnnC4F32Ds(
+      'artCnnC4F32Ds', 'ArtCNN C4F32 DS', 'ArtCNN C4F32 的 DS 模型'),
+  erikaArtCnnC4F32Dn('artCnnC4F32Dn', 'ArtCNN C4F32 DN', 'ArtCNN C4F32 降噪模型'),
+  erikaArtCnnR8F64('artCnnR8F64', 'ArtCNN R8F64', '大型 2 倍超分网络，适合高性能桌面 GPU'),
+  erikaAnime4kS('anime4kS', 'Anime4K S', '2 倍 CNN 超分；从 S 到 UL，模型规模与 GPU 开销递增'),
+  erikaAnime4kM('anime4kM', 'Anime4K M', '2 倍 CNN 超分；从 S 到 UL，模型规模与 GPU 开销递增'),
+  erikaAnime4kL('anime4kL', 'Anime4K L', '2 倍 CNN 超分；从 S 到 UL，模型规模与 GPU 开销递增'),
+  erikaAnime4kVl(
+      'anime4kVl', 'Anime4K VL', '2 倍 CNN 超分；从 S 到 UL，模型规模与 GPU 开销递增'),
+  erikaAnime4kUl(
+      'anime4kUl', 'Anime4K UL', '2 倍 CNN 超分；从 S 到 UL，模型规模与 GPU 开销递增'),
+  erikaAnime4kDenoiseS(
+      'anime4kDenoiseS', 'Anime4K 降噪 S', '2 倍 CNN 超分；从 S 到 UL，模型规模与 GPU 开销递增'),
+  erikaAnime4kDenoiseM(
+      'anime4kDenoiseM', 'Anime4K 降噪 M', '2 倍 CNN 超分；从 S 到 UL，模型规模与 GPU 开销递增'),
+  erikaAnime4kDenoiseL(
+      'anime4kDenoiseL', 'Anime4K 降噪 L', '2 倍 CNN 超分；从 S 到 UL，模型规模与 GPU 开销递增'),
+  erikaAnime4kDenoiseVl('anime4kDenoiseVl', 'Anime4K 降噪 VL',
+      '2 倍 CNN 超分；从 S 到 UL，模型规模与 GPU 开销递增'),
+  erikaAnime4kDenoiseUl('anime4kDenoiseUl', 'Anime4K 降噪 UL',
+      '2 倍 CNN 超分；从 S 到 UL，模型规模与 GPU 开销递增'),
+  erikaFsr1('fsr1', 'FSR 1.0', '轻量空间超分，将亮度缩放到显示尺寸'),
+  erikaPlatformVideo('platformVideo', '平台视频超分',
+      'Windows RTX Video / Intel VSR，或 Apple VideoToolbox；受硬件、系统和片源限制'),
+  erikaMetalFxSpatial(
+      'metalFxSpatial', 'MetalFX Spatial', 'Apple 设备的空间超分，缩放到显示尺寸'),
+  erikaCustom('custom', '自定义模型', '先导入 .esr 或 FSRCNNX / Anime4K CNN shader');
+
+  const PlayerUpscalerMode(this.nativeName, this.label, this.description);
+  final String nativeName;
+  final String label;
+  final String description;
 }
 
 enum PlayerUpscalerBackendStatus {
-  off,
-  inactive,
-  building,
-  scalar,
-  simdgroupMatrix,
-  unknown,
+  off('关闭'),
+  inactive('未激活'),
+  building('构建中'),
+  scalar('Scalar'),
+  simdgroupMatrix('Metal SIMD-group Matrix'),
+  unknown('未知'),
+  cooperativeMatrix('Cooperative Matrix'),
+  linalgMatrix('Linalg Matrix'),
+  videoProcessor('Windows Video Processor'),
+  videoToolbox('Apple VideoToolbox'),
+  metalFx('MetalFX'),
+  tensorOps('Tensor Operations');
+
+  const PlayerUpscalerBackendStatus(this.label);
+  final String label;
 }
 
 class PlayerUpscalerStatus {
@@ -75,7 +119,8 @@ class PlayerVideoCodecParams {
   final int height;
   final String? name;
 
-  PlayerVideoCodecParams({required this.width, required this.height, this.name});
+  PlayerVideoCodecParams(
+      {required this.width, required this.height, this.name});
 }
 
 class PlayerVideoStreamInfo {
@@ -122,7 +167,8 @@ class PlayerAudioStreamInfo {
   final String? title;
   final String? language;
   final Map<String, String> metadata;
-  final String rawRepresentation; // For mdk.Track.toString() compatibility if needed for audio too
+  final String
+      rawRepresentation; // For mdk.Track.toString() compatibility if needed for audio too
   final bool isExternal; // 是否为外部音频轨道（如外挂MKA）
 
   PlayerAudioStreamInfo({
@@ -169,6 +215,7 @@ class PlayerMediaInfo {
   final List<PlayerVideoStreamInfo>? video;
   final List<PlayerAudioStreamInfo>? audio;
   final List<PlayerSubtitleStreamInfo>? subtitle;
+
   /// MKV/容器自带章节列表（按 startMs 升序），无章节时为 null。
   final List<PlayerChapter>? chapters;
   final String? specificErrorMessage;

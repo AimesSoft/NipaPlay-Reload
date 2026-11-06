@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/capabilities/kernel_control.dart';
 import 'package:nipaplay/next/capabilities/kernel_facts.dart';
@@ -701,6 +702,8 @@ void main() {
 
     test('Erika: upscaler and debug HUD for this media, others refused',
         () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       final r = await rig(KernelId.erika);
       final erika = r.natives.single as FakeErika;
       final result =

@@ -1,11 +1,11 @@
 # Erika Flutter for HarmonyOS
 
-This is the HarmonyOS portion of `erika_flutter` 0.3.3 (MPL-2.0).
+This is the HarmonyOS portion of `erika_flutter` 0.3.4 (MPL-2.0).
 The Dart API, native header and platform bridge are copied from that release.
 Only `pubspec_overrides.ohos.yaml` selects this package.
 
 The OHOS CMake build uses liberika revision
-`2bd4e02fe29807b23037e68f45c4eced159ac56b` with
+`a62e45fe991db11c17eeefd033eccd654d15f617` with
 the included renderer patch, `ERIKA_OHOS_GLES_ONLY=1` and
 `ERIKA_OHOS_VULKAN_VIDEO=0`. Both Vulkan video paths crash the Mali shader
 compiler on nova 14. The compatibility build uses GLES GPU rendering and

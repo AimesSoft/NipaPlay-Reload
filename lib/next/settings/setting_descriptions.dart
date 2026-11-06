@@ -64,7 +64,9 @@ const applicationSettingDescriptions = <String, String>{
   'player.crtProfile':
       'CRT GLSL 着色器预设，模拟显示器质感，可与 Anime4K 叠加；只对 Media Kit（libmpv）内核生效。off 关闭；lite 轻量（扫描线加暗角）；standard 标准（再加曲面与栅格）；high 高质量（再加辉光与色散，开销最高）。',
   'player.erikaUpscalerMode':
-      'Erika 内核的实时超分辨率（ART-CNN）：off 关闭；erikaArtCnnC4F16 半精度，速度优先；erikaArtCnnC4F32 单精度，画质优先，GPU 压力更高；erikaArtCnnC4F16Ds 半精度去噪锐化，适合压缩痕迹明显的动画。设置值与 Erika 内核属性一一对应：erikaArtCnnC4F16 ↔ artCnnC4F16，erikaArtCnnC4F32 ↔ artCnnC4F32，erikaArtCnnC4F16Ds ↔ artCnnC4F16Ds，off ↔ off。playback.set_kernel_properties 只改当前实例，不保存长期设置；要让下个媒体也使用，请用 settings.set 保存这里的值。只在 Erika 内核下提供。',
+      'Erika 实时超分：ArtCNN、Anime4K CNN（含降噪模型）、FSR 1.0、平台视频超分、Apple MetalFX 与自定义模型。可选值按平台提供；C4F16/C4F32 是模型规模，不代表浮点精度。平台模式受硬件、系统与片源限制，playback.kernel 中的 activeBackend 和诊断说明实际是否启用。自定义模式先设置 player.erikaUpscalerModelPath，再选 erikaCustom。settings.set 保存长期设置，Next 当前媒体须用 playback.reopen_with_kernel 重开才采用；playback.set_kernel_properties 的 upscaler 只改变当前实例，原生模式名见 playback.kernel。',
+  'player.erikaUpscalerModelPath':
+      '导入设备上的 Erika .esr 或 FSRCNNX / Anime4K CNN shader 文件。应用保存模型副本；传空字符串停用自定义模型。设置后选择 erikaCustom，Next 重开播放器时加载。此路径属于执行设备；跨设备操作使用目标设备上的文件路径。',
 
   // ---- 播放行为 ----
   'player.introSkipEnabled':

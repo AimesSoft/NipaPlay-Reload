@@ -1,3 +1,4 @@
+import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -648,42 +649,12 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     ];
   }
 
-  String _formatErikaUpscalerMode(String mode) {
-    switch (mode) {
-      case 'erikaArtCnnC4F16':
-      case 'artCnnC4F16':
-        return 'ART-CNN C4F16';
-      case 'erikaArtCnnC4F32':
-      case 'artCnnC4F32':
-        return 'ART-CNN C4F32';
-      case 'erikaArtCnnC4F16Ds':
-      case 'artCnnC4F16Ds':
-        return 'ART-CNN C4F16 DS';
-      case 'off':
-        return '关闭';
-      default:
-        return mode;
-    }
-  }
+  String _formatErikaUpscalerMode(String mode) => PlayerUpscalerMode.values
+      .where((value) => value.name == mode || value.nativeName == mode)
+      .firstOrNull?.label ?? mode;
 
-  String _formatErikaUpscalerBackend(String backend) {
-    switch (backend) {
-      case 'simdgroupMatrix':
-        return 'SIMD-group Matrix';
-      case 'scalar':
-        return 'Scalar fallback';
-      case 'building':
-        return '构建中';
-      case 'inactive':
-        return '未激活';
-      case 'off':
-        return '关闭';
-      case 'unknown':
-        return '未知';
-      default:
-        return backend;
-    }
-  }
+  String _formatErikaUpscalerBackend(String backend) => PlayerUpscalerBackendStatus.values
+      .where((value) => value.name == backend).firstOrNull?.label ?? backend;
 
   String _formatMicrosAsMs(int micros) {
     if (micros <= 0) {

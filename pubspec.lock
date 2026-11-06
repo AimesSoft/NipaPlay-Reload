@@ -354,10 +354,10 @@ packages:
     dependency: "direct main"
     description:
       name: erika_flutter
-      sha256: "9d2b28a0e0946982306cd465be5877b16bb2141c2e486cf47484c95fa0366b84"
+      sha256: "117f82cb1cdd8fee6f02e9bca74eedafc71db28eb1e6415f0953053e07fff54d"
       url: "https://pub.dev"
     source: hosted
-    version: "0.3.3"
+    version: "0.3.4"
   fake_async:
     dependency: transitive
     description:

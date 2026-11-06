@@ -283,11 +283,33 @@ typedef enum ErikaOutputSurfaceFormat {
   ErikaOutputSurfaceFormat_SixteenBitFloat = 2,
 } ErikaOutputSurfaceFormat;
 
+/* Upscaler modes. Values are grouped by family and stable: 1-15 ArtCNN,
+ * 16-31 Anime4K, 32-47 spatial shaders, 48-63 platform scalers, 64 a
+ * runtime-loaded network (erika_presenter_load_upscaler_model). Backends
+ * that cannot run a mode keep native sampling and report Inactive. */
 typedef enum ErikaLumaUpscalerMode {
   ErikaLumaUpscalerMode_Off = 0,
   ErikaLumaUpscalerMode_ArtCnnC4F16 = 1,
   ErikaLumaUpscalerMode_ArtCnnC4F32 = 2,
   ErikaLumaUpscalerMode_ArtCnnC4F16Ds = 3,
+  ErikaLumaUpscalerMode_ArtCnnC4F16Dn = 4,
+  ErikaLumaUpscalerMode_ArtCnnC4F32Ds = 5,
+  ErikaLumaUpscalerMode_ArtCnnC4F32Dn = 6,
+  ErikaLumaUpscalerMode_ArtCnnR8F64 = 7,
+  ErikaLumaUpscalerMode_Anime4kS = 16,
+  ErikaLumaUpscalerMode_Anime4kM = 17,
+  ErikaLumaUpscalerMode_Anime4kL = 18,
+  ErikaLumaUpscalerMode_Anime4kVl = 19,
+  ErikaLumaUpscalerMode_Anime4kUl = 20,
+  ErikaLumaUpscalerMode_Anime4kDenoiseS = 21,
+  ErikaLumaUpscalerMode_Anime4kDenoiseM = 22,
+  ErikaLumaUpscalerMode_Anime4kDenoiseL = 23,
+  ErikaLumaUpscalerMode_Anime4kDenoiseVl = 24,
+  ErikaLumaUpscalerMode_Anime4kDenoiseUl = 25,
+  ErikaLumaUpscalerMode_Fsr1 = 32,
+  ErikaLumaUpscalerMode_PlatformVideo = 48,
+  ErikaLumaUpscalerMode_MetalFxSpatial = 49,
+  ErikaLumaUpscalerMode_Custom = 64,
 } ErikaLumaUpscalerMode;
 
 typedef enum ErikaUpscalerBackendStatus {
@@ -296,6 +318,12 @@ typedef enum ErikaUpscalerBackendStatus {
   ErikaUpscalerBackendStatus_Building = 2,
   ErikaUpscalerBackendStatus_Scalar = 3,
   ErikaUpscalerBackendStatus_SimdgroupMatrix = 4,
+  ErikaUpscalerBackendStatus_CooperativeMatrix = 5,
+  ErikaUpscalerBackendStatus_LinalgMatrix = 6,
+  ErikaUpscalerBackendStatus_VideoProcessor = 7,
+  ErikaUpscalerBackendStatus_VideoToolbox = 8,
+  ErikaUpscalerBackendStatus_MetalFx = 9,
+  ErikaUpscalerBackendStatus_TensorOps = 10,
 } ErikaUpscalerBackendStatus;
 
 typedef enum ErikaVideoAlphaMode {
@@ -672,9 +700,11 @@ ErikaPresenterHandle *erika_presenter_create_with_output_mode_and_alpha(
 void erika_presenter_destroy(ErikaPresenterHandle *handle);
 
 /* Playback and runtime parameters. volume is 0.0–1.0; rate 1.0 is normal speed;
- * set_upscaler takes an ErikaLumaUpscalerMode. Metal and capable wgpu/Vulkan
- * renderers execute ArtCNN; other backends retain native luma sampling and
- * report an explicit Inactive fallback. */
+ * set_upscaler takes an ErikaLumaUpscalerMode. D3D11 runs every network mode,
+ * FSR 1.0 and (on NVIDIA/Intel) PlatformVideo; Metal runs the network modes
+ * and its platform scalers; wgpu/Vulkan runs the legacy ArtCNN modes. A
+ * backend that cannot run a mode keeps native sampling and reports Inactive
+ * (see erika_presenter_get_upscaler_status and the diagnostics JSON). */
 ErikaStatus erika_presenter_open(ErikaPresenterHandle *handle, const char *uri);
 ErikaStatus erika_presenter_open_with_headers(
     ErikaPresenterHandle *handle,
@@ -699,6 +729,17 @@ ErikaStatus erika_presenter_set_volume(ErikaPresenterHandle *handle, double volu
  * volume: set_volume while muted is kept and applied on unmute. */
 ErikaStatus erika_presenter_set_muted(ErikaPresenterHandle *handle, bool muted);
 ErikaStatus erika_presenter_set_upscaler(ErikaPresenterHandle *handle, int32_t mode);
+/* Loads the network used by ErikaLumaUpscalerMode_Custom from memory: an
+ * Erika .esr model (see crates/erika/assets/artcnn/export_artcnn_esr.py) or
+ * an mpv hook shader of the FSRCNNX / Anime4K CNN dialect. Weights are never
+ * bundled for such models; the host supplies them. Select the network with
+ * erika_presenter_set_upscaler(handle, ErikaLumaUpscalerMode_Custom). */
+ErikaStatus erika_presenter_load_upscaler_model(
+    ErikaPresenterHandle *handle,
+    const char *name,
+    const uint8_t *data,
+    uintptr_t data_len);
+ErikaStatus erika_presenter_clear_upscaler_model(ErikaPresenterHandle *handle);
 ErikaStatus erika_presenter_set_subtitle_scale(ErikaPresenterHandle *handle, double scale);
 /* Shows subtitles later (positive delay_micros) or earlier (negative) than
  * their timestamps, embedded and external tracks alike; clamped to ten

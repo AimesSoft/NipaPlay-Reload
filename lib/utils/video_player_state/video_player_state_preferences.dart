@@ -908,6 +908,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
 
   Future<void> _loadErikaUpscalerMode() async {
     final prefs = await SharedPreferences.getInstance();
+    _erikaUpscalerModelPath = prefs.getString('erika_upscaler_model_path') ?? '';
     final stored = prefs.getInt(_erikaUpscalerModeKey);
     final resolved = stored != null &&
             stored >= 0 &&
@@ -924,6 +925,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
   }
 
   Future<void> setErikaUpscalerMode(PlayerUpscalerMode mode) async {
+    if (mode == PlayerUpscalerMode.erikaCustom && _erikaUpscalerModelPath.isEmpty) {
+      throw StateError('请先导入 Erika 自定义超分模型');
+    }
     if (_erikaUpscalerMode == mode) {
       await applyErikaUpscalerModeToCurrentPlayer();
       return;
@@ -944,7 +948,39 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_isDisposed || !player.supportsUpscaler) {
       return;
     }
+    if (_erikaUpscalerMode == PlayerUpscalerMode.erikaCustom) {
+      if (_erikaUpscalerModelPath.isEmpty) {
+        throw StateError('请先导入 Erika 自定义超分模型');
+      }
+      await player.loadUpscalerModelFile(_erikaUpscalerModelPath);
+    }
     await player.setUpscaler(_erikaUpscalerMode);
+  }
+
+  Future<void> setErikaUpscalerModelPath(String path) async {
+    var stored = '';
+    if (path.isNotEmpty) {
+      // Own the imported bytes so picker permissions and temporary files do
+      // not make the setting disappear after relaunch (including iOS).
+      final bytes = await File(path).readAsBytes();
+      if (bytes.isEmpty) throw ArgumentError('超分模型文件为空');
+      final root = await StorageService.getAppStorageDirectory();
+      final target = File(p.join(root.path, 'erika_models',
+          '${sha256.convert(bytes)}${p.extension(path)}'));
+      await target.parent.create(recursive: true);
+      if (!await target.exists()) await target.writeAsBytes(bytes, flush: true);
+      stored = target.path;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('erika_upscaler_model_path', stored);
+    _erikaUpscalerModelPath = stored;
+    if (stored.isEmpty && _erikaUpscalerMode == PlayerUpscalerMode.erikaCustom) {
+      await setErikaUpscalerMode(PlayerUpscalerMode.off);
+      if (player.supportsUpscaler) await player.clearUpscalerModel();
+    } else {
+      await applyErikaUpscalerModeToCurrentPlayer();
+    }
+    _notifyListeners();
   }
 
   bool _supportsErikaUpscalerForCurrentPlayer() {

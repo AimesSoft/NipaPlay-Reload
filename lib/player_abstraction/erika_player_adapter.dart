@@ -1470,20 +1470,34 @@ class ErikaPlayerAdapter
     }
   }
 
-  /// Where Erika's neural upscaler is offered. On Android and OpenHarmony it
-  /// runs as portable scalar wgpu kernels, far too slow for phone GPUs in
-  /// real time (liberika#193), so it is not offered there until they are.
+  // Neural modes remain hidden on Android/OHOS pending phone performance
+  // validation. FSR 1.0 is available there without a neural network.
   static bool get supportsNeuralUpscaler =>
-      _isSupported &&
-      defaultTargetPlatform != TargetPlatform.android &&
-      !_isHarmonyOS;
+      _isSupported && defaultTargetPlatform != TargetPlatform.android && !_isHarmonyOS;
 
-  bool get supportsUpscaler => supportsNeuralUpscaler;
+  static List<PlayerUpscalerMode> get availableUpscalerModes {
+    final apple = defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final desktop = defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        (defaultTargetPlatform == TargetPlatform.linux && !_isHarmonyOS);
+    return PlayerUpscalerMode.values.where((mode) {
+      if (mode == PlayerUpscalerMode.off) return true;
+      if (!_isSupported) return false;
+      if (mode == PlayerUpscalerMode.erikaFsr1) return true;
+      if (mode == PlayerUpscalerMode.erikaPlatformVideo) {
+        return apple || defaultTargetPlatform == TargetPlatform.windows;
+      }
+      if (mode == PlayerUpscalerMode.erikaMetalFxSpatial) return apple;
+      if (mode == PlayerUpscalerMode.erikaArtCnnR8F64) return desktop;
+      return supportsNeuralUpscaler;
+    }).toList(growable: false);
+  }
+
+  bool get supportsUpscaler => _isSupported;
 
   Future<void> setUpscaler(PlayerUpscalerMode mode) async {
-    // Where it is not offered the status stays as it is, so a read-back
-    // says the request did not take.
-    if (!supportsNeuralUpscaler) return;
+    if (!availableUpscalerModes.contains(mode)) return;
     _lastUpscalerStatus = PlayerUpscalerStatus(
       requestedMode: mode,
       activeBackend: mode == PlayerUpscalerMode.off
@@ -1501,6 +1515,20 @@ class ErikaPlayerAdapter
       debugPrint('Erika: set upscaler failed: $error');
     }
   }
+
+  Future<void> loadUpscalerModelFile(String path) async {
+    if (defaultTargetPlatform == TargetPlatform.linux && !_isHarmonyOS) {
+      final response = await _player.invokeJson('loadUpscalerModelFile', {'path': path});
+      if (response['ok'] != true) {
+        throw StateError('${response['error'] ?? response['status']}');
+      }
+    } else {
+      await _player.loadUpscalerModel(await File(path).readAsBytes(),
+          name: path.split(RegExp(r'[/\\]')).last);
+    }
+  }
+
+  Future<void> clearUpscalerModel() => _player.clearUpscalerModel();
 
   Future<PlayerUpscalerStatus> getUpscalerStatus() async {
     if (!_isSupported) {
@@ -1949,48 +1977,15 @@ class ErikaPlayerAdapter
     };
   }
 
-  ErikaUpscalerMode _toNativeUpscalerMode(PlayerUpscalerMode mode) {
-    switch (mode) {
-      case PlayerUpscalerMode.erikaArtCnnC4F16:
-        return ErikaUpscalerMode.artCnnC4F16;
-      case PlayerUpscalerMode.erikaArtCnnC4F32:
-        return ErikaUpscalerMode.artCnnC4F32;
-      case PlayerUpscalerMode.erikaArtCnnC4F16Ds:
-        return ErikaUpscalerMode.artCnnC4F16Ds;
-      case PlayerUpscalerMode.off:
-        return ErikaUpscalerMode.off;
-    }
-  }
+  ErikaUpscalerMode _toNativeUpscalerMode(PlayerUpscalerMode mode) =>
+      ErikaUpscalerMode.values.byName(mode.nativeName);
 
-  PlayerUpscalerMode _fromNativeUpscalerMode(ErikaUpscalerMode mode) {
-    switch (mode) {
-      case ErikaUpscalerMode.artCnnC4F16:
-        return PlayerUpscalerMode.erikaArtCnnC4F16;
-      case ErikaUpscalerMode.artCnnC4F32:
-        return PlayerUpscalerMode.erikaArtCnnC4F32;
-      case ErikaUpscalerMode.artCnnC4F16Ds:
-        return PlayerUpscalerMode.erikaArtCnnC4F16Ds;
-      case ErikaUpscalerMode.off:
-        return PlayerUpscalerMode.off;
-    }
-  }
+  PlayerUpscalerMode _fromNativeUpscalerMode(ErikaUpscalerMode mode) =>
+      PlayerUpscalerMode.values.firstWhere((value) => value.nativeName == mode.name);
 
   PlayerUpscalerBackendStatus _fromNativeUpscalerBackend(
     ErikaUpscalerBackendStatus status,
-  ) {
-    switch (status) {
-      case ErikaUpscalerBackendStatus.off:
-        return PlayerUpscalerBackendStatus.off;
-      case ErikaUpscalerBackendStatus.inactive:
-        return PlayerUpscalerBackendStatus.inactive;
-      case ErikaUpscalerBackendStatus.building:
-        return PlayerUpscalerBackendStatus.building;
-      case ErikaUpscalerBackendStatus.scalar:
-        return PlayerUpscalerBackendStatus.scalar;
-      case ErikaUpscalerBackendStatus.simdgroupMatrix:
-        return PlayerUpscalerBackendStatus.simdgroupMatrix;
-    }
-  }
+  ) => PlayerUpscalerBackendStatus.values.byName(status.name);
 
   PlayerUpscalerStatus _convertUpscalerStatus(ErikaUpscalerStatus status) {
     return PlayerUpscalerStatus(

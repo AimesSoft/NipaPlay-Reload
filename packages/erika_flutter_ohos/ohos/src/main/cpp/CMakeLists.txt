@@ -7,17 +7,17 @@ set(PLUGIN_NAME erika_flutter_plugin)
 
 get_filename_component(ERIKA_PACKAGE_ROOT
   "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." REALPATH)
-# The published 0.3.3 runtime enables experimental NativeBuffer import.
+# The published 0.3.4 runtime enables experimental NativeBuffer import.
 # Mali drivers also crash compiling the ordinary Vulkan video shader. Build
 # the same revision with GLES; hardware decoding remains enabled.
 set(ERIKA_TARGET aarch64-unknown-linux-ohos)
 set(ERIKA_USE_PREBUILT OFF)
-set(ERIKA_COMPAT_REVISION 2bd4e02fe29807b23037e68f45c4eced159ac56b)
+set(ERIKA_COMPAT_REVISION a62e45fe991db11c17eeefd033eccd654d15f617)
 find_program(GIT_EXECUTABLE git REQUIRED)
 if(NOT "$ENV{ERIKA_REPO_ROOT}" STREQUAL "")
   file(TO_CMAKE_PATH "$ENV{ERIKA_REPO_ROOT}" ERIKA_ROOT)
 else()
-  set(ERIKA_ROOT "${CMAKE_CURRENT_BINARY_DIR}/erika-source-v0.3.3")
+  set(ERIKA_ROOT "${CMAKE_CURRENT_BINARY_DIR}/erika-source-v0.3.4")
   if(NOT EXISTS "${ERIKA_ROOT}/Cargo.toml")
     file(MAKE_DIRECTORY "${ERIKA_ROOT}")
     foreach(args IN ITEMS "init" "fetch;--depth=1;https://github.com/AimesSoft/liberika.git;${ERIKA_COMPAT_REVISION}" "checkout;--detach;FETCH_HEAD")

@@ -11,6 +11,10 @@
 
 `playback.kernel` 报告当前内核、支持的控制、已知属性与覆盖。MDK、Media Kit/mpv、Erika 和 video_player 暴露的属性不同；未报告是 null，不证明不存在。需要调节前先读目标实际支持情况和 `nipa describe playback.set_kernel_properties`。该操作作用于当前播放；`playback.restore_kernel_properties` 恢复可恢复的会话覆盖，`playback.reopen_with_kernel` 会重开媒体。持久默认偏好经 `settings.describe/get/set` 管理，不能把会话覆盖当成永久设置。
 
+Erika 0.3.4 的超分模式由运行时列出，`settings.describe` 的 `player.erikaUpscalerMode` 使用持久设置名（例如 `erikaFsr1`），当前会话的 `upscaler` 使用内核名（`fsr1`）。先查 `playback.kernel` 的请求模式、实际后端和诊断；`building` 表示编译中，`inactive` 表示当前条件无法启用，不能把选项已保存当成已启用。ArtCNN 的 F16/F32 表示模型规模，并非浮点精度。
+
+自定义模型：将目标设备上的 `.esr` 或 FSRCNNX / Anime4K CNN shader 路径写入 `player.erikaUpscalerModelPath`（应用导入副本），再设 `player.erikaUpscalerMode=erikaCustom`，用 `playback.reopen_with_kernel` 重开并核对状态。空路径停用自定义模型。Classic 和 Next 共用这些持久偏好，Next 的内核实例仍独立创建。Android/OHOS 暂只提供 FSR，平台视频模式和 MetalFX 的实际可用性由系统、GPU、片源共同决定。
+
 `playback.capture` 会写截图或 GIF 文件；先确认用户意图与目标路径，回执中的弹幕包含情况是捕获事实，并不证明画面中此刻有可见弹幕。`ui.capture` 截的是应用窗口，有平台和原生视频层限制，不能当作其他应用或外部播放器的截图。
 
 播放失败时先查 `playback.failures`、`diagnostics.player_log` 和实际内核事实；`playback.retry` 会重建当前内部播放，使用前确认 sessionId 和影响。未知解码或缓冲原因如实保留，不从缺失日志猜测。远程调用遇到 `outcome_unknown` 时先查目标会话、任务和过程事实；没有幂等契约的写入不自动重做。

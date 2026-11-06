@@ -1,3 +1,4 @@
+import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 
 JsonMap settingPresentation(String key, JsonMap schema) => {
@@ -14,10 +15,14 @@ const _pathFormats = {
   'subtitle.fontDir': 'directory',
   'danmaku.fontFilePath': 'file',
   'player.externalPath': 'file',
+  'player.erikaUpscalerModelPath': 'file',
   'appearance.customBackgroundPath': 'file',
 };
 
 String _label(String key, Object? value) {
+  if (key == 'player.erikaUpscalerMode') {
+    return PlayerUpscalerMode.values.where((mode) => mode.name == value).firstOrNull?.label ?? '$value';
+  }
   final text = value is double && value == value.roundToDouble()
       ? '${value.toInt()}' : '$value';
   return _byKey[key]?['$value'] ?? _byKey[key]?[text] ?? _common[text] ?? text;
@@ -47,12 +52,6 @@ const _byKey = <String, Map<String, String>>{
       'videoPlayer': '系统',
       'mediaKit': 'mpv',
       'erika': 'Erika'
-    },
-    'player.erikaUpscalerMode': {
-      'off': '关闭',
-      'erikaArtCnnC4F16': '标准',
-      'erikaArtCnnC4F32': '高',
-      'erikaArtCnnC4F16Ds': '省电'
     },
     'player.videoAspectMode': {
       'contain': '完整',

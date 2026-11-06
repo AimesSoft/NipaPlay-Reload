@@ -769,6 +769,14 @@ class Player
     } catch (_) {}
   }
 
+  Future<void> loadUpscalerModelFile(String path) async {
+    await (_delegate as dynamic).loadUpscalerModelFile(path);
+  }
+
+  Future<void> clearUpscalerModel() async {
+    await (_delegate as dynamic).clearUpscalerModel();
+  }
+
   Future<PlayerUpscalerStatus?> getUpscalerStatus() async {
     try {
       final result = (_delegate as dynamic).getUpscalerStatus();

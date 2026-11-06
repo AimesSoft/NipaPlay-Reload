@@ -30,6 +30,7 @@ final class PlayerSettings {
     'player.macosNativeVideoEnabled',
     'player.erikaAndroidOutputMode',
     'player.erikaUpscalerMode',
+    'player.erikaUpscalerModelPath',
     'player.customUserAgent',
     'network.httpProxy',
   };
@@ -74,6 +75,7 @@ final class PlayerSettings {
         'player.erikaAndroidOutputMode':
             PlayerFactory.getErikaAndroidOutputMode().name,
         'player.erikaUpscalerMode': upscaler.name,
+        'player.erikaUpscalerModelPath': prefs.getString('erika_upscaler_model_path') ?? '',
         'player.customUserAgent': PlayerFactory.getCustomPlayerUA(),
         'network.httpProxy': PlayerFactory.getHttpProxy(),
       };

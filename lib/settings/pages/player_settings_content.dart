@@ -1,3 +1,4 @@
+import 'package:file_selector/file_selector.dart';
 import 'dart:io' if (dart.library.io) 'dart:io';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
@@ -224,29 +225,17 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
     }
   }
 
-  String _getErikaUpscalerTitle(PlayerUpscalerMode mode) {
-    switch (mode) {
-      case PlayerUpscalerMode.off:
-        return '关闭';
-      case PlayerUpscalerMode.erikaArtCnnC4F16:
-        return 'ART-CNN C4F16';
-      case PlayerUpscalerMode.erikaArtCnnC4F32:
-        return 'ART-CNN C4F32';
-      case PlayerUpscalerMode.erikaArtCnnC4F16Ds:
-        return 'ART-CNN C4F16 DS';
-    }
-  }
+  String _getErikaUpscalerTitle(PlayerUpscalerMode mode) => mode.label;
+  String _getErikaUpscalerDescription(PlayerUpscalerMode mode) => mode.description;
 
-  String _getErikaUpscalerDescription(PlayerUpscalerMode mode) {
-    switch (mode) {
-      case PlayerUpscalerMode.off:
-        return '不启用 Erika 内核超分辨率';
-      case PlayerUpscalerMode.erikaArtCnnC4F16:
-        return '半精度 ART-CNN，速度优先，推荐日常播放';
-      case PlayerUpscalerMode.erikaArtCnnC4F32:
-        return '单精度 ART-CNN，画质优先，对 GPU 压力更高';
-      case PlayerUpscalerMode.erikaArtCnnC4F16Ds:
-        return '半精度去噪锐化 ART-CNN，适合压缩痕迹明显的动画视频';
+  Future<void> _selectErikaUpscalerModel(VideoPlayerState state) async {
+    try {
+      final selected = await openFile();
+      if (selected == null) return;
+      await state.setErikaUpscalerModelPath(selected.path);
+      await state.setErikaUpscalerMode(PlayerUpscalerMode.erikaCustom);
+    } catch (error) {
+      if (mounted) BlurSnackBar.show(context, '导入超分模型失败：$error');
     }
   }
 
@@ -415,11 +404,11 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                   height: 1),
             ],
             if (visibleKernelType == PlayerKernelType.erika) ...[
-              if (ErikaPlayerAdapter.supportsNeuralUpscaler) ...[
+              if (ErikaPlayerAdapter.availableUpscalerModes.length > 1) ...[
                 Consumer<VideoPlayerState>(
                   builder: (context, videoState, child) {
                     final currentMode = videoState.erikaUpscalerMode;
-                    final items = PlayerUpscalerMode.values
+                    final items = ErikaPlayerAdapter.availableUpscalerModes
                         .map(
                           (mode) => DropdownMenuItemData(
                             title: _getErikaUpscalerTitle(mode),
@@ -431,12 +420,17 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                         .toList();
                     return AdaptiveSettingsTile.dropdown(
                       title: 'Erika 超分辨率',
-                      subtitle: '使用 Erika ART-CNN 对视频帧做实时超分',
+                      subtitle: 'ArtCNN、Anime4K、FSR 与平台超分；实际后端见播放信息',
                       icon: Ionicons.sparkles_outline,
                       items: items,
                       onChanged: (dynamic value) async {
                         if (value is! PlayerUpscalerMode) return;
-                        await videoState.setErikaUpscalerMode(value);
+                        try {
+                          await videoState.setErikaUpscalerMode(value);
+                        } catch (error) {
+                          if (context.mounted) BlurSnackBar.show(context, '$error');
+                          return;
+                        }
                         if (!context.mounted) return;
                         final option = _getErikaUpscalerTitle(value);
                         BlurSnackBar.show(
@@ -454,6 +448,28 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
                     color: colorScheme.onSurface.withValues(alpha: 0.12),
                     height: 1),
               ],
+              if (ErikaPlayerAdapter.supportsNeuralUpscaler)
+                Consumer<VideoPlayerState>(builder: (context, state, _) => Column(children: [
+                  AdaptiveSettingsTile.button(
+                    title: '导入 Erika 超分模型',
+                    subtitle: state.erikaUpscalerModelPath.isEmpty
+                        ? '选择 .esr 或 FSRCNNX / Anime4K CNN shader'
+                        : state.erikaUpscalerModelPath,
+                    icon: Ionicons.folder_open_outline,
+                    onTap: () => _selectErikaUpscalerModel(state),
+                  ),
+                  if (state.erikaUpscalerModelPath.isNotEmpty)
+                    AdaptiveSettingsTile.button(
+                      title: '停用自定义模型',
+                      icon: Ionicons.close_outline,
+                      onTap: () async {
+                        try { await state.setErikaUpscalerModelPath(''); }
+                        catch (error) {
+                          if (context.mounted) BlurSnackBar.show(context, '$error');
+                        }
+                      },
+                    ),
+                ])),
               if (!kIsWeb && Platform.isAndroid) ...[
                 AdaptiveSettingsTile.dropdown(
                   title: 'Erika Android 输出',

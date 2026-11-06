@@ -322,6 +322,13 @@ final class ErikaDriver extends AdapterDriver
     final mode = PlayerUpscalerMode.values
         .where((m) => m.name == config.settings['player.erikaUpscalerMode'])
         .firstOrNull;
+    final modelPath = config.settings['player.erikaUpscalerModelPath'];
+    if (mode == PlayerUpscalerMode.erikaCustom) {
+      if (modelPath is! String || modelPath.isEmpty) {
+        throw StateError('请先导入 Erika 自定义超分模型');
+      }
+      await adapter.loadUpscalerModelFile(modelPath);
+    }
     if (mode != null && mode != PlayerUpscalerMode.off) {
       await adapter.setUpscaler(mode);
     }

@@ -14,7 +14,7 @@ import 'player/core/session.dart' show PlayerLevels;
 import 'player/kernel/driver.dart' show KernelId;
 import 'player/kernel/player_settings.dart';
 import 'player/kernel/native.dart' show ErikaNative;
-import 'capabilities/kernel_facts.dart' show erikaUpscalerName, kernelIdOf;
+import 'capabilities/kernel_facts.dart' show kernelIdOf;
 import 'settings/effective.dart';
 import 'settings/effective_value.dart';
 import 'player/next_playback.dart';
@@ -255,7 +255,7 @@ final class NextRuntime extends ChangeNotifier {
           made.kernel == KernelId.erika &&
           native is ErikaNative) {
         final erika = native;
-        final running = erikaUpscalerName(await erika.upscaler());
+        final running = (await erika.upscaler()).name;
         if (sameValue(stored, running)) {
           return Effective.same(running,
               detail: '正在播放的 Erika 实例当前请求 $running。');
