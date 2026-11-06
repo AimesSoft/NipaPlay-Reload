@@ -140,7 +140,7 @@ dependencies:
     path: packages/media_kit_video
   media_kit_libs_video:
     path: third_party/media-kit-upstream/libs/universal/media_kit_libs_video
-  erika_flutter: 0.3.4
+  erika_flutter: 0.3.5
   # Offline dictation; model weights are downloaded only when enabled.
   sherpa_onnx: 2.0.1
   record: 6.1.2
