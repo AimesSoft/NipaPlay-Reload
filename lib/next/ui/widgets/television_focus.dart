@@ -42,7 +42,7 @@ class TelevisionFocusable extends StatelessWidget {
 /// directions must cross that boundary, while dialogs keep their own policy.
 /// Scan live traversal nodes once per key, with no parallel focus state.
 class TelevisionTraversalPolicy extends FocusTraversalPolicy {
-  TelevisionTraversalPolicy(this.root);
+  const TelevisionTraversalPolicy(this.root);
   final FocusNode root;
 
   @override
@@ -68,6 +68,10 @@ class TelevisionTraversalPolicy extends FocusTraversalPolicy {
     var bestDistance = double.infinity;
     for (final node in root.traversalDescendants) {
       if (node == currentNode || node is FocusScopeNode) continue;
+      // Retained Navigator routes still have laid-out boxes. They must not
+      // compete with the detail/settings page that covers them.
+      final context = node.context;
+      if (context == null || ModalRoute.of(context)?.isCurrent == false) continue;
       final target = node.context?.findRenderObject();
       if (target is! RenderBox || !target.attached || !target.hasSize) continue;
       final rect = node.rect;

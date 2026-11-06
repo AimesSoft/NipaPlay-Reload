@@ -5,6 +5,48 @@ import 'package:nipaplay/next/ui/widgets/buttons.dart';
 import 'package:nipaplay/next/ui/widgets/television_focus.dart';
 
 void main() {
+  testWidgets('directions ignore controls on a retained covered route',
+      (tester) async {
+    final original = TelevisionFocusable.isTelevision;
+    TelevisionFocusable.isTelevision = () => true;
+    addTearDown(() => TelevisionFocusable.isTelevision = original);
+    final root = FocusNode();
+    final top = FocusNode();
+    final nav = GlobalKey<NavigatorState>();
+    addTearDown(root.dispose);
+    addTearDown(top.dispose);
+    final opened = <String>[];
+    Widget page(String label, double y) => Align(
+        alignment: Alignment.topLeft,
+        child: Padding(
+            padding: EdgeInsets.only(top: y),
+            child: NextButton(label: label, onTap: () => opened.add(label))));
+    await tester.pumpWidget(MaterialApp(
+        home: FocusTraversalGroup(
+            policy: TelevisionTraversalPolicy(root),
+            child: Focus(
+                focusNode: root,
+                child: Column(children: [
+                  Focus(focusNode: top, child: const SizedBox(height: 40)),
+                  Expanded(
+                      child: Navigator(
+                          key: nav,
+                          onGenerateRoute: (_) => PageRouteBuilder<void>(
+                              opaque: false,
+                              pageBuilder: (_, __, ___) => page('covered', 20)))),
+                ])))));
+    nav.currentState!.push(PageRouteBuilder<void>(
+        opaque: false, pageBuilder: (_, __, ___) => page('detail', 160)));
+    await tester.pumpAndSettle();
+    top.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(opened, ['detail']);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('directions cross between the top bar and navigator scope',
       (tester) async {
     final original = TelevisionFocusable.isTelevision;

@@ -158,6 +158,12 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   /// ⌘K wherever the focus is (Classic's video holds it while watching).
   bool _onKey(KeyEvent event) {
     if (!mounted || event is! KeyDownEvent) return false;
+    // Siri Remote emits a media key through the same hardware input path.
+    if (globals.isTvOS &&
+        event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
+      _playback?.togglePlay();
+      return true;
+    }
     if (event.logicalKey != LogicalKeyboardKey.keyK) return false;
     final keys = HardwareKeyboard.instance;
     if (!(keys.isMetaPressed || keys.isControlPressed) ||
