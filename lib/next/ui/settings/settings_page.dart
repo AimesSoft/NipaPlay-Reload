@@ -478,8 +478,10 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
             SizedBox(width: NextMetrics.gutter),
             SizedBox(
               width: 176,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 34),
+              // Scrolls where the room is shorter than the rail (a
+              // television's page, a short window).
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(top: 34, bottom: 34),
                 child: _Rail(
                   current: query.isEmpty ? _section : null,
                   search: _search,

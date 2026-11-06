@@ -9,6 +9,7 @@ import '../chat/composer.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/attachments.dart';
+import '../widgets/television_focus.dart';
 import '../widgets/buttons.dart';
 import '../widgets/drop_zone.dart';
 import '../widgets/glass.dart';
@@ -138,6 +139,8 @@ class _AskBarState extends State<AskBar> {
               child: TvOSRemoteTextInputControl(
                   title: '与梨花对话',
                   focusNode: widget.focusNode,
+                  // The whole bar shows a remote's focus (below).
+                  highlight: false,
                   child: TextField(
                     controller: _text,
                     focusNode: useTvOSRemoteTextInput(context)
@@ -159,7 +162,8 @@ class _AskBarState extends State<AskBar> {
             ),
             if (empty &&
                 !widget.focusNode.hasFocus &&
-                widget.onExpand == null) ...[
+                widget.onExpand == null &&
+                !TelevisionFocusable.television) ...[
               const KeyHint('⌘ K'),
               const SizedBox(width: 12),
             ] else
@@ -204,7 +208,15 @@ class _AskBarState extends State<AskBar> {
       enabled: widget.onAttach != null,
       onDrop: (paths) => widget.onAttach?.call(paths),
       builder: (context, over) => Stack(children: [
-        glass,
+        // A remote's focus on the field: the bar rises and wears the ring.
+        if (TelevisionFocusable.television)
+          TelevisionFocusFrame(
+              focused: widget.focusNode.hasFocus,
+              scale: 1.03,
+              radius: BorderRadius.circular(28),
+              child: glass)
+        else
+          glass,
         Positioned.fill(
           child: DropGlow(over: over, radius: BorderRadius.circular(28)),
         ),

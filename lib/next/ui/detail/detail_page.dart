@@ -1015,10 +1015,11 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     final compact = NextLayout.compact(context);
     final lead = <Widget>[
       if (_found) ...[
-        NextButton(label: '让梨花准备', onTap: _prepare),
+        NextButton(label: '让梨花准备', onTap: _prepare, autofocus: true),
         const SizedBox(width: 12),
       ] else if (next != null && next.playable) ...[
         PlayButton(
+          autofocus: true,
           label: !started
               ? '播放'
               : switch (Words.episode(next.number)) {

@@ -24,6 +24,7 @@ import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
+import '../widgets/television_focus.dart';
 import 'menu_controls.dart' show PlayerMenuSheet;
 import 'player_menus.dart';
 import 'player_more.dart';
@@ -83,6 +84,14 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   _Menu? _menu;
   bool _holding = false;
   final _menuFocus = FocusNode(debugLabel: 'next.player.menu');
+
+  /// A remote's way through the controls. While the scope itself holds the
+  /// focus the viewer is watching: left and right seek, select plays or
+  /// pauses, down brings the controls up with focus on them. Once one of
+  /// them has focus the directions move between them, and Menu steps back
+  /// out to watching before it leaves the video.
+  final _remote = FocusScopeNode(debugLabel: 'next.player.remote');
+  bool get _onControls => _remote.hasFocus && !_remote.hasPrimaryFocus;
   final _more = GlobalKey<MoreMenuState>();
   final _subtitles = GlobalKey<SubtitleMenuState>();
 
@@ -96,6 +105,14 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
+    if (TelevisionFocusable.television) {
+      _remote
+        ..addListener(_remoteChanged)
+        ..onKeyEvent = _remoteKey;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _remote.requestFocus();
+      });
+    }
     if (_phone) unawaited(PhoneOrientation.video());
   }
 
@@ -106,6 +123,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
     if (!identical(shell, _shell)) {
       _shell?.panelOpen.removeListener(_panelChanged);
       _shell = shell..panelOpen.addListener(_panelChanged);
+      if (TelevisionFocusable.television) shell.playerEscape = _remoteEscape;
     }
     final playback = NextPlaybackScope.of(context);
     if (!identical(playback, _playback)) {
@@ -128,6 +146,11 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
     _release();
     _watch?.dispose();
     _menuFocus.dispose();
+    _remote.removeListener(_remoteChanged);
+    _remote.dispose();
+    if (identical(_shell?.playerEscape, _remoteEscape)) {
+      _shell?.playerEscape = null;
+    }
     _shotGone?.cancel();
     super.dispose();
   }
@@ -242,6 +265,86 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
 
   void _scrub(bool on) => setState(() => _scrubbing = on);
 
+  static const _remoteStep = Duration(seconds: 10);
+
+  /// Keys reaching the picture itself (watching, no control focused).
+  /// Taken here, before the focus system turns arrows into moves.
+  KeyEventResult _remoteKey(FocusNode node, KeyEvent event) {
+    final playback = _playback;
+    if (playback == null || !_remote.hasPrimaryFocus || _menu != null) {
+      return KeyEventResult.ignored;
+    }
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowLeft || LogicalKeyboardKey.arrowRight:
+        final step = event.logicalKey == LogicalKeyboardKey.arrowLeft
+            ? -_remoteStep
+            : _remoteStep;
+        final at = playback.position + step;
+        playback.seek(at < Duration.zero ? Duration.zero : at);
+        _reveal();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.select || LogicalKeyboardKey.enter
+          when event is KeyDownEvent:
+        playback.togglePlay();
+        _reveal();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowDown || LogicalKeyboardKey.arrowUp
+          when event is KeyDownEvent:
+        _reveal();
+        _focusFirstControl();
+        return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _remoteChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// The controls up, and away again after the usual rest.
+  void _reveal() {
+    setState(() => _tapHidden = false);
+    _playback!
+      ..hover(true)
+      ..hover(false);
+  }
+
+  /// The first of the controls along the foot: play or pause.
+  void _focusFirstControl() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final nodes = _remote.traversalDescendants
+          .where((n) => n.canRequestFocus && !n.rect.isEmpty)
+          .toList();
+      if (nodes.isEmpty) return;
+      final bottom = nodes.map((n) => n.rect.top).reduce(math.max);
+      final row = nodes.where((n) => n.rect.top > bottom - 24).toList()
+        ..sort((a, b) => a.rect.left.compareTo(b.rect.left));
+      row.first.requestFocus();
+    });
+  }
+
+  /// Menu on the remote: a menu closes, then the controls give the focus
+  /// back to the picture; only then does the video go.
+  bool _remoteEscape() {
+    if (_menu != null) {
+      _closeMenu();
+      return true;
+    }
+    if (_onControls) {
+      // To the scope itself (requesting the scope would give it back to
+      // the control it remembers).
+      FocusManager.instance.primaryFocus
+          ?.unfocus(disposition: UnfocusDisposition.scope);
+      setState(() => _tapHidden = true);
+      return true;
+    }
+    return false;
+  }
+
   /// A tap on the picture: the controls go if they are up, else they come.
   void _tapPicture(bool shown) {
     if (_menu != null) return _closeMenu();
@@ -270,7 +373,9 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   Widget build(BuildContext context) {
     final playback = _playback!;
     final stage = NextStage.maybeOf(context);
-    final layer = _layer(playback);
+    final layer = TelevisionFocusable.television
+        ? FocusScope(node: _remote, child: _layer(playback))
+        : _layer(playback);
     // With the conversation beside the video, all of this is laid out in
     // the picture's room, left of it.
     return stage == null
@@ -290,7 +395,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
       ),
       builder: (context, frame, _) {
         final (hasVideo, loading, controls) = frame;
-        final pinned = _overChrome || _scrubbing || _menu != null;
+        final pinned = _overChrome || _scrubbing || _menu != null || _onControls;
         final shown = hasVideo && !_tapHidden && (controls || pinned);
         return Stack(fit: StackFit.expand, children: [
           if (_touch && hasVideo)
@@ -920,7 +1025,9 @@ class _BottomBar extends StatelessWidget {
                           ),
                   ),
                   const Spacer(),
-                  if (!touch) ...[
+                  // A finger drags the volume on the picture; a television
+                  // has its own.
+                  if (!touch && !TelevisionFocusable.television) ...[
                     _Volume(playback: playback),
                     const SizedBox(width: _gap),
                   ],
@@ -974,7 +1081,8 @@ class _BottomBar extends StatelessWidget {
                             unawaited(PhoneOrientation.fullScreen(!full)),
                       );
                     })
-                  else
+                  // A television is always full screen.
+                  else if (!TelevisionFocusable.television)
                   PlaybackSelector<bool>(
                     playback: playback,
                     selector: (s) => s.fullscreen,

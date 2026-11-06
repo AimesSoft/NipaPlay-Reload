@@ -19,14 +19,26 @@ mixin _HoverCard<T extends StatefulWidget> on State<T> {
     report?.call(value);
   }
 
-  Widget hoverScale(BuildContext context, Widget child) => AnimatedScale(
-        scale: hovered && !NextMotion.reduced(context) ? 1.03 : 1,
-        duration: const Duration(milliseconds: 320),
-        curve: NextMotion.ease,
-        child: child,
-      );
+  /// Hovered, the picture leans in; focused from a remote, it rises
+  /// further and wears the ring.
+  Widget hoverScale(BuildContext context, Widget child) =>
+      TelevisionFocusable.television
+          ? TelevisionFocusFrame(
+              focused: hovered,
+              scale: 1.07,
+              radius: const BorderRadius.all(Radius.circular(12)),
+              child: child)
+          : AnimatedScale(
+              scale: hovered && !NextMotion.reduced(context) ? 1.03 : 1,
+              duration: const Duration(milliseconds: 320),
+              curve: NextMotion.ease,
+              child: child,
+            );
 
-  Widget playOverlay(VoidCallback? onPlay, {double size = 46}) => onPlay == null
+  /// Over a hovered picture; a remote's select opens the work instead.
+  Widget playOverlay(VoidCallback? onPlay, {double size = 46}) => onPlay ==
+              null ||
+          TelevisionFocusable.television
       ? const SizedBox.shrink()
       : ExcludeFocus(
           excluding: globals.isTvOS,
@@ -119,7 +131,9 @@ class _WideCardState extends State<WideCard> with _HoverCard {
                   decoration: BoxDecoration(
                     borderRadius: radius,
                     boxShadow: [
-                      if (widget.selected)
+                      // A remote's focus wears the paper ring there; the
+                      // episode to go on with keeps its progress line.
+                      if (widget.selected && !TelevisionFocusable.television)
                         const BoxShadow(
                             color: NextColors.paper, spreadRadius: 2),
                       const BoxShadow(

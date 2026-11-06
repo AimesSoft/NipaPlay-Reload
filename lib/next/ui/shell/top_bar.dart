@@ -143,7 +143,7 @@ class NextTopBar extends StatelessWidget {
     // what is always at hand, under the status bar.
     if (NextLayout.compact(context)) return _CompactBar(shell: shell);
     final top = NextLayout.barTop(context);
-    return SizedBox(
+    final bar = SizedBox(
       height: top + NextMetrics.topBar,
       child: Stack(children: [
         // Only a desktop window is dragged and zoomed by its bar.
@@ -186,6 +186,26 @@ class NextTopBar extends StatelessWidget {
         ),
       ]),
     );
+    if (!Pressable.television) return bar;
+    // A television's bar steps aside while the page is scrolled under it,
+    // and comes back with the top of the page.
+    return ValueListenableBuilder(
+      valueListenable: shell.scrolled,
+      builder: (context, scrolled, child) => ExcludeFocus(
+        excluding: scrolled,
+        child: AnimatedSlide(
+          offset: scrolled ? const Offset(0, -0.35) : Offset.zero,
+          duration: const Duration(milliseconds: 320),
+          curve: NextMotion.ease,
+          child: AnimatedOpacity(
+            opacity: scrolled ? 0 : 1,
+            duration: const Duration(milliseconds: 240),
+            child: child,
+          ),
+        ),
+      ),
+      child: bar,
+    );
   }
 }
 
@@ -210,45 +230,72 @@ class _NavItem extends StatelessWidget {
         onTap: onTap,
         semanticLabel: label,
         pressScale: 0.96,
-        builder: (context, hovered) => SizedBox(
-          height: height,
-          child: Center(
-            child: Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 180),
-                  style: NextText.sans(size,
-                      weight: FontWeight.w500,
-                      letterSpacing: 0.28,
-                      height: 20 / size,
-                      color:
-                          active || hovered ? NextColors.paper : NextColors.p3),
-                  child: Text(label),
-                ),
-                Positioned(
-                  bottom: -7,
-                  child: AnimatedOpacity(
-                    opacity: active ? 1 : 0,
-                    duration: const Duration(milliseconds: 220),
-                    child: Container(
-                      width: 4,
-                      height: 4,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: NextColors.accent,
-                        boxShadow: [
-                          BoxShadow(color: NextColors.accent, blurRadius: 10)
-                        ],
+        focusRing: false,
+        focusScale: 1.08,
+        builder: (context, hovered) {
+          // On a television the focused section sits on a paper pill.
+          final tv = Pressable.television;
+          final lit = tv && hovered;
+          return SizedBox(
+            height: height,
+            child: Center(
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  if (tv)
+                    Positioned(
+                      left: -14,
+                      right: -14,
+                      top: -7,
+                      bottom: -7,
+                      child: AnimatedOpacity(
+                        opacity: lit ? 1 : 0,
+                        duration: const Duration(milliseconds: 180),
+                        child: const DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: NextColors.paper,
+                            borderRadius: BorderRadius.all(Radius.circular(999)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 180),
+                    style: NextText.sans(size,
+                        weight: lit ? FontWeight.w600 : FontWeight.w500,
+                        letterSpacing: 0.28,
+                        height: 20 / size,
+                        color: lit
+                            ? const Color(0xFF111111)
+                            : active || hovered
+                                ? NextColors.paper
+                                : NextColors.p3),
+                    child: Text(label),
+                  ),
+                  Positioned(
+                    bottom: -7,
+                    child: AnimatedOpacity(
+                      opacity: active ? 1 : 0,
+                      duration: const Duration(milliseconds: 220),
+                      child: Container(
+                        width: 4,
+                        height: 4,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: NextColors.accent,
+                          boxShadow: [
+                            BoxShadow(color: NextColors.accent, blurRadius: 10)
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       );
 }
 

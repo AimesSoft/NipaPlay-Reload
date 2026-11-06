@@ -87,6 +87,7 @@ class TvOSRemoteTextInputControl extends StatefulWidget {
     this.required = false,
     this.obscureText,
     this.autofocus = false,
+    this.highlight = true,
   });
 
   final FocusNode? focusNode;
@@ -97,6 +98,9 @@ class TvOSRemoteTextInputControl extends StatefulWidget {
   final bool required;
   final bool? obscureText;
   final bool autofocus;
+
+  /// Draws its own focus outline; off where the caller shows focus itself.
+  final bool highlight;
 
   @override
   State<TvOSRemoteTextInputControl> createState() =>
@@ -160,7 +164,7 @@ class _TvOSRemoteTextInputControlState
             foregroundDecoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: _showFocusHighlight
+                color: _showFocusHighlight && widget.highlight
                     ? Theme.of(context).colorScheme.primary
                     : Colors.transparent,
                 width: 2,

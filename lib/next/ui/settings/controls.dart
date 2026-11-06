@@ -664,39 +664,46 @@ class PillButton extends StatelessWidget {
         child: Pressable(
           onTap: busy ? null : onTap,
           semanticLabel: label,
-          builder: (context, hovered) => AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: primary
-                  ? (hovered ? const Color(0xFFFFFFFF) : NextColors.paper)
-                  : danger && hovered
-                      ? const Color(0x24FF2E55)
-                      : hovered
-                          ? const Color(0x1FFFFFFF)
-                          : const Color(0x0FFFFFFF),
-              borderRadius: BorderRadius.circular(15),
-              border: primary ? null : Border.all(color: NextColors.line2),
-            ),
-            // As wide as its label, unless its place sets the width.
-            child: Center(
-              widthFactor: 1,
-              child: busy
-                  ? BusyDots(
-                      color: primary
-                          ? const Color(0xFF111111)
-                          : NextColors.paper)
-                  : Text(label,
-                      style: NextText.sans(12.5,
-                          weight: FontWeight.w500,
-                          color: primary
-                              ? const Color(0xFF111111)
-                              : danger
-                                  ? NextColors.accent2
-                                  : NextColors.paper)),
-            ),
-          ),
+          focusRing: false,
+          builder: (context, hovered) {
+            // On a television only the focused pill is paper.
+            final paper = Pressable.television ? hovered : primary;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: paper
+                    ? (hovered && !Pressable.television
+                        ? const Color(0xFFFFFFFF)
+                        : NextColors.paper)
+                    : danger && hovered
+                        ? const Color(0x24FF2E55)
+                        : hovered || primary
+                            ? const Color(0x1FFFFFFF)
+                            : const Color(0x0FFFFFFF),
+                borderRadius: BorderRadius.circular(15),
+                border: paper ? null : Border.all(color: NextColors.line2),
+              ),
+              // As wide as its label, unless its place sets the width.
+              child: Center(
+                widthFactor: 1,
+                child: busy
+                    ? BusyDots(
+                        color: paper
+                            ? const Color(0xFF111111)
+                            : NextColors.paper)
+                    : Text(label,
+                        style: NextText.sans(12.5,
+                            weight: FontWeight.w500,
+                            color: paper
+                                ? const Color(0xFF111111)
+                                : danger
+                                    ? NextColors.accent2
+                                    : NextColors.paper)),
+              ),
+            );
+          },
         ),
       );
 }

@@ -8,6 +8,7 @@ import '../chat/transcript.dart' show Shimmer;
 import '../shell/shell_controller.dart';
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
+import '../widgets/television_focus.dart';
 import '../widgets/artwork.dart';
 import '../widgets/buttons.dart';
 import '../widgets/nipa_avatar.dart';
@@ -101,7 +102,11 @@ class HeroCopy extends StatelessWidget {
           if (preparing != null) preparing!,
           WorkTitle(work: work),
           MetaLine(work),
-          if (overview != null && overview.isNotEmpty)
+          // A television keeps its first screen for the work and the input
+          // bar; the story is on the work's page.
+          if (overview != null &&
+              overview.isNotEmpty &&
+              !TelevisionFocusable.television)
             Padding(
               padding: const EdgeInsets.only(top: 14),
               child: ConstrainedBox(
@@ -116,7 +121,8 @@ class HeroCopy extends StatelessWidget {
           const SizedBox(height: 26),
           Wrap(runSpacing: 12, children: [
             if (work.next?.playable ?? false) ...[
-              PlayButton(label: Words.play(work), onTap: onPlay),
+              PlayButton(
+                  label: Words.play(work), onTap: onPlay, autofocus: true),
               const SizedBox(width: 12),
             ],
             NextButton.ghost(label: '详情', onTap: onDetail),

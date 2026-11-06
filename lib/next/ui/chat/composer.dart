@@ -19,6 +19,7 @@ import '../widgets/attachments.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/progress.dart';
+import '../widgets/television_focus.dart';
 import '../widgets/words.dart';
 import 'input_paste.dart';
 
@@ -125,6 +126,7 @@ class _ChatComposerState extends State<ChatComposer>
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_changed);
     widget.focusNode.onKeyEvent = _key;
+    widget.focusNode.addListener(_changed);
   }
 
   @override
@@ -141,7 +143,9 @@ class _ChatComposerState extends State<ChatComposer>
     }
     if (old.focusNode != widget.focusNode) {
       old.focusNode.onKeyEvent = null;
+      old.focusNode.removeListener(_changed);
       widget.focusNode.onKeyEvent = _key;
+      widget.focusNode.addListener(_changed);
     }
   }
 
@@ -152,6 +156,7 @@ class _ChatComposerState extends State<ChatComposer>
     _voice.removeListener(_voiceChanged);
     _voice.dispose();
     widget.controller.removeListener(_changed);
+    widget.focusNode.removeListener(_changed);
     if (widget.focusNode.onKeyEvent == _key) widget.focusNode.onKeyEvent = null;
     super.dispose();
   }
@@ -181,116 +186,123 @@ class _ChatComposerState extends State<ChatComposer>
     final underway = chat.underway;
     return Column(mainAxisSize: MainAxisSize.min, children: [
       if (underway.isNotEmpty) UnderwayBar(items: underway),
-      Container(
-        padding: const EdgeInsets.fromLTRB(18, 10, 8, 8),
-        decoration: BoxDecoration(
-          color: const Color(0xE616161C),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: NextColors.line2),
-          boxShadow: const [
-            BoxShadow(
-                color: Color(0x59000000),
-                blurRadius: 30,
-                offset: Offset(0, 12)),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (chat.about != null || chat.attachments.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8, right: 10),
-                child: Wrap(spacing: 8, runSpacing: 8, children: [
-                  if (chat.about case final work?)
-                    AboutTag(work: work, onRemove: () => chat.setAbout(null)),
-                  if (chat.attachments.isNotEmpty)
-                    AttachmentStrip(
-                        paths: chat.attachments, onRemove: chat.detach),
-                ]),
-              ),
-            const NipaSetupChip(padding: EdgeInsets.only(bottom: 8)),
-            if (_dictating || _voice.error != null)
-              Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(children: [
-                    Expanded(
-                        child: Text(
-                            _voice.error ??
-                                (_voice.active
-                                    ? '正在本机听写… 点击麦克风结束，文字确认后发送'
-                                    : '正在准备或结束听写…'),
-                            style: NextText.sans(12, color: NextColors.p2))),
-                    if (_dictating)
-                      Pressable(
-                          semanticLabel: '取消听写',
-                          onTap: _cancelVoice,
-                          builder: (_, hovered) => Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Text('取消',
-                                  style: NextText.sans(12,
-                                      color: NextColors.p2)))),
-                  ])),
-            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 9),
-                  child: ChatInputPaste(
-                    key: ValueKey(chat.thread),
-                    controller: widget.controller,
-                    enabled: chat.acceptsTyping && !_dictating,
-                    onImages: chat.attach,
-                    builder: (contextMenuBuilder) => TvOSRemoteTextInputControl(
-                        title: '与梨花对话',
-                        focusNode: widget.focusNode,
-                        child: TextField(
-                          contextMenuBuilder: contextMenuBuilder,
-                          controller: widget.controller,
-                          focusNode: useTvOSRemoteTextInput(context)
-                              ? null
-                              : widget.focusNode,
-                          enabled: chat.acceptsTyping,
-                          readOnly: _dictating,
-                          minLines: 1,
-                          maxLines: 6,
-                          keyboardType: TextInputType.multiline,
-                          textInputAction: TextInputAction.newline,
-                          cursorColor: NextColors.accent,
-                          cursorWidth: 1.5,
-                          style: NextText.sans(widget.textSize, height: 1.5),
-                          decoration: InputDecoration.collapsed(
-                            hintText: chat.hint,
-                            hintStyle: NextText.sans(widget.textSize,
-                                color: NextColors.p3),
-                          ),
-                        )),
+      // A remote's focus on the field rings the whole box.
+      TelevisionFocusFrame(
+        focused: TelevisionFocusable.television && widget.focusNode.hasFocus,
+        scale: 1,
+        radius: BorderRadius.circular(22),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(18, 10, 8, 8),
+          decoration: BoxDecoration(
+            color: const Color(0xE616161C),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: NextColors.line2),
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x59000000),
+                  blurRadius: 30,
+                  offset: Offset(0, 12)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (chat.about != null || chat.attachments.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8, right: 10),
+                  child: Wrap(spacing: 8, runSpacing: 8, children: [
+                    if (chat.about case final work?)
+                      AboutTag(work: work, onRemove: () => chat.setAbout(null)),
+                    if (chat.attachments.isNotEmpty)
+                      AttachmentStrip(
+                          paths: chat.attachments, onRemove: chat.detach),
+                  ]),
+                ),
+              const NipaSetupChip(padding: EdgeInsets.only(bottom: 8)),
+              if (_dictating || _voice.error != null)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(children: [
+                      Expanded(
+                          child: Text(
+                              _voice.error ??
+                                  (_voice.active
+                                      ? '正在本机听写… 点击麦克风结束，文字确认后发送'
+                                      : '正在准备或结束听写…'),
+                              style: NextText.sans(12, color: NextColors.p2))),
+                      if (_dictating)
+                        Pressable(
+                            semanticLabel: '取消听写',
+                            onTap: _cancelVoice,
+                            builder: (_, hovered) => Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Text('取消',
+                                    style: NextText.sans(12,
+                                        color: NextColors.p2)))),
+                    ])),
+              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 9),
+                    child: ChatInputPaste(
+                      key: ValueKey(chat.thread),
+                      controller: widget.controller,
+                      enabled: chat.acceptsTyping && !_dictating,
+                      onImages: chat.attach,
+                      builder: (contextMenuBuilder) => TvOSRemoteTextInputControl(
+                          title: '与梨花对话',
+                          focusNode: widget.focusNode,
+                          highlight: false,
+                          child: TextField(
+                            contextMenuBuilder: contextMenuBuilder,
+                            controller: widget.controller,
+                            focusNode: useTvOSRemoteTextInput(context)
+                                ? null
+                                : widget.focusNode,
+                            enabled: chat.acceptsTyping,
+                            readOnly: _dictating,
+                            minLines: 1,
+                            maxLines: 6,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
+                            cursorColor: NextColors.accent,
+                            cursorWidth: 1.5,
+                            style: NextText.sans(widget.textSize, height: 1.5),
+                            decoration: InputDecoration.collapsed(
+                              hintText: chat.hint,
+                              hintStyle: NextText.sans(widget.textSize,
+                                  color: NextColors.p3),
+                            ),
+                          )),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              if (_voiceModels.enabled && VoiceModelStore.supported)
-                Pressable(
-                  semanticLabel: _dictating ? '结束听写' : '语音输入',
-                  onTap: chat.acceptsTyping ? _toggleVoice : null,
-                  builder: (_, hovered) => Container(
-                    width: 36,
-                    height: 36,
-                    margin: const EdgeInsets.only(right: 6),
-                    decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _dictating ? NextColors.accentSoft : null),
-                    child: Icon(_dictating ? Icons.mic : Icons.mic_none,
-                        size: 20,
-                        color: _dictating ? NextColors.accent : NextColors.p2),
+                const SizedBox(width: 10),
+                if (_voiceModels.enabled && VoiceModelStore.supported)
+                  Pressable(
+                    semanticLabel: _dictating ? '结束听写' : '语音输入',
+                    onTap: chat.acceptsTyping ? _toggleVoice : null,
+                    builder: (_, hovered) => Container(
+                      width: 36,
+                      height: 36,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _dictating ? NextColors.accentSoft : null),
+                      child: Icon(_dictating ? Icons.mic : Icons.mic_none,
+                          size: 20,
+                          color: _dictating ? NextColors.accent : NextColors.p2),
+                    ),
                   ),
+                SendOrStop(
+                  stop: chat.running && empty,
+                  onSend: _send,
+                  onStop: chat.stop,
                 ),
-              SendOrStop(
-                stop: chat.running && empty,
-                onSend: _send,
-                onStop: chat.stop,
-              ),
-            ]),
-          ],
+              ]),
+            ],
+          ),
         ),
       ),
     ]);

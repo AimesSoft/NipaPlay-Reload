@@ -14,6 +14,7 @@ import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../settings/section_accounts.dart' show SourcesSection;
 import '../settings/settings_layout.dart' show SettingsSection;
+import '../widgets/television_focus.dart';
 import '../widgets/attachments.dart';
 import '../widgets/buttons.dart';
 import '../widgets/cards.dart';
@@ -111,8 +112,24 @@ class _NextHomePageState extends State<NextHomePage> {
     setState(() {});
   }
 
+  /// A television's bar steps aside once the page scrolls under it (the
+  /// home's scroll sits below the one the shell listens to).
+  void _scrolledUnderBar() {
+    final shell = _shell;
+    if (shell != null && _scroll.hasClients) {
+      shell.scrolled.value = _scroll.offset > 24;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (TelevisionFocusable.television) _scroll.addListener(_scrolledUnderBar);
+  }
+
   @override
   void dispose() {
+    _scroll.removeListener(_scrolledUnderBar);
     _shell?.homeChatOpen.removeListener(_openChanged);
     _changes?.cancel();
     _focusTimer?.cancel();
@@ -359,8 +376,13 @@ class _NextHomePageState extends State<NextHomePage> {
         if (mounted && TickerMode.of(context)) c.markSeen();
       });
     }
+    // A window shows the first shelf under the input bar; a television
+    // keeps the first screen for the hero and the bar, the shelf's title
+    // just showing below.
     final top = ConstrainedBox(
-      constraints: BoxConstraints(minHeight: h - 338, minWidth: size.width),
+      constraints: BoxConstraints(
+          minHeight: h - (TelevisionFocusable.television ? 196 : 338),
+          minWidth: size.width),
       child: Align(
         alignment: Alignment.bottomLeft,
         child: Padding(
@@ -405,7 +427,7 @@ class _NextHomePageState extends State<NextHomePage> {
         ),
       ),
     );
-    return Column(
+    final region = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -436,6 +458,21 @@ class _NextHomePageState extends State<NextHomePage> {
         ),
         const SizedBox(height: 34),
       ],
+    );
+    if (!TelevisionFocusable.television) return region;
+    // A remote coming back up into the hero brings the first screen back
+    // whole, not just enough of it to show the focused button.
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (inside) {
+        if (inside && _scroll.hasClients && _scroll.offset > 0) {
+          _scroll.animateTo(0,
+              duration: const Duration(milliseconds: 420),
+              curve: NextMotion.ease);
+        }
+      },
+      child: region,
     );
   }
 }

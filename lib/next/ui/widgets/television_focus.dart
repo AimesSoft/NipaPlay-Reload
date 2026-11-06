@@ -6,18 +6,29 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 /// Television visual design stays in those callers' builders.
 class TelevisionFocusable extends StatelessWidget {
   const TelevisionFocusable(
-      {super.key, required this.child, this.onActivate, this.onFocusChange});
+      {super.key,
+      required this.child,
+      this.onActivate,
+      this.onFocusChange,
+      this.autofocus = false});
   final Widget child;
   final VoidCallback? onActivate;
   final ValueChanged<bool>? onFocusChange;
 
+  /// Where a remote's focus starts on the page (its main action).
+  final bool autofocus;
+
   @visibleForTesting
   static bool Function() isTelevision = () => globals.isTvOS;
+
+  /// Whether input comes from a remote here.
+  static bool get television => isTelevision();
 
   @override
   Widget build(BuildContext context) {
     if (!isTelevision() || onActivate == null) return child;
     return FocusableActionDetector(
+      autofocus: autofocus,
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
         SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
@@ -104,5 +115,62 @@ class TelevisionTraversalPolicy extends FocusTraversalPolicy {
         alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
         duration: const Duration(milliseconds: 180));
     return true;
+  }
+}
+
+/// How the one focused thing looks on a television, read from across the
+/// room: it rises, and unless its own face turns over (a button filling
+/// with paper), it wears a paper ring with a soft glow.
+class TelevisionFocusFrame extends StatelessWidget {
+  const TelevisionFocusFrame({
+    super.key,
+    required this.focused,
+    required this.child,
+    this.scale = 1.06,
+    this.radius = const BorderRadius.all(Radius.circular(999)),
+    this.ring = true,
+  });
+  final bool focused;
+  final Widget child;
+  final double scale;
+  final BorderRadius radius;
+  final bool ring;
+
+  @override
+  Widget build(BuildContext context) {
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return AnimatedScale(
+      scale: focused && !still ? scale : 1,
+      duration: const Duration(milliseconds: 240),
+      curve: const Cubic(0.2, 0.9, 0.3, 1.12),
+      child: !ring
+          ? child
+          : Stack(clipBehavior: Clip.none, children: [
+              child,
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: focused ? 1 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: radius,
+                        border: Border.all(
+                            color: const Color(0xFFF5F1EA),
+                            width: 2.5,
+                            strokeAlign: BorderSide.strokeAlignOutside),
+                        boxShadow: const [
+                          BoxShadow(
+                              color: Color(0x66F5F1EA),
+                              blurRadius: 24,
+                              blurStyle: BlurStyle.outer),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ]),
+    );
   }
 }

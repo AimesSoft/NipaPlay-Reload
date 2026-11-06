@@ -13,6 +13,7 @@ import '../../player/ports/session_playback.dart';
 import 'next_shell.dart';
 import 'file_open_host.dart';
 import 'next_ui_preference.dart';
+import 'television_scale.dart';
 import 'window_chrome.dart';
 
 /// Mounts exactly one interface. Classic is disposed while Next is open;
@@ -100,7 +101,8 @@ class _NextUiGateState extends State<NextUiGate> {
     final playback = NextPlaybackScope.maybeOf(context) ??
         context.read<NextRuntime>().playback;
     final nextWindows = playback is SessionPlayback ? playback.windows : null;
-    return NextFileOpenHost(
+    return NextTelevisionScale(
+        child: NextFileOpenHost(
       launchFilePath: nextLaunch,
       openFile: widget.openNextFile,
       child: NextPlaybackScope(
@@ -155,6 +157,6 @@ class _NextUiGateState extends State<NextUiGate> {
           },
         ),
       ),
-    );
+    ));
   }
 }

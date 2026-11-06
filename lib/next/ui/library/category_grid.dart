@@ -8,6 +8,7 @@ import '../../ui_data/ui_data.dart';
 import '../theme/tokens.dart';
 import '../widgets/cards.dart';
 import '../widgets/devices.dart';
+import '../widgets/television_focus.dart';
 import '../widgets/icons.dart';
 import '../widgets/words.dart';
 import 'fan_cover.dart';
@@ -319,11 +320,16 @@ class CategoryGrid extends StatelessWidget {
 
   static const maxTile = 196.0, gap = 20.0;
 
+  /// The widest a poster gets here: smaller on a television, where the
+  /// page is drawn larger and a row should still hold six.
+  static double get tileLimit =>
+      TelevisionFocusable.television ? 150.0 : maxTile;
+
   @override
   Widget build(BuildContext context) => SliverLayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.crossAxisExtent;
-          final columns = ((width + gap) / (maxTile + gap)).ceil();
+          final columns = ((width + gap) / (tileLimit + gap)).ceil();
           final tile = (width - gap * (columns - 1)) / columns;
           return ListenableBuilder(
             listenable: items,

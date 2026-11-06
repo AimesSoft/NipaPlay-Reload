@@ -249,8 +249,12 @@ class _CollectionButtonState extends State<CollectionButton>
     return Pressable(
       onTap: () => _show(!_portal.isShowing),
       semanticLabel: status?.label ?? '收藏',
+      focusRing: false,
       builder: (context, hovered) {
         final lit = hovered || _portal.isShowing;
+        // On a television the focused button turns paper, as the others.
+        final tv = Pressable.television && hovered;
+        const ink = Color(0xFF111111);
         return AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           height: 46,
@@ -258,28 +262,42 @@ class _CollectionButtonState extends State<CollectionButton>
           padding: EdgeInsets.symmetric(horizontal: status == null ? 0 : 20),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: lit ? const Color(0x24FFFFFF) : const Color(0x1AFFFFFF),
+            color: tv
+                ? NextColors.paper
+                : lit
+                    ? const Color(0x24FFFFFF)
+                    : const Color(0x1AFFFFFF),
             borderRadius: BorderRadius.circular(23),
-            border: Border.all(color: NextColors.line2),
+            border: tv ? null : Border.all(color: NextColors.line2),
           ),
           child: status == null
               ? _Ribbon(
                   size: 18,
                   filled: false,
-                  color: lit ? NextColors.paper : NextColors.p2)
+                  color: tv
+                      ? ink
+                      : lit
+                          ? NextColors.paper
+                          : NextColors.p2)
               : Row(mainAxisSize: MainAxisSize.min, children: [
                   const _Ribbon(
                       size: 15, filled: true, color: NextColors.accent),
                   const SizedBox(width: 9),
                   Text(status.label,
                       style: NextText.sans(15,
-                          weight: FontWeight.w600, letterSpacing: 0.3)),
+                          weight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                          color: tv ? ink : NextColors.paper)),
                   if (rating != null) ...[
                     const SizedBox(width: 12),
-                    const _Stars.one(size: 12, color: NextColors.accent2),
+                    _Stars.one(
+                        size: 12,
+                        color: tv ? NextColors.accent : NextColors.accent2),
                     const SizedBox(width: 4),
                     Text('$rating',
-                        style: NextText.num(15, weight: FontWeight.w600)),
+                        style: NextText.num(15,
+                            weight: FontWeight.w600,
+                            color: tv ? ink : NextColors.paper)),
                   ],
                 ]),
         );
