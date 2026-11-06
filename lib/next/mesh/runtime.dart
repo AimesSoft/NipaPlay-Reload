@@ -786,6 +786,7 @@ final class MeshRuntime implements MeshDeviceSource {
     });
     _publishedAddresses = signature;
     _lastAddressReportSuccessAt = DateTime.now();
+    _addressLookup.coordinatorReached();
     return response;
   }
 
@@ -1153,6 +1154,7 @@ final class MeshRuntime implements MeshDeviceSource {
       throw const FormatException(
           'Coordinator revocation epoch went backwards.');
     }
+    _addressLookup.coordinatorReached();
     _devices = devices;
     _epoch = epoch;
     presence.retain({for (final d in devices) d['device_id'] as String});

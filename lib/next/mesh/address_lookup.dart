@@ -44,6 +44,16 @@ final class MeshAddressLookup {
     }
   }
 
+  /// A successful control request proves transport recovery, but says
+  /// nothing about an address-query quota or an authentication refusal.
+  void coordinatorReached() {
+    if (failure?.retryable == true && failure?.details['httpStatus'] != 429) {
+      retryAt = null;
+      failure = null;
+      _failureGap = null;
+    }
+  }
+
   void reset() {
     _generation++;
     _pending.clear();

@@ -82,6 +82,7 @@ void main() {
     await lookup.resolve('peer');
     success.complete(address(1000));
     await other;
+    lookup.coordinatorReached();
     lookup.refresh(['peer', 'other']);
     now = now.add(const Duration(seconds: 119));
     await lookup.resolve('peer');
@@ -109,6 +110,16 @@ void main() {
     lookup.refresh(['peer']);
     expect((await lookup.resolve('peer')).single['port'], 2000);
     expect(calls, previous + 1);
+  });
+
+  test('confirmed control-plane recovery releases only transient query cooldown', () async {
+    answer = (_) async => throw const Failure(
+        FailureCode.unavailable, 'unreachable', retryable: true);
+    await lookup.resolve('peer');
+    lookup.coordinatorReached();
+    answer = (_) async => address(2000);
+    expect((await lookup.resolve('peer')).single['port'], 2000);
+    expect(calls, 2);
   });
 
   test('a peer-specific refusal does not suppress other peers', () async {
