@@ -1,6 +1,8 @@
 # erika_flutter (0.3.0 to 0.3.3) performs open/seek synchronously on the platform thread.
+# Rendering was already off-main, but media I/O and UI calls shared its native lock.
 # A Dart loopback media source then waits on the very thread opening it.
 # Generate a build-local source copy; never mutate the shared pub cache.
+# 0.3.4's ErikaPresenterOwner owns all native calls and supersedes this patch.
 module ErikaMediaIO
   def self.replace!(source, before, after)
     raise "Erika media I/O patch: upstream anchor changed: #{before.lines.first.strip}" unless source.scan(before).length == 1
@@ -147,10 +149,18 @@ module ErikaMediaIO
     file = target.source_build_phase.files.find { |f| File.basename(f.file_ref.path) == 'ErikaFlutterPlugin.swift' }
     raise 'Erika media I/O patch: Swift source missing' unless file
     original = File.join(root, 'Flutter/ephemeral/.symlinks/plugins/erika_flutter/macos/Classes/ErikaFlutterPlugin.swift')
-    output = File.join(root, 'Flutter/ephemeral/patched_plugins/erika_flutter/ErikaFlutterPlugin.swift')
-    require 'fileutils'
-    FileUtils.mkdir_p(File.dirname(output))
-    File.write(output, patch(File.read(original)))
+    source = File.read(original)
+    if source.include?('let owner: ErikaPresenterOwner') &&
+       File.file?(File.join(File.dirname(original), 'ErikaPresenterOwner.swift'))
+      # Restore the upstream reference even when reusing a Pods project that
+      # previously compiled our patched 0.3.0–0.3.3 copy.
+      output = original
+    else
+      output = File.join(root, 'Flutter/ephemeral/patched_plugins/erika_flutter/ErikaFlutterPlugin.swift')
+      require 'fileutils'
+      FileUtils.mkdir_p(File.dirname(output))
+      File.write(output, patch(source))
+    end
     file.file_ref.path = output
     file.file_ref.source_tree = '<absolute>'
   end
