@@ -116,6 +116,12 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
+# Use the Vulkan runtime installed by the GPU driver. media-kit's legacy ANGLE
+# archive includes a loader that corrupts cooperative-matrix query arguments.
+list(FILTER PLUGIN_BUNDLED_LIBRARIES EXCLUDE REGEX "[/\\\\]vulkan-1\\.dll$")
+install(CODE "file(REMOVE \"${INSTALL_BUNDLE_LIB_DIR}/vulkan-1.dll\")"
+  COMPONENT Runtime)
+
 if(PLUGIN_BUNDLED_LIBRARIES)
   install(FILES "${PLUGIN_BUNDLED_LIBRARIES}"
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
