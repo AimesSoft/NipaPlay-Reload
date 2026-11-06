@@ -3,6 +3,9 @@ name: Build tvOS
 on:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      NIPAPLAY_TMDB_TOKEN:
+        required: false
     outputs:
       version:
         description: Application version from pubspec.yaml
@@ -22,6 +25,10 @@ on:
       - 'third_party/**'
       - 'tool/**'
       - 'tvos/**'
+      - 'rust/tvos/**'
+      - 'rust/src/api/mesh.rs'
+      - 'rust/src/mesh/**'
+      - 'rust_builder/tvos/**'
 
 permissions:
   contents: read
@@ -35,6 +42,9 @@ jobs:
     name: Build tvOS package
     runs-on: macos-26
     timeout-minutes: 120
+    env:
+      NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
+      CARGO_BUILD_JOBS: '2'
     outputs:
       version: ${{ steps.project.outputs.version }}
       artifact-name: ${{ steps.artifact.outputs.name }}
@@ -120,6 +130,14 @@ jobs:
             run tool/configure_flutter_dependencies.dart tvos
           "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" pub get
 
+      - name: Install Rust for the television Mesh transport
+        shell: bash
+        run: rustup toolchain install nightly --profile minimal --component rust-src
+
+      - name: Prepare built-in credentials
+        shell: bash
+        run: python3 .github/workflows/scripts/built-in-credentials.py prepare "$RUNNER_TEMP/nipaplay-tvos-defines.json"
+
       - name: Generate build info json
         shell: bash
         run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
@@ -129,26 +147,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" \
-            build tvos --simulator --debug --no-pub
+          bash tool/build_tvos_unsigned.sh simulator \
+            --dart-define-from-file="$RUNNER_TEMP/nipaplay-tvos-defines.json"
 
       - name: Build unsigned tvOS device application
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
-          unsigned_config="$RUNNER_TEMP/NipaPlay-tvOS-unsigned.xcconfig"
-          printf '%s\n' \
-            'CODE_SIGNING_ALLOWED = NO' \
-            'CODE_SIGNING_REQUIRED = NO' \
-            'CODE_SIGN_IDENTITY =' \
-            'DEVELOPMENT_TEAM =' \
-            'PROVISIONING_PROFILE_SPECIFIER =' \
-            > "$unsigned_config"
+          bash tool/build_tvos_unsigned.sh device \
+            --dart-define-from-file="$RUNNER_TEMP/nipaplay-tvos-defines.json"
 
-          XCODE_XCCONFIG_FILE="$unsigned_config" \
-            "$FLUTTER_TVOS_ROOT/bin/flutter-tvos" \
-            build tvos --release --no-pub
+      - name: Verify built-in credentials in the compiled application
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == 'pull_request' ]]; then
+            app_path=build/tvos/Release-appletvsimulator/Runner.app
+          else
+            app_path=build/tvos/Release-appletvos/Runner.app
+          fi
+          test -s "$app_path/Frameworks/App.framework/App"
+          test ! -f "$app_path/flutter_assets/kernel_blob.bin"
+          python3 .github/workflows/scripts/built-in-credentials.py verify \
+            "$app_path/Frameworks/App.framework/App"
+          python3 .github/workflows/scripts/verify-ios-agent-assets.py "$app_path"
 
       - name: Prepare tvOS artifact
         id: artifact
