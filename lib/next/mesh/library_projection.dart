@@ -405,24 +405,33 @@ final class LibraryProjection {
             b['external_id']
           ])
       ];
-  Future<String> _sample(String path) async {
-    final file = File(path), stat = await File(path).stat();
-    final stamp = '${stat.size}:${stat.modified.microsecondsSinceEpoch}';
-    if (_samples[path]?.$1 == stamp) return _samples[path]!.$2;
-    final input = await file.open();
+  Future<String?> _sample(String path) async {
     try {
-      final head = await input.read(math.min(stat.size, 65536));
-      await input.setPosition(math.max(0, stat.size - 65536));
-      final tail = await input.read(65536);
-      final value = _hash([
-        stat.size,
-        sha256.convert(head).toString(),
-        sha256.convert(tail).toString()
-      ]);
+      final file = File(path);
+      final stat = await file.stat();
+      if (stat.type != FileSystemEntityType.file) return null;
+      final stamp = '${stat.size}:${stat.modified.microsecondsSinceEpoch}';
+      if (_samples[path]?.$1 == stamp) return _samples[path]!.$2;
+      final input = await file.open();
+      final String value;
+      try {
+        final head = await input.read(math.min(stat.size, 65536));
+        await input.setPosition(math.max(0, stat.size - 65536));
+        final tail = await input.read(65536);
+        value = _hash([
+          stat.size,
+          sha256.convert(head).toString(),
+          sha256.convert(tail).toString()
+        ]);
+      } finally {
+        await input.close();
+      }
       _samples[path] = (stamp, value);
       return value;
-    } finally {
-      await input.close();
+    } on FileSystemException {
+      // A stored location can exist but be unreadable, for example after
+      // switching from a sandboxed build. Keep indexing the other locations.
+      return null;
     }
   }
 
@@ -532,12 +541,13 @@ final class LibraryProjection {
             [episode.episodeId, ui.media.store.ownerDeviceId]);
         for (final f in nativeFiles) {
           final path = f['locator'] as String;
-          if (!await File(path).exists()) continue;
+          final sample = await _sample(path);
+          if (sample == null) continue;
           final probe =
               (jsonDecode(f['attributes'] as String) as Map)['probe'] as Map?;
           locations.add({
             'fileId': f['fileId'],
-            'sample': await _sample(path),
+            'sample': sample,
             'startMs': f['startMs'] ?? 0,
             'endMs': f['endMs'],
             // What the file's streams are, for the work's page wherever it
