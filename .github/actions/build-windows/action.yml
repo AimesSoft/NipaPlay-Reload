@@ -587,9 +587,6 @@ runs:
         Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
         Name: "fileassoc"; Description: "将常见视频格式与 NipaPlay 关联"; Flags: unchecked
 
-        [InstallDelete]
-        Type: files; Name: "{app}\vulkan-1.dll"
-
         [Files]
         Source: "$buildDir\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
