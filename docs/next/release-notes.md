@@ -30,7 +30,7 @@ Alpha 3 加入本地语音输入实验，升级 Erika 0.3.4 并开放新的超�
 
 - Classic 与 Next 同步接入 ArtCNN 扩展型号、Anime4K CNN 与降噪模型、FSR 1.0、平台视频超分和 Apple MetalFX。可导入 Erika `.esr` 或 FSRCNNX / Anime4K CNN shader 自定义模型；设置与实际后端状态向梨花开放。
 - Windows 可使用 RTX Video / Intel VSR，Apple 可使用 MetalFX / VideoToolbox；实际启用受 GPU、操作系统和片源条件影响。「播放信息」区分请求模式与实际后端。
-- 播放器原生操作由各自的独立线程处理，包括打开、定位、渲染、截图和销毁。macOS 使用上游线程实现，退出旧版 Mesh 媒体 I/O 补丁。
+- 播放器原生操作由各自的独立线程处理，包括打开、定位、渲染、截图和销毁，耗时媒体操作不占用界面线程。
 - 播放信息补充真实容器、视频与音频码率、帧率和 Dolby Vision 标识。
 
 ### 实验室：离线语音输入
