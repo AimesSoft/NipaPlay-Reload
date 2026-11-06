@@ -167,15 +167,24 @@ jobs:
           p12-file-base64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
 
-      - name: Download existing App Store provisioning profiles
+      - name: Setup Ruby for provisioning
         if: inputs.upload-to-app-store
-        uses: apple-actions/download-provisioning-profiles@v4
+        uses: ruby/setup-ruby@v1
         with:
-          bundle-id: com.aimessoft.nipaplay
-          profile-type: IOS_APP_STORE
-          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          api-key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+          ruby-version: '3.3'
+
+      - name: Install fastlane for provisioning
+        if: inputs.upload-to-app-store
+        run: gem install fastlane --version 2.237.0 --no-document
+
+      - name: Ensure App Store profile for the existing certificate
+        if: inputs.upload-to-app-store
+        id: provisioning
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: ruby .github/workflows/scripts/ensure-ios-distribution-profile.rb
 
       - name: Build App Store signed IPA
         if: inputs.upload-to-app-store
@@ -184,6 +193,7 @@ jobs:
         env:
           APP_VERSION: ${{ steps.setup.outputs.version }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_DISTRIBUTION_PROFILE: ${{ steps.provisioning.outputs.profile-path }}
         run: |
           set -euo pipefail
 
