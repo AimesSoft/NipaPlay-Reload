@@ -107,6 +107,15 @@ class _WebDAVFormState extends State<_WebDAVForm> {
         }
         return textColor;
       }),
+      backgroundColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.focused)
+              ? accentColor.withValues(alpha: 0.18)
+              : Colors.transparent),
+      side: WidgetStateProperty.resolveWith((states) => BorderSide(
+          color: states.contains(WidgetState.focused)
+              ? accentColor
+              : Colors.transparent,
+          width: 2)),
       overlayColor: MaterialStateProperty.all(Colors.transparent),
       splashFactory: NoSplash.splashFactory,
       padding: MaterialStateProperty.all(
@@ -303,6 +312,17 @@ class _WebDAVFormState extends State<_WebDAVForm> {
                       },
                       style: IconButton.styleFrom(
                         overlayColor: Colors.transparent,
+                      ).copyWith(
+                        backgroundColor: WidgetStateProperty.resolveWith(
+                            (states) => states.contains(WidgetState.focused)
+                                ? accentColor.withValues(alpha: 0.18)
+                                : Colors.transparent),
+                        side: WidgetStateProperty.resolveWith((states) =>
+                            BorderSide(
+                                color: states.contains(WidgetState.focused)
+                                    ? accentColor
+                                    : Colors.transparent,
+                                width: 2)),
                       ),
                     ),
                   ),

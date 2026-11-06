@@ -7,6 +7,7 @@ import 'linux_storage_migration.dart'; // 导入Linux存储迁移
 import 'macos_storage_migration.dart'; // 导入macOS存储迁移
 import 'package:nipaplay/services/macos_process_environment.dart';
 import 'lab_profile.dart';
+import 'platform_identity_io.dart' as platform_identity;
 
 class StorageService {
   @visibleForTesting
@@ -151,6 +152,9 @@ class StorageService {
     if (debugAppStorageDirectoryOverride != null) {
       return debugAppStorageDirectoryOverride!;
     }
+    if (platform_identity.isTvOS) {
+      return getTvOSStorageDirectory();
+    }
     // Linux平台特殊处理 - 使用XDG规范目录并处理迁移
     if (Platform.isLinux) {
       return _getLinuxStorageDirectory();
@@ -158,6 +162,16 @@ class StorageService {
     
     // 其他所有平台（iOS、Android、macOS、Windows）使用统一逻辑
     return _getUniversalStorageDirectory();
+  }
+
+  @visibleForTesting
+  static Future<Directory> getTvOSStorageDirectory() async {
+    // Documents is read-only on a physical Apple TV, even though the
+    // simulator permits writes. tvOS provides writable local files in Caches.
+    final cache = await getApplicationCacheDirectory();
+    final directory = Directory('${cache.path}/nipaplay');
+    await directory.create(recursive: true);
+    return directory;
   }
   
   // 通用存储目录处理（除Linux外的所有平台）

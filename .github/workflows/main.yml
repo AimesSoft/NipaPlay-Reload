@@ -227,13 +227,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          app_version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
-          curated_notes=".github/release-notes/$app_version/github.txt"
-          if [ -s "$curated_notes" ]; then
-            cp "$curated_notes" release_notes.md
-            exit 0
-          fi
-
           # The changelog pipeline (gather commits/PRs -> call AI -> write notes) is
           # wrapped in a subshell so ANY failure (missing config, AI 429/timeout,
           # jq parse error) cannot abort the release. On failure release_notes.md is
@@ -679,13 +672,6 @@ jobs:
         env:
           AI_API_TOKEN: ${{ secrets.RELEASE_AI_TOKEN }}
         run: |
-          curated_dir=".github/release-notes/$APP_VERSION"
-          if [ -s "$curated_dir/zh-Hans.txt" ] && [ -s "$curated_dir/en-US.txt" ]; then
-            mkdir -p "$RUNNER_TEMP/app-store-metadata/$APP_STORE_ZH_LOCALE" "$RUNNER_TEMP/app-store-metadata/$APP_STORE_EN_LOCALE"
-            cp "$curated_dir/zh-Hans.txt" "$RUNNER_TEMP/app-store-metadata/$APP_STORE_ZH_LOCALE/release_notes.txt"
-            cp "$curated_dir/en-US.txt" "$RUNNER_TEMP/app-store-metadata/$APP_STORE_EN_LOCALE/release_notes.txt"
-            exit 0
-          fi
           python3 .github/workflows/scripts/generate-app-store-release-notes.py \
             --source "$GITHUB_RELEASE_NOTES" \
             --output-dir "$RUNNER_TEMP/app-store-metadata" \
@@ -915,13 +901,6 @@ jobs:
         env:
           AI_API_TOKEN: ${{ secrets.RELEASE_AI_TOKEN }}
         run: |
-          curated_dir=".github/release-notes/$APP_VERSION"
-          if [ -s "$curated_dir/zh-Hans.txt" ] && [ -s "$curated_dir/en-US.txt" ]; then
-            mkdir -p "$RUNNER_TEMP/app-store-metadata/$APP_STORE_ZH_LOCALE" "$RUNNER_TEMP/app-store-metadata/$APP_STORE_EN_LOCALE"
-            cp "$curated_dir/zh-Hans.txt" "$RUNNER_TEMP/app-store-metadata/$APP_STORE_ZH_LOCALE/release_notes.txt"
-            cp "$curated_dir/en-US.txt" "$RUNNER_TEMP/app-store-metadata/$APP_STORE_EN_LOCALE/release_notes.txt"
-            exit 0
-          fi
           python3 .github/workflows/scripts/generate-app-store-release-notes.py \
             --source "$GITHUB_RELEASE_NOTES" \
             --output-dir "$RUNNER_TEMP/app-store-metadata" \

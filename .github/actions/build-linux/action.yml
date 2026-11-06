@@ -82,7 +82,7 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: build/erika-linux-runtime
-        key: erika-linux-0.2.1-${{ runner.arch }}-${{ runner.os }}-${{ hashFiles('scripts/build_erika_linux_runtime.sh', '.github/patches/erika-linux-native-deps.patch', '.github/workflows/build-linux.yml', '.github/actions/build-linux/action.yml') }}
+        key: erika-linux-0.3.2-${{ runner.arch }}-${{ runner.os }}-${{ hashFiles('scripts/build_erika_linux_runtime.sh', '.github/patches/erika-linux-native-deps.patch', '.github/workflows/build-linux.yml', '.github/actions/build-linux/action.yml') }}
 
     - name: Build Erika Linux runtime
       if: steps.erika-cache.outputs.cache-hit != 'true'

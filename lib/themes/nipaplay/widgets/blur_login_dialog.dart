@@ -117,6 +117,7 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
   }
 
   Future<void> _handleLogin() async {
+    if (_isLoading) return;
     // 收集所有字段的值
     final values = <String, String>{};
     for (final field in widget.fields) {
@@ -125,7 +126,7 @@ class _BlurLoginDialogState extends State<BlurLoginDialog> {
         BlurSnackBar.show(context, '请输入${field.label}');
         return;
       }
-      values[field.key] = value.trim();
+      values[field.key] = field.isPassword ? value : value.trim();
     }
 
     setState(() {

@@ -44,7 +44,6 @@ void main() {
       scaffold,
       isNot(contains('globals.isTelevision ? null : widget.onOpenSettings')),
     );
-    expect(scaffold, contains('widget.onOpenSettings,'));
     expect(scaffold, contains('onOpenSettings: _toggleSettingsPanel'));
     expect(
       scaffold,

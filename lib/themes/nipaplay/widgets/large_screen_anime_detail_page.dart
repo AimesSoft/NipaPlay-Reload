@@ -11,6 +11,10 @@ import 'package:nipaplay/models/shared_remote_library.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
+import 'package:nipaplay/services/dandanplay_http_client.dart'
+    show DandanplayLoginRequired;
+import 'package:nipaplay/widgets/dandanplay_login_required_view.dart';
+import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
 import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/services/large_screen_ui_sfx_service.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
@@ -59,9 +63,11 @@ class NipaplayLargeScreenAnimeDetailPage extends StatefulWidget {
     this.sharedEpisodeLoader,
     this.sharedEpisodeBuilder,
     this.sharedSourceLabel,
+    this.animeLoader,
   });
 
   final int animeId;
+  final Future<BangumiAnime> Function(int animeId)? animeLoader;
   final SharedRemoteAnimeSummary? sharedSummary;
   final Future<List<SharedRemoteEpisode>> Function()? sharedEpisodeLoader;
   final PlayableItem Function(SharedRemoteEpisode episode)?
@@ -93,7 +99,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
 
   BangumiAnime? _anime;
   bool _isLoading = true;
-  String? _error;
+  Object? _error;
 
   bool _isEpisodeListReversed = false;
   bool _isEpisodeAreaActive = false;
@@ -109,8 +115,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
   final Map<int, PlayableItem> _sharedPlayableMap = <int, PlayableItem>{};
   // 共享媒体库返回的全部剧集（含未匹配到剧集编号的文件），
   // 由 _displayEntries 决定哪些条目需要单独展示。
-  final List<SharedRemoteEpisode> _sharedEpisodeList =
-      <SharedRemoteEpisode>[];
+  final List<SharedRemoteEpisode> _sharedEpisodeList = <SharedRemoteEpisode>[];
 
   bool _isLoadingSharedEpisodes = false;
   String? _sharedEpisodesError;
@@ -122,7 +127,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
     super.initState();
     FocusManager.instance.addEarlyKeyEventHandler(_handleEarlyKeyEvent);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || !_isLoading || !_isCurrentRouteActive()) return;
       _inputFocusNode.requestFocus();
     });
     _loadPageData();
@@ -280,7 +285,23 @@ class _NipaplayLargeScreenAnimeDetailPageState
     });
 
     try {
-      final anime = await _fetchAnimeDetails();
+      BangumiAnime anime;
+      try {
+        anime = await _fetchAnimeDetails();
+      } catch (_) {
+        final summary = widget.sharedSummary;
+        // A media library's own files must remain playable when optional
+        // online metadata is unavailable or requires a different account.
+        if (summary == null || widget.sharedEpisodeLoader == null) rethrow;
+        anime = BangumiAnime(
+          id: widget.animeId,
+          name: summary.name,
+          nameCn: summary.nameCn ?? summary.name,
+          imageUrl: summary.imageUrl ?? '',
+          summary: summary.summary,
+          episodeList: const [],
+        );
+      }
       if (!mounted) return;
 
       setState(() {
@@ -307,14 +328,16 @@ class _NipaplayLargeScreenAnimeDetailPageState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = e;
         _isLoading = false;
       });
-      _requestControlFocus(0);
+      // The error view has its own real focus targets, rather than the
+      // loaded page's close/favorite/sort selection model.
     }
   }
 
   Future<BangumiAnime> _fetchAnimeDetails() async {
+    if (widget.animeLoader != null) return widget.animeLoader!(widget.animeId);
     if (kIsWeb) {
       final apiUri = WebRemoteAccessService.apiUri(
           '/api/bangumi/detail/${widget.animeId}');
@@ -552,7 +575,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
     if (controlNodes.isEmpty) return;
     final targetIndex = _clampInt(index, 0, controlNodes.length - 1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || !_isCurrentRouteActive()) return;
       controlNodes[targetIndex].requestFocus();
     });
   }
@@ -561,7 +584,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
     if (_episodeFocusNodes.isEmpty) return;
     final targetIndex = _clampInt(index, 0, _episodeFocusNodes.length - 1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || !_isCurrentRouteActive()) return;
       _episodeFocusNodes[targetIndex].requestFocus();
     });
   }
@@ -717,6 +740,18 @@ class _NipaplayLargeScreenAnimeDetailPageState
   }
 
   KeyEventResult _handleInputCommandEvent(KeyEvent event) {
+    if (_isLoading || _error != null) {
+      final command = NipaplayLargeScreenInputControls.fromKeyEvent(event);
+      if (command == NipaplayLargeScreenInputCommand.back ||
+          command == NipaplayLargeScreenInputCommand.toggleMenu) {
+        Navigator.of(context).maybePop();
+        return KeyEventResult.handled;
+      }
+      // Let error/login buttons receive Select and directional navigation.
+      // The old loaded-page handler treated Select as "close" even when
+      // the visible action said "retry".
+      return KeyEventResult.ignored;
+    }
     final command = NipaplayLargeScreenInputControls.fromKeyEvent(event);
     if (command == null) {
       return KeyEventResult.ignored;
@@ -1288,26 +1323,28 @@ class _NipaplayLargeScreenAnimeDetailPageState
         ? const Center(child: CircularProgressIndicator())
         : (_error != null
             ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _error!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: isDark ? Colors.white70 : Colors.black54,
+                child: _error is DandanplayLoginRequired
+                    ? DandanplayLoginRequiredView(
+                        onSignedIn: _loadPageData,
+                        onClose: () => Navigator.of(context).maybePop(),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('暂时无法加载详情，请重试'),
+                          const SizedBox(height: 16),
+                          AdaptiveMediaActionButton(
+                            label: '重试',
+                            desktopIcon: Icons.refresh_rounded,
+                            autofocus: true,
+                            onPressed: _loadPageData,
+                          ),
+                          AdaptiveMediaActionButton(
+                            label: '返回',
+                            onPressed: () => Navigator.of(context).maybePop(),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildControlButton(
-                      focusNode: _closeFocusNode,
-                      icon: Icons.refresh_rounded,
-                      label: '重试',
-                      controlIndex: 0,
-                      onPressed: _loadPageData,
-                    ),
-                  ],
-                ),
               )
             : _buildLoadedBody(_anime!));
 
@@ -1376,7 +1413,10 @@ class _NipaplayLargeScreenAnimeDetailPageState
                             ),
                           ),
                         ),
-                        Positioned.fill(child: body),
+                        Positioned.fill(
+                            child: _error == null
+                                ? body
+                                : FocusScope(autofocus: true, child: body)),
                       ],
                     ),
                   ),

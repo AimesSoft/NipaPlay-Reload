@@ -5,6 +5,7 @@ import 'package:nipaplay/widgets/scroll_edge_builder.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'dart:async';
+import 'package:nipaplay/widgets/dandanplay_login_required_view.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
@@ -313,6 +314,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   final Map<String, TrendingBangumiResult> _trendingResults = {};
   final Set<String> _trendingLoadingKeys = {};
   String? _trendingError;
+  bool _trendingLoginRequired = false;
   ScrollController? _trendingScrollController;
 
   void _updateTrendingState(VoidCallback update) => setState(update);
