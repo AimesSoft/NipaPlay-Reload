@@ -6,6 +6,8 @@
 # Pub replaces dependency_overrides as a complete section, so the shared
 # overrides from pubspec.yaml are repeated below the tvOS-specific entries.
 dependency_overrides:
+  # The tvOS-only native surface adaptation is verified against this source.
+  erika_flutter: 0.3.4
   fvp:
     path: third_party/fvp
   shared_preferences_windows:

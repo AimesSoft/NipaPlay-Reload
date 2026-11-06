@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 import '../data/settings_data.dart';
 import '../shell/shell_controller.dart';
@@ -227,15 +228,15 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
             ]),
         ]),
       SettingsSection.danmaku => RegistryGroups(
-          section: section,
-          model: model,
-          more: _isMore(section),
-          onMore: () => _toggleMore(section),
-          highlight: _highlight,
-          extra: {
-            if (keys.value != null)
-              '防剧透': [HostKeyRow(keys: keys, which: HostKey.spoilerAi)],
-          }),
+            section: section,
+            model: model,
+            more: _isMore(section),
+            onMore: () => _toggleMore(section),
+            highlight: _highlight,
+            extra: {
+              if (keys.value != null)
+                '防剧透': [HostKeyRow(keys: keys, which: HostKey.spoilerAi)],
+            }),
       SettingsSection.sources => SourcesSection(
           key: _sources,
           data: data,
@@ -314,8 +315,9 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     final model = _model!;
     final places = [
       for (final s in SettingsSection.values)
-        if (s.title.toLowerCase().contains(q) ||
-            (_words[s]?.contains(q) ?? false))
+        if (SettingsSection.available(s) &&
+            (s.title.toLowerCase().contains(q) ||
+                (_words[s]?.contains(q) ?? false)))
           s
     ];
     final found = <SettingsSection, List<UiSetting>>{};
@@ -359,50 +361,44 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     ]);
   }
 
-
   /// The section (or the search's results), scrolling, inside [padding].
   Widget _content(SettingsModel model, String query, EdgeInsets padding) =>
       ListenableBuilder(
-                listenable: Listenable.merge([model, _keys]),
-                builder: (context, _) => SingleChildScrollView(
-                  controller: _scroll,
-                  padding: padding,
-                  child: Align(
+        listenable: Listenable.merge([model, _keys]),
+        builder: (context, _) => SingleChildScrollView(
+          controller: _scroll,
+          padding: padding,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                layoutBuilder: (current, previous) => Stack(
                     alignment: Alignment.topLeft,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 760),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        layoutBuilder: (current, previous) => Stack(
-                            alignment: Alignment.topLeft,
-                            children: [
-                              ...previous,
-                              if (current != null) current
-                            ]),
-                        child: Column(
-                          key: ValueKey(query.isEmpty ? _section : 'search'),
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 26),
-                              child: Text(
-                                  query.isEmpty ? _section.title : '“$query”',
-                                  style: NextText.sans(28,
-                                      weight: FontWeight.w600)),
-                            ),
-                            if (model.all == null && model.failed == null)
-                              const SizedBox(height: 200)
-                            else if (query.isNotEmpty)
-                              _results(query)
-                            else
-                              _body(_section),
-                          ],
-                        ),
-                      ),
+                    children: [...previous, if (current != null) current]),
+                child: Column(
+                  key: ValueKey(query.isEmpty ? _section : 'search'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 26),
+                      child: Text(query.isEmpty ? _section.title : '“$query”',
+                          style: NextText.sans(28, weight: FontWeight.w600)),
                     ),
-                  ),
+                    if (model.all == null && model.failed == null)
+                      const SizedBox(height: 200)
+                    else if (query.isNotEmpty)
+                      _results(query)
+                    else
+                      _body(_section),
+                  ],
                 ),
-              );
+              ),
+            ),
+          ),
+        ),
+      );
 
   /// A phone: back and the search on the bar's row, the sections in a row
   /// that scrolls sideways, the section under them in one column.
@@ -412,7 +408,8 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
       color: NextColors.ink,
       child: Padding(
         padding: EdgeInsets.only(top: NextLayout.barTop(context)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // Back on the bar's row (its right holds the shell's own).
           SizedBox(
             height: NextMetrics.topBar,
@@ -443,7 +440,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.symmetric(horizontal: gutter),
               children: [
-                for (final s in SettingsSection.rail.expand((g) => g))
+                for (final s in SettingsSection.visibleRail.expand((g) => g))
                   Padding(
                     padding: const EdgeInsets.only(right: 22),
                     child: _RailItem(
@@ -627,7 +624,7 @@ class _Rail extends StatelessWidget {
         _SearchField(
             search: search, searchFocus: searchFocus, onSearch: onSearch),
         const SizedBox(height: 22),
-        for (final (i, group) in SettingsSection.rail.indexed) ...[
+        for (final (i, group) in SettingsSection.visibleRail.indexed) ...[
           if (i > 0) const SizedBox(height: 14),
           for (final s in group)
             _RailItem(
@@ -647,43 +644,45 @@ class _SearchField extends StatelessWidget {
   final VoidCallback onSearch;
 
   @override
-  Widget build(BuildContext context) =>
-        ListenableBuilder(
-          listenable: searchFocus,
-          builder: (context, _) => AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            height: 34,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: searchFocus.hasFocus
-                  ? const Color(0x14FFFFFF)
-                  : const Color(0x0AFFFFFF),
-              borderRadius: BorderRadius.circular(17),
-              border: Border.all(
-                  color: searchFocus.hasFocus
-                      ? const Color(0x59FF2E55)
-                      : NextColors.line),
-            ),
-            child: Row(children: [
-              const NextIcon(NextGlyph.search, size: 14, color: NextColors.p3),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: search,
-                  focusNode: searchFocus,
-                  cursorColor: NextColors.accent,
-                  cursorWidth: 1.5,
-                  style: NextText.sans(13),
-                  onChanged: (_) => onSearch(),
-                  decoration: InputDecoration.collapsed(
-                    hintText: '搜索',
-                    hintStyle: NextText.sans(13, color: NextColors.p4),
-                  ),
-                ),
-              ),
-            ]),
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: searchFocus,
+        builder: (context, _) => AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: searchFocus.hasFocus
+                ? const Color(0x14FFFFFF)
+                : const Color(0x0AFFFFFF),
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(
+                color: searchFocus.hasFocus
+                    ? const Color(0x59FF2E55)
+                    : NextColors.line),
           ),
-        );
+          child: Row(children: [
+            const NextIcon(NextGlyph.search, size: 14, color: NextColors.p3),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TvOSRemoteTextInputControl(
+                title: '搜索设置',
+                focusNode: searchFocus,
+                child: TextField(
+                controller: search,
+                focusNode: useTvOSRemoteTextInput(context) ? null : searchFocus,
+                cursorColor: NextColors.accent,
+                cursorWidth: 1.5,
+                style: NextText.sans(13),
+                onChanged: (_) => onSearch(),
+                decoration: InputDecoration.collapsed(
+                  hintText: '搜索',
+                  hintStyle: NextText.sans(13, color: NextColors.p4),
+                ),
+              )),
+            ),
+          ]),
+        ),
+      );
 }
 
 class _RailItem extends StatelessWidget {

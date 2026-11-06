@@ -566,17 +566,58 @@ abstract final class NextUiDebug {
               PhysicalKeyboardKey.arrowRight,
               LogicalKeyboardKey.arrowRight
             ),
+          'up' => (PhysicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowUp),
+          'down' => (PhysicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowDown),
+          'enter' => (PhysicalKeyboardKey.enter, LogicalKeyboardKey.enter),
+          'select' => (PhysicalKeyboardKey.select, LogicalKeyboardKey.select),
+          'tab' => (PhysicalKeyboardKey.tab, LogicalKeyboardKey.tab),
           'escape' => (PhysicalKeyboardKey.escape, LogicalKeyboardKey.escape),
-          _ => throw ArgumentError('key: space, left, right or escape'),
+          _ => throw ArgumentError('Unknown navigation key'),
         };
         final stamp =
             Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
-        final handled = HardwareKeyboard.instance.handleKeyEvent(KeyDownEvent(
-            physicalKey: physical, logicalKey: logical, timeStamp: stamp));
-        HardwareKeyboard.instance.handleKeyEvent(KeyUpEvent(
-            physicalKey: physical, logicalKey: logical, timeStamp: stamp));
+        final down = KeyDownEvent(
+            physicalKey: physical, logicalKey: logical, timeStamp: stamp);
+        final up = KeyUpEvent(
+            physicalKey: physical, logicalKey: logical, timeStamp: stamp);
+        var handled = HardwareKeyboard.instance.handleKeyEvent(down);
+        // The television fork still dispatches focus through KeyMessage.
+        // A direct HardwareKeyboard event only reaches global player handlers.
+        if (Platform.operatingSystem == 'tvos') {
+          // ignore: deprecated_member_use
+          final dispatch = ServicesBinding.instance.keyEventManager.keyMessageHandler;
+          // ignore: deprecated_member_use
+          handled = (dispatch?.call(KeyMessage([down], null)) ?? false) || handled;
+          HardwareKeyboard.instance.handleKeyEvent(up);
+          // ignore: deprecated_member_use
+          dispatch?.call(KeyMessage([up], null));
+        } else {
+          HardwareKeyboard.instance.handleKeyEvent(up);
+        }
         await _settle();
-        return {'handled': handled, ..._status(shell)};
+        final focus = FocusManager.instance.primaryFocus;
+        String? label;
+        focus?.context?.visitAncestorElements((element) {
+          if (element.widget case final Pressable button) {
+            label = button.semanticLabel;
+            return false;
+          }
+          if (element.widget case final PosterCard card) {
+            label = card.title;
+            return false;
+          }
+          if (element.widget is WideCard) {
+            label = '剧集卡片';
+            return false;
+          }
+          return true;
+        });
+        final render = focus?.context?.findRenderObject();
+        final rect = render is RenderBox && render.attached && render.hasSize
+            ? focus!.rect : null;
+        return {'handled': handled, 'focus': label ?? focus?.debugLabel,
+          'focusRect': rect == null ? null : [rect.left, rect.top, rect.width, rect.height],
+          ..._status(shell)};
       case 'click':
         // A click at x,y (logical pixels of the window); two with double.
         final [x, y] = p['at']!.split(',').map(int.parse).toList();

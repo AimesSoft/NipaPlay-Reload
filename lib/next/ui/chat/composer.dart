@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart' show Icons, InputDecoration, TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../../voice/input.dart';
@@ -239,25 +240,30 @@ class _ChatComposerState extends State<ChatComposer>
                     controller: widget.controller,
                     enabled: chat.acceptsTyping && !_dictating,
                     onImages: chat.attach,
-                    builder: (contextMenuBuilder) => TextField(
-                      contextMenuBuilder: contextMenuBuilder,
-                      controller: widget.controller,
-                      focusNode: widget.focusNode,
-                      enabled: chat.acceptsTyping,
-                      readOnly: _dictating,
-                      minLines: 1,
-                      maxLines: 6,
-                      keyboardType: TextInputType.multiline,
-                      textInputAction: TextInputAction.newline,
-                      cursorColor: NextColors.accent,
-                      cursorWidth: 1.5,
-                      style: NextText.sans(widget.textSize, height: 1.5),
-                      decoration: InputDecoration.collapsed(
-                        hintText: chat.hint,
-                        hintStyle: NextText.sans(widget.textSize,
-                            color: NextColors.p3),
-                      ),
-                    ),
+                    builder: (contextMenuBuilder) => TvOSRemoteTextInputControl(
+                        title: '与梨花对话',
+                        focusNode: widget.focusNode,
+                        child: TextField(
+                          contextMenuBuilder: contextMenuBuilder,
+                          controller: widget.controller,
+                          focusNode: useTvOSRemoteTextInput(context)
+                              ? null
+                              : widget.focusNode,
+                          enabled: chat.acceptsTyping,
+                          readOnly: _dictating,
+                          minLines: 1,
+                          maxLines: 6,
+                          keyboardType: TextInputType.multiline,
+                          textInputAction: TextInputAction.newline,
+                          cursorColor: NextColors.accent,
+                          cursorWidth: 1.5,
+                          style: NextText.sans(widget.textSize, height: 1.5),
+                          decoration: InputDecoration.collapsed(
+                            hintText: chat.hint,
+                            hintStyle: NextText.sans(widget.textSize,
+                                color: NextColors.p3),
+                          ),
+                        )),
                   ),
                 ),
               ),

@@ -45,7 +45,7 @@ class NextUiPreference extends ChangeNotifier {
   @visibleForTesting
   static bool Function() deviceHasNext = () =>
       globals.isDesktop ||
-      (!kIsWeb && Platform.isIOS && !globals.isTvOS);
+      (!kIsWeb && (Platform.isIOS || globals.isTvOS));
 
   late final Future<void> ready;
   bool _enabled = false;

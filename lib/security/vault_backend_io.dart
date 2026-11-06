@@ -9,8 +9,9 @@ bool get usesSystemVault =>
     !globals.isHarmonyOS &&
     !globals.isTelevision &&
     (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
-/// iOS (not tvOS) keeps its secrets in the Keychain.
-bool get usesKeychainVault => Platform.isIOS && !globals.isTelevision;
+/// Apple mobile devices and televisions keep secrets in their own Keychain.
+bool get usesKeychainVault => globals.isTvOS ||
+    (Platform.isIOS && !globals.isTelevision);
 CredentialVault createCredentialVault() => usesSystemVault
     ? DesktopCredentialVault()
     : usesKeychainVault

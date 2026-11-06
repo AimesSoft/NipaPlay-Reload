@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        A7B000000000000000000001 /* NipaKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B000000000000000000002 /* NipaKeychain.swift */; };
+        A7B000000000000000000003 /* NipaMeshBonjour.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B000000000000000000004 /* NipaMeshBonjour.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		29D92457F42E4DB40BAFE67D /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 240D9B35499FE039E7FE5B2B /* Pods_Runner.framework */; };
 		97C146FB1CF9000082B4168C /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000082B4168C /* AppDelegate.swift */; };
@@ -21,6 +23,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+        A7B000000000000000000002 /* NipaKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NipaKeychain.swift; path = ../../ios/Runner/NipaKeychain.swift; sourceTree = "<group>"; };
+        A7B000000000000000000004 /* NipaMeshBonjour.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NipaMeshBonjour.swift; path = ../../ios/Runner/NipaMeshBonjour.swift; sourceTree = "<group>"; };
 		0EA267B1C499E6C13C259468 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
@@ -91,6 +95,8 @@
 			isa = PBXGroup;
 			children = (
 				97C146FA1CF9000082B4168C /* AppDelegate.swift */,
+                A7B000000000000000000002 /* NipaKeychain.swift */,
+                A7B000000000000000000004 /* NipaMeshBonjour.swift */,
 				A11000000000000000000002 /* TVOSReleaseSimulatorShaderOverride.m */,
 				A11000000000000000000006 /* impeller_entity_simulator.metallib */,
 				A11000000000000000000007 /* impeller_modern_simulator.metallib */,
@@ -319,6 +325,8 @@
 			files = (
 				A11000000000000000000001 /* TVOSReleaseSimulatorShaderOverride.m in Sources */,
 				97C146FB1CF9000082B4168C /* AppDelegate.swift in Sources */,
+                A7B000000000000000000001 /* NipaKeychain.swift in Sources */,
+                A7B000000000000000000003 /* NipaMeshBonjour.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

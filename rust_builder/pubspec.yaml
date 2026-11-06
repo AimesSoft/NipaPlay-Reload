@@ -27,6 +27,8 @@ flutter:
         pluginClass: RustLibNipaplayPlugin
       ios:
         pluginClass: RustLibNipaplayPlugin
+      tvos:
+        pluginClass: RustLibNipaplayPlugin
       linux:
         pluginClass: RustLibNipaplayPlugin
         fileName: rust_lib_nipaplay_plugin.cc

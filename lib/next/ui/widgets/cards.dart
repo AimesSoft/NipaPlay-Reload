@@ -5,6 +5,8 @@ import 'art_origin.dart';
 import 'artwork.dart';
 import 'buttons.dart';
 import 'progress.dart';
+import 'television_focus.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// Hover handling shared by work cards: scale to 1.03 (not under reduced
 /// motion), reveal the round play button, report hover to the page.
@@ -26,16 +28,18 @@ mixin _HoverCard<T extends StatefulWidget> on State<T> {
 
   Widget playOverlay(VoidCallback? onPlay, {double size = 46}) => onPlay == null
       ? const SizedBox.shrink()
-      : Center(
-          child: IgnorePointer(
-            ignoring: !hovered,
-            child: AnimatedOpacity(
-              opacity: hovered ? 1 : 0,
-              duration: const Duration(milliseconds: 180),
-              child: HoverPlayButton(onTap: onPlay, size: size),
+      : ExcludeFocus(
+          excluding: globals.isTvOS,
+          child: Center(
+            child: IgnorePointer(
+              ignoring: !hovered,
+              child: AnimatedOpacity(
+                opacity: hovered ? 1 : 0,
+                duration: const Duration(milliseconds: 180),
+                child: HoverPlayButton(onTap: onPlay, size: size),
+              ),
             ),
-          ),
-        );
+          ));
 }
 
 /// The 16:9 card (`.card .thumb`): artwork, bottom shade, title and caption
@@ -91,130 +95,136 @@ class _WideCardState extends State<WideCard> with _HoverCard {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(12);
-    return MouseRegion(
-      cursor:
-          widget.onOpen == null ? MouseCursor.defer : SystemMouseCursors.click,
-      onEnter: (_) => setHovered(true, widget.onHover),
-      onExit: (_) => setHovered(false, widget.onHover),
-      child: GestureDetector(
-        onTap: widget.onOpen,
-        child: hoverScale(
-          context,
-          _origin(
-            widget.workId,
-            image: widget.image,
-            tint: widget.tint,
-            shape: ArtShape.wide,
-            child: Container(
-              width: widget.width,
-              height: widget.height,
-              decoration: BoxDecoration(
-                borderRadius: radius,
-                boxShadow: [
-                  if (widget.selected)
-                    const BoxShadow(color: NextColors.paper, spreadRadius: 2),
-                  const BoxShadow(
-                      color: Color(0x59000000),
-                      blurRadius: 30,
-                      offset: Offset(0, 10)),
-                ],
-              ),
-              foregroundDecoration: BoxDecoration(
-                borderRadius: radius,
-                border: Border.all(color: const Color(0x0FFFFFFF)),
-              ),
-              child: ClipRRect(
-                borderRadius: radius,
-                child: Stack(fit: StackFit.expand, children: [
-                  widget.image == null && widget.poster != null
-                      ? PosterFill(widget.poster!, tint: widget.tint)
-                      : NextImage(widget.image, tint: widget.tint),
-                  if (widget.title != null ||
-                      widget.caption != null ||
-                      widget.label != null)
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [
-                            Color(0xC7000000),
-                            Color(0x33000000),
-                            Color(0x00000000)
-                          ],
-                          stops: [0, 0.46, 0.7],
+    return TelevisionFocusable(
+        onActivate: widget.onOpen,
+        onFocusChange: (value) => setHovered(value, widget.onHover),
+        child: MouseRegion(
+          cursor: widget.onOpen == null
+              ? MouseCursor.defer
+              : SystemMouseCursors.click,
+          onEnter: (_) => setHovered(true, widget.onHover),
+          onExit: (_) => setHovered(false, widget.onHover),
+          child: GestureDetector(
+            onTap: widget.onOpen,
+            child: hoverScale(
+              context,
+              _origin(
+                widget.workId,
+                image: widget.image,
+                tint: widget.tint,
+                shape: ArtShape.wide,
+                child: Container(
+                  width: widget.width,
+                  height: widget.height,
+                  decoration: BoxDecoration(
+                    borderRadius: radius,
+                    boxShadow: [
+                      if (widget.selected)
+                        const BoxShadow(
+                            color: NextColors.paper, spreadRadius: 2),
+                      const BoxShadow(
+                          color: Color(0x59000000),
+                          blurRadius: 30,
+                          offset: Offset(0, 10)),
+                    ],
+                  ),
+                  foregroundDecoration: BoxDecoration(
+                    borderRadius: radius,
+                    border: Border.all(color: const Color(0x0FFFFFFF)),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: radius,
+                    child: Stack(fit: StackFit.expand, children: [
+                      widget.image == null && widget.poster != null
+                          ? PosterFill(widget.poster!, tint: widget.tint)
+                          : NextImage(widget.image, tint: widget.tint),
+                      if (widget.title != null ||
+                          widget.caption != null ||
+                          widget.label != null)
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [
+                                Color(0xC7000000),
+                                Color(0x33000000),
+                                Color(0x00000000)
+                              ],
+                              stops: [0, 0.46, 0.7],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  if (widget.badge != null)
-                    Positioned(
-                      left: 12,
-                      top: 12,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0x80000000),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(widget.badge!,
-                            style: NextText.sans(11,
-                                weight: FontWeight.w600, color: NextColors.p2)),
-                      ),
-                    ),
-                  if (widget.title != null || widget.caption != null)
-                    Positioned(
-                      left: 14,
-                      right: 14,
-                      bottom: 20,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (widget.title != null)
-                            Text(widget.title!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: NextText.sans(14.5,
+                      if (widget.badge != null)
+                        Positioned(
+                          left: 12,
+                          top: 12,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0x80000000),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(widget.badge!,
+                                style: NextText.sans(11,
                                     weight: FontWeight.w600,
-                                    shadows: const [
-                                      Shadow(
-                                          color: Color(0x80000000),
-                                          blurRadius: 6,
-                                          offset: Offset(0, 1))
-                                    ])),
-                          if (widget.caption != null) ...[
-                            const SizedBox(height: 3),
-                            Text(widget.caption!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style:
-                                    NextText.sans(11.5, color: NextColors.p2)),
-                          ],
-                        ],
-                      ),
-                    ),
-                  if (widget.label != null)
-                    Positioned(left: 12, bottom: 12, child: widget.label!),
-                  if (widget.progress != null)
-                    Positioned(
-                      left: 14,
-                      right: 14,
-                      bottom: 11,
-                      child: ThinBar(
-                        progress: widget.progress!,
-                        track: const Color(0x38FFFFFF),
-                        fill: NextColors.paper,
-                      ),
-                    ),
-                  playOverlay(widget.onPlay, size: 44),
-                ]),
+                                    color: NextColors.p2)),
+                          ),
+                        ),
+                      if (widget.title != null || widget.caption != null)
+                        Positioned(
+                          left: 14,
+                          right: 14,
+                          bottom: 20,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.title != null)
+                                Text(widget.title!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: NextText.sans(14.5,
+                                        weight: FontWeight.w600,
+                                        shadows: const [
+                                          Shadow(
+                                              color: Color(0x80000000),
+                                              blurRadius: 6,
+                                              offset: Offset(0, 1))
+                                        ])),
+                              if (widget.caption != null) ...[
+                                const SizedBox(height: 3),
+                                Text(widget.caption!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: NextText.sans(11.5,
+                                        color: NextColors.p2)),
+                              ],
+                            ],
+                          ),
+                        ),
+                      if (widget.label != null)
+                        Positioned(left: 12, bottom: 12, child: widget.label!),
+                      if (widget.progress != null)
+                        Positioned(
+                          left: 14,
+                          right: 14,
+                          bottom: 11,
+                          child: ThinBar(
+                            progress: widget.progress!,
+                            track: const Color(0x38FFFFFF),
+                            fill: NextColors.paper,
+                          ),
+                        ),
+                      playOverlay(widget.onPlay, size: 44),
+                    ]),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 }
 
@@ -274,88 +284,94 @@ class _PosterCardState extends State<PosterCard> with _HoverCard {
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(12);
     final reduced = NextMotion.reduced(context);
-    return SizedBox(
-      width: widget.width,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          MouseRegion(
-            cursor: widget.onOpen == null
-                ? MouseCursor.defer
-                : SystemMouseCursors.click,
-            onEnter: (_) => setHovered(true, widget.onHover),
-            onExit: (_) => setHovered(false, widget.onHover),
-            child: GestureDetector(
-              onTap: widget.onOpen,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 400),
-                curve: NextMotion.ease,
-                transform: Matrix4.translationValues(
-                    0, widget.selected && !reduced ? -6 : 0, 0),
-                child: hoverScale(
-                  context,
-                  _origin(
-                    widget.workId,
-                    image: widget.image,
-                    tint: widget.tint,
-                    shape: ArtShape.poster,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 400),
-                      curve: NextMotion.ease,
-                      height: widget.height,
-                      decoration: BoxDecoration(
-                        borderRadius: radius,
-                        boxShadow: widget.selected
-                            ? const [
-                                BoxShadow(
-                                    color: NextColors.paper, spreadRadius: 2),
-                                BoxShadow(
-                                    color: Color(0x99000000),
-                                    blurRadius: 50,
-                                    offset: Offset(0, 22)),
-                              ]
-                            : const [
-                                BoxShadow(
-                                    color: Color(0x00F5F1EA), spreadRadius: 0),
-                                BoxShadow(
-                                    color: Color(0x80000000),
-                                    blurRadius: 40,
-                                    offset: Offset(0, 18)),
-                              ],
-                      ),
-                      foregroundDecoration: BoxDecoration(
-                        borderRadius: radius,
-                        border: Border.all(color: const Color(0x14FFFFFF)),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: radius,
-                        child: Stack(fit: StackFit.expand, children: [
-                          NextImage(widget.image,
-                              shape: ArtShape.poster, tint: widget.tint),
-                          playOverlay(widget.onPlay),
-                        ]),
+    return TelevisionFocusable(
+        onActivate: widget.onOpen,
+        onFocusChange: (value) => setHovered(value, widget.onHover),
+        child: SizedBox(
+          width: widget.width,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              MouseRegion(
+                cursor: widget.onOpen == null
+                    ? MouseCursor.defer
+                    : SystemMouseCursors.click,
+                onEnter: (_) => setHovered(true, widget.onHover),
+                onExit: (_) => setHovered(false, widget.onHover),
+                child: GestureDetector(
+                  onTap: widget.onOpen,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 400),
+                    curve: NextMotion.ease,
+                    transform: Matrix4.translationValues(
+                        0, widget.selected && !reduced ? -6 : 0, 0),
+                    child: hoverScale(
+                      context,
+                      _origin(
+                        widget.workId,
+                        image: widget.image,
+                        tint: widget.tint,
+                        shape: ArtShape.poster,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 400),
+                          curve: NextMotion.ease,
+                          height: widget.height,
+                          decoration: BoxDecoration(
+                            borderRadius: radius,
+                            boxShadow: widget.selected
+                                ? const [
+                                    BoxShadow(
+                                        color: NextColors.paper,
+                                        spreadRadius: 2),
+                                    BoxShadow(
+                                        color: Color(0x99000000),
+                                        blurRadius: 50,
+                                        offset: Offset(0, 22)),
+                                  ]
+                                : const [
+                                    BoxShadow(
+                                        color: Color(0x00F5F1EA),
+                                        spreadRadius: 0),
+                                    BoxShadow(
+                                        color: Color(0x80000000),
+                                        blurRadius: 40,
+                                        offset: Offset(0, 18)),
+                                  ],
+                          ),
+                          foregroundDecoration: BoxDecoration(
+                            borderRadius: radius,
+                            border: Border.all(color: const Color(0x14FFFFFF)),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: radius,
+                            child: Stack(fit: StackFit.expand, children: [
+                              NextImage(widget.image,
+                                  shape: ArtShape.poster, tint: widget.tint),
+                              playOverlay(widget.onPlay),
+                            ]),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(height: 12),
+              Text(widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: NextText.sans(14.5, weight: FontWeight.w600)),
+              if (widget.reason != null && widget.reason!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(widget.reason!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        NextText.sans(12.5, color: NextColors.p3, height: 1.5)),
+              ],
+            ],
           ),
-          const SizedBox(height: 12),
-          Text(widget.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: NextText.sans(14.5, weight: FontWeight.w600)),
-          if (widget.reason != null && widget.reason!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(widget.reason!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: NextText.sans(12.5, color: NextColors.p3, height: 1.5)),
-          ],
-        ],
-      ),
-    );
+        ));
   }
 }

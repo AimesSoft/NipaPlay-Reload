@@ -1,4 +1,5 @@
 import '../data/settings_data.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// The page's sections, in the rail's order. Gaps in the rail fall between
 /// [rail]'s lists.
@@ -30,6 +31,17 @@ enum SettingsSection {
     [general, shortcuts, plugins, labs, about],
     [classic],
   ];
+
+  static Iterable<List<SettingsSection>> get visibleRail => [
+        for (final group in rail)
+          [
+            for (final section in group)
+              if (available(section)) section
+          ],
+      ];
+
+  static bool available(SettingsSection section) =>
+      !globals.isTvOS || section != SettingsSection.downloads;
 }
 
 /// A titled run of registry settings in a section. [folded] groups wait
@@ -218,7 +230,13 @@ abstract final class SettingsLayout {
       ]),
     ],
     SettingsSection.nipa: [
-      SettingsGroup('提醒与整理', ['notification.agentPopups', 'library.organizeAddedFolders', 'library.fileOrganization', 'library.fileOrganizationRules', 'library.notifyNipaEnabled']),
+      SettingsGroup('提醒与整理', [
+        'notification.agentPopups',
+        'library.organizeAddedFolders',
+        'library.fileOrganization',
+        'library.fileOrganizationRules',
+        'library.notifyNipaEnabled'
+      ]),
       SettingsGroup('文件夹', ['next.'], folded: true),
     ],
     SettingsSection.labs: [
@@ -276,6 +294,11 @@ abstract final class SettingsLayout {
   /// Settings shown on the page: not the player's live state, and only
   /// those a control exists for.
   static bool shown(UiSetting s) =>
+      SettingsSection.available(sectionOf(s.key)) &&
+      (!globals.isTvOS ||
+          !(s.key.startsWith('player.external') ||
+              s.key.startsWith('labs.voice') ||
+              s.key.startsWith('window.'))) &&
       !s.runtime &&
       s.kind != UiSettingKind.other &&
       !hidden.any((h) => SettingsGroup._matches(h, s.key));

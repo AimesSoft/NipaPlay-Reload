@@ -5,6 +5,7 @@ import 'system/app_restart.dart';
 import 'system/app_runtime.dart';
 import '../services/desktop_exit_handler.dart';
 import 'body/next_body.dart';
+import 'body/television_storage.dart';
 import 'mesh/files.dart';
 import 'dart:io';
 
@@ -198,6 +199,7 @@ final class NextCore {
   late final NipaGate nipaGate;
   bool _nipa = false;
   bool _startupIndexed = false;
+  bool _televisionCatalogueLost = false;
   late final TaskResources resources;
   late final BodyEvents events;
   late final SystemSettings automatic;
@@ -267,7 +269,15 @@ final class NextCore {
         Directory(
             '${(await StorageService.getAppStorageDirectory()).path}/next');
     phase('root');
+    await TelevisionStorage.restore(root, credentialVault);
+    if (Platform.operatingSystem == 'tvos') {
+      _televisionCatalogueLost = !await File('${root.path}/next.db').exists();
+    }
     deviceId = await loadDeviceIdentity(root);
+    if (Platform.operatingSystem == 'tvos') {
+      await TelevisionStorage.save('device.json',
+          await File('${root.path}/device.json').readAsString(), credentialVault);
+    }
     phase('device identity');
     final database = await openNextDatabase(root, factory: databaseFactory);
     phase('database open');
@@ -773,10 +783,32 @@ final class NextCore {
     phaseNipa('startup: Nipa mesh prepared');
     await uiData.start();
     phaseNipa('startup: Nipa ui data');
+    if (_televisionCatalogueLost) {
+      _televisionCatalogueLost = false;
+      unawaited(_recoverTelevisionCatalogue());
+    }
     followups.start();
     phaseNipa('startup: Nipa followups');
     uiData.meshLibrary!.startPolling();
     nipaGate.set(true);
+  }
+
+  /// tvOS may purge the database while retaining source settings and their
+  /// Keychain credentials. Rebuild those catalogues through the existing task
+  /// engine; remote Mesh catalogues are independently restored by MeshLibrary.
+  Future<void> _recoverTelevisionCatalogue() async {
+    try {
+      await mediaSources.ensureInitialized();
+      for (final source in await mediaSources.list()) {
+        try {
+          await mediaSources.ensureCatalogue(source['sourceId'] as String);
+        } catch (error) {
+          stderr.writeln('tvOS source catalogue recovery: ${error.runtimeType}');
+        }
+      }
+    } catch (error) {
+      stderr.writeln('tvOS source configuration recovery: ${error.runtimeType}');
+    }
   }
 
   /// A device joined that this one had not seen. The person is asked once

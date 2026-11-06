@@ -6,6 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipa_harness/nipa_harness.dart' show Failure;
 
 import '../../player/kernel/driver.dart' show KernelDriver;
@@ -255,7 +256,8 @@ class MoreMenuState extends State<MoreMenu> {
               MenuItem(label: '逐帧前进（.）', onTap: () => _set(() async {
                 await next.inspection.inspect('playback.navigate', {'frameDelta': 1});
               })),
-              MenuItem(label: '截取 GIF', onTap: () => _set(() => showNextGifDialog(context, next))),
+              if (!globals.isTvOS)
+                MenuItem(label: '截取 GIF', onTap: () => _set(() => showNextGifDialog(context, next))),
               if (next.canPictureInPicture)
                 MenuItem(label: next.windows.detached ? '返回主窗口' : '分离窗口',
                     onTap: () => _set(next.windows.detached ? next.windows.returnToMain : next.detach)),
@@ -725,10 +727,10 @@ class _DanmakuPageState extends State<_DanmakuPage> {
                         label: '发送弹幕',
                         onTap: () => widget.onOpen(_Page.send)),
                     const PlayerMenuDivider(),
-                    PlayerSettingAction(
+                    if (!globals.isTvOS) PlayerSettingAction(
                         label: '保存为 JSON',
                         onTap: () => unawaited(_save(xml: false))),
-                    PlayerSettingAction(
+                    if (!globals.isTvOS) PlayerSettingAction(
                         label: '保存为 XML',
                         value: _saved,
                         onTap: () => unawaited(_save(xml: true))),
@@ -842,8 +844,8 @@ class _DanmakuTracksState extends State<_DanmakuTracks> {
               child: Text(error,
                   style: NextText.sans(12, color: NextColors.accent)),
             ),
-          const PlayerMenuDivider(),
-          MenuItem(
+          if (!globals.isTvOS) const PlayerMenuDivider(),
+          if (!globals.isTvOS) MenuItem(
             label: _adding ? '正在添加…' : '添加弹幕文件…',
             onTap: () {
               if (!_adding) unawaited(_add());

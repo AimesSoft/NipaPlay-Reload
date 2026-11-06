@@ -10,6 +10,7 @@ import 'credential_key_policy.dart';
 import 'secret_redactor.dart';
 import 'vault_backend.dart';
 import 'session_credential_vault.dart';
+import 'package:nipaplay/utils/platform_identity.dart' as platform_identity;
 
 /// Adapts verified legacy storage keys without exposing secrets to serializers.
 final class CredentialStore {
@@ -19,7 +20,8 @@ final class CredentialStore {
     vault = SessionCredentialVault(backend, report, _recovered);
   }
   static var instance =
-      CredentialStore(createCredentialVault(), desktop: usesSystemVault);
+      CredentialStore(createCredentialVault(),
+          desktop: usesSystemVault || platform_identity.isTvOS);
   late final SessionCredentialVault vault;
   final bool desktop;
   final TargetPlatform platform;

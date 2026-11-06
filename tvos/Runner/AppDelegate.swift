@@ -18,6 +18,8 @@ class AppDelegate: FlutterAppDelegate {
         self.window = window
 
         GeneratedPluginRegistrant.register(with: self)
+        NipaKeychain.register(with: flutterViewController.binaryMessenger)
+        NipaMeshBonjour.register(with: flutterViewController.binaryMessenger)
 
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }

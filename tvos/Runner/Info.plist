@@ -38,5 +38,11 @@
   <array>
     <string>arm64</string>
   </array>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>NipaPlay 通过本地网络连接你的媒体服务器和同账号设备。</string>
+  <key>NSBonjourServices</key>
+  <array><string>_nipaplay-mesh._tcp</string></array>
+  <key>NSAppTransportSecurity</key>
+  <dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict>
 </plist>

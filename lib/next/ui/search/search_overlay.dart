@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 import '../../ui_data/ui_data.dart';
 import '../data/search.dart';
@@ -329,23 +330,27 @@ class _Input extends StatelessWidget {
           const NextIcon(NextGlyph.search, size: 18, color: NextColors.p2),
           const SizedBox(width: 14),
           Expanded(
-            child: TextField(
-              controller: search.text,
-              focusNode: search.focus,
-              onSubmitted: (_) => onSubmit(),
-              // Enter keeps the box focused; what it opens decides.
-              onEditingComplete: () {},
-              textInputAction: TextInputAction.search,
-              maxLines: 1,
-              cursorColor: NextColors.accent,
-              cursorWidth: 1.5,
-              cursorHeight: 20,
-              style: NextText.sans(17),
-              decoration: InputDecoration.collapsed(
-                hintText: '搜索',
-                hintStyle: NextText.sans(17, color: NextColors.p3),
-              ),
-            ),
+            child: TvOSRemoteTextInputControl(
+                title: '搜索',
+                focusNode: search.focus,
+                child: TextField(
+                  controller: search.text,
+                  focusNode:
+                      useTvOSRemoteTextInput(context) ? null : search.focus,
+                  onSubmitted: (_) => onSubmit(),
+                  // Enter keeps the box focused; what it opens decides.
+                  onEditingComplete: () {},
+                  textInputAction: TextInputAction.search,
+                  maxLines: 1,
+                  cursorColor: NextColors.accent,
+                  cursorWidth: 1.5,
+                  cursorHeight: 20,
+                  style: NextText.sans(17),
+                  decoration: InputDecoration.collapsed(
+                    hintText: '搜索',
+                    hintStyle: NextText.sans(17, color: NextColors.p3),
+                  ),
+                )),
           ),
           const SizedBox(width: 22),
         ]),
@@ -512,8 +517,7 @@ class _RowState extends State<_Row> {
         WorkEntry(:final work) => work.title,
         EpisodeEntry(:final work, :final episode) => [
             work.title,
-            if (Words.episode(episode.number) ?? episode.title
-                case final name?)
+            if (Words.episode(episode.number) ?? episode.title case final name?)
               name,
           ].join(' '),
         SourceEntry(:final hit) => '${hit.title} ${hit.source.name}',
@@ -661,13 +665,9 @@ class _RowState extends State<_Row> {
           source: source, poster: image, workTitle: hit.workTitle),
       (final kind, final work?, final episode?) => _episode(work, episode, on,
           source: source, image: image, file: kind == UiSourceHitKind.file),
-      _ => _still(
-          hit.title,
-          [if (hit.workTitle case final title?) title, source].join(' · '),
-          on,
-          image: image,
-          file: true,
-          playable: hit.playable),
+      _ => _still(hit.title,
+          [if (hit.workTitle case final title?) title, source].join(' · '), on,
+          image: image, file: true, playable: hit.playable),
     };
     return hit.reachable ? row : Opacity(opacity: 0.5, child: row);
   }

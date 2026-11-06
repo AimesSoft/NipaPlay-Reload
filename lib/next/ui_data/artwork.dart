@@ -12,6 +12,7 @@ import '../../security/built_in_credentials.dart';
 import '../media/identity_store.dart';
 import '../media/library_reads.dart';
 import '../events/signals.dart';
+import '../body/television_storage.dart';
 import '../media/media_service.dart';
 import '../media/metadata_provider.dart';
 import '../media/providers.dart';
@@ -211,7 +212,15 @@ final class ArtworkCache {
     }
     final result = <String, Object?>{};
     for (final kind in ['backdrop', 'poster', 'logo', 'still']) {
-      if (urls[kind] case final String url) result[kind] = await _download(url);
+      if (urls[kind] case final String url) {
+        var path = await _download(url);
+        if (Platform.operatingSystem == 'tvos' && Uri.parse(url).scheme == 'file') {
+          final cached = await TelevisionStorage.cachedArtwork(root, path);
+          if (cached == null) continue;
+          path = cached;
+        }
+        result[kind] = path;
+      }
     }
     if (result['backdrop'] ?? result['poster'] case final String path) {
       result['tint'] = await _tint(path);

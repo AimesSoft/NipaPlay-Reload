@@ -2,6 +2,7 @@
 # Reads .flutter-plugins-dependencies and adds local pods for each plugin.
 
 platform :tvos, '13.0'
+require_relative 'erika_surface_patch'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -49,5 +50,6 @@ post_install do |installer|
         ].map { |symbol| "-Wl,-u,_#{symbol}" }
       end
     end
+    nipa_patch_erika_tv_surface(target, installer.sandbox.root) if target.name == 'erika_flutter'
   end
 end

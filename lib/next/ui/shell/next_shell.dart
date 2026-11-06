@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_pop_route_guard.dart';
 
 import '../data/services.dart';
 import '../../work_detail_bridge.dart';
@@ -17,6 +18,7 @@ import '../pages/discover_page.dart';
 import '../pages/library_page.dart';
 import '../panel/chat_panel.dart';
 import '../player/player_layer.dart';
+import '../player/playback.dart';
 import '../player/touch_surface.dart' show PhoneOrientation;
 import '../search/search_overlay.dart';
 import '../settings/settings_page.dart';
@@ -25,6 +27,7 @@ import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/grain.dart';
 import '../widgets/sheet.dart';
+import '../widgets/television_focus.dart';
 import 'shell_controller.dart';
 import 'agent_inbox.dart';
 import 'top_bar.dart';
@@ -77,6 +80,14 @@ class _NextShellState extends State<NextShell> {
     super.initState();
     _shown = this;
     if (kDebugMode) NextUiDebug.attach(_shell, context);
+    if (globals.isTvOS) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          TelevisionTraversalPolicy(_focus)
+              .inDirection(_focus, TraversalDirection.down);
+        }
+      });
+    }
     // A phone's pages stand upright; a video may turn it.
     if (!globals.isDesktop && globals.isPhone) {
       unawaited(PhoneOrientation.pages());
@@ -121,6 +132,17 @@ class _NextShellState extends State<NextShell> {
     return false;
   }
 
+  Future<bool> _remoteBack() async {
+    if (_shell.escape()) return true;
+    if (widget.playing) {
+      await NextPlaybackScope.of(context).leave();
+    } else {
+      // Classic's root MENU opens its navigation. Next uses its existing menu.
+      _shell.togglePopover(NextPopover.nipa);
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     // Pages hidden while Classic's player shows a video. A login Nipa asks
@@ -134,133 +156,157 @@ class _NextShellState extends State<NextShell> {
       if (!mounted || !_onScreen) return null;
       final work = await _services.data.work(id);
       if (!mounted || !_onScreen) return null;
-      if (work == null || _shell.navigatorKey.currentState == null) return false;
+      if (work == null || _shell.navigatorKey.currentState == null)
+        return false;
       _shell.openWork(work);
       return true;
     });
     final base = Theme.of(context);
     // Next is dark: the status bar's words are light over it.
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Theme(
-      data: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-        fontFamily: NextFonts.sans,
-        fontFamilyFallback: NextFonts.sansFallback,
-        scaffoldBackgroundColor: NextColors.ink,
-        textSelectionTheme: const TextSelectionThemeData(
-          cursorColor: NextColors.accent,
-          selectionColor: Color(0x59FF2E55),
-          selectionHandleColor: NextColors.accent,
-        ),
-        platform: base.platform,
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: DefaultTextStyle(
-          style: NextText.sans(14),
-          child: NextShellScope(
-            controller: _shell,
-            child: CallbackShortcuts(
-              bindings: nextShellShortcuts(_shell),
-              child: Focus(
-                focusNode: _focus,
-                autofocus: true,
-                child: Stack(children: [
-                  Positioned.fill(
-                    child: _Pages(
-                      hidden: playing,
-                      child: ColoredBox(
-                        color: NextColors.ink,
-                        child: Stack(children: [
-                          Positioned.fill(
-                            child: NotificationListener<ScrollNotification>(
-                              onNotification: _onScroll,
-                              child: ArtOriginScope(
-                                origins: _shell.origins,
-                                child: Listener(
-                                  behavior: HitTestBehavior.translucent,
-                                  onPointerDown: (e) =>
-                                      _shell.origins.press(e.localPosition),
-                                  child: Navigator(
-                                    key: _shell.navigatorKey,
-                                    onGenerateRoute: _route,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Scrim under the bar once content scrolls beneath
-                          // it.
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            top: 0,
-                            height: NextLayout.barTop(context) + 96,
-                            child: IgnorePointer(
-                              child: ValueListenableBuilder(
-                                valueListenable: _shell.scrolled,
-                                builder: (context, scrolled, _) =>
-                                    AnimatedOpacity(
-                                  opacity: scrolled ? 1 : 0,
-                                  duration: const Duration(milliseconds: 240),
-                                  child: const DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Color(0xE608080B),
-                                          Color(0x0008080B)
-                                        ],
+    final shell = AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light,
+        child: Theme(
+          data: ThemeData(
+            brightness: Brightness.dark,
+            useMaterial3: true,
+            fontFamily: NextFonts.sans,
+            fontFamilyFallback: NextFonts.sansFallback,
+            scaffoldBackgroundColor: NextColors.ink,
+            textSelectionTheme: const TextSelectionThemeData(
+              cursorColor: NextColors.accent,
+              selectionColor: Color(0x59FF2E55),
+              selectionHandleColor: NextColors.accent,
+            ),
+            platform: base.platform,
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: DefaultTextStyle(
+              style: NextText.sans(14),
+              child: NextShellScope(
+                controller: _shell,
+                child: CallbackShortcuts(
+                  bindings: {
+                    ...nextShellShortcuts(_shell),
+                    if (globals.isTvOS)
+                      const SingleActivator(LogicalKeyboardKey.escape): () =>
+                          unawaited(_remoteBack()),
+                  },
+                  child: Focus(
+                    focusNode: _focus,
+                    autofocus: true,
+                    child: Stack(children: [
+                      Positioned.fill(
+                        child: _Pages(
+                          hidden: playing,
+                          child: ColoredBox(
+                            color: NextColors.ink,
+                            child: Stack(children: [
+                              Positioned.fill(
+                                child: NotificationListener<ScrollNotification>(
+                                  onNotification: _onScroll,
+                                  child: ArtOriginScope(
+                                    origins: _shell.origins,
+                                    child: Listener(
+                                      behavior: HitTestBehavior.translucent,
+                                      onPointerDown: (e) =>
+                                          _shell.origins.press(e.localPosition),
+                                      child: Navigator(
+                                        key: _shell.navigatorKey,
+                                        onGenerateRoute: _route,
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
+                              // Scrim under the bar once content scrolls beneath
+                              // it.
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                top: 0,
+                                height: NextLayout.barTop(context) + 96,
+                                child: IgnorePointer(
+                                  child: ValueListenableBuilder(
+                                    valueListenable: _shell.scrolled,
+                                    builder: (context, scrolled, _) =>
+                                        AnimatedOpacity(
+                                      opacity: scrolled ? 1 : 0,
+                                      duration:
+                                          const Duration(milliseconds: 240),
+                                      child: const DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [
+                                              Color(0xE608080B),
+                                              Color(0x0008080B)
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  top: 0,
+                                  child: NextTopBar()),
+                              const Positioned.fill(child: Grain()),
+                              const Positioned.fill(child: NextPopovers()),
+                            ]),
                           ),
-                          const Positioned(
-                              left: 0, right: 0, top: 0, child: NextTopBar()),
-                          const Positioned.fill(child: Grain()),
-                          const Positioned.fill(child: NextPopovers()),
-                        ]),
+                        ),
                       ),
-                    ),
-                  ),
-                  // Always a slot here, so the layers above keep their state.
-                  Positioned.fill(
-                    child: playing
-                        ? const NextPlayerLayer()
-                        : const SizedBox.shrink(),
-                  ),
-                  const Positioned.fill(child: ChatPanelLayer()),
-                  Positioned.fill(
-                    child: _Pages(
-                      hidden: playing,
-                      child: SearchLayer(
-                        search: _shell.search,
-                        onOpen: _shell.openSearchEntry,
-                        onClose: _shell.closeSearch,
+                      // Always a slot here, so the layers above keep their state.
+                      Positioned.fill(
+                        child: playing
+                            ? const NextPlayerLayer()
+                            : const SizedBox.shrink(),
                       ),
-                    ),
+                      const Positioned.fill(child: ChatPanelLayer()),
+                      Positioned.fill(
+                        child: _Pages(
+                          hidden: playing,
+                          child: SearchLayer(
+                            search: _shell.search,
+                            onOpen: _shell.openSearchEntry,
+                            onClose: _shell.closeSearch,
+                          ),
+                        ),
+                      ),
+                      Positioned.fill(
+                          child: AgentInboxOverlay(
+                              bottomInset: playing ? 120 : 0,
+                              calls: _services.calls,
+                              events: _services.chat.display,
+                              peer: () => _services.peers?.chosen,
+                              errors: _shell.chat.rawError,
+                              onOpen: (row) async {
+                                _shell.openChat();
+                                final target = row['target'] as Map?;
+                                if (target?['threadId']
+                                    case final String thread)
+                                  await _shell.chat.select(thread);
+                              })),
+                      const Positioned.fill(child: NextSheetLayer()),
+                    ]),
                   ),
-                  Positioned.fill(child: AgentInboxOverlay(bottomInset: playing ? 120 : 0, calls: _services.calls, events: _services.chat.display,
-                    peer: () => _services.peers?.chosen, errors: _shell.chat.rawError,
-                    onOpen: (row) async {
-                      _shell.openChat();
-                      final target = row['target'] as Map?;
-                      if (target?['threadId'] case final String thread) await _shell.chat.select(thread);
-                    })),
-                  const Positioned.fill(child: NextSheetLayer()),
-                ]),
+                ),
               ),
             ),
           ),
-        ),
-      ),
-    ));
+        ));
+    return globals.isTvOS
+        ? NipaplayTvOSPopRouteGuard(
+            enabled: true,
+            onRootPopRoute: _remoteBack,
+            child: FocusTraversalGroup(
+                policy: TelevisionTraversalPolicy(_focus), child: shell))
+        : shell;
   }
 }
 
@@ -359,13 +405,15 @@ class _SectionsState extends State<_Sections>
             Offstage(
               key: ValueKey(s),
               offstage: s != _current,
-              child: TickerMode(
-                enabled: s == _current,
-                child: nextPageTransition(
-                    context,
-                    s == _current ? _enter : kAlwaysCompleteAnimation,
-                    _page(s)),
-              ),
+              child: ExcludeFocus(
+                  excluding: globals.isTvOS && s != _current,
+                  child: TickerMode(
+                    enabled: s == _current,
+                    child: nextPageTransition(
+                        context,
+                        s == _current ? _enter : kAlwaysCompleteAnimation,
+                        _page(s)),
+                  )),
             ),
         // A phone's sections are at its foot, over the pages; a page pushed
         // over them (a work, settings) covers them.

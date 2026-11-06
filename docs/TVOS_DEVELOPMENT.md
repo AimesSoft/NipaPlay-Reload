@@ -92,3 +92,47 @@ the user's Apple developer identity. This keeps personal teams and provisioning
 profiles out of the project while still producing a physical Apple TV package.
 App Store or directly installable device-specific artifacts continue to require
 Apple signing credentials and a matching tvOS provisioning profile.
+
+## Next 身体模式
+
+实验室的 Next 开关现在也适用于 tvOS。打开后复用 iPad 的身体模式：
+电视运行界面、播放器和 Mesh，通过同账号设备上的梨花提供对话服务。
+没有设备运行梨花时，来源和播放继续独立工作；关闭开关回到 Classic。
+本线没有增加电视专用主题、字号或版式。
+
+### 原生依赖与构建
+
+除上面的 Flutter SDK、Xcode、CocoaPods 外，Next 的 Mesh 静态库需要
+带 `rust-src` 的 nightly Rust。tvOS 的 Rust target 使用 `build-std`：
+
+```bash
+rustup toolchain install nightly --component rust-src
+FLUTTER_TVOS_ROOT=$HOME/development/flutter-tvos ./tool/flutter_tvos.sh pub get
+FLUTTER_TVOS_ROOT=$HOME/development/flutter-tvos ./tool/flutter_tvos.sh build tvos --simulator --debug --no-pub
+```
+
+在共享验收机器上，以上依赖安装和构建必须写入脚本并用
+`~/.nipa-next/bin/heavy-run` 执行。2026-11-07 的实际构建使用
+Rust `1.101.0-nightly (249c1e4e3 2026-11-05)`，默认限制为两个 Cargo worker。
+`rust_builder/tvos/build_mesh.sh` 从 CocoaPods 调用；`rust/tvos/` 只链接
+共享 Mesh，Dart 在后台 isolate 通过 JSON C ABI 调用，不引入桌面渲染器或下载器。
+其他平台继续使用原 FRB 路径。
+
+tvOS profile 固定 Erika Flutter 0.3.4。`tvos/erika_surface_patch.rb` 在
+Pod 安装时验证上游 Swift 源的 SHA-256，并生成 tvOS 专用副本：把 renderer
+控制的 Metal layer 从 UIView backing layer 改为独立 sublayer，解决
+tvOS 26 的后台线程 UIKit 断言。不改 Pub cache 和其他平台的插件源。
+升级 Erika 时必须复核该补丁；上游修复后应移除它。
+
+### 存储与恢复
+
+tvOS 的可写文件根为 `Library/Caches/NipaPlay`，Next 位于其 `next/` 下。
+数据库、目录投影和图片均可清理；身份私钥、证书和小型安装记录保存到
+系统 Keychain，启动时恢复缓存副本。账号和来源秘密也经现有凭据迁移逻辑
+进入 Keychain，偏好只保留引用。数据库消失后，通过现有任务引擎同步已配置
+来源，远端目录由 MeshLibrary 恢复；不把整个数据库放进 UserDefaults 或 Keychain。
+
+焦点输入在 `lib/next/ui/widgets/television_focus.dart`；按钮、卡片复用原 hover
+状态。`next_shell.dart` 负责跨页面焦点域和 Menu/Esc 返回，文字输入复用
+Classic 的 `TvOSRemoteTextInputControl`。后续视觉工作可从这些位置接手。
+第一轮的完整证据、限制与交付状态见 `next/TVOS_REPORT.md`。

@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import 'icons.dart';
+import 'television_focus.dart';
 
 /// Hover and press feedback shared by all Next buttons: brightness and a
 /// slight press scale, transform and opacity only.
@@ -40,32 +41,37 @@ class _PressableState extends State<Pressable> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onTap != null;
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: widget.semanticLabel,
-      child: MouseRegion(
-        cursor: enabled ? widget.cursor : MouseCursor.defer,
-        onEnter: (_) => _hover(true),
-        onExit: (_) {
-          _hover(false);
-          if (_pressed) setState(() => _pressed = false);
-        },
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
-          onTap: widget.onTap,
-          child: AnimatedScale(
-            scale: _pressed ? widget.pressScale : 1,
-            duration: const Duration(milliseconds: 140),
-            curve: NextMotion.ease,
-            child: widget.builder(context, _hovered && enabled),
+    return TelevisionFocusable(
+        onActivate: widget.onTap,
+        onFocusChange: _hover,
+        child: Semantics(
+          button: true,
+          enabled: enabled,
+          label: widget.semanticLabel,
+          child: MouseRegion(
+            cursor: enabled ? widget.cursor : MouseCursor.defer,
+            onEnter: (_) => _hover(true),
+            onExit: (_) {
+              _hover(false);
+              if (_pressed) setState(() => _pressed = false);
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown:
+                  enabled ? (_) => setState(() => _pressed = true) : null,
+              onTapCancel:
+                  enabled ? () => setState(() => _pressed = false) : null,
+              onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+              onTap: widget.onTap,
+              child: AnimatedScale(
+                scale: _pressed ? widget.pressScale : 1,
+                duration: const Duration(milliseconds: 140),
+                curve: NextMotion.ease,
+                child: widget.builder(context, _hovered && enabled),
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 }
 
@@ -270,13 +276,13 @@ class KeyHint extends StatelessWidget {
   Widget build(BuildContext context) => NextLayout.compact(context)
       ? const SizedBox.shrink()
       : Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: BoxDecoration(
-          border: Border.all(color: NextColors.line2),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(text, style: NextText.num(11.5, color: NextColors.p3)),
-      );
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            border: Border.all(color: NextColors.line2),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(text, style: NextText.num(11.5, color: NextColors.p3)),
+        );
 }
 
 /// The round play button that appears over a hovered card.

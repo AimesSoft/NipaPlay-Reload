@@ -7,6 +7,7 @@ import 'linux_storage_migration.dart'; // 导入Linux存储迁移
 import 'macos_storage_migration.dart'; // 导入macOS存储迁移
 import 'package:nipaplay/services/macos_process_environment.dart';
 import 'lab_profile.dart';
+import 'platform_identity.dart' as platform;
 
 class StorageService {
   @visibleForTesting
@@ -150,6 +151,14 @@ class StorageService {
     }
     if (debugAppStorageDirectoryOverride != null) {
       return debugAppStorageDirectoryOverride!;
+    }
+    // tvOS has no persistent Documents directory. File data is purgeable;
+    // credentials and Mesh identity are kept separately in the Keychain.
+    if (platform.isTvOS) {
+      final cache = await getApplicationCacheDirectory();
+      final directory = Directory('${cache.path}/NipaPlay');
+      await directory.create(recursive: true);
+      return directory;
     }
     // Linux平台特殊处理 - 使用XDG规范目录并处理迁移
     if (Platform.isLinux) {

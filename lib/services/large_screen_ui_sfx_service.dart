@@ -1,5 +1,6 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// 大屏幕模式下的 UI 音效类型。
 enum LargeScreenUiSfx {
@@ -42,6 +43,9 @@ enum LargeScreenUiSfx {
 /// 避免快速连续触发时互相打断（如连续方向键导航）。
 class LargeScreenUiSfxService with ChangeNotifier {
   LargeScreenUiSfxService() {
+    // Siri Remote input is supplied by Flutter; audioplayers has no native
+    // implementation in this television dependency profile.
+    if (globals.isTvOS) return;
     // 设置全局 AudioContext：使用 mixWithOthers 确保与其他音频源共存。
     // 注意：macOS 上 AudioContext 是 no-op，不影响播放。
     try {
@@ -84,7 +88,7 @@ class LargeScreenUiSfxService with ChangeNotifier {
     if (_largeScreenModeActive == value) return;
     _largeScreenModeActive = value;
     debugPrint('LargeScreenUiSfxService: largeScreenModeActive = $value');
-    if (value) {
+    if (value && !globals.isTvOS) {
       // 进入大屏幕模式时预加载所有播放器，避免首次播放延迟。
       _preloadPlayers();
     }
@@ -135,6 +139,7 @@ class LargeScreenUiSfxService with ChangeNotifier {
   /// 同一音效类型的连续播放会打断前一次（如快速连续方向键、
   /// 滑块连续步进），不同音效类型互不影响。
   Future<void> play(LargeScreenUiSfx sfx) async {
+    if (globals.isTvOS) return;
     if (!_largeScreenModeActive || !_enabled) {
       debugPrint(
         'LargeScreenUiSfxService: 跳过播放 ($sfx) — '

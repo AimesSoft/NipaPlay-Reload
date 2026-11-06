@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import '../body/television_storage.dart';
 
 /// A device of the account that runs, or last ran, Nipa.
 final class NipaPeer {
@@ -93,6 +95,12 @@ final class NipaPeers {
     await load();
     _chosen = deviceId;
     _chosenName = _peers.where((p) => p.id == deviceId).firstOrNull?.name;
+    await TelevisionStorage.save(
+        'nipa-peer.json',
+        deviceId == null
+            ? null
+            : jsonEncode({'deviceId': deviceId, 'name': _chosenName}),
+        CredentialStore.instance.vault);
     if (deviceId == null) {
       if (await _file.exists()) await _file.delete();
     } else {

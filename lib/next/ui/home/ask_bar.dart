@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 import '../chat/composer.dart';
 import '../shell/shell_controller.dart';
@@ -134,24 +135,31 @@ class _AskBarState extends State<AskBar> {
                 onTap: NextShellScope.of(context).openChat),
             const SizedBox(width: 12),
             Expanded(
-              child: TextField(
-                controller: _text,
-                focusNode: widget.focusNode,
-                onSubmitted: _send,
-                textInputAction: TextInputAction.send,
-                maxLines: 1,
-                cursorColor: NextColors.accent,
-                cursorWidth: 1.5,
-                cursorHeight: 18,
-                style: NextText.sans(15.5),
-                decoration: InputDecoration.collapsed(
-                  hintText:
-                      widget.attachments.isEmpty ? widget.hint : '想让梨花做什么？',
-                  hintStyle: NextText.sans(15.5, color: NextColors.p3),
-                ),
-              ),
+              child: TvOSRemoteTextInputControl(
+                  title: '与梨花对话',
+                  focusNode: widget.focusNode,
+                  child: TextField(
+                    controller: _text,
+                    focusNode: useTvOSRemoteTextInput(context)
+                        ? null
+                        : widget.focusNode,
+                    onSubmitted: _send,
+                    textInputAction: TextInputAction.send,
+                    maxLines: 1,
+                    cursorColor: NextColors.accent,
+                    cursorWidth: 1.5,
+                    cursorHeight: 18,
+                    style: NextText.sans(15.5),
+                    decoration: InputDecoration.collapsed(
+                      hintText:
+                          widget.attachments.isEmpty ? widget.hint : '想让梨花做什么？',
+                      hintStyle: NextText.sans(15.5, color: NextColors.p3),
+                    ),
+                  )),
             ),
-            if (empty && !widget.focusNode.hasFocus && widget.onExpand == null) ...[
+            if (empty &&
+                !widget.focusNode.hasFocus &&
+                widget.onExpand == null) ...[
               const KeyHint('⌘ K'),
               const SizedBox(width: 12),
             ] else
