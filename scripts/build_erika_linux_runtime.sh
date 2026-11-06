@@ -5,13 +5,13 @@ project_root=$(cd "$(dirname "$0")/.." && pwd)
 output=${1:-"$project_root/build/erika-linux-runtime"}
 mkdir -p "$output"
 output=$(cd "$output" && pwd)
-erika_commit=a62e45fe991db11c17eeefd033eccd654d15f617
+erika_commit=13014fe11f34ba7fc9c164b7f764f827258c26ba
 nvcodec_commit=e844e5b26f46bb77479f063029595293aa8f812d
 vulkan_headers_commit=b379292b2ab6df5771ba9870d53cf8b2c9295daf
 work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/nipaplay-erika.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
-git clone --depth 1 --branch v0.3.4 https://github.com/AimesSoft/liberika.git "$work/Erika"
+git clone --depth 1 --branch v0.3.5 https://github.com/AimesSoft/liberika.git "$work/Erika"
 test "$(git -C "$work/Erika" rev-parse HEAD)" = "$erika_commit"
 git -C "$work/Erika" apply "$project_root/.github/patches/erika-linux-native-deps.patch"
 
@@ -39,7 +39,7 @@ cargo rustc --locked --release -p erika_capi --lib -- \
   -C link-arg=-ldrm -C link-arg=-ldl -C link-arg=-lm
 
 # Use Erika's own packaging to include every dependency/asset license.
-GITHUB_SHA="$erika_commit" GITHUB_REF_NAME=v0.3.4 ERIKA_NATIVE_PROFILE=lgpl \
+GITHUB_SHA="$erika_commit" GITHUB_REF_NAME=v0.3.5 ERIKA_NATIVE_PROFILE=lgpl \
   bash packaging/bundle.sh erika-linux "$work/erika-linux.zip" "$CARGO_TARGET_DIR/release/liberika_capi.so"
 unzip -q "$work/erika-linux.zip" -d "$work/bundle"
 mkdir -p "$output"
@@ -56,7 +56,7 @@ notice.write_text("\n\n".join(
     for p in sorted(headers.glob("*.h"))
 ) + "\n")
 PYLICENSE
-printf 'erika_ref=v0.3.4\nerika_source=%s\nnvcodec_source=%s\nvulkan_headers_source=%s\nnative_deps_patch=%s\n' \
+printf 'erika_ref=v0.3.5\nerika_source=%s\nnvcodec_source=%s\nvulkan_headers_source=%s\nnative_deps_patch=%s\n' \
   "$erika_commit" "$nvcodec_commit" "$vulkan_headers_commit" \
   "$(sha256sum "$project_root/.github/patches/erika-linux-native-deps.patch" | cut -d ' ' -f1)" \
   >> "$output/MANIFEST.txt"
