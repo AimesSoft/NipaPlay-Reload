@@ -5,6 +5,9 @@ import 'package:erika_flutter/erika_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/next/player/core/arbiter.dart';
+import 'package:nipaplay/next/player/kernel/driver.dart';
+import 'package:nipaplay/next/player/kernel/erika_driver.dart';
 import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
 import 'package:nipaplay/player_abstraction/player_enums.dart';
 
@@ -110,6 +113,43 @@ void main() {
     });
     return player;
   }
+
+  test('external subtitle failure cannot fail the Erika media open plan',
+      () async {
+    var subtitleCalls = 0;
+    messenger.setMockMethodCallHandler(playerChannel, (call) async {
+      if (call.method == 'create') return 9;
+      if (call.method == 'addExternalSubtitle') {
+        subtitleCalls++;
+        throw PlatformException(
+            code: 'ERIKA_ERROR', message: 'invalid subtitle');
+      }
+      return null;
+    });
+    final lease =
+        await KernelArbiter().acquire(KernelOwner.next, reason: 'test');
+    final driver =
+        ErikaDriver(lease, const KernelConfig(kernel: KernelId.erika));
+    try {
+      driver.adapter.setMedia('test.mkv', PlayerMediaType.video);
+      await driver.adapter.prepare();
+      final tracks = await driver.planOpened(
+        const KernelTrackPlan(subtitle: FileKernelSubtitle('broken.ass')),
+        const MediaFacts(duration: Duration(minutes: 1)),
+      );
+      expect(tracks.subtitle, KernelSubtitle.none);
+      expect(subtitleCalls, 0);
+      // The later selection still reports the actual error to its caller.
+      await expectLater(
+          driver.switchSubtitle(const FileKernelSubtitle('broken.ass'), null),
+          throwsA(isA<PlatformException>()));
+      expect(subtitleCalls, 1);
+      expect(driver.adapter.state, PlayerPlaybackState.paused);
+    } finally {
+      await driver.disposeKernel();
+      lease.release();
+    }
+  });
 
   test('Erika tracks carry their bit rates, frame rate and dynamic range',
       () async {

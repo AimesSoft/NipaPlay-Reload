@@ -406,12 +406,16 @@ final class ErikaDriver extends AdapterDriver
           queue.live();
           basis = subtitleConfirmed ? 'event' : 'not_reported';
         }
-      case FileKernelSubtitle(:final path):
-        await adapter.setExternalSubtitleAsync(path);
-        queue.live();
-        subtitleConfirmed = await _reportedThat(_subtitleDrawn);
-        queue.live();
-        basis = subtitleConfirmed ? 'event' : 'not_reported';
+      case FileKernelSubtitle():
+        // Mount sidecars through SubtitleController.opened, which reports
+        // subtitle failures without failing the media's open operation.
+        return KernelTracks(
+            audio: plan.audio,
+            subtitle: KernelSubtitle.none,
+            audioConfirmed:
+                audio == null || adapter.activeAudioTracks.firstOrNull == audio,
+            subtitleConfirmed: true,
+            basis: 'external_subtitle_deferred');
     }
     final audioNow = adapter.activeAudioTracks.firstOrNull;
     return KernelTracks(
