@@ -18,8 +18,8 @@ permissions:
 
 jobs:
   startup:
-    name: macOS 14 startup (${{ matrix.architecture }})
-    runs-on: macos-14
+    name: macOS 15 startup (${{ matrix.architecture }})
+    runs-on: macos-15
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -27,11 +27,11 @@ jobs:
         architecture: [arm64, x86_64]
     steps:
       - uses: actions/checkout@v4
-      - name: Verify macOS 14 Apple Silicon runtime
+      - name: Verify macOS 15 Apple Silicon runtime
         run: |
           sw_vers
           uname -m
-          test "$(sw_vers -productVersion | cut -d. -f1)" = 14
+          test "$(sw_vers -productVersion | cut -d. -f1)" = 15
           test "$(uname -m)" = arm64
       - uses: actions/download-artifact@v4
         with:
@@ -68,6 +68,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-14-runtime-${{ matrix.architecture }}
+          name: macos-15-runtime-${{ matrix.architecture }}
           path: diagnostics/
           if-no-files-found: warn
