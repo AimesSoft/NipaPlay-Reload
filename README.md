@@ -187,9 +187,9 @@ Next 还引入个人 Git Harness、跨设备 Mesh、
 
 ### 参与开发者预览
 
-当前版本为 **2.0.0-alpha.2 · Developer Preview**。Alpha 2 改进了播放加载反馈，扩充字幕、弹幕与播放设置菜单，将 Erika 纳入常规内核选项，并完善作品详情页及梨花调整资料展示的能力。
+当前版本为 **2.0.0-alpha.3 · Developer Preview**。Alpha 3 加入本地语音输入实验，接入 Erika 0.3.4 的超分与自定义模型，完善媒体库任务恢复，并重新整理使用文档和梨花的应用知识入口。
 
-- [Alpha 2 下载与发行说明](https://github.com/AimesSoft/NipaPlay-Reload/releases/tag/v2.0.0-alpha.2)
+- [Alpha 3 下载与发行说明](https://github.com/AimesSoft/NipaPlay-Reload/releases/tag/v2.0.0-alpha.3)
 - [Next 使用文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md)：从安装、配置梨花到第一次使用，以及日常使用、进阶和排障
 - [下载与开启 Next](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/install.md) · [配置梨花](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/setup-nipa.md)
 - [常见问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/faq.md) · [已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/known-issues.md)
