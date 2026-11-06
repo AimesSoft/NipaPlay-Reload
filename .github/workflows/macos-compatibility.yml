@@ -11,6 +11,10 @@ on:
         description: 'Optional Actions run containing release-macOS-universal (skip rebuilding)'
         type: string
         default: ''
+      publish_next:
+        description: 'Publish the existing Next artifacts after both startup checks pass'
+        type: boolean
+        default: false
   push:
     branches: [codex/fix-476-macos14]
 
@@ -35,8 +39,8 @@ jobs:
 
   released-app:
     if: inputs.release_tag != '' && inputs.artifact_run_id == ''
-    name: Run released app on macOS 14
-    runs-on: macos-14
+    name: Run released app on macOS 15
+    runs-on: macos-15
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +48,7 @@ jobs:
         run: |
           sw_vers
           uname -m
-          test "$(sw_vers -productVersion | cut -d. -f1)" = 14
+          test "$(sw_vers -productVersion | cut -d. -f1)" = 15
           test "$(uname -m)" = arm64
       - name: Download released Apple Silicon app
         env:
@@ -59,6 +63,77 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-14-released-diagnostics
+          name: macos-15-released-diagnostics
           path: diagnostics/
           if-no-files-found: warn
+
+  publish-next:
+    name: Publish existing Next artifacts
+    needs: existing-build
+    if: inputs.publish_next && inputs.artifact_run_id != ''
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read source build and require complete Next artifacts
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.artifact_run_id }}
+        run: |
+          python3 - <<'PYCODE'
+          import base64, json, os, re, subprocess
+          from pathlib import Path
+          repo = os.environ['GITHUB_REPOSITORY']
+          run_id = os.environ['SOURCE_RUN']
+          assert run_id.isdigit(), 'A numeric Actions run ID is required'
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
+          run = api(f'actions/runs/{run_id}')
+          assert run['head_branch'] == 'next' and run['path'] == '.github/workflows/main.yml', 'Use a Next release build'
+          assert run['status'] == 'completed', 'The source build must have finished'
+          sha = run['head_sha']
+          pubspec = base64.b64decode(api(f'contents/pubspec.yaml?ref={sha}')['content']).decode()
+          version = re.search(r'^version:\s*(\S+)', pubspec, re.M).group(1)
+          assert re.fullmatch(r'\d+\.\d+\.\d+-alpha\.\d+', version), 'Only alpha releases can be recovered here'
+          current = re.search(r'^version:\s*(\S+)', Path('pubspec.yaml').read_text(), re.M).group(1)
+          assert current == version, 'Release notes must come from the same application version'
+          artifacts = api(f'actions/runs/{run_id}/artifacts?per_page=100')['artifacts']
+          present = {item['name'] for item in artifacts if not item['expired']}
+          required = {'release-macOS-universal', 'release-macOS-arm64', 'release-macOS-x86_64',
+                      'release-Windows-x64', 'release-Linux-amd64', 'release-Linux-arm64',
+                      'release-Headless-amd64', 'release-Headless-arm64', 'release-iOS'}
+          assert required <= present, f'Missing release artifacts: {required - present}'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'sha={sha}\nversion={version}\n')
+          print(f'Reusing {version} artifacts from {sha} ({run_id})')
+          PYCODE
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: /tmp/artifacts
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.artifact_run_id }}
+      - name: Prepare developer preview notes
+        env:
+          RELEASE_VERSION: ${{ steps.source.outputs.version }}
+          RELEASE_REVISION: ${{ steps.source.outputs.sha }}
+        run: |
+          cp docs/next/release-notes.md release_notes.md
+          printf '\n构建版本：`%s` · 源码：`%s`\n' "$RELEASE_VERSION" "$RELEASE_REVISION" >> release_notes.md
+      - name: Publish developer preview
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ steps.source.outputs.version }}
+          name: NipaPlay Next ${{ steps.source.outputs.version }} · Developer Preview
+          commit: ${{ steps.source.outputs.sha }}
+          prerelease: true
+          makeLatest: false
+          allowUpdates: true
+          bodyFile: release_notes.md
+          artifacts: /tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS-*/*.dmg,/tmp/artifacts/release-macOS-*/*.zip,/tmp/artifacts/release-macOS-*/*.pkg,/tmp/artifacts/release-Windows-x64/*.zip,/tmp/artifacts/release-Windows-x64/*.exe,/tmp/artifacts/release-Windows-x64/*.msix,/tmp/artifacts/release-Linux-amd64/*.deb,/tmp/artifacts/release-Linux-amd64/*.AppImage,/tmp/artifacts/release-Linux-amd64/*.tar.gz,/tmp/artifacts/release-Linux-amd64/*.rpm,/tmp/artifacts/release-Linux-amd64/*.flatpak,/tmp/artifacts/release-Linux-arm64/*.deb,/tmp/artifacts/release-Linux-arm64/*.tar.gz,/tmp/artifacts/release-Linux-arm64/*.rpm,/tmp/artifacts/release-Linux-arm64/*.flatpak,/tmp/artifacts/release-Headless-amd64/*.tar.gz,/tmp/artifacts/release-Headless-arm64/*.tar.gz
+          artifactErrorsFailBuild: true
+          replacesArtifacts: true
+          token: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}

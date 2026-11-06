@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       architectures:
-        description: 'JSON array of package architectures (include universal for the macOS 14 gate)'
+        description: 'JSON array of package architectures (include universal for the macOS 15 gate)'
         type: string
         default: '["universal", "arm64", "x86_64"]'
       unsigned:
@@ -408,7 +408,7 @@ jobs:
           if-no-files-found: warn
 
   compatibility:
-    name: Run packaged app on macOS 14
+    name: Run packaged app on macOS 15
     needs: build
     uses: ./.github/workflows/smoke-macos.yml
     with:
