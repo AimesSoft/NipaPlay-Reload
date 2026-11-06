@@ -43,7 +43,9 @@ cargo run --manifest-path server/nipaplay-mesh-coordinator/Cargo.toml
 | `MESH_ADDRESS_MAX_TTL_SECONDS` | `7200` | 夹到 60–7200 秒；默认 TTL 同样夹到范围内 |
 | `MESH_REGISTER_PER_HOUR` | `10` | 每账号每小时注册次数 |
 | `MESH_RENEW_PER_HOUR` | `24` | 每设备每小时续期次数（续期不带令牌，按设备计） |
-| `MESH_ADDRESSES_PER_HOUR` | `60` | 每账号每小时地址请求次数 |
+| `MESH_ADDRESSES_PER_HOUR` | `600` | 每账号每小时地址查询次数（GET），不消耗上报额度 |
+| `MESH_ADDRESS_REPORTS_PER_HOUR` | `600` | 每账号每小时地址上报次数（POST），与查询独立 |
+| `MESH_ADDRESS_REPORTS_PER_DEVICE_PER_HOUR` | `60` | 每设备每小时地址上报次数，验证设备归属与吊销状态后计数 |
 | `MESH_DEVICES_PER_HOUR` | `120` | 每账号每小时设备/吊销请求次数 |
 | `MESH_IP_REQUESTS_PER_MINUTE` | `300` | 每 IP 每分钟请求上限，包括匿名、无效输入和公开接口 |
 | `MESH_TRUST_PROXY_HEADERS` | `true` | 仅当 socket 对端为回环代理时信任 `X-Real-IP` / `X-Forwarded-For` |
@@ -85,6 +87,8 @@ JWT 无法解析、声明缺失或类型不符返回 `422 invalid_identity`。�
 IP 限流在解析请求体前执行；令牌限流在上游验证前执行。已解析过的账号也在再次验证前
 检查账号额度；新令牌必须先核实身份才能归入账号桶，同账号的不同令牌共用账号额度。
 身份缓存有效 10 分钟、拒绝结果 30 秒。令牌最长 4096 字节，不接受空白或控制字符。
+地址查询与上报使用独立的令牌和账号额度；查询被限流不会阻止设备发布新地址或刷新
+地址有效期。上报另有每设备额度，同账号的不同令牌不能绕过该设备的上报限制。
 HTTP JSON 请求体最多 32 KiB；畸形 JSON 返回 `400 invalid_input`，超限返回 `413 invalid_input`。
 所有内部或上游失败仅返回固定错误信息，不返回路径、SQL 或上游响应正文。
 

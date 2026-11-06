@@ -199,6 +199,8 @@ async fn start_harness_with_methods(
         register_per_hour: 10,
         renew_per_hour: 24,
         addresses_per_hour: 60,
+        address_reports_per_hour: 600,
+        address_reports_per_device_per_hour: 60,
         devices_per_hour: 120,
         ip_requests_per_minute: 300,
         trust_proxy_headers: true,
@@ -1316,6 +1318,147 @@ async fn account_lookup_never_calls_renew() {
         );
         assert_eq!(harness.lookup_calls.load(Ordering::SeqCst), 0);
     }
+}
+
+#[tokio::test]
+async fn address_limits_lookup_exhaustion_does_not_block_new_port_reports() {
+    let harness = start_harness("address-read-limit", |c| c.addresses_per_hour = 1).await;
+    let device: Value = harness
+        .register(VALID_TOKEN, &new_device_key(), "Mac")
+        .await
+        .json()
+        .await
+        .unwrap();
+    let id = device["device_id"].as_str().unwrap();
+    for (token, expected) in [
+        (VALID_TOKEN, StatusCode::OK),
+        (VALID_TOKEN, StatusCode::TOO_MANY_REQUESTS),
+        ("test-same-account-token", StatusCode::TOO_MANY_REQUESTS),
+    ] {
+        let response = harness
+            .client
+            .get(harness.url("/mesh/v1/addresses"))
+            .query(&[("device_id", id)])
+            .bearer_auth(test_token(token))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+    }
+    assert_eq!(
+        report_test_address(&harness, VALID_TOKEN, id, 49805).await,
+        StatusCode::OK
+    );
+    let addresses = harness
+        .store
+        .addresses(id, nipaplay_auth::unix_timestamp())
+        .unwrap();
+    assert_eq!(addresses.len(), 1);
+    assert_eq!(addresses[0].port, 49805);
+}
+
+async fn report_test_address(harness: &Harness, token: &str, id: &str, port: u16) -> StatusCode {
+    harness
+        .client
+        .post(harness.url("/mesh/v1/addresses"))
+        .bearer_auth(test_token(token))
+        .json(&json!({"device_id":id,
+            "candidates":[{"kind":"lan","host":"127.0.0.1","port":port}]}))
+        .send()
+        .await
+        .unwrap()
+        .status()
+}
+
+#[tokio::test]
+async fn address_limits_reports_are_per_owned_device_across_tokens() {
+    let harness = start_harness("address-device-limit", |c| {
+        c.address_reports_per_device_per_hour = 1;
+    })
+    .await;
+    let first: Value = harness
+        .register(VALID_TOKEN, &new_device_key(), "Mac")
+        .await
+        .json()
+        .await
+        .unwrap();
+    let second: Value = harness
+        .register(VALID_TOKEN, &new_device_key(), "Win")
+        .await
+        .json()
+        .await
+        .unwrap();
+    let first_id = first["device_id"].as_str().unwrap();
+    let second_id = second["device_id"].as_str().unwrap();
+    // Another account cannot spend this device's quota or replace its address.
+    assert_eq!(
+        report_test_address(&harness, SECOND_TOKEN, first_id, 1000).await,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        report_test_address(&harness, VALID_TOKEN, first_id, 1001).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        report_test_address(&harness, "test-same-account-token", first_id, 1002).await,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        report_test_address(&harness, VALID_TOKEN, second_id, 1003).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        harness
+            .store
+            .addresses(first_id, nipaplay_auth::unix_timestamp())
+            .unwrap()[0]
+            .port,
+        1001
+    );
+}
+
+#[tokio::test]
+async fn address_limits_report_account_cap_does_not_block_lookups() {
+    let harness = start_harness("address-report-account-limit", |c| {
+        c.address_reports_per_hour = 1;
+    })
+    .await;
+    let first: Value = harness
+        .register(VALID_TOKEN, &new_device_key(), "Mac")
+        .await
+        .json()
+        .await
+        .unwrap();
+    let second: Value = harness
+        .register(VALID_TOKEN, &new_device_key(), "Win")
+        .await
+        .json()
+        .await
+        .unwrap();
+    let id = first["device_id"].as_str().unwrap();
+    assert_eq!(
+        report_test_address(&harness, VALID_TOKEN, id, 1001).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        report_test_address(
+            &harness,
+            "test-same-account-token",
+            second["device_id"].as_str().unwrap(),
+            1002
+        )
+        .await,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    let response = harness
+        .client
+        .get(harness.url("/mesh/v1/addresses"))
+        .query(&[("device_id", id)])
+        .bearer_auth(test_token(VALID_TOKEN))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]

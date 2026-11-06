@@ -507,7 +507,7 @@ async fn report_addresses(
         Ok(body) => body,
         Err(error) => return error.into_response(),
     };
-    let auth = match authenticate(&state, &headers, peer, RateKind::Addresses).await {
+    let auth = match authenticate(&state, &headers, peer, RateKind::AddressReports).await {
         Ok(auth) => auth,
         Err(error) => return error.into_response(),
     };
@@ -535,6 +535,21 @@ async fn report_addresses(
     }
     if device.revoked_at.is_some() {
         return ApiError::new(ErrorCode::DeviceRevoked, "设备已被吊销").into_response();
+    }
+
+    // Only verified, owned devices get a bucket. Lookups have a separate
+    // budget, so they cannot prevent a restarted device publishing its port.
+    let report_key = format!("device:{device_id}:address_reports");
+    if !state.limiter.check_window(
+        Duration::from_secs(3600),
+        &[(
+            &report_key,
+            state.config.address_reports_per_device_per_hour,
+        )],
+    ) {
+        warn!(device_id = %device_id, "mesh address report rate limit exceeded (device)");
+        return ApiError::new(ErrorCode::RateLimited, "设备地址上报过于频繁，请稍后再试")
+            .into_response();
     }
 
     let now = nipaplay_auth::unix_timestamp();
@@ -681,6 +696,7 @@ enum RateKind {
     Register,
     Devices,
     Addresses,
+    AddressReports,
 }
 
 impl RateKind {
@@ -689,6 +705,7 @@ impl RateKind {
             RateKind::Register => config.register_per_hour,
             RateKind::Devices => config.devices_per_hour,
             RateKind::Addresses => config.addresses_per_hour,
+            RateKind::AddressReports => config.address_reports_per_hour,
         }
     }
 }
@@ -729,6 +746,10 @@ async fn authenticate(
         Duration::from_secs(3600),
         &[(&token_key, kind.account_limit(&state.config))],
     ) {
+        warn!(
+            kind = rate_kind_name(kind),
+            "mesh rate limit exceeded (token)"
+        );
         return Err(ApiError::new(
             ErrorCode::RateLimited,
             "请求过于频繁，请稍后再试",
@@ -752,7 +773,7 @@ fn check_account_rate(state: &AppState, account_id: &str, kind: RateKind) -> Res
         Duration::from_secs(3600),
         &[(&account_key, kind.account_limit(&state.config))],
     ) {
-        warn!(account_id = %account_id, "mesh rate limit exceeded (account)");
+        warn!(account_id = %account_id, kind = rate_kind_name(kind), "mesh rate limit exceeded (account)");
         return Err(ApiError::new(
             ErrorCode::RateLimited,
             "请求过于频繁，请稍后再试",
@@ -791,6 +812,7 @@ fn rate_kind_name(kind: RateKind) -> &'static str {
         RateKind::Register => "register",
         RateKind::Devices => "devices",
         RateKind::Addresses => "addresses",
+        RateKind::AddressReports => "address_reports",
     }
 }
 
