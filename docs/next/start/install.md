@@ -4,7 +4,7 @@ Next 与 Classic 同属一个 NipaPlay 安装包，在 Classic 的实验室中�
 
 ## 安装包
 
-[GitHub 发行页](https://github.com/AimesSoft/NipaPlay-Reload/releases) 中版本号为 `2.0.0-alpha.*` 的预发布版本包含 Next。Alpha 2 的附件：
+[GitHub 发行页](https://github.com/AimesSoft/NipaPlay-Reload/releases) 中版本号为 `2.0.0-alpha.*` 的预发布版本包含 Next。当前预览的附件：
 
 | 平台 | 文件 | 其他格式 |
 |---|---|---|

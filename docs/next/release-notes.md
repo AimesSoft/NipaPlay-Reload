@@ -1,8 +1,8 @@
 # NipaPlay Next · Developer Preview
 
-这是 NipaPlay Next 的第三个开发者预览（Alpha 3）。Next 重新组织了媒体库、播放器和个人助手之间的关系：你通过对话表达想做的事，梨花查询信息、选择工具并执行，结果呈现在书架、作品资料、播放器和弹幕里。
+这是 NipaPlay Next 的第四个开发者预览（Alpha 4）。Next 重新组织了媒体库、播放器和个人助手之间的关系：你通过对话表达想做的事，梨花查询信息、选择工具并执行，结果呈现在书架、作品资料、播放器和弹幕里。
 
-Alpha 3 加入本地语音输入实验，升级 Erika 0.3.4 并开放新的超分模式与自定义模型，改善媒体探测和后台任务恢复，重新整理了使用文档与梨花查询应用知识的入口。下面先列出本次更新，随后介绍 Next 的主要能力。
+Alpha 4 升级 Erika 0.3.5，修复 Windows 播放控件被视频遮挡、部分外挂字幕导致播放失败的问题，并改善 Windows 超分加速兼容性。下面先列出本次更新，随后介绍此前预览的功能与 Next 的主要能力。
 
 本次预览由 **AimesSoft** 发布，面向开发者、Agent 系统爱好者，以及愿意一起探索这种使用方式的用户。
 
@@ -24,7 +24,23 @@ Alpha 3 加入本地语音输入实验，升级 Erika 0.3.4 并开放新的超�
 > **如果你无法独立处理系统故障、检查 Agent 操作或恢复重要数据，请勿启用本次 Alpha 实验。**
 
 
-## Alpha 3 更新了什么
+## Alpha 4 更新了什么
+
+### 播放与字幕
+
+- **升级 Erika 0.3.5**：Windows 原生视频画面恢复到透明 Flutter 控件下方，播放控件和菜单可以正常显示、点击，同时保留 HDR 输出。
+- **修复部分外挂字幕无法识别**：自动处理 ASS 等文本字幕开头重复的 UTF-8 BOM，保留字幕正文与时间轴。
+- **字幕失败不再中断视频**：Next 将外挂字幕挂载与视频打开分开处理；字幕加载出错会报告原因，视频仍可继续播放，也可以重新选择字幕。
+- **改善 Windows 超分兼容性**：Erika 的 cooperative matrix 后端按绝对路径加载系统 Vulkan 运行库，避免应用目录中的旧加载器干扰扩展识别；加速不可用时使用标量后端。安装包继续保留 mpv 所需的 Vulkan 依赖。
+- Classic 与 Next 同步使用 Erika 0.3.5，播放诊断显示对应的内核版本。
+
+### 组网与平台
+
+- Mesh 协调服务将地址查询和地址上报的限额分开，避免频繁查询耗尽设备地址更新额度；此项已在服务端部署。
+- 同步主分支的平台修复，包括 macOS 应用分类，以及按发行渠道显示赞助入口。
+- Mesh 在协调服务恢复后仍可能暂时显示设备离线，客户端自动恢复问题继续跟踪于 [#1101](https://github.com/AimesSoft/NipaPlay-Reload/issues/1101)。遇到该情况可重启应用重试，详见[已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/known-issues.md)。
+
+## 此前 Alpha 3 的主要更新
 
 ### Erika 0.3.4：超分与播放线程
 
@@ -130,7 +146,7 @@ Release 附件提供以下版本：
 - **Windows x64**：安装程序、ZIP 便携包与 MSIX。
 - **Linux**：amd64 和 arm64 的 DEB、RPM 与 tar.gz；amd64 另提供 AppImage。
 - **Linux headless**：amd64、arm64 的无界面宿主包，见 [Headless 指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/advanced/headless.md)。
-- **iPhone / iPad**：当前附件为需自行签名侧载的 IPA；TestFlight 分发正在准备，开放信息将在发行页更新。
+- **iPhone / iPad**：当前附件为需自行签名侧载的 IPA；TestFlight 测试构建另行上传，开放测试的方式以发行页公告为准。
 
 本次发行不包含 Android、tvOS 和 HarmonyOS。
 

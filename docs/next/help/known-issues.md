@@ -24,6 +24,7 @@
 | 项目 | 版本 | 说明 |
 |---|---|---|
 | 连接方式 | Alpha 1 | 仅支持设备直连，不提供 NAT 穿透和中继；切换网络、睡眠唤醒、长时间播放的表现取决于设备和网络环境 |
+| 协调服务恢复后的重连 | Alpha 3–4 | 地址服务恢复后，部分设备仍可能显示离线；可重启应用重试。客户端恢复问题见 [#1101](https://github.com/AimesSoft/NipaPlay-Reload/issues/1101) |
 | 移动设备 | Alpha 1 | iPhone、iPad 本机不运行梨花，使用其他设备上的梨花，见[多台设备](../use/devices.md#在-ipadiphone-上使用梨花) |
 
 ### 梨花
@@ -40,6 +41,12 @@
 - 不分发 Android、tvOS 和 HarmonyOS 版本。
 
 ## 已修复
+
+### Alpha 4
+
+- Windows 的 Erika 视频画面不再遮住播放控件和菜单。
+- 处理外挂字幕开头重复的 UTF-8 BOM；字幕加载失败不再让已打开的视频进入致命错误状态。
+- Erika 超分加速使用系统 Vulkan 加载器，减少旧加载器对扩展识别的干扰。
 
 ### Alpha 2
 
