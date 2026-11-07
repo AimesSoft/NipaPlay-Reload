@@ -29,6 +29,11 @@ final class ArtworkCache {
   final _pending = <String, Future<JsonMap>>{};
   bool get busy => _pending.isNotEmpty;
 
+  /// Catalogue workers delegate image I/O to this host client so requests use
+  /// the same proxy and certificate policy as the rest of the application.
+  Future<http.Response> fetchImage(Uri uri) =>
+      _client.get(uri).timeout(const Duration(seconds: 30));
+
   Future<JsonMap> cached(String entityId) async {
     final identities = await _identities(entityId);
     final fields =
@@ -278,8 +283,7 @@ final class ArtworkCache {
     final file = File(p.join(root.path, 'artwork',
         '${sha256.convert(utf8.encode(url))}${uri.path.endsWith('.png') ? '.png' : '.jpg'}'));
     if (await file.exists()) return file.path;
-    final response =
-        await _client.get(uri).timeout(const Duration(seconds: 30));
+    final response = await fetchImage(uri);
     if (response.statusCode != 200) {
       throw Failure(FailureCode.unavailable,
           'Artwork download returned HTTP ${response.statusCode}.');
