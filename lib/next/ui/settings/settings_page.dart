@@ -674,6 +674,7 @@ class _SearchField extends StatelessWidget {
                   title: '搜索设置',
                   focusNode: searchFocus,
                   child: TextField(
+                    cursorOpacityAnimates: false,
                     controller: search,
                     focusNode:
                         useTvOSRemoteTextInput(context) ? null : searchFocus,

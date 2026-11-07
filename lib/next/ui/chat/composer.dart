@@ -277,6 +277,8 @@ class _ChatComposerState extends State<ChatComposer>
                           focusNode: widget.focusNode,
                           highlight: false,
                           child: TextField(
+                            // A blink, not a fade: a focused field must not keep the screen drawing.
+                            cursorOpacityAnimates: false,
                             contextMenuBuilder: contextMenuBuilder,
                             controller: widget.controller,
                             focusNode: useTvOSRemoteTextInput(context)

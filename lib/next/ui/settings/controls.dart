@@ -524,6 +524,7 @@ class _FieldControlState extends State<FieldControl> {
               color: _focused ? const Color(0x59FF2E55) : NextColors.line),
         ),
         child: TextField(
+          cursorOpacityAnimates: false,
           controller: _text,
           focusNode: _focus,
           obscureText: widget.obscure,
@@ -621,6 +622,7 @@ class _LiveTextFieldState extends State<LiveTextField> {
         title: widget.label ?? widget.hint ?? '输入',
         obscureText: widget.obscure,
         child: TextField(
+        cursorOpacityAnimates: false,
         controller: _text,
         focusNode: _focus,
         obscureText: widget.obscure,
@@ -939,6 +941,7 @@ class _ListControlState extends State<ListControl> {
                 border: Border.all(color: NextColors.line),
               ),
               child: TextField(
+                cursorOpacityAnimates: false,
                 controller: _text,
                 cursorColor: NextColors.accent,
                 style: NextText.sans(12.5),

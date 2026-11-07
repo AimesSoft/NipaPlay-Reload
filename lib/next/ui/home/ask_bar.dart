@@ -142,6 +142,7 @@ class _AskBarState extends State<AskBar> {
                   // The whole bar shows a remote's focus (below).
                   highlight: false,
                   child: TextField(
+                    cursorOpacityAnimates: false,
                     controller: _text,
                     focusNode: useTvOSRemoteTextInput(context)
                         ? null

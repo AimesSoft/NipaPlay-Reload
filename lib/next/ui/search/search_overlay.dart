@@ -337,6 +337,7 @@ class _Input extends StatelessWidget {
                 // where the remote is.
                 highlight: false,
                 child: TextField(
+                  cursorOpacityAnimates: false,
                   controller: search.text,
                   focusNode:
                       useTvOSRemoteTextInput(context) ? null : search.focus,

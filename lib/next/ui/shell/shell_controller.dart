@@ -234,18 +234,21 @@ class NextShellController extends ChangeNotifier {
     if (services.peers case final peers?) {
       unawaited(peers.refresh().catchError((Object _) {}));
     }
+    // A touch screen's keyboard would cover the conversation (and a focused
+    // field keeps drawing its cursor): it comes when the field is tapped.
+    // A computer's keyboard is there already; a television types with its
+    // remote from the field.
+    final typeAtOnce = globals.isDesktop || globals.isTvOS;
     if (onHome && !globals.isPhone) {
       homeChatOpen.value = true;
-      if (!globals.isPhone) {
+      if (typeAtOnce) {
         WidgetsBinding.instance
             .addPostFrameCallback((_) => homeChatFocus.requestFocus());
       }
       return;
     }
     panelOpen.value = true;
-    // A phone's keyboard would cover the conversation: it comes when the
-    // field is tapped.
-    if (globals.isPhone) return;
+    if (!typeAtOnce) return;
     WidgetsBinding.instance
         .addPostFrameCallback((_) => panelFocus.requestFocus());
   }
