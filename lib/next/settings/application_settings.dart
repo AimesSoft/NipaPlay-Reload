@@ -197,7 +197,11 @@ abstract final class ApplicationSettings {
       }
       return kernels(const ['erika']);
     }
-    if (key == 'player.useHardwareDecoder') {
+    if (const {
+      'player.useHardwareDecoder',
+      'player.hwdecMode',
+      'player.softDecodePixelFormat',
+    }.contains(key)) {
       return kernels(const ['mdk', 'mediaKit']);
     }
     if (key == 'player.pauseOnBackground') {
@@ -253,8 +257,15 @@ abstract final class ApplicationSettings {
       );
     }
     if (key == 'player.macosNativeVideoEnabled') {
-      final now = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
-      return platforms(const ['macos'], now, '此设置只适用于 macOS。');
+      final mac = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+      return (
+        appliesTo: const {
+          'platforms': ['macos'],
+          'kernels': ['mediaKit'],
+        },
+        appliesNow: mac && kernel == 'mediaKit',
+        reason: !mac ? '此设置只适用于 macOS。' : kernels(const ['mediaKit']).reason,
+      );
     }
     if (key == 'player.androidAudioOutput' ||
         key == 'player.erikaAndroidOutputMode') {
@@ -431,8 +442,16 @@ abstract final class ApplicationSettings {
       return kernel == PlayerKernelType.erika &&
           ErikaPlayerAdapter.availableUpscalerModes.length > 1;
     }
-    if (key == 'player.useHardwareDecoder') {
+    if (const {
+      'player.useHardwareDecoder',
+      'player.hwdecMode',
+      'player.softDecodePixelFormat',
+    }.contains(key)) {
       return kernel == PlayerKernelType.mdk ||
+          kernel == PlayerKernelType.mediaKit;
+    }
+    if (key == 'player.macosNativeVideoEnabled') {
+      return !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS &&
           kernel == PlayerKernelType.mediaKit;
     }
     if (key == 'player.pauseOnBackground') return globals.isPhone;

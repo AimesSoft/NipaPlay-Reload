@@ -10,6 +10,7 @@ import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipa_harness/nipa_harness.dart' show Failure;
 
 import '../../player/kernel/driver.dart' show KernelDriver;
+import '../../player/kernel/native.dart' show ErikaNative;
 import '../../player/ports/session_playback.dart';
 import '../data/gui_calls.dart';
 import '../data/settings_data.dart';
@@ -20,6 +21,7 @@ import '../widgets/icons.dart';
 import '../widgets/menu.dart';
 import '../widgets/progress.dart';
 import 'gif_dialog.dart';
+import 'erika_playback_info.dart';
 import 'menu_controls.dart';
 import 'playback.dart';
 import 'player_menus.dart' show TimedLine;
@@ -1215,6 +1217,15 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
   bool _copied = false;
   String? _decoder;
   Object? _decoderOf;
+  Map<String, Object?>? _erikaStatus;
+  String? _runtimeError;
+  Timer? _runtimePoll;
+
+  @override
+  void dispose() {
+    _runtimePoll?.cancel();
+    super.dispose();
+  }
 
   static String _source(String? kind) => switch (kind) {
         'local' => '本地文件',
@@ -1255,21 +1266,50 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
         _ => null,
       };
 
-  /// The decoder as the kernel names it now, read once per kernel instance.
+  /// Refresh while this page is open; a decoder can fall back and an
+  /// upscaler can finish building after the initial media-open events.
   void _readDecoder(KernelDriver? driver) {
-    if (driver == null || identical(driver, _decoderOf)) return;
+    if (identical(driver, _decoderOf)) return;
+    _runtimePoll?.cancel();
     _decoderOf = driver;
     _decoder = null;
-    if (driver.fenced) return;
-    unawaited(() async {
-      try {
+    _erikaStatus = null;
+    _runtimeError = null;
+    if (driver == null || driver.fenced) return;
+    unawaited(_readRuntime(driver));
+  }
+
+  Future<void> _readRuntime(KernelDriver driver) async {
+    if (!mounted || driver.fenced || !identical(driver, _decoderOf)) return;
+    final native = driver.native;
+    try {
+      if (native is ErikaNative) {
+        final status = await native.status();
+        if (mounted && identical(driver, _decoderOf)) {
+          setState(() {
+            _erikaStatus = status;
+            _decoder = erikaDecoderLabel(status);
+            _runtimeError = null;
+          });
+        }
+      } else {
         final decoders = (await driver.readFacts())['decoders'];
         final video = decoders is Map ? decoders['video'] : null;
         if (mounted && identical(driver, _decoderOf) && video is String) {
           setState(() => _decoder = video.isEmpty ? null : video);
         }
-      } catch (_) {}
-    }());
+      }
+    } catch (error) {
+      if (mounted && identical(driver, _decoderOf)) {
+        setState(() => _runtimeError = '$error');
+      }
+    } finally {
+      if (native is ErikaNative && mounted && !driver.fenced &&
+          identical(driver, _decoderOf)) {
+        _runtimePoll = Timer(const Duration(seconds: 2),
+            () => unawaited(_readRuntime(driver)));
+      }
+    }
   }
 
   Future<void> _copy() async {
@@ -1288,9 +1328,9 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
     final p = widget.playback;
     final s = p is SessionPlayback ? p : null;
     final session = s?.session;
-    return PlaybackSelector<int>(
+    return PlaybackSelector<Object>(
       playback: p,
-      selector: (_) => session?.media.value.hashCode ?? 0,
+      selector: (_) => (session?.driver, session?.media.value),
       builder: (context, _, __) {
         final media = session?.media.value;
         _readDecoder(session?.driver);
@@ -1338,12 +1378,17 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
                 ].join(' · ')
               ),
           ],
+          if (session?.driver?.native is ErikaNative) ...[
+            if (_runtimeError case final error?)
+              ('内核运行状态', '读取失败：$error')
+            else if (_erikaStatus case final status?)
+              ...erikaPlaybackInfoRows(status)
+            else
+              ('超分状态', '读取中…'),
+          ],
           ('弹幕', '${p.danmakuPort().registry.length} 条轨道'),
         ];
-        return Column(mainAxisSize: MainAxisSize.min, children: [
-          Align(
-              alignment: Alignment.centerLeft,
-              child: PlayerMenuBack('播放信息', onTap: widget.onBack)),
+        return PlayerSettingsPage(title: '播放信息', onBack: widget.onBack, children: [
           for (final (label, value) in rows)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
