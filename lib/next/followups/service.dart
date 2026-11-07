@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../db/notifications.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:io';
@@ -70,6 +71,12 @@ final class Followups {
   final RepositoryLocation location;
   ChatHost? _host;
   Future<void>? _inboxSchema;
+  final _inboxChanges = StreamController<void>.broadcast();
+  Stream<void> get inboxChanges => _inboxChanges.stream;
+  void _inboxChanged() {
+    _inboxChanges.add(null);
+    InboxChanges.committed(database.path);
+  }
 
   /// The running conversation host; null while none is attached.
   ChatHost? get chatHost => _host;
@@ -1069,6 +1076,7 @@ final class Followups {
     await _operations;
     _wake?.cancel();
     _host = null;
+    await _inboxChanges.close();
   }
 
   /// Ids already among followups, of [ids].

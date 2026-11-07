@@ -19,6 +19,7 @@ import 'download_sheet.dart';
 import 'limits_sheet.dart';
 import 'new_download.dart';
 import 'units.dart';
+import '../widgets/visible_updates.dart';
 
 /// Every download NipaPlay keeps, newest first, each opening to its own
 /// sheet. A torrent file dropped anywhere on it starts a new one.
@@ -39,10 +40,10 @@ abstract interface class DownloadListDebug {
 }
 
 class DownloadListState extends State<DownloadList>
+    with VisibleUpdates<DownloadList>
     implements DownloadListDebug {
   List<UiDownload>? _list;
   Object? _error;
-  Timer? _poll;
   NextShellController? _shell;
 
   @override
@@ -51,17 +52,7 @@ class DownloadListState extends State<DownloadList>
     final shell = NextShellScope.of(context);
     if (identical(shell, _shell)) return;
     _shell = shell;
-    _load();
-    _poll?.cancel();
-    _poll = Timer.periodic(const Duration(milliseconds: 1500), (_) {
-      if (TickerMode.of(context)) _load();
-    });
-  }
-
-  @override
-  void dispose() {
-    _poll?.cancel();
-    super.dispose();
+    watchUpdates(shell.services.calls.changes, _load);
   }
 
   Future<void> _load() async {

@@ -29,6 +29,8 @@ import 'library_service.dart';
 import '../mesh/library.dart';
 import '../chat/turn_boundaries.dart';
 import '../util/slicer.dart';
+import '../db/notifications.dart';
+import '../system/foreground.dart';
 
 /// The `library.files` rows, found by episode and by file.
 final class LocalFiles {
@@ -124,9 +126,10 @@ final class UiDataService
   final _tasks = StreamController<List<UiTask>>.broadcast();
   StreamSubscription<Job>? _jobs;
   StreamSubscription<void>? _classic;
-  Timer? _timer, _midnight;
-  String? _observed;
-  Future<void> _polling = Future.value(), _publishing = Future.value();
+  StreamSubscription<void>? _catalogue;
+  StreamSubscription<bool>? _foreground;
+  bool _started = false;
+  Future<void> _publishing = Future.value();
   bool _closed = false;
   @override
   Stream<void> get changes => _changes.stream;
@@ -150,7 +153,7 @@ final class UiDataService
   }
 
   void _publishTasks() {
-    if (!_tasks.hasListener) {
+    if (!_tasks.hasListener || !NextForeground.active) {
       return;
     }
     _publishing = _publishing.then((_) async {
@@ -163,11 +166,21 @@ final class UiDataService
   }
 
   /// The tasks another device of the Mesh runs have changed.
-  void peerTasksChanged() => _publishTasks();
+  void peerTasksChanged() {
+    _publishTasks();
+    _changed();
+  }
 
   Future<void> start() async {
-    if (_timer != null) return;
-    _observed = await _fingerprint();
+    if (_started || _closed) return;
+    _started = true;
+    _catalogue = CatalogueChanges.forPath(db.path).listen((_) => _changed());
+    _foreground = NextForeground.changes.listen((active) {
+      if (active) {
+        _changed();
+        _publishTasks();
+      }
+    });
     _jobs = engine.changes.listen((_) {
       _jobRevision++;
       _changed();
@@ -178,35 +191,13 @@ final class UiDataService
     _publishTasks();
     // The history, what to continue and the calendar tell when they move.
     _classic = sources.changes.listen((_) => _changed());
-    _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
-      _polling = _polling.then((_) async {
-        final fingerprint = await _fingerprint();
-        if (fingerprint != _observed) {
-          _observed = fingerprint;
-          _changed();
-        }
-      });
-      unawaited(_polling.then<void>((_) {},
-          onError: (Object e, StackTrace s) =>
-              Zone.current.handleUncaughtError(e, s)));
-    });
-    _scheduleMidnight();
   }
 
-  /// "Today" moves once a day: the airing shelf is read again then.
-  void _scheduleMidnight() {
-    final now = DateTime.now();
-    final next = DateTime(now.year, now.month, now.day + 1);
-    _midnight = Timer(next.difference(now) + const Duration(seconds: 1), () {
-      _changed();
-      if (!_closed) _scheduleMidnight();
-    });
-  }
-
-  Future<String> _fingerprint() async =>
-      '${await catalogueStamp()}:${await libraryData?.sourceStamp()}';
   void _changed() {
-    if (!_closed) _changes.add(null);
+    if (!_closed && NextForeground.active) {
+      NextRefreshMetrics.record('ui.data');
+      _changes.add(null);
+    }
   }
 
   @override
@@ -1545,25 +1536,24 @@ final class UiDataService
   /// Next's interface is closed: nothing here is kept fresh until [start]
   /// again. Its streams stay open for whoever listens then.
   Future<void> pause() async {
-    _timer?.cancel();
-    _timer = null;
-    _midnight?.cancel();
-    _midnight = null;
+    _started = false;
+    await _catalogue?.cancel();
+    _catalogue = null;
+    await _foreground?.cancel();
+    _foreground = null;
     await _classic?.cancel();
     _classic = null;
     await _jobs?.cancel();
     _jobs = null;
-    await _polling;
     await _publishing;
   }
 
   Future<void> close() async {
     _closed = true;
-    _timer?.cancel();
-    _midnight?.cancel();
+    await _catalogue?.cancel();
+    await _foreground?.cancel();
     await _classic?.cancel();
     await _jobs?.cancel();
-    await _polling;
     await _publishing;
     await meshLibrary?.close();
     artwork.close();

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:nipa_harness/nipa_harness.dart';
 
 /// The capability layer as the person at this window: every Action through
@@ -7,11 +8,13 @@ import 'package:nipa_harness/nipa_harness.dart';
 /// updates, plugins and sync read and change things only through here.
 final class GuiCalls {
   /// [harness] is read at each call (it may come once the core is ready).
-  GuiCalls(this.harness);
+  GuiCalls(this.harness, {this.changes = const Stream<void>.empty()});
 
   /// Nothing to call: every Action is unavailable (tests that never touch
   /// these pages).
-  GuiCalls.none() : harness = _none;
+  GuiCalls.none() : harness = _none, changes = const Stream<void>.empty();
+
+  final Stream<void> changes;
 
   final Future<Harness> Function() harness;
 

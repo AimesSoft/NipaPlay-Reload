@@ -1,5 +1,17 @@
 # 阶段 M：客户端 Mesh
 
+目录刷新使用认证后的 `mesh/library/*` 宿主 RPC。读取第一页时带
+`subscribe:true, watchId:<本次目录会话的 UUID>`，支持推送的持有方返回
+`push:true`，并登记读取方；目录提交、续播进度、共享任务或收件箱变化后，
+持有方向读取方发送 `mesh/library/changed {}`。读取方只刷新该设备，变化发生在
+刷新过程中时补读一次。新订阅或 watchId 改变也触发一次反向刷新，补齐设备上线、
+重启后的目录。推送不携带数据库内容，也不绕过设备认证和在场授权。
+
+未返回 `push:true` 的旧端仅在应用前台每 60 秒刷新；已协商推送的设备网络失败
+不会降级为轮询。应用回前台、设备名单或在场发生变化及用户 `mesh.refresh`
+各触发一次刷新。暂停 Next 时拆除订阅和兼容计时器，恢复时重订阅并补读。
+旧客户端仍可读取完整 snapshot；它们自己的刷新频率不受新服务端控制。
+
 NextCore 创建 MeshRuntime、三个 Mesh Action 和 mesh.addressCandidates 设置项，
 并管理 transport 生命周期。NextRuntime 将包含播放能力和 journal 的同一个 Harness
 交回 Core；回环 MCP 和 Mesh 复用 nipa_harness/mcp.dart 的 JSON-RPC 分派器。
@@ -55,7 +67,7 @@ receiver/trusted-devices 的第二次审批；tools/list、tools/call 和回传�
 之间传输，沿用 LAN、overlay、用户自有 SSH 转发候选。
 
 `mesh/library/snapshot` 提供版本化目录页（目标约 256 KiB，单页最大 512 KiB），
-包含来源身份、元数据、剧集、文件摘要及进度观察。接收端每 5 秒拉取；设备名单不随目录刷新
+包含来源身份、元数据、剧集、文件摘要及进度观察。接收端按开头所述的推送协议刷新；设备名单不随目录刷新
 向协调服务请求（见下文“控制面与发现”）；失联不删除上次目录和图片缓存。分页中版本改变则整批拒绝，下次刷新
 重读。每个设备保留自己的数据库，只交换目录事实和小型附件。
 

@@ -25,6 +25,7 @@ import 'player/skip/migration.dart';
 import 'db/migration.dart';
 import 'db/harmony_migration.dart';
 import 'db/epochs.dart';
+import 'db/notifications.dart';
 import 'state/activity_invocations.dart';
 
 // Each position is a released database version. Append new domain migrations.
@@ -90,7 +91,10 @@ Future<Database> openNextDatabase(Directory root,
       factory = databaseFactory;
     }
   }
-  final db = await factory.openDatabase(databasePath,
+  var observedPath = databasePath;
+  final notifications = NotifyingDatabaseFactory(factory,
+      () => CatalogueChanges.committed(observedPath));
+  final db = await notifications.factory.openDatabase(databasePath,
       options: OpenDatabaseOptions(
         version: _migrations.length,
         onConfigure: (db) async {
@@ -108,6 +112,8 @@ Future<Database> openNextDatabase(Directory root,
   try {
     final files = DanmakuFiles(db);
     await files.migrate();
+    observedPath = db.path;
+    await notifications.observe(db);
     return db;
   } catch (_) {
     await db.close();

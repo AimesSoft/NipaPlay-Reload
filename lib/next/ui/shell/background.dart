@@ -14,6 +14,7 @@ import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
 import 'shell_controller.dart';
+import '../widgets/elapsed_text.dart';
 
 /// The top bar's way into what goes on in the background: NipaPlay's tasks
 /// and the helpers Nipa sent off. Background work is of many kinds and most
@@ -344,33 +345,13 @@ class _HelperRow extends StatelessWidget {
 }
 
 /// How long since [from], m:ss, ticking.
-class _Since extends StatefulWidget {
+class _Since extends StatelessWidget {
   const _Since(this.from);
   final DateTime from;
 
   @override
-  State<_Since> createState() => _SinceState();
-}
-
-class _SinceState extends State<_Since> {
-  late final Timer _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final d = DateTime.now().difference(widget.from);
-    return Text(ChatTurn.clock(d.isNegative ? Duration.zero : d),
-        style: NextText.num(12, color: NextColors.p3));
-  }
+  Widget build(BuildContext context) => ElapsedText(text: () {
+    final d = DateTime.now().difference(from);
+    return ChatTurn.clock(d.isNegative ? Duration.zero : d);
+  }, style: NextText.num(12, color: NextColors.p3));
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../widgets/visible_updates.dart';
 
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -373,34 +374,26 @@ class _CapacityFold extends StatefulWidget {
   State<_CapacityFold> createState() => _CapacityFoldState();
 }
 
-class _CapacityFoldState extends State<_CapacityFold> {
+class _CapacityFoldState extends State<_CapacityFold>
+    with VisibleUpdates<_CapacityFold> {
   List<UiPool>? _pools;
   String? _said;
-  Timer? _poll;
 
   @override
   void didUpdateWidget(_CapacityFold old) {
     super.didUpdateWidget(old);
-    if (widget.open && !old.open) _start();
-    if (!widget.open) _poll?.cancel();
+    _start();
   }
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.open) _start();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _start();
   }
 
   void _start() {
-    _load();
-    _poll?.cancel();
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _load());
-  }
-
-  @override
-  void dispose() {
-    _poll?.cancel();
-    super.dispose();
+    watchUpdates(NextShellScope.of(context).services.calls.changes, _load,
+        enabled: widget.open);
   }
 
   Future<void> _load() async {

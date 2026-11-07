@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../widgets/elapsed_text.dart';
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart' show SelectionArea;
@@ -653,32 +654,14 @@ class _ShimmerState extends State<Shimmer> with SingleTickerProviderStateMixin {
 }
 
 /// m:ss of the turn's work; only this text rebuilds each second.
-class _Clock extends StatefulWidget {
+class _Clock extends StatelessWidget {
   const _Clock({required this.turn});
   final ChatTurn turn;
 
   @override
-  State<_Clock> createState() => _ClockState();
-}
-
-class _ClockState extends State<_Clock> {
-  late final Timer _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Text(
-        ChatTurn.clock(widget.turn.elapsed()),
+  Widget build(BuildContext context) => ElapsedText(
+        text: () => ChatTurn.clock(turn.elapsed()),
+        running: turn.running && !turn.waiting && !turn.queued,
         style: NextText.num(12.5, color: NextColors.p3),
       );
 }

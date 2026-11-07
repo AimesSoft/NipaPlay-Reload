@@ -38,6 +38,27 @@ import Photos
     NipaKeychain.register(with: messenger)
     NipaMeshBonjour.register(with: messenger)
 
+    #if DEBUG || NIPAPLAY_NEXT_PROFILE
+    let nextDevChannel = FlutterMethodChannel(
+      name: "nipaplay/next_dev", binaryMessenger: messenger)
+    nextDevChannel.setMethodCallHandler { call, result in
+      guard call.method == "thermal" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let state = ProcessInfo.processInfo.thermalState
+      let name: String
+      switch state {
+      case .nominal: name = "nominal"
+      case .fair: name = "fair"
+      case .serious: name = "serious"
+      case .critical: name = "critical"
+      @unknown default: name = "unknown"
+      }
+      result(["available": true, "state": name, "rawValue": state.rawValue])
+    }
+    #endif
+
     // Dictation temporarily uses playAndRecord; restore the player's audio
     // category after recording so it does not retain the microphone route.
     let voiceSessionChannel = FlutterMethodChannel(

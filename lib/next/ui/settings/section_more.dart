@@ -11,6 +11,7 @@ import 'controls.dart';
 import 'registry_rows.dart';
 import 'section_accounts.dart' show ConfirmPill;
 import 'settings_layout.dart';
+import '../widgets/visible_updates.dart';
 
 /// Plugins: the installed ones, each on or off, updated or deleted; the
 /// market and a script from this computer behind “更多”.
@@ -351,7 +352,7 @@ class SyncSection extends StatefulWidget {
   State<SyncSection> createState() => SyncSectionState();
 }
 
-class SyncSectionState extends State<SyncSection> {
+class SyncSectionState extends State<SyncSection> with VisibleUpdates<SyncSection> {
   UiSync? _s;
   String? _failed;
 
@@ -362,18 +363,11 @@ class SyncSectionState extends State<SyncSection> {
   bool _logging = false;
   bool _running = false;
   bool? _enabling;
-  Timer? _follow;
 
   @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _follow?.cancel();
-    super.dispose();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    watchUpdates(widget.sync.calls.changes, _load);
   }
 
   Future<void> _load() async {
@@ -393,16 +387,7 @@ class SyncSectionState extends State<SyncSection> {
   /// Reads the state again for a while: syncing, signing in and switching
   /// on end in the background.
   void _watch() {
-    _follow?.cancel();
-    var ticks = 0;
-    _follow = Timer.periodic(const Duration(milliseconds: 1500), (t) async {
-      ticks++;
-      await _load();
-      if (ticks >= 3 && !(_s?.syncing ?? false) || ticks > 80) {
-        t.cancel();
-        if (mounted) setState(() => _enabling = null);
-      }
-    });
+    if (updatesVisible) unawaited(_load());
   }
 
   Future<bool> _do(Future<void> Function() action) async {
