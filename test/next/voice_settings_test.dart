@@ -13,6 +13,9 @@ import 'package:nipaplay/next/ui/settings/settings_layout.dart';
 import 'package:nipaplay/next/voice/model_store.dart';
 import 'package:nipaplay/next/voice/models.dart';
 import 'package:nipaplay/next/voice/settings.dart';
+import 'package:nipaplay/next/voice/capability.dart';
+import 'package:nipaplay/security/credential_store.dart';
+import '../security/memory_vault.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -67,6 +70,49 @@ void main() {
     } finally {
       await registry.drain();
       await db.close();
+      store.dispose();
+      await root.delete(recursive: true);
+    }
+  });
+
+  test('cloud configuration needs consent, isolates credentials by endpoint and never opens a microphone', () async {
+    final root = await Directory.systemTemp.createTemp('voice-cloud-settings-');
+    SharedPreferences.setMockInitialValues({});
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'), (_) async => root.path);
+    final original = CredentialStore.instance;
+    final vault = MemoryVault();
+    CredentialStore.instance = CredentialStore(vault, desktop: true);
+    final store = VoiceModelStore();
+    final harness = Harness([VoiceCapability(store)]);
+    Future<Outcome> configure(Map<String, Object?> input) => harness.invokeJson(
+        'voice.configure', input, Invocation(origin: 'agent'));
+    final input = <String, Object?>{'provider': 'azure', 'endpoint': 'https://one.cognitiveservices.azure.com', 'apiKey': 'cloud-secret-fixture'};
+    try {
+      expect(await configure(input), isA<Failed>());
+      expect(vault.values, isEmpty);
+      final result = await configure({...input, 'userAuthorization': 'Use my Azure Speech account for dictation'});
+      expect(result, isA<Completed>());
+      expect(jsonEncode(result.toEnvelope()), isNot(contains('cloud-secret-fixture')));
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(VoiceModelStore.configurationKey), isNot(contains('cloud-secret-fixture')));
+      expect(store.ready, true);
+      await store.setEnabled(true);
+      expect(store.downloadRequested, false);
+      expect(store.recording, false);
+      expect(store.phase, 'not_downloaded');
+      expect(await configure({'provider': 'azure', 'endpoint': 'https://two.cognitiveservices.azure.com',
+        'userAuthorization': 'Change to my second Azure resource'}), isA<Completed>());
+      expect(store.keyConfigured, false);
+      expect(store.ready, false);
+      expect(vault.values.values, contains('cloud-secret-fixture'));
+      expect(await configure({...input, 'endpoint': 'http://untrusted.example',
+        'userAuthorization': 'Use this endpoint'}), isA<Failed>());
+      expect(await configure({...input, 'clearCredential': true,
+        'userAuthorization': 'Delete my saved Azure key'}), isA<Completed>());
+      expect(vault.values, isEmpty);
+    } finally {
+      CredentialStore.instance = original;
       store.dispose();
       await root.delete(recursive: true);
     }

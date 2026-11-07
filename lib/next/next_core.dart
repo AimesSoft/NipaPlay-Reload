@@ -1,3 +1,6 @@
+import 'system/startup_services.dart';
+import 'voice/capability.dart';
+import 'voice/model_store.dart';
 import 'followups/inbox_capability.dart';
 import 'capabilities/app_runtime_capability.dart';
 import 'platform/lab_profile.dart';
@@ -199,6 +202,7 @@ final class NextCore {
   late final NipaGate nipaGate;
   bool _nipa = false;
   bool _startupIndexed = false;
+  final startup = StartupServices();
   bool _televisionCatalogueLost = false;
   late final TaskResources resources;
   late final BodyEvents events;
@@ -518,8 +522,9 @@ final class NextCore {
     await Future<void>.delayed(Duration.zero);
     storage = SystemStorage(root, database, hooks);
     desktopSystem = DesktopSystem(media.service, root, hooks);
-    diagnostics = SystemDiagnostics(
-        database, media.service, storage, automatic, settings);
+    diagnostics =
+        SystemDiagnostics(database, media.service, storage, automatic, settings)
+          ..startup = startup;
     downloads.downloads.returnTarget = followups.downloadReturnTarget;
     media.attach(engine);
     mediaSources.engine = engine;
@@ -610,6 +615,7 @@ final class NextCore {
       NetworkCapability(mediaSources),
       storage,
       diagnostics,
+      VoiceCapability(VoiceModelStore.instance),
       desktopSystem,
       programs.capability,
       programRepository,
@@ -708,6 +714,7 @@ final class NextCore {
     await media.start();
     phase('media start');
     mesh.attach(statusReader);
+    _registerStartupServices();
     // Once, after an upgrade: the old journal into 动态's tables, off the
     // main isolate and after startup.
     unawaited(activityInvocations.backfill());
@@ -719,13 +726,22 @@ final class NextCore {
   /// followups take, and her own tasks. The data layer Classic shares
   /// (database, downloads, media, settings, tasks) runs regardless.
   Future<void> startNipa() async {
-    void phaseNipa(String name) => _startupPhase?.call(name);
     await ready;
     if (_nipa) return;
     _nipa = true;
-    if (!_startupIndexed) {
+    hooks.observeEvent = followups.hookEvent;
+    BodySignals.emit = (event, id, facts) => hooks.emit(event, id, facts);
+    startup.start();
+    followups.start();
+    nipaGate.set(true);
+  }
+
+  void _registerStartupServices() {
+    startup.onChanged = uiData.notifyLibraryChanged;
+    startup.register('scan', '启动文件扫描', () async {
+      if (_startupIndexed) return;
       await classicScan.scan?.foldersReady;
-      _startupIndexed = true;
+      if (!startup.active) return;
       automatic.startupScanStatus = await submitStartupIndex(
         enabled: automatic.startupScanEnabled,
         roots: media.service.authorizedRoots(),
@@ -735,17 +751,24 @@ final class NextCore {
           await media.service.submit('media.scan', {'root': path});
         },
       );
-    }
-    hooks.observeEvent = followups.hookEvent;
-    BodySignals.emit = (event, id, facts) async {
-      await hooks.emit(event, id, facts);
-    };
-    await uiData.meshLibrary!.start(background: false);
-    phaseNipa('startup: Nipa mesh library');
-    // The first pass over every local file is one library-worker request.
-    // Directory walks, candidate matching, parsing and the final writes all
-    // stay off the UI isolate; this turn only submits the pass, receives two
-    // small summaries and publishes one change.
+      _startupIndexed = true;
+    });
+    startup.register('library', '媒体目录', () async {
+      final library = uiData.meshLibrary!;
+      await library.start(background: false);
+      await library.rebuild();
+      if (startup.active) library.startPolling();
+      if (_televisionCatalogueLost && startup.active) {
+        _televisionCatalogueLost = false;
+        unawaited(_recoverTelevisionCatalogue());
+      }
+    });
+    startup.register('indexers', '字幕与弹幕索引', _startIndexers);
+    startup.register('mesh', 'Mesh 连接', mesh.startConfigured);
+    startup.register('ui_data', '界面数据观察', uiData.start);
+  }
+
+  Future<void> _startIndexers() async {
     final indexer = uiData.meshLibrary!.worker;
     danmaku.sidecars.watch();
     subtitles.watch();
@@ -772,25 +795,6 @@ final class NextCore {
       subtitles.finishBulk(null, error: error);
       rethrow;
     }
-    phaseNipa('startup: Nipa indexers');
-    await mesh.startConfigured();
-    phaseNipa('startup: Nipa mesh configured');
-    // One worker round now sees the complete startup input, including the
-    // account and peers chosen while joining Mesh. Polls and the full followup
-    // sweep stay behind it: both read the shared database on this isolate and
-    // otherwise make the worker wait look like main-thread catalogue work.
-    await uiData.meshLibrary!.prepareIndex();
-    phaseNipa('startup: Nipa mesh prepared');
-    await uiData.start();
-    phaseNipa('startup: Nipa ui data');
-    if (_televisionCatalogueLost) {
-      _televisionCatalogueLost = false;
-      unawaited(_recoverTelevisionCatalogue());
-    }
-    followups.start();
-    phaseNipa('startup: Nipa followups');
-    uiData.meshLibrary!.startPolling();
-    nipaGate.set(true);
   }
 
   /// tvOS may purge the database while retaining source settings and their
@@ -828,6 +832,7 @@ final class NextCore {
     if (!_nipa) return;
     _nipa = false;
     nipaGate.set(false);
+    await startup.pause();
     // The programs she runs end with her, not later in Classic.
     await programs.cancelRunning(reason: 'next_interface_closed');
     hooks.observeEvent = null;
@@ -860,6 +865,7 @@ final class NextCore {
 
   Future<void> close() async {
     await ready;
+    await startup.pause();
     if (identical(SettingsAccess.registry, settings)) {
       SettingsAccess.registry = null;
       ApplicationSettings.authorizePath = null;

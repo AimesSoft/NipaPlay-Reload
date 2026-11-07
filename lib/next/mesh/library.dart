@@ -157,13 +157,21 @@ final class MeshLibrary {
   Database get db => ui.db;
   String get own => mesh.identity?.deviceId ?? ui.media.store.ownerDeviceId;
 
+  Future<void>? _starting;
   Future<void> start({bool background = true}) async {
+    await (_starting ??= _loadSaved().catchError((Object error) {
+      _starting = null;
+      throw error;
+    }));
+    if (background) startPolling();
+  }
+
+  Future<void> _loadSaved() async {
     await worker.warm();
     final peers = await worker.call('saved') as Map<String, JsonMap>;
     _peers.addAll(peers);
     _peersRevision++;
     _progressRevision++;
-    if (background) startPolling();
   }
 
   /// Starts catalogue refresh ticks after the first complete publication.
@@ -219,6 +227,18 @@ final class MeshLibrary {
       _builtStamp = result.stamp;
     })()
         .whenComplete(() => _building = null);
+  }
+
+  /// Explicit recovery also re-reads files when permissions changed without
+  /// a database mutation. The last publication stays intact until success.
+  Future<void> rebuild() async {
+    // A failed concurrent read is what recovery is meant to repair.
+    try { await _preparing; } catch (_) {}
+    await start(background: false);
+    await worker.call('rebuild', own);
+    invalidateIndex();
+    _composedStamp = null;
+    await prepareIndex();
   }
 
   /// How many times the local catalogue was built.
@@ -479,6 +499,7 @@ final class MeshLibrary {
   /// composition and transfer. The UI publishes the result with reference
   /// replacements only.
   Future<void> _prepareIndex(int epoch) async {
+    await start(background: false);
     for (var attempt = 0; attempt < 3; attempt++) {
       final peerRevision = _peersRevision;
       final onlineRevision = _onlineRevision;

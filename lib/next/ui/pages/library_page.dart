@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../data/gui_calls.dart' show rawFailureText;
 
 import 'package:flutter/widgets.dart';
 
@@ -110,25 +111,32 @@ class _LibraryPageState extends State<LibraryPage>
     super.dispose();
   }
 
+  Object? _loadError;
+
   Future<void> _load() async {
     final read = ++_reads;
-    final sources = await _data.sources();
-    final id = sources.any((s) => s.sourceId == _sourceId)
-        ? _sourceId!
-        : sources.first.sourceId;
-    final page = await _data.page(id);
-    if (!mounted || read != _reads) return;
-    final before = _page;
-    final changedShape = before != null &&
-        id == _sourceId &&
-        (before.form != page.form || before.arranged != page.arranged);
-    setState(() {
-      _sources = sources;
-      _sourceId = id;
-      _page = page;
-      _syncSingle();
-    });
-    if (changedShape) _fade.forward(from: 0);
+    try {
+      final sources = await _data.sources();
+      final id = sources.any((s) => s.sourceId == _sourceId)
+          ? _sourceId!
+          : sources.first.sourceId;
+      final page = await _data.page(id);
+      if (!mounted || read != _reads) return;
+      final before = _page;
+      final changedShape = before != null &&
+          id == _sourceId &&
+          (before.form != page.form || before.arranged != page.arranged);
+      setState(() {
+        _loadError = null;
+        _sources = sources;
+        _sourceId = id;
+        _page = page;
+        _syncSingle();
+      });
+      if (changedShape) _fade.forward(from: 0);
+    } catch (error) {
+      if (mounted && read == _reads) setState(() => _loadError = error);
+    }
   }
 
   void _syncSingle() {
@@ -288,6 +296,20 @@ class _LibraryPageState extends State<LibraryPage>
                   NextLayout.gutter(context), NextLayout.underBar(context) + 40, NextLayout.end(context), 28),
               sliver: SliverToBoxAdapter(child: _header()),
             ),
+            if (_loadError case final error?)
+              SliverToBoxAdapter(
+                  child: Padding(
+                padding: EdgeInsets.symmetric(
+                    horizontal: NextLayout.gutter(context), vertical: 16),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('目录加载失败，已有资料暂时保留。', style: NextText.sans(14)),
+                      Text(rawFailureText(error),
+                          style: NextText.sans(12, color: NextColors.p2)),
+                      NextButton.ghost(label: '重试', onTap: _load),
+                    ]),
+              )),
             if (_status case final status?)
               StatusView(status: status, on: _on)
             else if (page != null)

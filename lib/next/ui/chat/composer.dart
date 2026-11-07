@@ -109,7 +109,7 @@ class _ChatComposerState extends State<ChatComposer>
       await _voice.stop();
       return;
     }
-    if (!_voiceModels.installed) {
+    if (!_voiceModels.ready) {
       NextShellScope.of(context).openSettings(section: SettingsSection.labs);
       return;
     }
@@ -250,7 +250,7 @@ class _ChatComposerState extends State<ChatComposer>
                           child: Text(
                               _voice.error ??
                                   (_voice.active
-                                      ? '正在本机听写… 点击麦克风结束，文字确认后发送'
+                                      ? '${_voice.label}… 点击麦克风结束，文字确认后发送'
                                       : '正在准备或结束听写…'),
                               style: NextText.sans(12, color: NextColors.p2))),
                       if (_dictating)

@@ -39,13 +39,13 @@ List<SettingEntry> voiceSettings({VoiceModelStore? modelStore}) {
           'platforms': ['macos', 'windows', 'linux', 'ios']
         },
         appliesNow: () => VoiceModelStore.supported,
-        appliesReason: () => '离线语音输入支持桌面端、iPhone 和 iPad。',
+        appliesReason: () => '语音输入支持桌面端、iPhone 和 iPad。',
       );
   return [
     entry(
         'labs.voiceEnabled',
-        '离线语音输入',
-        '实验功能：为梨花对话输入文字。用户要求开启时可设置 true，后台下载所选模型；false 停止录音和下载，保留已下载模型。不自动发送、不启动麦克风。写入成功只表示开关保存；读取 labs.voiceStatus 确认模型 ready 或查看原始错误。',
+        '语音输入',
+        '实验功能：为梨花对话输入文字。用户要求开启时可设置 true：本机模式后台下载所选模型，云端模式使用 voice.configure 中保存的服务；false 停止录音和下载，保留已下载模型。不自动发送、不启动麦克风。写入成功只表示开关保存；读取 labs.voiceStatus 确认模型 ready 或查看原始错误。',
         const BooleanSchema(),
         false,
         VoiceModelStore.enabledKey,
@@ -78,7 +78,7 @@ List<SettingEntry> voiceSettings({VoiceModelStore? modelStore}) {
     entry(
         'labs.voiceStatus',
         '语音模型状态',
-        '只读 JSON：supported、enabled、model、phase（not_downloaded/downloading/installing/ready/failed）、installed、downloadRequested、downloadedBytes、downloadBytes、error、recording。Agent 不能通过设置开始录音；用户在本机输入框点击麦克风，文字确认后发送。',
+        '只读 JSON：supported、enabled、model、phase（本机模型 not_downloaded/downloading/installing/ready/failed）、configuration、ready（配置就绪，非连通测试）、recordingPhase、receivedAudioBytes、recordingError、installed、downloadRequested、downloadedBytes、downloadBytes、error、recording。Agent 不能通过设置开始录音；用户在本机输入框点击麦克风，文字确认后发送。',
         const StringSchema(),
         '{}',
         '@runtime:voiceStatus',

@@ -7,6 +7,7 @@ import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import 'registry_rows.dart';
 import 'settings_layout.dart';
+import 'voice_service_editor.dart';
 
 class LabsSection extends StatelessWidget {
   const LabsSection({super.key, required this.model, this.highlight});
@@ -20,6 +21,7 @@ class LabsSection extends StatelessWidget {
       Text('这里的功能仍在实验中，可以随时关闭。',
           style: NextText.sans(13, color: NextColors.p2)),
       const SizedBox(height: 18),
+      if (VoiceModelStore.supported) const VoiceServiceEditor(),
       RegistryGroups(
           section: SettingsSection.labs,
           model: model,
@@ -30,6 +32,12 @@ class LabsSection extends StatelessWidget {
         AnimatedBuilder(
             animation: store,
             builder: (context, _) {
+              if (!store.configuration.local) {
+                return Padding(padding: const EdgeInsets.only(top: 14), child: Text(
+                    '${store.configuration.label}：${store.keyConfigured ? '凭据已配置' : '需要配置密钥'}。'
+                    '文字留在输入框，确认后发送。每次录音最长 3 分钟。',
+                    style: NextText.sans(12, color: NextColors.p2)));
+              }
               final preparing =
                   store.phase == 'downloading' || store.phase == 'installing';
               final status = switch (store.phase) {

@@ -1,3 +1,4 @@
+import '../data/gui_calls.dart' show rawFailureText;
 import 'package:nipa_harness/nipa_harness.dart' show Failure;
 import 'dart:async';
 import 'dart:math' as math;
@@ -44,6 +45,7 @@ class _NextHomePageState extends State<NextHomePage> {
   NextShellController? _shell;
   StreamSubscription<void>? _changes;
   UiHome? _home;
+  Object? _loadError;
   int _loadGeneration = 0;
 
   /// The shelf card held for 600 ms, previewed in the hero.
@@ -85,11 +87,14 @@ class _NextHomePageState extends State<NextHomePage> {
       if (mounted && generation == _loadGeneration) {
         setState(() {
           _home = home;
+          _loadError = null;
           if (home.hero?.pinned == true) _heroOverride = null;
         });
       }
     } catch (error) {
-      debugPrint('[NextUi] home failed: $error');
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _loadError = error);
+      }
     }
   }
 
@@ -307,6 +312,31 @@ class _NextHomePageState extends State<NextHomePage> {
                       controller: _scroll,
                       slivers: [
                         SliverToBoxAdapter(child: _region(size, hero, preview)),
+                        if (_loadError case final error?)
+                          SliverToBoxAdapter(
+                              child: Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: NextLayout.gutter(context),
+                                vertical: 16),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('目录加载失败，可以继续与梨花对话。',
+                                      style: NextText.sans(14)),
+                                  Text(rawFailureText(error),
+                                      style: NextText.sans(12,
+                                          color: NextColors.p2)),
+                                  NextButton.ghost(
+                                      label: '重试目录',
+                                      onTap: () async {
+                                        await _shell!.services.calls.call(
+                                            'diagnostics.recover', {
+                                          'operation': 'startup.retry',
+                                          'component': 'library'
+                                        });
+                                      }),
+                                ]),
+                          )),
                         SliverToBoxAdapter(child: _shelvesWidget()),
                         SliverToBoxAdapter(
                             child: SizedBox(
@@ -363,9 +393,7 @@ class _NextHomePageState extends State<NextHomePage> {
     final line = c.doing ?? c.latestLine ?? heroNote;
     // The line on the home is the news itself: once it has been on screen
     // for a moment, the avatar's dot goes away.
-    if (c.unseen &&
-        line == c.latestLine &&
-        TickerMode.of(context)) {
+    if (c.unseen && line == c.latestLine && TickerMode.of(context)) {
       _seenTimer ??= Timer(const Duration(seconds: 3), () {
         _seenTimer = null;
         if (mounted && TickerMode.of(context)) c.markSeen();

@@ -94,6 +94,7 @@
 | `diagnostics.player_log` | read | 播放器内核日志 | Core | 允许 | [源码](../../../lib/next/system/runtime_diagnostics.dart) |
 | `diagnostics.player_log_file` | write | 播放器完整日志文件 | Core | 允许 | [源码](../../../lib/next/system/runtime_diagnostics.dart) |
 | `diagnostics.recover` | write | 运行常见恢复操作 | Core | 允许 | [源码](../../../lib/next/system/diagnostics.dart) |
+| `diagnostics.startup` | read | 读取独立启动组件状态、失败原因与尝试时间 | Core | 允许 | [源码](../../../lib/next/system/diagnostics.dart) |
 | `diagnostics.status` | read | 健康检查与运行诊断 | Core | 允许 | [源码](../../../lib/next/system/diagnostics.dart) |
 | `discover.calendar` | read | 读取放送日历 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/discover_capability.dart) |
 | `discover.home` | read | 读取已挂载的 Classic 首页事实 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/discover_capability.dart) |
@@ -343,3 +344,10 @@
 | `window.bounds.set` | write | 主窗口位置与尺寸 | Core | 允许 | [源码](../../../lib/next/system/desktop.dart) |
 | `window.control` | write | Control a window | Runtime/部分共享 | 允许 | [源码](../../../lib/next/player/features/operation_specs.dart) |
 | `window.state` | read | Read window state | Runtime/部分共享 | 允许 | [源码](../../../lib/next/player/features/operation_specs.dart) |
+
+## 语音输入
+
+| Action | Effect | 用途 | 宿主 | Mesh | 实现 |
+|---|---|---|---|---|---|
+| `voice.status` | read | 读取本机语音服务、录音状态与错误 | GUI Core，桌面/iOS | 允许 | [源码](../../../lib/next/voice/capability.dart) |
+| `voice.configure` | write | 用户授权后配置本机或云端识别、保存凭据；不打开麦克风 | GUI Core，桌面/iOS | 允许 | [源码](../../../lib/next/voice/capability.dart) |

@@ -466,7 +466,6 @@ final class NextRuntime extends ChangeNotifier {
   final _harnessReady = Completer<Harness>();
   late final AgentEndpoint _endpoint;
   late final TaskEngine _taskEngine;
-  late final LocalLibraryOperations _localLibrary;
   HarnessLocation? _location;
   late final HarnessHooks _hooks;
   StreamSubscription<Job>? _jobEvents;
@@ -591,9 +590,13 @@ final class NextRuntime extends ChangeNotifier {
     FlutterPlayerPerfFrames.install();
     final localPlayback = playback.localOperations(
         core.settings, () => globals.navigatorKey.currentContext!);
-    final localLibrary = _localLibrary = LocalLibraryOperations(
+    final localLibrary = LocalLibraryOperations(
         ServiceProvider.scanService, ServiceProvider.watchHistoryProvider,
         engine: core.engine);
+    core.startup.register('history', '观看记录', () async {
+      await localLibrary.attachClassicHistory();
+      core.stateSources.changed();
+    });
     core.classicScan.scan = ServiceProvider.scanService;
     core.classicScan.history = ServiceProvider.watchHistoryProvider;
     core.storage.playbackActive = () => playback.hasVideo;
@@ -888,7 +891,6 @@ final class NextRuntime extends ChangeNotifier {
       await _uncaught?.attach();
       PlayerNativeLog.instance.attach();
       ServiceProvider.nextCore.subtitles.attachPlayer(playback.subtitleTarget);
-      await _localLibrary.attachClassicHistory();
       if (NextBody.bodyOnly) {
         // The body only: no local agent endpoint and no conversation host.
         status = const AgentEndpointStopped();

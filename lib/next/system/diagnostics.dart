@@ -1,3 +1,4 @@
+import 'startup_services.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -31,6 +32,7 @@ final class SystemDiagnostics implements Capability {
   final SettingsRegistry settings;
   Future<JsonMap> Function() playerFacts =
       () async => {'available': false, 'reason': 'player_host_not_attached'};
+  StartupServices? startup;
   Future<JsonMap>? _checking;
   JsonMap? _update;
   Future<JsonMap> checkUpdate() {
@@ -162,6 +164,16 @@ final class SystemDiagnostics implements Capability {
         ...const OperationObservationsCapability().actions,
         ClassicAction(
             const ActionSpec(
+                id: 'diagnostics.startup',
+                title: '读取启动与降级状态',
+                description:
+                    '立即读取目录、字幕弹幕索引、观看记录、Mesh 等服务的启动状态、原始错误与时间。失败不表示空媒体库，也不阻止聊天。用 diagnostics.recover 的 startup.retry 按 component 重试；无需重启应用。',
+                effect: Effect.read,
+                input: ObjectSchema({}),
+                output: ObjectSchema({}, additionalProperties: true)),
+            (_, __) async => startup?.status ?? {'state': 'not_attached'}),
+        ClassicAction(
+            const ActionSpec(
                 id: 'diagnostics.status',
                 title: '健康检查与运行诊断',
                 description:
@@ -194,6 +206,7 @@ final class SystemDiagnostics implements Capability {
               'maxRssBytes': ProcessInfo.maxRss
             },
             'player': await playerFacts(),
+            'startup': startup?.status,
             'health': {
               'identityMutations': media.mutationStatus,
               'notifications': BodySignals.deliveryStatus,
@@ -217,6 +230,7 @@ final class SystemDiagnostics implements Capability {
                   }
                 : {'applicable': false},
             'recoveries': [
+              'startup.retry',
               'logs.restart',
               'media.projections.reconcile',
               'indexers.reconcile'
@@ -243,20 +257,28 @@ final class SystemDiagnostics implements Capability {
                 id: 'diagnostics.recover',
                 title: '运行常见恢复操作',
                 description:
-                    '显式重启日志写入、排空持久投影 outbox 或立即检查自动索引器。保留用户文件、设置、任务和历史；不自动改变登录、迁移或路由。',
+                    'startup.retry 后台重试指定 component（见 diagnostics.startup），省略时重试所有失败服务；返回 requested 只表示已请求，终态需再查询。library 会重新读取文件并重建目录。也可显式重启日志写入、排空持久投影 outbox 或立即检查自动索引器。保留用户文件、设置、任务和历史；不自动改变登录、迁移或路由。',
                 effect: Effect.write,
                 input: ObjectSchema({
                   'operation': StringSchema(values: [
+                    'startup.retry',
                     'logs.restart',
                     'media.projections.reconcile',
                     'indexers.reconcile'
-                  ])
+                  ]),
+                  'component': StringSchema(minLength: 1)
                 }, required: [
                   'operation'
                 ]),
                 output: ObjectSchema({}, additionalProperties: true)),
             (input, _) async {
           switch (input['operation']) {
+            case 'startup.retry':
+              if (startup == null) {
+                throw const Failure(FailureCode.unavailable,
+                    'Startup services are not attached.');
+              }
+              return startup!.retry(input['component'] as String?);
             case 'logs.restart':
               await FileLogService().stop();
               final enabled = await SettingsStorage.loadBool('enable_file_log',

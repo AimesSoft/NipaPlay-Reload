@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -61,6 +62,36 @@ void main() {
   tearDown(() async {
     await core.close();
     await root.delete(recursive: true);
+  });
+
+  test('optional startup failures leave the agent endpoint actions usable and retryable', () async {
+    core = createCore();
+    await core.ready;
+    final blocked = Completer<void>();
+    var denied = true;
+    core.startup.register('library', '目录', () => blocked.future);
+    core.startup.register('indexers', '索引', () async {
+      if (denied) throw const FileSystemException('permission denied', '/fixture/subtitles');
+    });
+    // Avoid external Mesh enrollment in this startup-boundary fixture.
+    core.startup.register('mesh', 'Mesh', () async {});
+    try {
+      await core.startNipa().timeout(const Duration(seconds: 2));
+      await core.startup.run('indexers');
+      final harness = Harness(core.capabilities);
+      final status = await call(harness, 'diagnostics.startup', {});
+      expect(core.nipaRunning, true);
+      expect(status['state'], 'degraded', reason: jsonEncode(status));
+      final components = status['components'] as List;
+      expect(components.firstWhere((s) => s['id'] == 'library')['state'], 'starting');
+      expect(components.firstWhere((s) => s['id'] == 'indexers')['error']['message'], contains('permission denied'));
+      denied = false;
+      final accepted = await call(harness, 'diagnostics.recover', {'operation': 'startup.retry', 'component': 'indexers'});
+      expect(accepted['requested'], ['indexers']);
+    } finally {
+      blocked.complete();
+      await core.startup.pause();
+    }
   });
 
   test('Classic and Harness share live download and media tasks without Labs',

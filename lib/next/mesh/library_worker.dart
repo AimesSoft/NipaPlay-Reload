@@ -958,6 +958,9 @@ Future<void> _serve(
           final row = await db.rawQuery(
               "SELECT COALESCE((SELECT n FROM change_epochs WHERE name='catalogue'),0) AS n");
           return row.single['n'] as int;
+        case 'rebuild':
+          await projection.build(jsonEncode([input, await ui.catalogueStamp()]));
+          return null;
         case 'buildCurrent':
           return buildCurrent(input as String);
         case 'prepare':

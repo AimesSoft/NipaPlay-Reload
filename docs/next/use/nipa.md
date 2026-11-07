@@ -8,20 +8,33 @@
 
 梨花的判断依据是当次查询到的实时状态。工具清单和参数随版本、设备变化，梨花每次按实时目录调用。
 
-## 离线语音输入（实验室）
+## 语音输入（实验室）
 
-在「设置 → 实验室」选择语音模型，再开启「离线语音输入」。首次使用需要联网下载模型；之后在本机识别，录音不会发送给语音服务。识别后的文字按普通对话的方式交给梨花。
+在「设置 → 实验室」选择语音模型，再开启「语音输入」。首次使用需要联网下载模型；之后在本机识别，录音不会发送给语音服务。识别后的文字按普通对话的方式交给梨花。
 
 - **中英双语 X-ASR**：含标点，下载约 128 MiB，桌面默认选择。
 - **中文轻量 Zipformer CTC**：下载约 20 MiB，iPhone/iPad 默认选择，也适合性能较低的电脑。
 
 模型就绪后，对话框出现麦克风。点击开始，边说边显示文字，再点结束；可以修改文字，确认后发送。点击「取消」恢复录音前的草稿。每次最长 3 分钟，切换会话或离开输入界面会停止录音。
 
-支持 macOS、Windows、Linux、iPhone 和 iPad。首次录音需要系统麦克风授权；Linux 还需安装提供 `parecord` 的 PulseAudio 工具。手机和平板使用自己的模型和麦克风，即使梨花运行在 Mesh 的另一台电脑上，也只把确认发送的文字交给她。
+支持 macOS、Windows、Linux、iPhone 和 iPad。首次录音需要系统麦克风授权；Linux 还需安装提供 `parecord` 的 PulseAudio 工具。本机模式下，手机和平板使用自己的模型和麦克风，即使梨花运行在 Mesh 的另一台电脑上，也只把确认发送的文字交给她。
 
 可以让梨花「开启这台设备的离线语音输入，选择中文轻量模型」，或者关闭、查询下载进度、重试和删除模型。开关按设备保存，开启开关不会开始录音。关闭保留已下载模型，「删除所选模型」会关闭功能并释放该模型的磁盘空间；下载失败的原始原因显示在实验室。
 
 模型来源：[X-ASR](https://github.com/Gilgamesh-J/X-ASR)、[sherpa-onnx 模型发布](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models)，识别引擎为 sherpa-onnx。该功能尚处于实验阶段。
+
+### 自配云端识别
+
+在「设置 → 实验室 → 语音识别服务」选择服务，填写地址和自己的 API Key，保存配置并开启语音输入：
+
+- **Azure**：使用 Speech 快速转写接口，填写 Speech 资源的 HTTPS 地址。结束录音后上传并返回文字；语言可填 `zh-CN`，留空自动识别。
+- **百炼**：使用 inference WebSocket 接口，填写工作空间提供的完整 `wss://…/api-ws/v1/inference` 地址和实时模型名，默认 `fun-asr-realtime`。支持兼容的 Fun-ASR、Paraformer、Qwen-Audio-ASR 模型；Qwen3-ASR-Realtime 使用不同协议，本版未接入。语言可填 `zh`，留空自动识别。
+
+云端模式会将录音直接发送给所选服务商，可能产生服务费用。密钥保存在凭据库，NipaPlay 不提供中转服务。服务失败会显示错误，不自动切换识别方式。切回「本机离线」后录音不上传；已有模型和云端凭据会保留，可在设置分别删除。
+
+两种模式都支持桌面、iPhone 和 iPad，录音最长 3 分钟，文字确认后才发送给梨花。云端模式无需下载本机模型。可明确授权梨花配置服务和密钥；`voice.status` 可查询录音阶段、音频字节数和最近错误。
+
+接口参考：[Azure 快速转写](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/fast-transcription-create)、[百炼 Fun-ASR 实时接口](https://help.aliyun.com/en/model-studio/fun-asr-realtime-websocket-api)。
 
 ## 工作过程
 

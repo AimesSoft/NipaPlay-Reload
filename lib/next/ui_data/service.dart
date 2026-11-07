@@ -166,6 +166,7 @@ final class UiDataService
   void peerTasksChanged() => _publishTasks();
 
   Future<void> start() async {
+    if (_timer != null) return;
     _observed = await _fingerprint();
     _jobs = engine.changes.listen((_) {
       _jobRevision++;

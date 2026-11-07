@@ -279,7 +279,7 @@ void main() {
     expect(await File(blocked).exists(), isTrue);
     await expectLater(File(blocked).open(), throwsA(isA<FileSystemException>()));
 
-    await worker.build('unreadable-file');
+    await worker.buildCurrent('owner');
     final snapshot = await worker.compose({}, {}, null);
     final episodes = snapshot.episodes.values.single;
     expect(episodes.singleWhere((e) => e.number == 1).playable, isFalse);
@@ -288,7 +288,10 @@ void main() {
         everyElement(1));
 
     expect((await Process.run('chmod', ['600', blocked])).exitCode, 0);
-    await worker.build('readable-again');
+    // Permissions changed without a catalogue epoch. Normal reads keep the
+    // cached projection; explicit recovery must force a fresh filesystem read.
+    expect((await worker.buildCurrent('owner')).builds, 0);
+    await worker.call('rebuild', 'owner');
     final rebuilt = await worker.compose({}, {}, null);
     expect(
         rebuilt.episodes.values.single

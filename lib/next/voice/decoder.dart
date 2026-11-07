@@ -6,9 +6,10 @@ import 'package:path/path.dart' as p;
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import 'models.dart';
+import 'speech_decoder.dart';
 
 /// One native recognizer, owned and freed by one worker isolate per recording.
-class VoiceDecoder {
+class VoiceDecoder implements SpeechDecoder {
   VoiceDecoder._(this._isolate, this._commands);
   final Isolate _isolate;
   final SendPort _commands;
@@ -42,8 +43,14 @@ class VoiceDecoder {
     }
   }
 
+  @override
   Future<String> accept(Uint8List pcm) => _request('audio', pcm);
+  @override
   Future<String> finish() => _request('finish');
+  @override
+  void cancel() {}
+
+  @override
   Future<void> close() async {
     // Native free happens on the owner, before the worker exits.
     try {

@@ -44,7 +44,7 @@ for guide, families in {
     'downloads-sources': 'download',
     'library-presentation': 'ui appearance',
     'automation-memory': 'activity agent chat events followup memory program task',
-    'maintenance-accounts': 'accounts app backup cache credentials diagnostics discover network notification plugins settings share shortcuts state storage sync webdav_quick',
+    'maintenance-accounts': 'voice accounts app backup cache credentials diagnostics discover network notification plugins settings share shortcuts state storage sync webdav_quick',
 }.items():
     for family in families.split():
         FAMILY_GUIDES[family] = 'development/guides/' + guide + '.md'

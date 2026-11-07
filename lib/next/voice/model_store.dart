@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -10,6 +11,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models.dart';
+import 'configuration.dart';
+import '../../security/credential_store.dart';
+import '../../security/secret_redactor.dart';
 import '../../utils/globals.dart' as globals;
 
 /// Settings and model preparation only. Enabling never opens a microphone.
@@ -24,6 +28,53 @@ class VoiceModelStore extends ChangeNotifier {
           Platform.isIOS);
   static const enabledKey = 'next_voice_enabled';
   static const modelKey = 'next_voice_model';
+  static const configurationKey = 'next_voice_configuration';
+  VoiceConfiguration configuration = const VoiceConfiguration();
+  bool keyConfigured = false;
+  String recordingPhase = 'idle';
+  int audioBytes = 0;
+  String? recordingError;
+  bool get ready => configuration.local ? installed : keyConfigured;
+
+  void recordingStatus(String phase, int bytes, String? failure) {
+    recordingPhase = phase;
+    audioBytes = bytes;
+    recordingError = failure == null ? null : SecretRedactor.text(failure);
+  }
+
+  Future<String> cloudKey() async {
+    final key =
+        await CredentialStore.instance.vault.read(configuration.credential);
+    if (key == null || key.isEmpty) throw StateError('请在实验室设置配置语音服务密钥。');
+    SecretRedactor.remember(configuration.credential, key);
+    return key;
+  }
+
+  Future<void> configure(VoiceConfiguration value,
+      {String? apiKey, bool clearCredential = false}) async {
+    value.validate();
+    await load();
+    _requireSupported();
+    await stopRecording?.call();
+    final vault = CredentialStore.instance.vault;
+    if (clearCredential) {
+      await vault.delete(value.credential);
+    } else if (apiKey != null && apiKey.isNotEmpty) {
+      SecretRedactor.remember(value.credential, apiKey);
+      await vault.write(value.credential, apiKey);
+    }
+    final configured = !value.local &&
+        (await vault.read(value.credential))?.isNotEmpty == true;
+    await (await SharedPreferences.getInstance())
+        .setString(configurationKey, jsonEncode(value.toJson()));
+    _cancelDownload();
+    configuration = value;
+    keyConfigured = configured;
+    phase = installed ? 'ready' : 'not_downloaded';
+    error = null;
+    notifyListeners();
+    if (enabled && value.local) prepare();
+  }
 
   bool enabled = false;
   bool downloadRequested = false;
@@ -51,6 +102,14 @@ class VoiceModelStore extends ChangeNotifier {
 
   Map<String, Object?> get status => {
         'supported': supported,
+        'configuration': {
+          ...configuration.toJson(),
+          'keyConfigured': keyConfigured
+        },
+        'ready': ready,
+        'recordingPhase': recordingPhase,
+        'receivedAudioBytes': audioBytes,
+        'recordingError': recordingError,
         'enabled': enabled,
         'model': modelId,
         'phase': phase,
@@ -67,13 +126,29 @@ class VoiceModelStore extends ChangeNotifier {
     if (!supported) return;
     final prefs = await SharedPreferences.getInstance();
     enabled = prefs.getBool(enabledKey) ?? false;
+    final saved = prefs.getString(configurationKey);
+    if (saved != null) {
+      configuration = VoiceConfiguration.fromJson(
+          (jsonDecode(saved) as Map).cast<String, Object?>());
+      configuration.validate();
+      if (!configuration.local) {
+        try {
+          keyConfigured = (await CredentialStore.instance.vault
+                      .read(configuration.credential))
+                  ?.isNotEmpty ==
+              true;
+        } catch (e) {
+          error = SecretRedactor.text('$e');
+        }
+      }
+    }
     final selected = prefs.getString(modelKey);
     if (voiceModels.any((m) => m.id == selected)) modelId = selected!;
     _root = Directory(p.join(
         (await getApplicationSupportDirectory()).path, 'next', 'voice_models'));
     phase = installed ? 'ready' : 'not_downloaded';
     notifyListeners();
-    if (enabled && !installed) prepare();
+    if (enabled && configuration.local && !installed) prepare();
   }
 
   Future<void> setEnabled(bool value) async {
@@ -82,7 +157,7 @@ class VoiceModelStore extends ChangeNotifier {
     await stopRecording?.call();
     await (await SharedPreferences.getInstance()).setBool(enabledKey, value);
     enabled = value;
-    if (value) {
+    if (value && configuration.local) {
       prepare();
     } else {
       _cancelDownload();
@@ -104,12 +179,12 @@ class VoiceModelStore extends ChangeNotifier {
     received = 0;
     error = null;
     notifyListeners();
-    if (enabled) prepare();
+    if (enabled && configuration.local) prepare();
   }
 
   void _requireSupported() {
     if (!supported) {
-      throw UnsupportedError('离线语音输入目前支持 macOS、Windows、Linux、iPhone 和 iPad。');
+      throw UnsupportedError('语音输入目前支持 macOS、Windows、Linux、iPhone 和 iPad。');
     }
   }
 
