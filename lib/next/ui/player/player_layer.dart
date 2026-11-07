@@ -523,7 +523,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
               // capsule's end, where its button is.
               if (_phone)
                 Positioned(
-                  right: math.max(28, MediaQuery.paddingOf(context).right + 2),
+                  right: _PhoneBar.side(context, right: true),
                   top: math.max(72, MediaQuery.paddingOf(context).top + 66),
                   bottom: _PhoneBar.raise(context) + 10,
                   child: Align(
@@ -1110,8 +1110,8 @@ class _PhoneTop extends StatelessWidget {
   Widget build(BuildContext context) {
     final safe = MediaQuery.paddingOf(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(math.max(28, safe.left + 2),
-          math.max(18, safe.top + 6), math.max(28, safe.right + 2), 0),
+      padding: EdgeInsets.fromLTRB(_PhoneBar.side(context),
+          math.max(18, safe.top + 6), _PhoneBar.side(context, right: true), 0),
       child: Row(children: [
         PhoneGlassCircle(
           label: '返回',
@@ -1147,132 +1147,210 @@ class _PhoneBar extends StatelessWidget {
 
   static const height = 58.0;
 
-  /// The capsule's top, from the screen's foot.
+  /// Upright, the danmaku, subtitles, episodes and ⋯ sit as glass circles
+  /// on a row over the capsule: the capsule keeps the room for the time.
+  static const _tools = 44.0, _toolsGap = 12.0;
+
+  static bool _upright(BuildContext context) =>
+      MediaQuery.orientationOf(context) == Orientation.portrait;
+
+  /// The margin at either side: narrow upright, clear of the island and the
+  /// rounded corners sideways.
+  static double side(BuildContext context, {bool right = false}) {
+    final safe = MediaQuery.paddingOf(context);
+    return math.max(_upright(context) ? 16 : 28,
+        (right ? safe.right : safe.left) + 2);
+  }
+
+  /// The controls' top, from the screen's foot.
   static double raise(BuildContext context) =>
-      math.max(16, MediaQuery.paddingOf(context).bottom + 2) + height;
+      math.max(16, MediaQuery.paddingOf(context).bottom + 2) +
+      height +
+      (_upright(context) ? _tools + _toolsGap : 0);
 
   @override
   Widget build(BuildContext context) {
     final safe = MediaQuery.paddingOf(context);
+    final upright = _upright(context);
     final time = NextText.num(12.5, color: NextColors.p2);
+    // Upright the phone turns sideways for the full picture; sideways it
+    // stands up again.
+    final turn = _BarButton(
+      glyph: upright ? NextGlyph.fullscreen : NextGlyph.exitFullscreen,
+      label: upright ? '全屏' : '退出全屏',
+      size: 19,
+      onTap: () => unawaited(PhoneOrientation.fullScreen(upright)),
+    );
+    final capsule = SizedBox(
+      height: height,
+      child: Stack(clipBehavior: Clip.none, children: [
+        // The glass is drawn under the row, so the time over the timeline
+        // and its preview may rise out of it.
+        const Positioned.fill(
+          child: GlassContainer(
+            shape: LiquidRoundedSuperellipse(borderRadius: height / 2),
+            settings: phoneGlass,
+            quality: GlassQuality.standard,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 10, 0),
+          child: Row(children: [
+            PlaybackSelector<bool>(
+              playback: playback,
+              selector: (s) => s.playIntent,
+              builder: (context, playing, _) => _BarButton(
+                glyph: playing ? NextGlyph.pause : NextGlyph.play,
+                label: playing ? '暂停' : '播放',
+                size: 20,
+                onTap: playback.togglePlay,
+              ),
+            ),
+            _NextEpisode(playback: playback, shell: shell),
+            const SizedBox(width: 8),
+            PlaybackSelector<int>(
+              playback: playback,
+              selector: (s) => s.position.inSeconds,
+              builder: (context, t, _) =>
+                  Text(playerTime(Duration(seconds: t)), style: time),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: height,
+                child: Stack(clipBehavior: Clip.none, children: [
+                  // The track on the capsule's middle, the heat over it.
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: height / 2 - 28,
+                    child: PlaybackSelector<(int, int, int)>(
+                      playback: playback,
+                      selector: (s) => (
+                        s.duration.inMilliseconds,
+                        s.buffered.inMilliseconds,
+                        s.danmakuVersion.value,
+                      ),
+                      builder: (context, t, _) => PlayerTimeline(
+                        live: () => playback.position,
+                        repaint: playback.frame,
+                        duration: Duration(milliseconds: t.$1),
+                        buffered: Duration(milliseconds: t.$2),
+                        heat: playback.heat(),
+                        onSeek: playback.seek,
+                        onScrub: onScrub,
+                        preview: switch (playback) {
+                          SessionPlayback(:final preview, :final session)
+                              when preview.enabled && session != null =>
+                            (at) => preview.at(session.source.uri, at),
+                          _ => null,
+                        },
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 12),
+            PlaybackSelector<int>(
+              playback: playback,
+              selector: (s) => s.duration.inSeconds,
+              builder: (context, t, _) =>
+                  Text(playerTime(Duration(seconds: t)), style: time),
+            ),
+            const SizedBox(width: 6),
+            if (!upright) ...[
+              if (playback.offersDanmaku)
+                PlaybackSelector<bool>(
+                  playback: playback,
+                  selector: (s) => s.danmakuVisible,
+                  builder: (context, on, _) =>
+                      _DanmakuPill(on: on, onTap: playback.toggleDanmaku),
+                ),
+              if (playback.offersSubtitles)
+                _BarButton(
+                  glyph: NextGlyph.subtitles,
+                  label: '字幕',
+                  lit: menu == _Menu.subtitles,
+                  onTap: () => onMenu(_Menu.subtitles),
+                ),
+              _BarButton(
+                glyph: NextGlyph.episodes,
+                label: '剧集',
+                lit: menu == _Menu.episodes,
+                onTap: () => onMenu(_Menu.episodes),
+              ),
+              _BarButton(
+                glyph: NextGlyph.more,
+                label: '更多',
+                lit: menu == _Menu.more,
+                onTap: () => onMenu(_Menu.more),
+              ),
+            ],
+            turn,
+          ]),
+        ),
+      ]),
+    );
     return GestureDetector(
       // Taps between the controls do not reach the picture.
       behavior: HitTestBehavior.opaque,
       onTap: () {},
       child: Padding(
-        padding: EdgeInsets.fromLTRB(math.max(28, safe.left + 2), 0,
-            math.max(28, safe.right + 2), math.max(16, safe.bottom + 2)),
-        child: SizedBox(
-          height: height,
-          child: Stack(clipBehavior: Clip.none, children: [
-            // The glass is drawn under the row, so the time over the
-            // timeline and its preview may rise out of it.
-            const Positioned.fill(
-              child: GlassContainer(
-                shape: LiquidRoundedSuperellipse(borderRadius: height / 2),
-                settings: phoneGlass,
-                quality: GlassQuality.standard,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 10, 0),
-              child: Row(children: [
-                PlaybackSelector<bool>(
-                  playback: playback,
-                  selector: (s) => s.playIntent,
-                  builder: (context, playing, _) => _BarButton(
-                    glyph: playing ? NextGlyph.pause : NextGlyph.play,
-                    label: playing ? '暂停' : '播放',
-                    size: 20,
-                    onTap: playback.togglePlay,
-                  ),
-                ),
-                _NextEpisode(playback: playback, shell: shell),
-                const SizedBox(width: 8),
-                PlaybackSelector<int>(
-                  playback: playback,
-                  selector: (s) => s.position.inSeconds,
-                  builder: (context, t, _) =>
-                      Text(playerTime(Duration(seconds: t)), style: time),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SizedBox(
-                    height: height,
-                    child: Stack(clipBehavior: Clip.none, children: [
-                      // The track on the capsule's middle, the heat over it.
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: height / 2 - 28,
-                        child: PlaybackSelector<(int, int, int)>(
-                          playback: playback,
-                          selector: (s) => (
-                            s.duration.inMilliseconds,
-                            s.buffered.inMilliseconds,
-                            s.danmakuVersion.value,
-                          ),
-                          builder: (context, t, _) => PlayerTimeline(
-                            live: () => playback.position,
-                            repaint: playback.frame,
-                            duration: Duration(milliseconds: t.$1),
-                            buffered: Duration(milliseconds: t.$2),
-                            heat: playback.heat(),
-                            onSeek: playback.seek,
-                            onScrub: onScrub,
-                            preview: switch (playback) {
-                              SessionPlayback(:final preview, :final session)
-                                  when preview.enabled && session != null =>
-                                (at) => preview.at(session.source.uri, at),
-                              _ => null,
-                            },
-                          ),
+        padding: EdgeInsets.fromLTRB(side(context), 0,
+            side(context, right: true), math.max(16, safe.bottom + 2)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (upright)
+              Padding(
+                padding: const EdgeInsets.only(bottom: _toolsGap),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  for (final tool in [
+                    if (playback.offersDanmaku)
+                      PlaybackSelector<bool>(
+                        playback: playback,
+                        selector: (s) => s.danmakuVisible,
+                        builder: (context, on, _) => PhoneGlassCircle(
+                          size: _tools,
+                          label: on ? '关闭弹幕' : '显示弹幕',
+                          onTap: playback.toggleDanmaku,
+                          child: Text('弹',
+                              style: NextText.sans(15,
+                                  weight: FontWeight.w700,
+                                  color: on
+                                      ? NextColors.accent
+                                      : NextColors.p3)),
                         ),
                       ),
-                    ]),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                PlaybackSelector<int>(
-                  playback: playback,
-                  selector: (s) => s.duration.inSeconds,
-                  builder: (context, t, _) =>
-                      Text(playerTime(Duration(seconds: t)), style: time),
-                ),
-                const SizedBox(width: 10),
-                if (playback.offersDanmaku)
-                  PlaybackSelector<bool>(
-                    playback: playback,
-                    selector: (s) => s.danmakuVisible,
-                    builder: (context, on, _) =>
-                        _DanmakuPill(on: on, onTap: playback.toggleDanmaku),
-                  ),
-                if (playback.offersSubtitles)
-                  _BarButton(
-                    glyph: NextGlyph.subtitles,
-                    label: '字幕',
-                    lit: menu == _Menu.subtitles,
-                    onTap: () => onMenu(_Menu.subtitles),
-                  ),
-                _BarButton(
-                  glyph: NextGlyph.episodes,
-                  label: '剧集',
-                  lit: menu == _Menu.episodes,
-                  onTap: () => onMenu(_Menu.episodes),
-                ),
-                _BarButton(
-                  glyph: NextGlyph.more,
-                  label: '更多',
-                  lit: menu == _Menu.more,
-                  onTap: () => onMenu(_Menu.more),
-                ),
-              ]),
-            ),
-          ]),
+                    if (playback.offersSubtitles)
+                      _tool(NextGlyph.subtitles, '字幕', _Menu.subtitles),
+                    _tool(NextGlyph.episodes, '剧集', _Menu.episodes),
+                    _tool(NextGlyph.more, '更多', _Menu.more),
+                  ]) ...[
+                    const SizedBox(width: 10),
+                    tool,
+                  ],
+                ]),
+              ),
+            capsule,
+          ],
         ),
       ),
     );
   }
+
+  /// A glass circle on the upright row that opens one of the menus.
+  Widget _tool(NextGlyph glyph, String label, _Menu which) => PhoneGlassCircle(
+        size: _tools,
+        label: label,
+        onTap: () => onMenu(which),
+        child: NextIcon(glyph,
+            size: 20,
+            stroke: 1.8,
+            color: menu == which ? NextColors.paper : const Color(0xE6F5F1EA)),
+      );
 }
 
 /// 弹: the danmaku on (crimson) or off.

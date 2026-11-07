@@ -35,26 +35,40 @@ class Shelf extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gutter = this.gutter ?? NextLayout.gutter(context);
+    // A phone has no room beside the title: the tabs go under it, and
+    // scroll sideways when they are more than the width.
+    final under = NextLayout.compact(context) && trailing != null;
+    final heading = Text(title,
+        style: NextText.sans(19, weight: FontWeight.w600, letterSpacing: 0.4));
     return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
             padding: EdgeInsets.only(left: gutter),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(title,
-                    style: NextText.sans(19,
-                        weight: FontWeight.w600, letterSpacing: 0.4)),
-                if (trailing case final t?) ...[
-                  const SizedBox(width: 28),
-                  Flexible(child: t),
-                ],
-              ],
-            ),
+            child: under
+                ? heading
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      heading,
+                      if (trailing case final t?) ...[
+                        const SizedBox(width: 28),
+                        Flexible(child: t),
+                      ],
+                    ],
+                  ),
           ),
+          if (under) ...[
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.only(
+                  left: gutter, right: NextLayout.end(context)),
+              child: trailing,
+            ),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             height: height,

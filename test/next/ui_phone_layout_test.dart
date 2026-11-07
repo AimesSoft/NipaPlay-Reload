@@ -54,7 +54,25 @@ void main() {
   });
 
   testWidgets(
-      'a phone plays sideways: its controls on one capsule, its menus a '
+      'a phone held upright: the menus on glass over the capsule, which '
+      'turns the phone sideways', (tester) async {
+    NextPlayerLayer.debugTouch = true;
+    NextPlayerLayer.debugPhone = true;
+    await pumpPlayer(tester,
+        status: PlayerStatus.playing, size: const Size(430, 932));
+    await tester.pump(const Duration(milliseconds: 400));
+    final play = tester.getRect(button('暂停'));
+    final full = tester.getRect(button('全屏'));
+    expect(full.center.dy, closeTo(play.center.dy, 1), reason: 'one capsule');
+    for (final label in ['字幕', '剧集', '更多']) {
+      final rect = tester.getRect(button(label));
+      expect(rect.bottom, lessThan(play.top), reason: '$label over it');
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+      'a phone held sideways: its controls on one capsule, its menus a '
       'sheet at the right above it', (tester) async {
     NextPlayerLayer.debugTouch = true;
     NextPlayerLayer.debugPhone = true;
@@ -63,7 +81,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(button('暂停').hitTestable(), findsOneWidget);
     expect(button('返回').hitTestable(), findsOneWidget);
-    expect(button('全屏'), findsNothing, reason: 'always full screen');
+    expect(button('退出全屏').hitTestable(), findsOneWidget,
+        reason: 'stands the phone up again');
     await tester.tap(button('字幕'));
     await tester.pump(const Duration(milliseconds: 400));
     final sheet = find.byType(PlayerMenuSheet);
