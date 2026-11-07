@@ -15,6 +15,10 @@ import '../widgets/artwork.dart';
 /// out once for B; A is reached with a transform, so switching states,
 /// the slow push-in (1.00 → 1.05 over 20 s) and scrolling only change
 /// transforms and opacity. A new backdrop cross-fades in [fade].
+///
+/// The push-in moves once when the backdrop first shows and once each time
+/// it changes (the other way, so nothing jumps), then holds: a page at rest
+/// draws nothing.
 class HeroBackdrop extends StatefulWidget {
   const HeroBackdrop({
     super.key,
@@ -62,25 +66,36 @@ class _HeroBackdropState extends State<HeroBackdrop>
   late final Animation<double> _stageT =
       CurvedAnimation(parent: _stage, curve: NextMotion.ease);
   bool _reduced = false;
+  bool _pushed = false;
 
   /// The visible part of the artwork (A's hero, or the whole page in B).
   final _visible = GlobalKey(debugLabel: 'hero.visible');
 
   void _syncMotion() {
     final reduced = NextMotion.reduced(context);
-    if (reduced == _reduced && (_reduced || _push.isAnimating)) return;
-    _reduced = reduced;
-    if (_reduced) {
-      _push.stop();
-      _push.value = 0;
-    } else if (!_push.isAnimating) {
-      _push.repeat(reverse: true);
+    if (reduced != _reduced) {
+      _reduced = reduced;
+      if (reduced) {
+        _push.stop();
+        _push.value = 0;
+      }
     }
+    if (!_reduced && !_pushed) {
+      _pushed = true;
+      _push.forward();
+    }
+  }
+
+  /// One more leg of the push-in for a new backdrop, from where it rests.
+  void _pushAgain() {
+    if (_reduced || _push.isAnimating) return;
+    _push.value >= 0.5 ? _push.reverse() : _push.forward();
   }
 
   @override
   void didUpdateWidget(HeroBackdrop old) {
     super.didUpdateWidget(old);
+    if (old.image != widget.image) _pushAgain();
     if (old.staged != widget.staged) {
       if (_reduced) {
         _stage.value = widget.staged ? 1 : 0;

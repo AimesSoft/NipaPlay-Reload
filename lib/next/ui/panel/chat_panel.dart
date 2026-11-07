@@ -155,8 +155,6 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
 extension on _ChatPanelLayerState {
   Widget _phone(NextShellController shell, bool docked, Widget sheet) {
     final size = MediaQuery.sizeOf(context);
-    final bottom = math.max(MediaQuery.viewInsetsOf(context).bottom,
-        MediaQuery.paddingOf(context).bottom);
     // Over a video the picture stays in sight above the sheet.
     final top = docked
         ? size.width * 9 / 16 + NextLayout.barTop(context) + 24
@@ -171,7 +169,9 @@ extension on _ChatPanelLayerState {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: shell.closePanel,
-              child: _Dim(t),
+              // The sheet covers nearly all of a phone's page: a shade is
+              // enough, and the page is not blurred twice under its glass.
+              child: _Dim(t, blur: false),
             ),
           ),
           Positioned(
@@ -182,11 +182,10 @@ extension on _ChatPanelLayerState {
             child: Opacity(
               opacity: _reduced ? t : math.min(1, t * 3),
               child: Transform.translate(
+                // The glass reaches the screen's foot; the composer keeps
+                // clear of the home indicator and the keyboard itself.
                 offset: Offset(0, (1 - _slide) * (size.height - top)),
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: bottom),
-                  child: sheet,
-                ),
+                child: sheet,
               ),
             ),
           ),
@@ -209,13 +208,14 @@ class _SpringCurve extends Curve {
 
 /// `.dim`: the page behind blurs (6) and darkens (35 %).
 class _Dim extends StatelessWidget {
-  const _Dim(this.t);
+  const _Dim(this.t, {this.blur = true});
   final double t;
+  final bool blur;
 
   @override
   Widget build(BuildContext context) {
     final shade = ColoredBox(color: Color.fromRGBO(6, 6, 9, 0.35 * t));
-    if (t <= 0.01) return shade;
+    if (t <= 0.01 || !blur) return shade;
     return ClipRect(
       child: BackdropFilter(
         filter: ui.ImageFilter.compose(

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -5,8 +6,9 @@ import '../theme/tokens.dart';
 
 /// A few short comments viewers left on the hero's work, drifting across
 /// the sky in its upper right (concept `.danmaku`): faint, few, slow, at
-/// most one per lane. Nothing when there are none, and nothing under
-/// reduced motion (they would only stand there).
+/// most one per lane. Each crosses once; when all have, the sky is still
+/// until another work takes the hero. Nothing when there are none, and
+/// nothing under reduced motion (they would only stand there).
 class HeroDanmaku extends StatefulWidget {
   const HeroDanmaku({super.key, required this.lines});
   final List<String> lines;
@@ -62,21 +64,56 @@ class _HeroDanmakuState extends State<HeroDanmaku>
   late final Ticker _ticker;
   final _now = ValueNotifier<Duration>(Duration.zero);
 
+  /// Every line has crossed: nothing moves until the lines change.
+  bool _done = false;
+  Duration _end = Duration.zero;
+
   @override
   void initState() {
     super.initState();
-    _ticker = createTicker((elapsed) => _now.value = elapsed);
+    _end = _endOf(widget.lines);
+    _ticker = createTicker((elapsed) {
+      _now.value = elapsed;
+      if (elapsed >= _end) {
+        _ticker.stop();
+        _done = true;
+      }
+    });
+  }
+
+  /// When the last lane's last line has left the band.
+  static Duration _endOf(List<String> lines) {
+    final count = _lanes.take(lines.length).length;
+    var end = Duration.zero;
+    for (final (i, lane) in _lanes.take(count).indexed) {
+      final laps = ((lines.length - i) / count).ceil();
+      final last = lane.crossing * (laps - lane.start);
+      if (last > end) end = last;
+    }
+    return end;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final moving = !NextMotion.reduced(context);
-    if (moving && !_ticker.isActive) {
+    if (moving && !_done && !_ticker.isActive) {
       _ticker.start();
     } else if (!moving && _ticker.isActive) {
       _ticker.stop();
     }
+  }
+
+  @override
+  void didUpdateWidget(HeroDanmaku old) {
+    super.didUpdateWidget(old);
+    if (listEquals(old.lines, widget.lines)) return;
+    // Another work's comments cross from the start.
+    _ticker.stop();
+    _now.value = Duration.zero;
+    _end = _endOf(widget.lines);
+    _done = false;
+    if (!NextMotion.reduced(context)) _ticker.start();
   }
 
   @override
@@ -131,7 +168,9 @@ class _HeroDanmakuState extends State<HeroDanmaku>
     final t = now.inMicroseconds / lane.crossing.inMicroseconds + lane.start;
     final lap = t.floor();
     final through = t - lap;
-    final line = lines[(i + lap * count) % lines.length];
+    final index = i + lap * count;
+    if (index >= lines.length) return const SizedBox.shrink();
+    final line = lines[index];
     return Positioned(
       top: lane.top,
       left: width - through * (width + _beyond),

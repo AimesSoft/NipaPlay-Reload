@@ -234,6 +234,7 @@ class _NextShellState extends State<NextShell> with WidgetsBindingObserver {
                       Positioned.fill(
                         child: _Pages(
                           hidden: playing,
+                          covered: _shell.panelOpen,
                           child: ColoredBox(
                             color: NextColors.ink,
                             child: Stack(children: [
@@ -353,18 +354,32 @@ class _NextShellState extends State<NextShell> with WidgetsBindingObserver {
 /// but off screen, still and out of focus. One structure either way, so
 /// nothing under it is remounted.
 class _Pages extends StatelessWidget {
-  const _Pages({required this.hidden, required this.child});
+  const _Pages({required this.hidden, required this.child, this.covered});
   final bool hidden;
   final Widget child;
 
+  /// While true on a phone, the conversation's sheet covers the pages:
+  /// they stand still under it (shown as they were, nothing moving).
+  final ValueListenable<bool>? covered;
+
   @override
-  Widget build(BuildContext context) => ExcludeFocus(
-        excluding: hidden,
-        child: Offstage(
-          offstage: hidden,
-          child: TickerMode(enabled: !hidden, child: child),
-        ),
-      );
+  Widget build(BuildContext context) {
+    Widget pages(bool still) =>
+        TickerMode(enabled: !hidden && !still, child: child);
+    return ExcludeFocus(
+      excluding: hidden,
+      child: Offstage(
+        offstage: hidden,
+        child: covered == null
+            ? pages(false)
+            : ValueListenableBuilder<bool>(
+                valueListenable: covered!,
+                builder: (context, on, _) =>
+                    pages(on && NextLayout.compact(context)),
+              ),
+      ),
+    );
+  }
 }
 
 /// ⌘K: the conversation's input. ⌘F: search, the Mac's Find (and free in

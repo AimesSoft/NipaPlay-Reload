@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../../mesh/nipa_peers.dart';
@@ -39,10 +41,17 @@ class ChatFrame extends StatelessWidget {
   final double sidePadding;
   final VoidCallback? onSent;
 
+  /// A phone's sheet reaches the screen's foot: the composer sits just
+  /// above the home indicator, or above the keyboard while it is up.
+  static double _phoneFoot(BuildContext context) => math.max(
+      MediaQuery.viewInsetsOf(context).bottom + 10,
+      MediaQuery.paddingOf(context).bottom + 2);
+
   @override
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
     final chat = shell.chat;
+    final phone = NextLayout.compact(context);
     Widget column(Widget child) => Center(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: columnWidth),
@@ -52,7 +61,7 @@ class ChatFrame extends StatelessWidget {
     return ListenableBuilder(
       listenable: Listenable.merge([chat, shell.services.logins]),
       builder: (context, _) => Column(children: [
-        if (NextLayout.compact(context)) ...[
+        if (phone) ...[
           // A sheet's grabber, and who is talking: her face and the
           // device she runs on.
           Container(
@@ -126,7 +135,8 @@ class ChatFrame extends StatelessWidget {
           ]),
         ),
         Padding(
-          padding: EdgeInsets.fromLTRB(sidePadding - 8, 0, sidePadding - 8, 16),
+          padding: EdgeInsets.fromLTRB(sidePadding - 8, 0, sidePadding - 8,
+              phone ? _phoneFoot(context) : 16),
           child: column(ChatComposer(
             chat: chat,
             controller: shell.askText,
