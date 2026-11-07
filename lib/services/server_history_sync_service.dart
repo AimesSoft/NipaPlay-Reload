@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nipaplay/models/watch_history_database.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/debug_log_service.dart';
+import 'package:nipaplay/services/classic_mode_policy.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/utils/storage_service.dart';
@@ -36,6 +37,8 @@ class ServerHistorySyncService {
     if (_initialized) return;
     _initialized = true;
     _onHistoryUpdated = onHistoryUpdated;
+    ClassicModePolicy.addListener(_modeChanged);
+    unawaited(ClassicModePolicy.allowsImplicitWork());
 
     _jellyfinService.addReadyListener(_handleJellyfinReady);
     _embyService.addReadyListener(_handleEmbyReady);
@@ -54,6 +57,7 @@ class ServerHistorySyncService {
 
   /// 触发一次 Jellyfin Resume 拉取（对外接口，便于手动刷新）。
   Future<void> syncJellyfinResume() async {
+    if (!ClassicModePolicy.classicActive) return;
     debugPrint(
         'ServerHistorySyncService.syncJellyfinResume -> start ready=${_jellyfinService.isReady} connected=${_jellyfinService.isConnected}');
     if (!_canSyncServer(
@@ -95,6 +99,7 @@ class ServerHistorySyncService {
 
   /// 触发一次 Emby Resume 拉取。
   Future<void> syncEmbyResume() async {
+    if (!ClassicModePolicy.classicActive) return;
     debugPrint(
         'ServerHistorySyncService.syncEmbyResume -> start ready=${_embyService.isReady} connected=${_embyService.isConnected}');
     if (!_canSyncServer(
@@ -134,6 +139,8 @@ class ServerHistorySyncService {
   }
 
   void dispose() {
+    ClassicModePolicy.removeListener(_modeChanged);
+    _initialized = false;
     _jellyfinService.removeReadyListener(_handleJellyfinReady);
     _embyService.removeReadyListener(_handleEmbyReady);
   }
@@ -186,6 +193,7 @@ class ServerHistorySyncService {
     int loggedMissingLastPlayed = 0;
 
     for (var index = 0; index < resumeItems.length; index++) {
+      if (!ClassicModePolicy.classicActive) return inserted + updated > 0;
       final item = resumeItems[index];
       final String? itemId = item['Id'] as String?;
       if (itemId == null) {
@@ -283,6 +291,12 @@ class ServerHistorySyncService {
     return (inserted + updated) > 0;
   }
 
+  void _modeChanged() {
+    if (!ClassicModePolicy.classicActive) return;
+    if (_jellyfinService.isReady) _scheduleJellyfinSync();
+    if (_embyService.isReady) _scheduleEmbySync();
+  }
+
   void _handleJellyfinReady() {
     debugPrint('ServerHistorySyncService._handleJellyfinReady -> received');
     _scheduleJellyfinSync();
@@ -294,6 +308,7 @@ class ServerHistorySyncService {
   }
 
   void _scheduleJellyfinSync() {
+    if (!ClassicModePolicy.classicActive) return;
     scheduleMicrotask(() {
       debugPrint(
           'ServerHistorySyncService._scheduleJellyfinSync -> microtask fired, isSyncing=$_isSyncingJellyfin');
@@ -304,6 +319,7 @@ class ServerHistorySyncService {
   }
 
   void _scheduleEmbySync() {
+    if (!ClassicModePolicy.classicActive) return;
     scheduleMicrotask(() {
       debugPrint(
           'ServerHistorySyncService._scheduleEmbySync -> microtask fired, isSyncing=$_isSyncingEmby');
@@ -394,6 +410,7 @@ class ServerHistorySyncService {
     required bool isJellyfin,
     required String serverLabel,
   }) async {
+    if (!ClassicModePolicy.classicActive) return null;
     if (imageTags == null || imageTags.isEmpty) return null;
     final selected = _pickBestImageTag(imageTags);
     if (selected == null) return null;

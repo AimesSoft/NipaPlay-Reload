@@ -21,7 +21,7 @@ Windows 使用 `python nipa`；PowerShell 5.1 中带 JSON 的调用可用 UTF-8 
 | --- | --- |
 | 找片、检查文件、整理作品 | `media.library.search`、`media.files.list`、`media.hash.match`、`media.metadata.search_batch` 提供事实和候选；`media.identity.bind_batch`、`media.management.bind_batch` 保存明确判断。旧 Classic 身份用 `media.library.import_history` 显式导入。 |
 | 建立或调整目录、资料 | `media.entities.put_batch`、`media.metadata.put`、`media.metadata.override_batch`；合并前用 `media.management.targets` 找拥有者，再用 `media.management.merge_work` 的预览核对映射。撤回入口为 `media.management.undo_merge`；不要按标题或集号猜测对应关系。 |
-| 管理片源 | `media.sources.list`、`media.sources.browse`、`media.sources.search`、`media.sources.sync`；登录、可用服务及远端访问取决于来源与配置。 |
+| 管理片源 | `media.sources.list`、`media.sources.browse`、`media.sources.search`、`media.sources.sync`；支持 SMB/WebDAV；登录和目录访问取决于来源与配置。 |
 | 下载并检查进度 | 查看 `download` 族，`download.wait_files` 可等待文件；`download.play` 依赖目标播放环境。`download.delete` 和用户在场确认的 `download.delete.request` 有各自契约，删除先核对预览与授权。 |
 | 播放和继续观看 | `playback.state`、`playback.open`、`playback.seek`、`playback.set_paused`，以及 `history.continue_watching`；GUI、播放器内核和设备状态决定实际可用性。 |
 | 内核诊断与临时调节 | `playback.kernel` 查询当前实例，`watch_kernel_properties` 观察、`set_kernel_properties` / `restore_kernel_properties` 调节或恢复；`reopen_with_kernel` 重开媒体，均需核对当前会话及支持范围。 |

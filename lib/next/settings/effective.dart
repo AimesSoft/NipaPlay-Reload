@@ -1,38 +1,13 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
-import 'package:nipaplay/services/media_server_device_id_service.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import 'application_settings.dart';
 import 'effective_value.dart';
 import 'registry.dart';
 import '../player/danmaku/settings.dart';
-
-/// The identity Jellyfin/Emby requests carry, derived as the media server
-/// client does (services/media_server_service_base.dart).
-Future<String> effectiveMediaServerDeviceId() async {
-  var appName = 'NipaPlay';
-  var platform = 'Flutter';
-  try {
-    final info = await PackageInfo.fromPlatform();
-    if (info.appName.isNotEmpty) appName = info.appName;
-    if (!kIsWeb && !kDebugMode) {
-      platform = Platform.operatingSystem;
-      platform = platform[0].toUpperCase() + platform.substring(1);
-    }
-  } catch (_) {
-    appName = 'NipaPlay';
-    platform = 'Flutter';
-  }
-  return MediaServerDeviceIdService.instance
-      .getEffectiveDeviceId(appName: appName, platform: platform);
-}
 
 typedef _Live = Object? Function(VideoPlayerState video);
 
@@ -237,12 +212,6 @@ abstract final class EffectiveRules {
           detail: stored == ''
               ? 'The official server is in use; requests go to this address.'
               : 'Requests go to this address.');
-    }
-    if (key == 'network.mediaServerDeviceId') {
-      return Effective.same(await effectiveMediaServerDeviceId(),
-          detail: stored == ''
-              ? 'No custom ID; the generated one is sent as DeviceId.'
-              : 'The custom ID is sent as DeviceId.');
     }
     if (key == 'appearance.largeScreenLayout') {
       return const Effective.unknown('held_by_main_page',

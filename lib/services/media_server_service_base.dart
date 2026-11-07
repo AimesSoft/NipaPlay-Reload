@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'classic_mode_policy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
@@ -856,6 +857,9 @@ abstract class MediaServerServiceBase {
 
     final transport = await MediaServerTransport.fromStoredSettings();
     try {
+      if (!await ClassicModePolicy.allowsImplicitWork()) {
+        throw StateError('Classic 媒体服务器请求在 Next 中暂停。');
+      }
       return await transport.send(request, timeout: timeout);
     } finally {
       transport.close();

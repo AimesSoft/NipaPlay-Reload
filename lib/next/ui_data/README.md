@@ -26,10 +26,9 @@ X56 搜索经 `media.library.search_merged` 读取同一合并目录投影，返
 的临时数据供应者接到这两个入口；本实现没有修改 `lib/next/ui/`。
 
 本地仍是 X47 的整个合并目录，只有“全部”。其他来源使用 Classic 已有配置、
-登录态和客户端：Jellyfin/Emby 只显示已选库，文件夹保留为可继续打开的
+登录态和客户端：SMB/WebDAV 的文件夹保留为可继续打开的
 `UiFolderItem`，Series 打开作品详情及季/集；SMB/WebDAV 从共享根路径逐层浏览。
-服务器原样排序读取 Classic 每库偏好，发现的父关系持久缓存以便子目录继承；
-请求中的 sort 不改变 Classic 偏好。SMB/WebDAV 排序为名称或修改时间。
+SMB/WebDAV 排序为名称或修改时间，不改变 Classic 偏好。
 
 Nipa 的能力与首页摆放同属 `ui.*`：
 
@@ -60,7 +59,7 @@ categoryId/title 或 `state.query library.arrangements` 的 hiddenOriginal 取 I
 `content` 恰好一种：
 
 ```json
-{"kind":"condition","filter":{"sourceIds":["local","jellyfin:服务器配置ID"],"types":["anime"],"watch":"unwatched"}}
+{"kind":"condition","filter":{"sourceIds":["local","smb:连接ID"],"types":["anime"],"watch":"unwatched"}}
 ```
 
 ```json
@@ -68,7 +67,7 @@ categoryId/title 或 `state.query library.arrangements` 的 hiddenOriginal 取 I
 ```
 
 ```json
-{"kind":"original","sourceId":"jellyfin:服务器配置ID","parentId":"服务器库或文件夹ID"}
+{"kind":"original","sourceId":"smb:连接ID","parentId":"来源内文件夹路径"}
 ```
 
 条件还支持 `deviceIds`、`genres`、`yearMin/yearMax`、`ratingMin/ratingMax`、
@@ -77,7 +76,7 @@ categoryId/title 或 `state.query library.arrangements` 的 hiddenOriginal 取 I
 unwatched/watching/watched；年份、标签和评分未知时不满足相应条件。评分采用
 作品界面第一项评分，`ratingSource` 保留它的来源；加入时间继承 X47 合并组的
 排序事实。作品类型取明确的 anime/series/movie 属性及已接受的弹弹play、Bangumi、
-TMDB 身份，不按标题猜测。Jellyfin/Emby 必须有 X47 接受的作品身份才进入条件，
+TMDB 身份，不按标题猜测。来源作品按接受的身份进入条件，
 原样浏览不自动接受 ProviderIds；本地/共享的已登记 work 实体也可参加条件。
 手选只提供“手选顺序”。本地来源原样引用为 `sourceId:local,parentId:all`。
 
@@ -89,7 +88,6 @@ types/watch/genres/year/rating/ratingSource/addedAt。两者不联网、不建�
 在线。分页读取只返回当前页作品，SQL 同时计算总数。X47 快照同步仍有全目录
 重建成本；这次没有把其底层同步改为增量。
 
-Jellyfin/Emby 原样内容使用 StartIndex/Limit/TotalRecordCount，一次只读服务器的一页。
 SMB/WebDAV 协议没有相同的分页：首屏枚举一层目录，把视频与目录条目缓存到
 本机，后续滚动用 SQLite LIMIT/OFFSET，不递归枚举整棵共享。详情 episodes 的
 既有接口返回一部作品全部剧集，因此通过服务器分批读取后合成列表。

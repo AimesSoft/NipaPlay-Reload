@@ -42,10 +42,6 @@ import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/providers/downloader_settings_provider.dart';
-import 'package:nipaplay/providers/shared_remote_library_provider.dart';
-import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
-import 'package:nipaplay/providers/jellyfin_provider.dart';
-import 'package:nipaplay/providers/emby_provider.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/services/system_proxy_service.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
@@ -150,8 +146,8 @@ final class NextRuntime extends ChangeNotifier {
     // A screen may mount as soon as Core is ready, before assets and the
     // complete GUI capability catalogue have been assembled.
     _harnessReady.future.ignore();
-    _operations = _initialize(capabilities).catchError(
-        (Object error, StackTrace stack) {
+    _operations =
+        _initialize(capabilities).catchError((Object error, StackTrace stack) {
       if (!_harnessReady.isCompleted) _harnessReady.completeError(error, stack);
       Error.throwWithStackTrace(error, stack);
     });
@@ -173,30 +169,6 @@ final class NextRuntime extends ChangeNotifier {
     DownloadSettings.provider = context.read<DownloaderSettingsProvider>();
     core.ready.then((_) {
       if (!context.mounted) return;
-      core.mediaSources.shared = context.read<SharedRemoteLibraryProvider>();
-      core.mediaSources.dandanRemoteProvider =
-          context.read<DandanplayRemoteProvider>();
-      core.mediaSources.shared!.observeChanges();
-      core.mediaSources.updateGuiSelection = (type, ids) => type == 'jellyfin'
-          ? context.read<JellyfinProvider>().updateSelectedLibraries(ids)
-          : context.read<EmbyProvider>().updateSelectedLibraries(ids);
-      core.mediaSources.applySort = (type, sorts) async {
-        if (type == 'jellyfin') {
-          final provider = context.read<JellyfinProvider>();
-          for (final sort in sorts) {
-            provider.setLibrarySortSettings(sort['libraryId'] as String,
-                sort['sortBy'] as String, sort['sortOrder'] as String);
-          }
-          await provider.persistLibrarySortSettings();
-        } else {
-          final provider = context.read<EmbyProvider>();
-          for (final sort in sorts) {
-            provider.setLibrarySortSettings(sort['libraryId'] as String,
-                sort['sortBy'] as String, sort['sortOrder'] as String);
-          }
-          await provider.persistLibrarySortSettings();
-        }
-      };
       core.mediaSources.requestPassword = (source, stopped) {
         if (!context.mounted) {
           throw const Failure(
@@ -302,87 +274,20 @@ final class NextRuntime extends ChangeNotifier {
     final playbackApi = Harness([playback]);
     core.mediaSources.playItem = (source, itemId, position) async {
       final type = source['type'];
-      PlayableItem item;
-      if (type == 'dandanplay_remote') {
-        final service = core.mediaSources.dandanRemote;
-        await core.mediaSources.refreshDandanRemote();
-        final episodes =
-            service.cachedEpisodes.where((e) => e.entryId == itemId);
-        if (episodes.isEmpty) {
-          throw const Failure(
-              FailureCode.notFound, 'Remote episode not found.');
-        }
-        final e = episodes.single;
-        final url = service.buildEpisodeStreamUrl(
-            hash: e.hasHash ? e.hash : null, entryId: e.entryId);
-        if (url == null) {
-          throw const Failure(
-              FailureCode.unavailable, 'Remote episode has no stream.');
-        }
-        final recorded = await WatchHistoryManager.getHistoryItem(url);
-        final history = recorded ??
-            WatchHistoryItem(
-                filePath: url,
-                animeName: e.animeTitle,
-                episodeTitle: e.episodeTitle,
-                animeId: e.animeId,
-                episodeId: e.episodeId,
-                watchProgress: 0,
-                lastPosition: 0,
-                duration: e.duration ?? 0,
-                lastWatchTime: DateTime.now(),
-                videoHash: e.hash);
-        item = PlayableItem(
-            videoPath: url,
-            actualPlayUrl: url,
-            title: e.animeTitle,
-            subtitle: e.episodeTitle,
-            animeId: e.animeId,
-            episodeId: e.episodeId,
-            historyItem: history);
-      } else if (type == 'nipaplay') {
-        final sharing = core.mediaSources.sharing;
-        await sharing.refreshLibrary(userInitiated: true);
-        PlayableItem? found;
-        for (final anime in sharing.animeSummaries) {
-          final episodes =
-              await sharing.loadAnimeEpisodes(anime.animeId, force: true);
-          for (final episode in episodes) {
-            if (episode.shareId == itemId) {
-              found = sharing.buildPlayableItem(anime: anime, episode: episode);
-            }
-          }
-          if (found != null) break;
-        }
-        if (found == null) {
-          throw const Failure(
-              FailureCode.notFound, 'Shared episode not found.');
-        }
-        item = found;
-      } else {
-        final path = switch (type) {
-          'jellyfin' || 'emby' => '$type://$itemId',
-          'smb' => MediaSourceUtils.buildSmbPath(
-              core.mediaSources.key(source['sourceId'] as String), itemId),
-          'webdav' => MediaSourceUtils.buildWebDavPath(
-              core.mediaSources.key(source['sourceId'] as String), itemId),
-          _ => throw const Failure(
-              FailureCode.invalidInput, 'Unsupported media source.')
-        };
-        final outcome = await playbackApi.invokeJson(
-            'playback.open',
-            {'path': path, if (position != null) 'startPositionMs': position},
-            BodyChanges.invocation ?? Invocation(origin: 'application'));
-        if (outcome is Failed) throw outcome.failure;
-        return outcome.toEnvelope();
-      }
-      await nextPlayback.openItem(item,
-          start: position == null ? null : Duration(milliseconds: position));
-      return {
-        'sourceId': source['sourceId'],
-        'itemId': itemId,
-        'state': nextPlayback.snapshot().toJson()
+      final path = switch (type) {
+        'smb' => MediaSourceUtils.buildSmbPath(
+            core.mediaSources.key(source['sourceId'] as String), itemId),
+        'webdav' => MediaSourceUtils.buildWebDavPath(
+            core.mediaSources.key(source['sourceId'] as String), itemId),
+        _ => throw const Failure(
+            FailureCode.invalidInput, 'Unsupported media source.')
       };
+      final outcome = await playbackApi.invokeJson(
+          'playback.open',
+          {'path': path, if (position != null) 'startPositionMs': position},
+          BodyChanges.invocation ?? Invocation(origin: 'application'));
+      if (outcome is Failed) throw outcome.failure;
+      return outcome.toEnvelope();
     };
     return NextRuntime._(
         labs, context.read<NextUiPreference>(), nextPlayback, classic, [
@@ -410,9 +315,8 @@ final class NextRuntime extends ChangeNotifier {
                 await core.libraryData.validatedSourceRef(id, 'episode');
             if (episode != null) {
               return {
-                'sourcePlayback': await core.mediaSources.play(
-                    episode[0], episode[1],
-                    expectedServerId: episode.length == 3 ? episode[2] : null)
+                'sourcePlayback':
+                    await core.mediaSources.play(episode[0], episode[1])
               };
             }
             final merged = id.startsWith('mesh-')
@@ -423,7 +327,6 @@ final class NextRuntime extends ChangeNotifier {
               return {
                 'sourcePlayback': await core.mediaSources.play(
                     source['sourceId'] as String, source['itemId'] as String,
-                    expectedServerId: source['serverId'] as String?,
                     startPositionMs: merged!['resumeMs'] as int?)
               };
             }
@@ -563,9 +466,10 @@ final class NextRuntime extends ChangeNotifier {
     final packageInfo = await PackageInfo.fromPlatform();
     JsonMap buildSource = {};
     try {
-      buildSource = (jsonDecode(
-              await rootBundle.loadString('assets/build_info.json')) as Map)
-          .cast<String, Object?>();
+      buildSource =
+          (jsonDecode(await rootBundle.loadString('assets/build_info.json'))
+                  as Map)
+              .cast<String, Object?>();
     } catch (_) {
       // Development builds may have no provenance.
     }
@@ -622,7 +526,7 @@ final class NextRuntime extends ChangeNotifier {
         InstanceCapability(instanceFacts),
         KnowledgeCapability(knowledge, () => _harness.catalog),
         UiCaptureCapability(ClassicUiCapture(instanceFacts,
-                videoLayer: () => exportVideoLayer(playback)).capture),
+            videoLayer: () => exportVideoLayer(playback)).capture),
         MediaFramesCapability(
             engine: PreferredFrameEngine([
               if (PlayerFactory.supportedKernelTypes
@@ -709,8 +613,8 @@ final class NextRuntime extends ChangeNotifier {
                       ? 'DIRECT'
                       : AppHttpProxy.findProxy(
                           uri, SystemProxyService.instance.findProxy)),
-        fixedRuntime: () => AgentRuntimeFixed.readAsync(
-            Platform.environment, labRoot: labRoot),
+        fixedRuntime: () =>
+            AgentRuntimeFixed.readAsync(Platform.environment, labRoot: labRoot),
         fixedRuntimeDirectory: labRoot,
         // A lab profile prepared for Codex keeps using it until told otherwise.
         defaultRuntime: labRoot != null &&
@@ -735,7 +639,8 @@ final class NextRuntime extends ChangeNotifier {
         chat: () => chat,
         chatProblem: () => chatError,
         repository: () => repositoryPath,
-        codexHome: Directory(LabProfile.active ? '${LabProfile.root}/codex-home' : '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}/.codex'),
+        codexHome:
+            Directory(LabProfile.active ? '${LabProfile.root}/codex-home' : '${Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']}/.codex'),
         checkCodex: _checkCodexModel,
         modelSaved: () async {
           if (chat != null || _disposed || !_open) return;
@@ -1204,7 +1109,8 @@ final class NextRuntime extends ChangeNotifier {
       throw const Failure(FailureCode.invalidInput, '文件不存在或格式不受支持。');
     }
     if (_disposed || !_nextOpen || !stillActive()) return;
-    await playback.openItem(PlayableItem(videoPath: path), origin: 'external_open');
+    await playback.openItem(PlayableItem(videoPath: path),
+        origin: 'external_open');
   }
 
   /// Classic asks before it opens [item] (drag and drop, open with, its

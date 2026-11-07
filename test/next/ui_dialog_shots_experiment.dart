@@ -153,8 +153,8 @@ void main() {
   testWidgets('a media source', (tester) async {
     await page(tester);
     unawaited(showMediaSourceLogin({
-      'name': '家里的 Jellyfin',
-      'type': 'jellyfin',
+      'name': '家里的 WebDAV',
+      'type': 'webdav',
       'url': 'http://192.168.1.20:8096',
       'username': 'sakiko'
     }, Completer<void>().future));

@@ -1703,17 +1703,6 @@ final class FakeCalls {
         world._taskStream.add(world._taskList());
         return {'jobId': id, 'job': _job(id)};
       }),
-      a('media.sources.discover', (_) => slow(1500, () => {
-            'candidates': [
-              {
-                'address': 'http://192.168.1.20:1180',
-                'kind': 'nipaplay_shared',
-                'name': '客厅的 Mac mini',
-                'discovery': 'udp_unverified'
-              }
-            ],
-            'observedAt': DateTime.now().toUtc().toIso8601String(),
-          })),
       // The library's batches: where a work is and what it is on each
       // device, searching a provider, refreshing and changing matches
       // (preview, then the plan); another device's part through

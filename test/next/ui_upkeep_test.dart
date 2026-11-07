@@ -143,8 +143,7 @@ void main() {
     expect(await NextSync(world.calls).test(), isFalse);
   });
 
-  test('a plugin’s own actions: listed, invoked as the person by id',
-      () async {
+  test('a plugin’s own actions: listed, invoked as the person by id', () async {
     final p = UiPlugin.from({
       'id': 'bilibili-danmaku',
       'name': 'B 站弹幕',
@@ -152,14 +151,15 @@ void main() {
         {'id': 'login', 'title': '登录哔哩哔哩', 'description': '扫码登录'},
       ],
     }, installed: true);
-    expect([for (final a in p.actions) (a.id, a.title)],
-        [('login', '登录哔哩哔哩')]);
+    expect([for (final a in p.actions) (a.id, a.title)], [('login', '登录哔哩哔哩')]);
     expect(UiPlugin.from({'id': 'x'}, installed: true).actions, isEmpty);
 
     final world = _World();
     final plugins = NextPlugins(world.calls);
-    final r = UiPluginResult.from(await plugins.invoke('bilibili-danmaku', 'login'));
-    expect(world.invoked.single, {'id': 'bilibili-danmaku', 'actionId': 'login'});
+    final r =
+        UiPluginResult.from(await plugins.invoke('bilibili-danmaku', 'login'));
+    expect(
+        world.invoked.single, {'id': 'bilibili-danmaku', 'actionId': 'login'});
     expect(world.origins.single, 'gui');
     expect((r!.title, r.content), ('已登录', 'hikari'));
     expect(UiPluginResult.from({'id': 'x', 'actionId': 'y', 'result': null}),
@@ -191,9 +191,6 @@ void main() {
     expect(world.indexed, ['/Users/hikari/Movies/电影'],
         reason: 'Next indexes files without asking Classic to identify them');
     await expectLater(folders.scan([]), throwsA(isA<Failure>()));
-    final near = await folders.nearby();
-    expect(near.single.name, '客厅的 Mac mini');
-    expect(near.single.address, 'http://192.168.1.20:1180');
   });
 
   test('only explicit folder addition asks for Agent organization', () async {
@@ -205,7 +202,8 @@ void main() {
     expect(world.scanRequests.last['organizeAddedFolder'], true);
   });
 
-  test('folder indexing failure does not fall back to Classic recognition', () async {
+  test('folder indexing failure does not fall back to Classic recognition',
+      () async {
     final world = _World()..indexAvailable = false;
     await expectLater(NextFolders(world.calls).scan(['/unavailable']),
         throwsA(isA<Failure>()));
@@ -269,21 +267,23 @@ final class _World {
 
   late final harness = Harness([
     _Capability([
-      _Action('storage.status', (_) => {
-            'directories': [
-              {'role': 'app', 'path': '/Library/NipaPlay', 'bytes': 5000},
-              {
-                'role': 'downloads',
-                'path': downloadsElsewhere
-                    ? '/Volumes/NAS/下载'
-                    : '/Library/NipaPlay/downloads',
-                'bytes': 4000
-              },
-            ],
-            'volumes': [
-              {'availableBytes': 200000, 'totalBytes': 1000000}
-            ],
-          }),
+      _Action(
+          'storage.status',
+          (_) => {
+                'directories': [
+                  {'role': 'app', 'path': '/Library/NipaPlay', 'bytes': 5000},
+                  {
+                    'role': 'downloads',
+                    'path': downloadsElsewhere
+                        ? '/Volumes/NAS/下载'
+                        : '/Library/NipaPlay/downloads',
+                    'bytes': 4000
+                  },
+                ],
+                'volumes': [
+                  {'availableBytes': 200000, 'totalBytes': 1000000}
+                ],
+              }),
       _Action('cache.plan', (input) {
         final kinds = (input['kinds'] as List).cast<String>();
         plans.add(kinds);
@@ -308,8 +308,8 @@ final class _World {
         }
         return {'planId': id, 'removedBytes': removed};
       }),
-      _Action('app.update.status',
-          (_) => {'checking': false, 'result': checked}),
+      _Action(
+          'app.update.status', (_) => {'checking': false, 'result': checked}),
       _Action('plugins.invoke', (input) {
         invoked.add(input);
         return {
@@ -323,29 +323,27 @@ final class _World {
         }
         return {'connected': true};
       }),
-      _Action('media.library.roots.add',
-          (_) => {'selected': ['/Users/hikari/Movies/电影'], 'roots': []}),
+      _Action(
+          'media.library.roots.add',
+          (_) => {
+                'selected': ['/Users/hikari/Movies/电影'],
+                'roots': []
+              }),
       _Action('media.library.scan', (input) {
         scanRequests.add(Map.of(input));
         if (!indexAvailable) {
-          throw const Failure(FailureCode.unavailable, 'Unavailable directory.');
+          throw const Failure(
+              FailureCode.unavailable, 'Unavailable directory.');
         }
         indexed.add(input['root'] as String);
-        return {'job': {'jobId': 'index-${indexed.length}'}};
+        return {
+          'job': {'jobId': 'index-${indexed.length}'}
+        };
       }),
       _Action('media.library.scan_classic', (input) {
         scanned.add((input['paths'] as List).cast<String>());
         return {'jobId': 'scan-${scanned.length}'};
       }),
-      _Action('media.sources.discover', (_) => {
-            'candidates': [
-              {
-                'address': 'http://192.168.1.20:1180',
-                'kind': 'nipaplay_shared',
-                'name': '客厅的 Mac mini',
-              }
-            ],
-          }),
     ]),
   ]);
 

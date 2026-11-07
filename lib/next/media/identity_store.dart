@@ -2461,11 +2461,6 @@ final class IdentityStore {
       };
     }
     if (payload == null) return;
-    final remote = (await entity(fileId, db: tx))['attributes'] as JsonMap;
-    if (remote['remoteSource'] case final Map target
-        when target['type'] == 'jellyfin' || target['type'] == 'emby') {
-      payload['remoteTarget'] = target;
-    }
     await tx.insert('media_projection_outbox', {
       'id': stableMediaId('projection', [fileId, bindingRevision]),
       'file_id': fileId,

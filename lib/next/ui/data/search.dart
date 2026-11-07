@@ -18,17 +18,13 @@ abstract interface class NextSearchData {
   /// with “让 Nipa 准备”.
   Future<List<UiWork>> online(String query);
 
-  /// The media sources the box looks in (Jellyfin, Emby, SMB, WebDAV), read
+  /// The media sources the box looks in (SMB, WebDAV), read
   /// when the panel opens. None: there is no 来源 group.
   Future<List<UiSearchSource>> sources();
 
   /// What [source] holds matching [query], at most [limit].
   Future<UiSourceAnswer> searchSource(UiSearchSource source, String query,
       {int limit});
-
-  /// The picture of [hit] the search came without, fetched from its source
-  /// now: a path on this device, or null when there is none.
-  Future<String?> sourceArtwork(UiSourceHit hit);
 }
 
 final class UiLibraryHits {
@@ -49,7 +45,7 @@ final class UiSearchSource {
   /// What it is asked by; never shown.
   final String sourceId;
 
-  /// As the viewer named it: “客厅 Jellyfin”.
+  /// As the viewer named it: “家里的 NAS”.
   final String name;
   final UiSourceKind kind;
 }
@@ -124,11 +120,6 @@ final class UiSourceHit {
   /// False when the source could not be reached: what it held when last
   /// seen.
   final bool reachable;
-
-  /// A server's item may have a picture to fetch; a share's file has none
-  /// of its own.
-  bool get hasArtwork =>
-      source.kind == UiSourceKind.jellyfin || source.kind == UiSourceKind.emby || source.sourceId.startsWith('dandanplay_remote:');
 }
 
 /// The real searches, invoked as the interface (`origin: gui`):
@@ -139,8 +130,7 @@ final class UiSourceHit {
 /// - 在线: `media.metadata.search` on 弹弹play. A result the library has
 ///   names its library work.
 /// - 来源: `media.sources.list` for the sources, then
-///   `media.sources.search` for each one on its own; a picture it had not
-///   cached, `media.sources.artwork`.
+///   `media.sources.search` for each one on its own.
 final class CoreSearch implements NextSearchData {
   /// [harness]: the runtime's, read at each call (it may come later).
   CoreSearch(this.harness);
@@ -149,16 +139,13 @@ final class CoreSearch implements NextSearchData {
   static const _limit = 12;
   static const _episodeLimit = 4;
   static const _searchable = {
-    'jellyfin': UiSourceKind.jellyfin,
-    'emby': UiSourceKind.emby,
     'smb': UiSourceKind.smb,
     'webdav': UiSourceKind.webdav,
-    'dandanplay_remote': UiSourceKind.other,
   };
 
   Future<JsonMap> _call(String action, JsonMap input) async {
-    final outcome =
-        await (await harness()).invokeJson(action, input, Invocation(origin: 'gui'));
+    final outcome = await (await harness())
+        .invokeJson(action, input, Invocation(origin: 'gui'));
     return switch (outcome) {
       Completed(:final value) => value.toJson(),
       Failed(:final failure) => throw failure,
@@ -315,11 +302,6 @@ final class CoreSearch implements NextSearchData {
         if (_hit(source, e, reachable: reachable) case final hit?) hit
     ], failed: answer['error'] != null || answer['total'] == null);
   }
-
-  @override
-  Future<String?> sourceArtwork(UiSourceHit hit) async => _text((await _call(
-      'media.sources.artwork',
-      {'sourceId': hit.source.sourceId, 'itemId': hit.itemId}))['poster']);
 
   /// A source's entry: a series or a film opens its page (the library's
   /// when bound, else the source's own); an episode, a video or a file of

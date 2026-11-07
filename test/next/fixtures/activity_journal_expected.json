@@ -473,13 +473,13 @@
       "entityId": null,
       "entityIds": [],
       "jobId": null,
-      "subjectId": "jellyfin",
+      "subjectId": null,
       "source": "journal",
       "facts": {
         "action": "media.sources.add",
         "status": "completed",
         "failureCode": null,
-        "provider": "jellyfin",
+        "provider": null,
         "sourceId": null,
         "result": {
           "sourceId": "src-1",

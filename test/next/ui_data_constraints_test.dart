@@ -141,7 +141,8 @@ void main() {
     expect(shelf.items.single.episode?.episodeId, 'episode-home');
   });
 
-  test('what runs here goes with the catalogue to the other devices; '
+  test(
+      'what runs here goes with the catalogue to the other devices; '
       'helpers and settled tasks do not', () async {
     final mesh =
         MeshRuntime(root: root, vault: MemoryVault(), token: () async => null);
@@ -217,9 +218,7 @@ void main() {
     final job = await engine.submit(
         type: 'agent.helper',
         title: '来源任务',
-        input: {
-          'workId': sourceEntityId('work', 'jellyfin:missing', 'missing')
-        });
+        input: {'workId': sourceEntityId('work', 'webdav:missing', 'missing')});
     final context = await helperExecutor.entered.future;
     final task = (await service.tasks().first).single;
     expect(task.taskId, job.jobId);
@@ -302,7 +301,8 @@ void main() {
   });
 
   for (final resume in [false, true]) {
-    test('task stream reconciles completion before '
+    test(
+        'task stream reconciles completion before '
         '${resume ? 'resuming' : 'starting'} observation', () async {
       if (resume) await service.start();
       final job = await engine.submit(type: executor.type, title: '下载恢复');
@@ -321,7 +321,8 @@ void main() {
       await service.start();
 
       // No further engine event is needed to clear the old progress.
-      expect(await tasks.moveNext().timeout(const Duration(seconds: 2)), isTrue);
+      expect(
+          await tasks.moveNext().timeout(const Duration(seconds: 2)), isTrue);
       expect(tasks.current.single.state, UiTaskState.finished);
       expect(tasks.current.single.progress, 1);
     });

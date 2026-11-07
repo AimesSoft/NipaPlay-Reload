@@ -68,7 +68,7 @@ final class PlaybackOpenAction
   static const _spec = ActionSpec(
     id: 'playback.open',
     title: 'Open a video',
-    description: 'Play a local file, URL, jellyfin://itemId or emby://itemId, '
+    description: 'Play a local file, HTTP(S) URL, SMB or WebDAV locator, '
         'including files with no watch history, or a recorded episode by IDs. '
         'Multiple episode files return a decision with executable path calls. '
         'An optional start position is supported by controllable players. '
@@ -103,7 +103,8 @@ final class PlaybackOpenAction
       try {
         path = Uri.parse(path).toFilePath(windows: Platform.isWindows);
       } on UnsupportedError {
-        throw const Failure(FailureCode.invalidInput, 'Invalid local file URL.');
+        throw const Failure(
+            FailureCode.invalidInput, 'Invalid local file URL.');
       }
     }
     final history = path != null
@@ -117,18 +118,25 @@ final class PlaybackOpenAction
       final uri = Uri.tryParse(path);
       if (p.isAbsolute(path) || uri == null || uri.scheme.isEmpty) {
         if (!p.isAbsolute(path)) {
-          throw const Failure(FailureCode.invalidInput, 'Use an absolute file path.');
+          throw const Failure(
+              FailureCode.invalidInput, 'Use an absolute file path.');
         }
         if (!await File(path).exists()) {
-          throw const Failure(FailureCode.notFound, 'The local file does not exist or is inaccessible.');
+          throw const Failure(FailureCode.notFound,
+              'The local file does not exist or is inaccessible.');
         }
       } else if (uri.scheme == 'mesh') {
-        if (uri.host.isNotEmpty || uri.pathSegments.length != 1 ||
-            uri.pathSegments.single.isEmpty || uri.hasQuery || uri.hasFragment) {
-          throw const Failure(FailureCode.invalidInput, 'A Mesh locator must name one episode.');
+        if (uri.host.isNotEmpty ||
+            uri.pathSegments.length != 1 ||
+            uri.pathSegments.single.isEmpty ||
+            uri.hasQuery ||
+            uri.hasFragment) {
+          throw const Failure(FailureCode.invalidInput,
+              'A Mesh locator must name one episode.');
         }
       } else if (uri.host.isEmpty) {
-        throw const Failure(FailureCode.invalidInput, 'A media URL must include a host or item ID.');
+        throw const Failure(FailureCode.invalidInput,
+            'A media URL must include a host or item ID.');
       }
     }
     final requested = PlayableItem(
@@ -191,7 +199,8 @@ final class PlaybackOpenAction
     }
     final state = _player.snapshot();
     return Completed(PlaybackOpenOutput(
-      path: _usesExternalPlayer() ? item.videoPath : state.path ?? item.videoPath,
+      path:
+          _usesExternalPlayer() ? item.videoPath : state.path ?? item.videoPath,
       player: state.player ?? (_usesExternalPlayer() ? 'external' : 'internal'),
       state: state,
     ));
@@ -314,11 +323,17 @@ final class PlaybackSeekAction
       throw const Failure(FailureCode.unavailable, 'No video is loaded.');
     }
     if (input.offsetMs != null && state.positionMs == null) {
-      throw const Failure(FailureCode.unavailable, 'The external player cannot report position for a relative seek.');
+      throw const Failure(FailureCode.unavailable,
+          'The external player cannot report position for a relative seek.');
     }
     final target = input.positionMs ?? state.positionMs! + input.offsetMs!;
-    await _player.seekTo(Duration(milliseconds: target.clamp(0,
-      state.durationMs == null || state.external != null && state.durationMs == 0 ? target.abs() : state.durationMs!)));
+    await _player.seekTo(Duration(
+        milliseconds: target.clamp(
+            0,
+            state.durationMs == null ||
+                    state.external != null && state.durationMs == 0
+                ? target.abs()
+                : state.durationMs!)));
     return Completed(PlaybackStateOutput(state: _player.snapshot()));
   }
 }

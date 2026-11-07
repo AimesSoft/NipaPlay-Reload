@@ -35,7 +35,6 @@ enum _Page {
   danmaku,
   chapters,
   playback,
-  quality,
   info,
   danmakuStyle,
   blockWords,
@@ -133,29 +132,6 @@ class MoreMenuState extends State<MoreMenu> {
   /// What [NextPlayback.danmakuAreas] are called, in their order.
   static const areaLabels = ['单行', '1/8', '1/4', '1/3', '2/3', '全屏'];
 
-  /// How a Jellyfin or Emby stream's qualities are called.
-  static const qualityLabels = {
-    'original': '原画',
-    'auto': '自动',
-    'bandwidth40m': '4K · 40 Mbps',
-    'bandwidth20m': '1080p · 20 Mbps',
-    'bandwidth10m': '1080p · 10 Mbps',
-    'bandwidth5m': '720p · 5 Mbps',
-    'bandwidth2m': '480p · 2 Mbps',
-    'bandwidth1m': '360p · 1 Mbps',
-  };
-
-  /// The stream's choices, when a Jellyfin or Emby server sends what plays.
-  Map<String, Object?>? get _stream {
-    final s = _session;
-    if (s == null || s.sources.plan?.serverSession == null) return null;
-    try {
-      return s.sources.streamOptions();
-    } catch (_) {
-      return null;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final reduced = NextMotion.reduced(context);
@@ -186,7 +162,6 @@ class MoreMenuState extends State<MoreMenu> {
                   onOpen: _open,
                   set: _set),
               _Page.playback => _playbackPage(),
-              _Page.quality => _quality(),
               _Page.info => _PlaybackInfo(playback: _playback, onBack: back),
               _Page.danmakuStyle => _danmakuStyle(),
               _Page.blockWords => PlayerSettings(
@@ -195,7 +170,8 @@ class MoreMenuState extends State<MoreMenu> {
                     title: '屏蔽词',
                     onBack: back,
                     children: [
-                      PlayerSettingWords(model: m, setting: 'danmaku.blockWords')
+                      PlayerSettingWords(
+                          model: m, setting: 'danmaku.blockWords')
                     ],
                   ),
                 ),
@@ -217,7 +193,6 @@ class MoreMenuState extends State<MoreMenu> {
         builder: (context, v, _) {
           final (rate, canFit, fit) = v;
           final audio = _audio.where((a) => a.selected).firstOrNull;
-          final stream = _stream;
           return Column(mainAxisSize: MainAxisSize.min, children: [
             PlayerMenuLink(
                 label: '倍速',
@@ -235,13 +210,7 @@ class MoreMenuState extends State<MoreMenu> {
                   onTap: () => _open(_Page.fit)),
             if (_playback.offersDanmaku)
               PlayerMenuLink(label: '弹幕', onTap: () => _open(_Page.danmaku)),
-            if (stream != null)
-              PlayerMenuLink(
-                  label: '清晰度',
-                  value: qualityLabels[stream['quality']],
-                  onTap: () => _open(_Page.quality)),
-            PlayerMenuLink(
-                label: '播放设置', onTap: () => _open(_Page.playback)),
+            PlayerMenuLink(label: '播放设置', onTap: () => _open(_Page.playback)),
             if (_session != null)
               PlayerMenuLink(label: '播放信息', onTap: () => _open(_Page.info)),
             if (_playback.offersScreenshot || _playback.canPictureInPicture)
@@ -269,8 +238,11 @@ class MoreMenuState extends State<MoreMenu> {
                     label: '截取 GIF',
                     onTap: () => _set(() => showNextGifDialog(context, next))),
               if (next.canPictureInPicture)
-                MenuItem(label: next.windows.detached ? '返回主窗口' : '分离窗口',
-                    onTap: () => _set(next.windows.detached ? next.windows.returnToMain : next.detach)),
+                MenuItem(
+                    label: next.windows.detached ? '返回主窗口' : '分离窗口',
+                    onTap: () => _set(next.windows.detached
+                        ? next.windows.returnToMain
+                        : next.detach)),
             ],
           ]);
         },
@@ -278,14 +250,21 @@ class MoreMenuState extends State<MoreMenu> {
 
   Widget _chapters() {
     final chapters = _session?.session?.media.value?.chapters;
-    return _list<int>(title: '章节',
-      options: [for (final (i, c) in (chapters ?? []).indexed)
-        (i, '${c.title.isEmpty ? '章节 ${i + 1}' : c.title} · ${c.startMs ~/ 60000}:${((c.startMs ~/ 1000) % 60).toString().padLeft(2, '0')}')],
-      selected: (_) => false,
-      onTap: (index) => _set(() async {
-        await _playback.inspection.inspect('playback.navigate', {'chapterIndex': index});
-        back();
-      }));
+    return _list<int>(
+        title: '章节',
+        options: [
+          for (final (i, c) in (chapters ?? []).indexed)
+            (
+              i,
+              '${c.title.isEmpty ? '章节 ${i + 1}' : c.title} · ${c.startMs ~/ 60000}:${((c.startMs ~/ 1000) % 60).toString().padLeft(2, '0')}'
+            )
+        ],
+        selected: (_) => false,
+        onTap: (index) => _set(() async {
+              await _playback.inspection
+                  .inspect('playback.navigate', {'chapterIndex': index});
+              back();
+            }));
   }
 
   Widget _list<T>({
@@ -344,7 +323,8 @@ class MoreMenuState extends State<MoreMenu> {
                     onCommit: (text) {
                       final v = double.tryParse(text.trim());
                       if (v == null || v <= 0) return;
-                      _set(() => _playback.setRate(v.clamp(0.01, 5).toDouble()));
+                      _set(
+                          () => _playback.setRate(v.clamp(0.01, 5).toDouble()));
                     },
                   ),
                 ),
@@ -428,35 +408,6 @@ class MoreMenuState extends State<MoreMenu> {
           ],
         ),
       );
-
-  Widget _quality() {
-    final stream = _stream;
-    final session = _session;
-    if (stream == null || session == null) {
-      return _list<String>(
-          title: '清晰度',
-          options: const [],
-          selected: (_) => false,
-          onTap: (_) {});
-    }
-    final qualities = [
-      for (final q in (stream['qualities'] as List?) ?? const [])
-        if (qualityLabels.containsKey(q)) '$q'
-    ]..sort((a, b) => qualityLabels.keys
-        .toList()
-        .indexOf(a)
-        .compareTo(qualityLabels.keys.toList().indexOf(b)));
-    return _list<String>(
-      title: '清晰度',
-      options: [for (final q in qualities) (q, qualityLabels[q]!)],
-      selected: (q) => q == stream['quality'],
-      onTap: (q) {
-        back();
-        _set(() => session.sources
-            .selectStream({'quality': q, 'transcode': q != 'original'}));
-      },
-    );
-  }
 
   /// The rest of Classic's 弹幕设置: outline, shadow, font, colours, how
   /// the tracks are spaced.
@@ -635,8 +586,8 @@ class _DanmakuPageState extends State<_DanmakuPage> {
                 alignment: Alignment.centerLeft,
                 child: PlayerMenuBack('弹幕', onTap: widget.onBack)),
             ConstrainedBox(
-              constraints: BoxConstraints(
-                  maxHeight: math.max(200, math.min(520, room))),
+              constraints:
+                  BoxConstraints(maxHeight: math.max(200, math.min(520, room))),
               child: SingleChildScrollView(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   PlayerMenuRow(
@@ -655,8 +606,8 @@ class _DanmakuPageState extends State<_DanmakuPage> {
                       dial: size,
                       onChanged: (x) =>
                           widget.set(() => _playback.setDanmakuSize(x)),
-                      onEnd: (x) => widget.set(
-                          () => _playback.setDanmakuSize(x, done: true)),
+                      onEnd: (x) => widget
+                          .set(() => _playback.setDanmakuSize(x, done: true)),
                     ),
                   ),
                   if (session != null)
@@ -664,8 +615,8 @@ class _DanmakuPageState extends State<_DanmakuPage> {
                       label: '速度',
                       child: PlayerMenuSlider(
                         label: '速度',
-                        dial: PlayerDial(speed.clamp(0.5, 2).toDouble(), 0.5,
-                            2, 0.05, DialUnit.times),
+                        dial: PlayerDial(speed.clamp(0.5, 2).toDouble(), 0.5, 2,
+                            0.05, DialUnit.times),
                         onChanged: (_) {},
                         onEnd: (x) => _write('danmaku.speedMultiplier', x),
                       ),
@@ -734,16 +685,17 @@ class _DanmakuPageState extends State<_DanmakuPage> {
                         label: '弹幕列表',
                         onTap: () => widget.onOpen(_Page.danmakuList)),
                     PlayerMenuLink(
-                        label: '发送弹幕',
-                        onTap: () => widget.onOpen(_Page.send)),
+                        label: '发送弹幕', onTap: () => widget.onOpen(_Page.send)),
                     const PlayerMenuDivider(),
-                    if (!globals.isTvOS) PlayerSettingAction(
-                        label: '保存为 JSON',
-                        onTap: () => unawaited(_save(xml: false))),
-                    if (!globals.isTvOS) PlayerSettingAction(
-                        label: '保存为 XML',
-                        value: _saved,
-                        onTap: () => unawaited(_save(xml: true))),
+                    if (!globals.isTvOS)
+                      PlayerSettingAction(
+                          label: '保存为 JSON',
+                          onTap: () => unawaited(_save(xml: false))),
+                    if (!globals.isTvOS)
+                      PlayerSettingAction(
+                          label: '保存为 XML',
+                          value: _saved,
+                          onTap: () => unawaited(_save(xml: true))),
                     PlayerSettingAction(
                       label: '恢复默认',
                       onTap: () => widget.set(() async {
@@ -828,8 +780,7 @@ class _DanmakuTracksState extends State<_DanmakuTracks> {
         return Column(mainAxisSize: MainAxisSize.min, children: [
           Align(
               alignment: Alignment.centerLeft,
-              child: PlayerMenuBack(
-                  tracks.isEmpty ? '弹幕轨道' : '弹幕轨道 · $total 条',
+              child: PlayerMenuBack(tracks.isEmpty ? '弹幕轨道' : '弹幕轨道 · $total 条',
                   onTap: widget.onBack)),
           if (tracks.isEmpty)
             SizedBox(
@@ -855,12 +806,13 @@ class _DanmakuTracksState extends State<_DanmakuTracks> {
                   style: NextText.sans(12, color: NextColors.accent)),
             ),
           if (!globals.isTvOS) const PlayerMenuDivider(),
-          if (!globals.isTvOS) MenuItem(
-            label: _adding ? '正在添加…' : '添加弹幕文件…',
-            onTap: () {
-              if (!_adding) unawaited(_add());
-            },
-          ),
+          if (!globals.isTvOS)
+            MenuItem(
+              label: _adding ? '正在添加…' : '添加弹幕文件…',
+              onTap: () {
+                if (!_adding) unawaited(_add());
+              },
+            ),
         ]);
       },
     );
@@ -1005,8 +957,8 @@ class _DanmakuListState extends State<_DanmakuList> {
         SizedBox(
           height: 58,
           child: Center(
-            child: Text('还没有弹幕',
-                style: NextText.sans(13, color: NextColors.p3)),
+            child:
+                Text('还没有弹幕', style: NextText.sans(13, color: NextColors.p3)),
           ),
         )
       else
@@ -1028,8 +980,7 @@ class _DanmakuListState extends State<_DanmakuList> {
                   at: at,
                   text: text,
                   current: at ~/ 1000 == now,
-                  onTap: () =>
-                      widget.playback.seek(Duration(milliseconds: at)),
+                  onTap: () => widget.playback.seek(Duration(milliseconds: at)),
                 );
               },
             ),
@@ -1229,8 +1180,6 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
 
   static String _source(String? kind) => switch (kind) {
         'local' => '本地文件',
-        'jellyfin' => 'Jellyfin',
-        'emby' => 'Emby',
         'mesh' => '其他设备',
         null => '—',
         _ => '网络',
@@ -1304,10 +1253,12 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
         setState(() => _runtimeError = '$error');
       }
     } finally {
-      if (native is ErikaNative && mounted && !driver.fenced &&
+      if (native is ErikaNative &&
+          mounted &&
+          !driver.fenced &&
           identical(driver, _decoderOf)) {
-        _runtimePoll = Timer(const Duration(seconds: 2),
-            () => unawaited(_readRuntime(driver)));
+        _runtimePoll = Timer(
+            const Duration(seconds: 2), () => unawaited(_readRuntime(driver)));
       }
     }
   }
@@ -1344,13 +1295,10 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
         final rows = <(String, String)>[
           if (session != null) ('内核', session.kernelId.label),
           ('来源', _source(plan?.source.kind)),
-          if (plan?.serverSession case final server?)
-            ('串流', server.isTranscoding ? '转码' : '直接播放'),
           if (media != null) ...[
             if (media.format case final f? when f.isNotEmpty)
               ('容器', _container(f)),
-            if (media.width > 0)
-              ('分辨率', '${media.width} × ${media.height}'),
+            if (media.width > 0) ('分辨率', '${media.width} × ${media.height}'),
             if (media.videoCodec case final c? when c.isNotEmpty)
               (
                 '视频',
@@ -1363,7 +1311,10 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
               ),
             if (_range(media.dynamicRange) case final r?) ('动态范围', r),
             if (media.frameRate case final f? when f > 0)
-              ('帧率', '${f.toStringAsFixed(f == f.roundToDouble() ? 0 : 2)} fps'),
+              (
+                '帧率',
+                '${f.toStringAsFixed(f == f.roundToDouble() ? 0 : 2)} fps'
+              ),
             if (media.bitRate case final b? when b > 0) ('码率', _rate(b)),
             if (_decoder case final d?) ('解码', d),
             if (audio != null)
@@ -1388,27 +1339,33 @@ class _PlaybackInfoState extends State<_PlaybackInfo> {
           ],
           ('弹幕', '${p.danmakuPort().registry.length} 条轨道'),
         ];
-        return PlayerSettingsPage(title: '播放信息', onBack: widget.onBack, children: [
-          for (final (label, value) in rows)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                SizedBox(
-                  width: 64,
-                  child: Text(label,
-                      style: NextText.sans(12.5, color: NextColors.p3)),
+        return PlayerSettingsPage(
+            title: '播放信息',
+            onBack: widget.onBack,
+            children: [
+              for (final (label, value) in rows)
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 64,
+                          child: Text(label,
+                              style: NextText.sans(12.5, color: NextColors.p3)),
+                        ),
+                        Expanded(
+                          child: Text(value.isEmpty ? '—' : value,
+                              style: NextText.sans(12.5, color: NextColors.p2)),
+                        ),
+                      ]),
                 ),
-                Expanded(
-                  child: Text(value.isEmpty ? '—' : value,
-                      style: NextText.sans(12.5, color: NextColors.p2)),
-                ),
-              ]),
-            ),
-          const PlayerMenuDivider(),
-          PlayerSettingAction(
-              label: _copied ? '已复制诊断' : '复制诊断',
-              onTap: () => unawaited(_copy())),
-        ]);
+              const PlayerMenuDivider(),
+              PlayerSettingAction(
+                  label: _copied ? '已复制诊断' : '复制诊断',
+                  onTap: () => unawaited(_copy())),
+            ]);
       },
     );
   }

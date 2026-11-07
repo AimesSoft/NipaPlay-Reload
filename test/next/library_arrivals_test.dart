@@ -509,19 +509,15 @@ void main() {
       expect(added.map((f) => f['via']), everyElement('local_scan'));
 
       final remote = await fx.identities.ensureRemoteFile(
-          'jellyfin://item-1', 'jf', {
-        'type': 'jellyfin',
+          'webdav://item-1', 'jf', {
+        'type': 'webdav',
         'serverId': 'srv',
         'itemId': 'item-1',
         'name': 'Episode One'
       });
       final facts = await describeLibraryArrivals(fx.identities, [
         for (final file in added) {...file, 'enteredAt': 'now'},
-        {
-          'path': 'jellyfin://item-1',
-          'via': 'media_source',
-          'enteredAt': 'now'
-        },
+        {'path': 'webdav://item-1', 'via': 'media_source', 'enteredAt': 'now'},
       ]);
       JsonMap byId(String id) => facts.singleWhere((f) => f['fileId'] == id);
 
@@ -542,7 +538,7 @@ void main() {
       expect(unlinked['works'], isEmpty);
 
       final source = byId(remote);
-      expect(source['path'], 'jellyfin://item-1');
+      expect(source['path'], 'webdav://item-1');
       expect(source['via'], 'media_source');
       expect(source['source'],
           containsPair('mediaSource', containsPair('itemId', 'item-1')));
@@ -550,8 +546,7 @@ void main() {
           containsPair('mediaSource', containsPair('sourceId', 'jf')));
     });
 
-    test('只回访可定位到对话的调用，媒体源同步和普通扫描不唤起',
-        () async {
+    test('只回访可定位到对话的调用，媒体源同步和普通扫描不唤起', () async {
       final cause = await causeForHelper();
       final sub = fx.identities.fileChanges
           .listen((file) => followups.libraryFileAdded(file));

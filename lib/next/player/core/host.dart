@@ -159,10 +159,7 @@ final class NextPlayerHost {
       'https',
       'webdav',
       'smb',
-      'jellyfin',
-      'emby',
       'mesh',
-      'dandanplay',
       'rtsp',
       'rtmp',
       'content'
@@ -292,7 +289,8 @@ final class NextPlayerHost {
     final session = _current.value;
     if (key.startsWith('subtitle.')) {
       // The registry kept it in the shared preferences already.
-      unawaited(_readSettings().then((_) => session?.subtitles.lookChanged(_look)));
+      unawaited(
+          _readSettings().then((_) => session?.subtitles.lookChanged(_look)));
       return;
     }
     if (session == null || value is! num) return;

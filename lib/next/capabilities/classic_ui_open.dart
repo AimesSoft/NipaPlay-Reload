@@ -18,13 +18,9 @@ import 'package:nipaplay/settings/pages/webdav_quick_settings_content.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_page.dart';
 import 'package:nipaplay/media_library/adaptive_media_collection_view.dart';
 import 'package:nipaplay/pages/new_series_page.dart';
-import 'package:nipaplay/pages/media_server_detail_page.dart';
-import 'package:nipaplay/models/playable_item.dart';
-import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_window.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tag_search_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/plugin_market_dialog.dart';
-import 'package:nipaplay/themes/nipaplay/widgets/network_media_server_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/webdav_connection_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/smb_connection_dialog.dart';
 import 'classic_home.dart';
@@ -187,54 +183,6 @@ final class ClassicUiOpen {
           ? null
           : {'kind': 'page', 'page': 'new_series', 'presentation': 'window'};
     }
-    if (target['serverItem'] case final Map item) {
-      final provider = item['provider'] as String;
-      final id = item['itemId'] as String;
-      final type = provider == 'jellyfin'
-          ? MediaServerType.jellyfin
-          : MediaServerType.emby;
-      unawaited(
-          MediaServerDetailPage.show(context, id, type).then((result) async {
-        if (result == null) {
-          return;
-        }
-        await PlaybackService().play(PlayableItem(
-            videoPath: result.filePath,
-            title: result.animeName,
-            subtitle: result.episodeTitle,
-            animeId: result.animeId,
-            episodeId: result.episodeId,
-            historyItem: result));
-      }));
-      await WidgetsBinding.instance.endOfFrame;
-      return _find<MediaServerDetailPage>(
-                  (w) => w.mediaId == id && w.serverType == type) ==
-              null
-          ? null
-          : {'kind': 'server_detail', 'provider': provider, 'itemId': id};
-    }
-    if (target['sourceItem'] case final Map item) {
-      if (!await page('home')) return null;
-      final id = (item['animeId'] as num).toInt();
-      if (classicHome()?.openSourceDetail(item['provider'] as String, id) !=
-          true) return null;
-      for (var attempt = 0; attempt < 400; attempt++) {
-        await WidgetsBinding.instance.endOfFrame;
-        final detail = _find<AnimeDetailPage>(
-            (page) => page.animeId == id && page.sharedSummary != null);
-        if (detail != null) {
-          return {
-            'kind': 'source_detail',
-            'provider': item['provider'],
-            'animeId': detail.animeId,
-            'sourceLabel': detail.sharedSourceLabel,
-            'episodeContext': detail.sharedEpisodeLoader != null
-          };
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      }
-      return null;
-    }
     if (target['libraryItem'] case final Map item) {
       final source = item['source'] as String;
       final section = source == 'local' ? 'local_library' : '${source}_library';
@@ -327,12 +275,6 @@ final class ClassicUiOpen {
         home.openHomeDialog(dialog);
       case 'plugin_market':
         unawaited(PluginMarketDialog.show(context));
-      case 'jellyfin_connection' || 'emby_connection':
-        unawaited(NetworkMediaServerDialog.show(
-            context,
-            dialog == 'jellyfin_connection'
-                ? MediaServerType.jellyfin
-                : MediaServerType.emby));
       case 'webdav_connection':
         unawaited(WebDAVConnectionDialog.show(context));
       case 'smb_connection':
@@ -355,10 +297,6 @@ final class ClassicUiOpen {
       'trending' => ['_NipaplayFullTrendingView'],
       'trending_filter' => ['_NipaplayTrendingFilterControls'],
       'plugin_market' => ['PluginMarketDialog'],
-      'jellyfin_connection' || 'emby_connection' => [
-          'NetworkMediaServerDialog',
-          'BlurLoginDialog'
-        ],
       'webdav_connection' => ['_WebDAVForm'],
       'smb_connection' => ['_SMBConnectionForm'],
       'logs' => ['DebugLogViewerPage', 'CupertinoDebugLogViewerSheet'],

@@ -3,8 +3,6 @@ part of 'fake_world.dart';
 /// The search panel's groups over the scripted world: the library (its
 /// works, then this device's other seasons and films, and episode titles);
 /// online, 发现's works and the library's own (some by another name, which
-/// open their library page); and every source on its own: the Jellyfin's
-/// series and episodes, the shares' files (some in no work), and the Emby
 /// that cannot be reached. Each answers after its own delay; [failing] ones
 /// fail on demand. What the library has comes with its picture and its
 /// work's name; a server's other items have theirs fetched on request.
@@ -14,17 +12,7 @@ final class FakeSearch implements NextSearchData {
 
   /// What fails (`search fail=`): `library`, `online`, `sources` (their
   /// list), `artwork` (fetching a source's picture) or a source by its ID.
-  /// At first the Emby, which the library shows as out of reach.
-  final failing = <String>{'emby'};
-
-  /// The pictures a server holds that its search did not bring, by item.
-  final _pictures = <String, String?>{};
-
-  @override
-  Future<String?> sourceArtwork(UiSourceHit hit) async {
-    await _answer('artwork', 450);
-    return _pictures[hit.itemId];
-  }
+  final failing = <String>{};
 
   static bool _matches(UiWork w, String q) =>
       w.title.toLowerCase().contains(q) ||
@@ -115,10 +103,8 @@ final class FakeSearch implements NextSearchData {
   }
 
   static const _delays = {
-    'jellyfin': 720,
     'smb': 380,
     'webdav': 520,
-    'emby': 1100,
   };
 
   @override
@@ -127,14 +113,8 @@ final class FakeSearch implements NextSearchData {
     await Future<void>.delayed(
         Duration(milliseconds: _delays[source.sourceId] ?? 600));
     final q = query.toLowerCase();
-    final shared =
-        source.kind == UiSourceKind.smb || source.kind == UiSourceKind.webdav;
     final fails = failing.contains(source.sourceId);
-    // A server that cannot be reached says nothing; a share still tells
-    // what it held when last seen.
-    if (fails && !shared) return const UiSourceAnswer([], failed: true);
-    final hits =
-        shared ? _files(source, q, reachable: !fails) : _server(source, q);
+    final hits = _files(source, q, reachable: !fails);
     return UiSourceAnswer(hits.take(limit).toList(), failed: fails);
   }
 
@@ -151,58 +131,6 @@ final class FakeSearch implements NextSearchData {
       ...keys.where((k) => !world.catalog.owns(k)),
       ...keys.where(world.catalog.owns),
     ];
-  }
-
-  /// A server's series (the library's when bound, else its own page) and
-  /// the episodes whose titles match.
-  Iterable<UiSourceHit> _server(UiSearchSource source, String q) sync* {
-    final keys = _keys(source.sourceId).toList();
-    for (final key in keys) {
-      final w = world.catalog.work(key);
-      if (!_matches(w, q)) continue;
-      final itemId = '${source.sourceId}:$key';
-      final bound = world.catalog.owns(key);
-      if (!bound) _pictures[itemId] = w.artwork.poster;
-      yield UiSourceHit(
-        source: source,
-        itemId: itemId,
-        kind: UiSourceHitKind.work,
-        title: w.title,
-        work: UiWork(
-            workId: w.workId,
-            title: w.title,
-            originalTitle: w.originalTitle,
-            year: w.year),
-        poster: bound ? w.artwork.poster : null,
-        workTitle: bound ? w.title : null,
-      );
-    }
-    for (final key in keys) {
-      if (!world._meta.containsKey(key)) continue;
-      for (final e in world._episodesOf(key)) {
-        if (!(e.title?.toLowerCase().contains(q) ?? false)) continue;
-        final w = world.catalog.work(key);
-        final itemId = '${source.sourceId}:${e.episodeId}';
-        final bound = world.catalog.owns(key);
-        if (!bound) _pictures[itemId] = e.still;
-        yield UiSourceHit(
-          source: source,
-          itemId: itemId,
-          kind: UiSourceHitKind.episode,
-          title: e.title!,
-          work: UiWork(workId: w.workId, title: w.title),
-          poster: bound ? e.still : null,
-          workTitle: bound ? w.title : null,
-          episode: UiEpisode(
-              episodeId: e.episodeId,
-              workId: w.workId,
-              number: e.number,
-              title: e.title,
-              playable: true),
-          playable: true,
-        );
-      }
-    }
   }
 
   /// A share's files by name: the recognised ones are an episode of their

@@ -151,7 +151,6 @@ import '../settings/settings_page.dart';
 ///   keyboard would (the debounce applies; `wait`, 300 by default, lets
 ///   groups answer before the keys), its keys, the scripted groups or
 ///   sources that fail (`sources`: their list; by default the unreachable
-///   Emby), its recent terms cleared; returns what it shows.
 /// - `manage` [`open=work|episode|none`] [`section=`] [`episode=N`]
 ///   [`tileMenu=N|none`] [`fail=read,search,…|none`] [`conflict=true`]
 ///   [`stale=true`] …: the detail page's management sheets (see
@@ -221,8 +220,7 @@ abstract final class NextUiDebug {
 
   static Future<Map<String, Object?>> _run(Map<String, String> p) async {
     if (const {'key', 'focus', 'playback'}.contains(p['op']) &&
-        (await SharedPreferences.getInstance())
-                .getBool(simulatorPreference) !=
+        (await SharedPreferences.getInstance()).getBool(simulatorPreference) !=
             true) {
       throw StateError('Enable dev_next_debug_extension for remote debugging');
     }

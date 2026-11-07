@@ -28,8 +28,6 @@ const uiDialogs = [
   'ui_preview',
   'build_info',
   'logs',
-  'jellyfin_connection',
-  'emby_connection',
   'webdav_connection',
   'smb_connection',
   'account_login',

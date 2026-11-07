@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/services/nipaplay_lan_discovery.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
@@ -75,77 +74,61 @@ final class DesktopSystem extends WindowListener implements Capability {
             {});
   }
 
-  Future<JsonMap> _discover(int milliseconds) async {
-    final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-    final rows = <String, JsonMap>{};
-    socket.broadcastEnabled = true;
-    final listener = socket.listen((event) {
-      if (event != RawSocketEvent.read) return;
-      Datagram? datagram;
-      while ((datagram = socket.receive()) != null) {
-        final server = NipaPlayLanDiscoveryProtocol.tryParseResponse(datagram!);
-        if (server != null) {
-          rows[server.baseUrl] = {
-            'address': server.baseUrl,
-            'kind': 'nipaplay_shared',
-            'name': server.hostname,
-            'discovery': 'udp_unverified'
-          };
-        }
-      }
-    });
-    try {
-      final packet = NipaPlayLanDiscoveryProtocol.buildRequestBytes();
-      socket.send(
-          packet, InternetAddress('255.255.255.255'), nipaplayLanDiscoveryPort);
-      await Future<void>.delayed(Duration(milliseconds: milliseconds));
-      return {
-        'candidates': rows.values.toList(),
-        'observedAt': DateTime.now().toUtc().toIso8601String(),
-        'registered': false,
-        'protocol':
-            'Classic UDP v1; old servers without discovery responder are not included'
-      };
-    } finally {
-      await listener.cancel();
-      socket.close();
-    }
-  }
-
   @override
   List<Action> get actions => [
         ClassicAction(
-          const ActionSpec(id: 'media.files.reveal', title: '在文件管理器中定位文件',
-            description: 'Reveal authorized native files in the local system file manager. '
-              'Batch results preserve each failure. macOS selects the file, Windows selects it in Explorer; '
-              'Linux opens its containing directory. This is a user-requested window operation. '
-              'Other hosts return unavailable; remote use reveals on that body, not this viewer device.',
-            effect: Effect.write,
-            input: ObjectSchema({'paths': ArraySchema(StringSchema(minLength: 1))}, required: ['paths']),
-            output: ObjectSchema({}, additionalProperties: true)),
-          (input, _) async {
-            final results = <JsonMap>[];
-            for (final path in (input['paths'] as List).cast<String>()) {
-              try {
-                if (!desktop) throw const Failure(FailureCode.unavailable, 'Host has no desktop file manager.');
-                final native = await media.authorizedPath(path);
-                final process = Platform.isMacOS
+            const ActionSpec(
+                id: 'media.files.reveal',
+                title: '在文件管理器中定位文件',
+                description:
+                    'Reveal authorized native files in the local system file manager. '
+                    'Batch results preserve each failure. macOS selects the file, Windows selects it in Explorer; '
+                    'Linux opens its containing directory. This is a user-requested window operation. '
+                    'Other hosts return unavailable; remote use reveals on that body, not this viewer device.',
+                effect: Effect.write,
+                input: ObjectSchema(
+                    {'paths': ArraySchema(StringSchema(minLength: 1))},
+                    required: ['paths']),
+                output: ObjectSchema({}, additionalProperties: true)),
+            (input, _) async {
+          final results = <JsonMap>[];
+          for (final path in (input['paths'] as List).cast<String>()) {
+            try {
+              if (!desktop)
+                throw const Failure(FailureCode.unavailable,
+                    'Host has no desktop file manager.');
+              final native = await media.authorizedPath(path);
+              final process = Platform.isMacOS
                   ? await Process.run('/usr/bin/open', ['-R', native])
                   : Platform.isWindows
-                    ? await Process.run('explorer.exe', ['/select,', native])
-                    : await Process.run('xdg-open', [p.dirname(native)]);
-                if (process.exitCode != 0) throw const Failure(FailureCode.unavailable, 'System file manager rejected the request.');
-                results.add({'index': results.length, 'requested': true,
-                  'mode': Platform.isLinux ? 'directory' : 'select_file'});
-              } on Failure catch (failure) {
-                results.add({'index': results.length, 'requested': false, 'error': failure.toJson()});
-              } on ProcessException {
-                results.add({'index': results.length, 'requested': false,
-                  'error': const Failure(FailureCode.unavailable, 'System file manager is not installed.').toJson()});
-              }
+                      ? await Process.run('explorer.exe', ['/select,', native])
+                      : await Process.run('xdg-open', [p.dirname(native)]);
+              if (process.exitCode != 0)
+                throw const Failure(FailureCode.unavailable,
+                    'System file manager rejected the request.');
+              results.add({
+                'index': results.length,
+                'requested': true,
+                'mode': Platform.isLinux ? 'directory' : 'select_file'
+              });
+            } on Failure catch (failure) {
+              results.add({
+                'index': results.length,
+                'requested': false,
+                'error': failure.toJson()
+              });
+            } on ProcessException {
+              results.add({
+                'index': results.length,
+                'requested': false,
+                'error': const Failure(FailureCode.unavailable,
+                        'System file manager is not installed.')
+                    .toJson()
+              });
             }
-            return {'results': results};
-          }),
+          }
+          return {'results': results};
+        }),
         for (final operation in ['status', 'send', 'list', 'cancel'])
           ClassicAction(
               ActionSpec(
@@ -174,18 +157,6 @@ final class DesktopSystem extends WindowListener implements Capability {
                           : const ObjectSchema({}),
                   output: const ObjectSchema({}, additionalProperties: true)),
               (input, _) => _notification(operation, input)),
-        ClassicAction(
-            const ActionSpec(
-                id: 'media.sources.discover',
-                title: '发现局域网共享来源',
-                description:
-                    '使用 Classic UDP 协议有界发现共享服务器。返回候选与观察时间，不登录、不登记来源；候选由对端声明，尚未验证。',
-                effect: Effect.read,
-                input: ObjectSchema(
-                    {'timeoutMs': IntegerSchema(minimum: 100, maximum: 10000)}),
-                output: ObjectSchema({}, additionalProperties: true)),
-            (input, _) =>
-                _discover((input['timeoutMs'] as num?)?.toInt() ?? 2000)),
         ClassicAction(
             const ActionSpec(
                 id: 'window.bounds.get',
@@ -220,7 +191,9 @@ final class DesktopSystem extends WindowListener implements Capability {
                     'width',
                     'height'
                   ])
-                }, required: ['bounds']),
+                }, required: [
+                  'bounds'
+                ]),
                 output: ObjectSchema({}, additionalProperties: true)),
             (input, _) async {
           if (!desktop) {

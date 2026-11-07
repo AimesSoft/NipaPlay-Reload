@@ -1,13 +1,37 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/media/file_identity_merge.dart';
+import 'package:nipaplay/next/network/observations.dart';
 import 'package:nipaplay/next/capabilities/watched_history.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'media_test_support.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('Classic server transports never enter Next network state', () {
+    NetworkObservations.record('media_server',
+        uri: Uri.parse('https://fixture.invalid'), status: 200);
+    expect(
+        NetworkObservations.facts
+            .where((row) => row['source'] == 'media_server'),
+        isEmpty);
+  });
+  test('Next never imports or calls Classic external media clients', () {
+    final forbiddenImport = RegExp(
+        r'''import\s+['"][^'"]*(?:jellyfin|emby|dandanplay_remote|shared_remote|multi_address_server|media_server_(?:service_base|playback_client)|playback_source_service|remote_subtitle_service)[^'"]*['"]''');
+    final forbiddenCall = RegExp(
+        r'\b(?:JellyfinService|EmbyService|DandanplayRemoteService|SharedRemoteLibraryProvider|SharedRemotePlaybackSyncService)\b');
+    for (final file in Directory('lib/next')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))) {
+      final source = file.readAsStringSync();
+      expect(forbiddenImport.hasMatch(source), isFalse, reason: file.path);
+      expect(forbiddenCall.hasMatch(source), isFalse, reason: file.path);
+    }
+  });
   late MediaFixture f;
   setUp(() async {
     f = MediaFixture();
@@ -18,8 +42,8 @@ void main() {
   test('HTTP history reuses source identity in either arrival order', () async {
     const url = 'http://localhost:1234/video/one';
     final first = await f.identities.ensureFile(url);
-    final remote = await f.identities
-        .ensureRemoteFile(url, 'shared', {'type': 'nipaplay'});
+    final remote =
+        await f.identities.ensureRemoteFile(url, 'shared', {'type': 'webdav'});
     expect(remote, first);
     await f.identities.importLegacy([
       {'filePath': url, 'animeName': ''}
@@ -29,7 +53,7 @@ void main() {
         hasLength(1));
     const secondUrl = 'http://localhost:1234/video/two';
     final second = await f.identities
-        .ensureRemoteFile(secondUrl, 'shared', {'type': 'nipaplay'});
+        .ensureRemoteFile(secondUrl, 'shared', {'type': 'webdav'});
     await f.identities.importLegacy([
       {'filePath': secondUrl, 'animeName': ''}
     ]);
@@ -45,15 +69,28 @@ void main() {
       {'filePath': url, 'animeName': ''}
     ]);
     final db = f.jobs.database;
-    await db.update('media_entities', {'attributes': jsonEncode({'probe': {}, 'bindingRevision': 7})}, where:'id=?', whereArgs:[old]);
-    await db.insert('media_projection_outbox', {'id':'old-projection','file_id':old,'file_revision':0,'binding_revision':7,'payload':'{"receipt":"keep"}','state':'delivered'});
+    await db.update(
+        'media_entities',
+        {
+          'attributes': jsonEncode({'probe': {}, 'bindingRevision': 7})
+        },
+        where: 'id=?',
+        whereArgs: [old]);
+    await db.insert('media_projection_outbox', {
+      'id': 'old-projection',
+      'file_id': old,
+      'file_revision': 0,
+      'binding_revision': 7,
+      'payload': '{"receipt":"keep"}',
+      'state': 'delivered'
+    });
     await db.insert('media_entities', {
       'id': 'source-file',
       'kind': 'file',
       'attributes': jsonEncode({
         'probe': {},
         'bindingRevision': 0,
-        'remoteSource': {'type': 'nipaplay'}
+        'remoteSource': {'type': 'webdav'}
       })
     });
     await db.insert('media_locations', {
@@ -76,9 +113,14 @@ void main() {
         .transaction((tx) => mergeLegacyRemoteFile(tx, 'fixture-device', url));
     expect(await f.identities.ensureFile(url), 'source-file');
     expect((await f.identities.entity(old))['id'], 'source-file');
-    expect(((await f.identities.entity(old))['attributes'] as Map)['bindingRevision'], 7);
-    expect((await db.query('media_projection_outbox')).single['payload'], '{"receipt":"keep"}');
-    expect((await db.query('media_projection_outbox')).single['file_id'], 'source-file');
+    expect(
+        ((await f.identities.entity(old))['attributes']
+            as Map)['bindingRevision'],
+        7);
+    expect((await db.query('media_projection_outbox')).single['payload'],
+        '{"receipt":"keep"}');
+    expect((await db.query('media_projection_outbox')).single['file_id'],
+        'source-file');
     expect(await db.query('media_classic_observations'), observations);
     expect(await db.query('media_legacy_history'), evidence);
     expect(
@@ -100,8 +142,10 @@ void main() {
       'different server scopes remain separate; legacy is not arbitrarily merged',
       () async {
     const url = 'http://localhost:1234/video/reused';
-    await f.identities.ensureRemoteFile(url, 'jellyfin', {'serverId': 'one'});
-    await f.identities.ensureRemoteFile(url, 'jellyfin', {'serverId': 'two'});
+    await f.identities
+        .ensureRemoteFile(url, 'webdav:fixture', {'serverId': 'one'});
+    await f.identities
+        .ensureRemoteFile(url, 'webdav:fixture', {'serverId': 'two'});
     await expectLater(f.identities.ensureFile(url), throwsA(isA<Failure>()));
   });
 

@@ -1,33 +1,24 @@
 import 'dart:async';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/models/media_server_playback.dart' as server;
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
 import 'package:nipaplay/next/player/core/session.dart';
 import 'package:nipaplay/next/player/kernel/driver.dart';
 import 'package:nipaplay/next/player/sources/playback_sources.dart';
 import 'package:nipaplay/next/player/sources/resolver.dart';
-import 'package:nipaplay/next/player/sources/server_progress.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:nipaplay/services/media_server_transport.dart';
 
 import 'fake_driver.dart';
 
 final class _Resolver extends NextSourceResolver {
-  _Resolver({this.remote});
-  final ServerProgress? remote;
+  _Resolver();
   final starts = <Duration?>[];
   Completer<void>? gate;
   @override
   Future<SourcePlan> resolve(PlayableItem item,
-      {Duration? start,
-      JsonMap selection = const {},
-      bool direct = false}) async {
+      {Duration? start, bool direct = false}) async {
     starts.add(start);
     if (gate case final gate?) await gate.future;
     final detail = item.detailContext ??
@@ -44,29 +35,44 @@ final class _Resolver extends NextSourceResolver {
                     videoPath: 'https://test.invalid/$index.mkv',
                     title: 'episode $index')));
     return SourcePlan(
-        item: item,
-        detail: detail,
-        source: ResolvedSource(
-            locator: item.videoPath,
-            uri: 'http://127.0.0.1/media?temporary=secret',
-            kind: 'network',
-            direct: true),
-        progress: remote,
-        selection: remote == null
-            ? const {}
-            : {
-                'mediaSourceId': remote!.session.mediaSourceId,
-                'quality': 'original',
-                'transcode': false,
-                ...selection
-              },
-        serverSession: remote?.session);
+      item: item,
+      detail: detail,
+      source: ResolvedSource(
+          locator: item.videoPath,
+          uri: 'http://127.0.0.1/media?temporary=secret',
+          kind: 'network',
+          direct: true),
+    );
   }
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  test('removed server locators are rejected before resolution', () async {
+    for (final scheme in ['jellyfin', 'emby', 'dandanplay']) {
+      await expectLater(
+          NextSourceResolver()
+              .resolve(PlayableItem(videoPath: '$scheme://fixture')),
+          throwsA(isA<Failure>()));
+    }
+    var episodeLoads = 0;
+    await expectLater(
+        NextSourceResolver().resolve(PlayableItem(
+            videoPath: 'https://fixture.invalid/media',
+            detailContext: PlaybackDetailContext(
+                sourceKind: PlaybackSourceKind.sharedRemoteAnime,
+                sourceLabel: 'retired',
+                sourceKey: 'retired',
+                title: 'retired',
+                isIdentified: false,
+                episodeLoader: () async {
+                  episodeLoads++;
+                  return [];
+                }))),
+        throwsA(isA<Failure>()));
+    expect(episodeLoads, 0);
+  });
   PlayableItem item(int index) =>
       PlayableItem(videoPath: 'https://test.invalid/$index.mkv');
   Future<void> flush() =>
@@ -74,7 +80,8 @@ void main() {
   void end(FakeHost rig) => rig.drivers.last
       .emit((seq, at) => KernelEnded(rig.drivers.last.instance, seq, at));
 
-  test('danmaku preparation precedes opening and stale requests cannot open', () async {
+  test('danmaku preparation precedes opening and stale requests cannot open',
+      () async {
     final rig = FakeHost();
     final sources = PlaybackSources(rig.host, _Resolver());
     addTearDown(sources.dispose);
@@ -126,23 +133,6 @@ void main() {
     await sources.open(item);
     expect(sources.plan!.source.uri, 'http://127.0.0.1/grant-2');
     expect(rig.drivers.first.released, true);
-  });
-
-  test(
-      'Dandanplay stable hash and entry locators resolve through its data client',
-      () async {
-    SharedPreferences.setMockInitialValues(
-        {'dandanplay_remote_base_url': 'http://127.0.0.1:9999'});
-    final resolver = NextSourceResolver();
-    for (final (path, expected) in [
-      ('dandanplay://hash-1', '/api/v1/stream/hash-1'),
-      ('dandanplay://id/entry-2', '/api/v1/stream/id/entry-2')
-    ]) {
-      final plan = await resolver.resolve(PlayableItem(videoPath: path));
-      expect(plan.source.locator, path);
-      expect(Uri.parse(plan.source.uri).path, expected);
-      expect((await plan.detail.episodeLoader()).single.videoPath, path);
-    }
   });
 
   test(
@@ -345,134 +335,5 @@ void main() {
     await rejected;
     expect(rig.drivers, isEmpty);
     expect(rig.host.current.value, null);
-  });
-
-  test(
-      'version and quality changes preserve pause and position, reject foreign tracks',
-      () async {
-    const first = server.PlaybackMediaSource(id: 'v1', mediaStreams: [
-      {'Type': 'Audio', 'Index': 1}
-    ]);
-    const second = server.PlaybackMediaSource(id: 'v2', mediaStreams: [
-      {'Type': 'Audio', 'Index': 5}
-    ]);
-    final remote = ServerProgress(
-        session: server.PlaybackSession(
-            itemId: 'episode',
-            streamUrl: 'unused',
-            isTranscoding: false,
-            mediaSourceId: 'v1',
-            mediaSources: [first, second]),
-        baseUrl: 'https://test.invalid',
-        prefix: '',
-        headers: {},
-        createTransport: () async => MediaServerTransport.fromClient(
-            MockClient((_) async => http.Response('', 204))));
-    final rig = FakeHost();
-    final sources = PlaybackSources(rig.host, _Resolver(remote: remote));
-    addTearDown(sources.dispose);
-    addTearDown(() => rig.host.dispose());
-    await sources.open(item(0));
-    rig.drivers.last.sample(const Duration(seconds: 53));
-    await rig.host.current.value!.setPaused(true, origin: 'test');
-    await sources.selectStream({'audioIndex': 1});
-    await sources.selectStream(
-        {'mediaSourceId': 'v2', 'quality': 'bandwidth1m', 'transcode': true});
-    expect(sources.plan!.selection['mediaSourceId'], 'v2');
-    expect(sources.plan!.selection['audioIndex'], null);
-    expect(sources.plan!.selection['quality'], 'bandwidth1m');
-    expect(rig.host.current.value!.position.inSeconds, 53);
-    expect(rig.host.current.value!.transport.value.playIntent, false);
-    expect(rig.drivers.length, 3);
-    expect(rig.drivers.take(2).every((d) => d.released), true);
-    await expectLater(
-        sources.selectStream({'audioIndex': 1}), throwsA(isA<Failure>()));
-    await expectLater(sources.selectStream({'mediaSourceId': 'missing'}),
-        throwsA(isA<Failure>()));
-    expect(rig.drivers.length, 3);
-  });
-
-  test(
-      'transcode cleanup captures device identity and preserves proxy subpaths',
-      () async {
-    final requests = <http.Request>[];
-    var status = 204;
-    final remote = ServerProgress(
-        session: server.PlaybackSession(
-            itemId: 'episode',
-            streamUrl: 'unused',
-            isTranscoding: true,
-            playSessionId: 'session'),
-        baseUrl: 'https://test.invalid/proxy/emby/',
-        prefix: '/emby',
-        headers: {
-          'X-Emby-Authorization':
-              'MediaBrowser DeviceId="lab-device", Token="private"'
-        },
-        selection: {'audioIndex': 2, 'subtitleIndex': -1},
-        createTransport: () async =>
-            MediaServerTransport.fromClient(MockClient((request) async {
-              requests.add(request);
-              return http.Response('', status);
-            })));
-    await remote.send('progress', {
-      'positionMs': 53000,
-      'paused': false,
-      'muted': true,
-      'volume': 0,
-      'rate': 1.0
-    });
-    expect(requests.first.url.path, '/proxy/emby/Sessions/Playing/Progress');
-    expect(jsonDecode(requests.first.body)['AudioStreamIndex'], 2);
-    await remote.stopTranscoding();
-    expect(requests.last.method, 'DELETE');
-    expect(requests.last.url.path, '/proxy/emby/Videos/ActiveEncodings');
-    expect(requests.last.url.queryParameters,
-        {'DeviceId': 'lab-device', 'PlaySessionId': 'session'});
-    status = 500;
-    await expectLater(remote.stopTranscoding(), throwsStateError);
-  });
-
-  test(
-      'remote heartbeat reports real time, seek, pause and final stop in order',
-      () async {
-    final reports = <(String, JsonMap)>[];
-    final remote = ServerProgress(
-        session: server.PlaybackSession(
-            itemId: 'episode',
-            streamUrl: 'not stored',
-            isTranscoding: false,
-            mediaSourceId: 'version',
-            playSessionId: 'session'),
-        baseUrl: 'http://127.0.0.1:9999',
-        prefix: '',
-        headers: {},
-        createTransport: () async =>
-            MediaServerTransport.fromClient(MockClient((request) async {
-              reports
-                  .add((request.url.path, jsonDecode(request.body) as JsonMap));
-              return http.Response('', 204);
-            })));
-    final rig = FakeHost();
-    final sources = PlaybackSources(rig.host, _Resolver(remote: remote));
-    addTearDown(sources.dispose);
-    final session = await sources.open(item(0));
-    await session.seek(const Duration(minutes: 13), origin: 'test');
-    await Future<void>.delayed(const Duration(milliseconds: 5200));
-    rig.drivers.last.sample(const Duration(seconds: 785));
-    await session.setPaused(true, origin: 'test');
-    await flush();
-    await rig.host.close(reason: 'test');
-    expect(reports.first.$1, '/Sessions/Playing');
-    expect(reports.last.$1, '/Sessions/Playing/Stopped');
-    expect(reports.last.$2['PositionTicks'], 7850000000);
-    expect(reports.last.$2['IsPaused'], true);
-    expect(reports.where((r) => r.$1.endsWith('/Progress')).length,
-        greaterThanOrEqualTo(2));
-    expect(sources.progress!.lastReport!['source'], 'session_clock');
-    expect(sources.progress!.lastError, null);
-    final count = reports.length;
-    await flush();
-    expect(reports.length, count);
   });
 }

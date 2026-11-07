@@ -9,6 +9,7 @@ import 'package:http/io_client.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/remote_control_settings.dart';
+import 'package:nipaplay/services/classic_mode_policy.dart';
 import 'package:nipaplay/services/process_memory_cache.dart';
 import 'package:nipaplay/services/web_remote_access_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
@@ -51,7 +52,16 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
   SharedRemoteLibraryProvider({http.Client Function(Uri uri)? clientFactory})
       : _clientFactory = clientFactory {
+    ClassicModePolicy.addListener(_modeChanged);
     _loadPersistedHosts();
+  }
+
+  void _modeChanged() {
+    if (!ClassicModePolicy.classicActive) {
+      _invalidateLibraryRequest();
+    } else if (!_disposed && !_isInitializing && activeHost != null) {
+      unawaited(refreshLibrary(userInitiated: true));
+    }
   }
 
   // Each request owns and closes the client returned by this factory.
@@ -209,7 +219,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
       }
       if (!_disposed) {
         notifyListeners();
-        if (_activeHostId != null) {
+        if (_activeHostId != null &&
+            await ClassicModePolicy.allowsImplicitWork()) {
           refreshLibrary();
         }
       }
@@ -353,7 +364,8 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
   Future<void> refreshLibrary({bool userInitiated = false}) {
     final host = activeHost;
-    if (_disposed || host == null) {
+    if (_disposed || host == null || !ClassicModePolicy.classicActive) {
+      _cancelLibraryRetry();
       return Future<void>.value();
     }
 
@@ -495,13 +507,15 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
   Duration _scheduleLibraryRetry(SharedRemoteHost host) {
     _cancelLibraryRetry();
+    if (!ClassicModePolicy.classicActive) return Duration.zero;
     const delays = [1, 2, 4, 8, 16, 30];
     final delay = Duration(seconds: delays[_libraryRetryAttempt]);
     if (_libraryRetryAttempt < delays.length - 1) _libraryRetryAttempt++;
     debugPrint('⏳ [共享媒体] ${delay.inSeconds} 秒后自动重试: ${host.baseUrl}');
     _libraryRetryTimer = Timer(delay, () {
       _libraryRetryTimer = null;
-      if (!_disposed &&
+      if (ClassicModePolicy.classicActive &&
+          !_disposed &&
           activeHost?.id == host.id &&
           activeHost?.baseUrl == host.baseUrl) {
         unawaited(refreshLibrary());
@@ -512,6 +526,7 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    ClassicModePolicy.removeListener(_modeChanged);
     _disposed = true;
     _invalidateLibraryRequest();
     super.dispose();
@@ -631,6 +646,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
     final client = _createClient(uri);
     try {
+      if (!ClassicModePolicy.classicActive) {
+        throw StateError('Classic 媒体库在 Next 中暂停。');
+      }
       return await client.get(sanitizedUri, headers: headers).timeout(timeout,
           onTimeout: () {
         throw TimeoutException('请求超时');
@@ -659,6 +677,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
     final client = _createClient(uri);
     try {
+      if (!ClassicModePolicy.classicActive) {
+        throw StateError('Classic 媒体库在 Next 中暂停。');
+      }
       return await client
           .post(
         sanitizedUri,
@@ -690,6 +711,9 @@ class SharedRemoteLibraryProvider extends ChangeNotifier {
 
     final client = _createClient(uri);
     try {
+      if (!ClassicModePolicy.classicActive) {
+        throw StateError('Classic 媒体库在 Next 中暂停。');
+      }
       return await client
           .delete(sanitizedUri, headers: headers)
           .timeout(timeout, onTimeout: () {

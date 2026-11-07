@@ -14,7 +14,13 @@ final class UiOpenValue implements JsonEncodable {
 
 final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
   const UiOpenAction(
-      {this.media, this.openPage, this.openDetail, this.openWork, this.openTarget, this.play, this.resolveEntity});
+      {this.media,
+      this.openPage,
+      this.openDetail,
+      this.openWork,
+      this.openTarget,
+      this.play,
+      this.resolveEntity});
   final Future<JsonMap?> Function(String)? resolveEntity;
   final MediaService Function()? media;
   final Future<bool> Function(String page)? openPage;
@@ -28,12 +34,11 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
         title: '打开页面',
         effect: Effect.write,
         description:
-            'Supply exactly one page, dialog, animeId, serverItem, sourceItem, libraryItem, aboutLink, system, entityId, workId or path. '
+            'Supply exactly one page, dialog, animeId, libraryItem, aboutLink, system, entityId, workId or path. '
             'entityId/workId for a work opens Next details when Next is visible, otherwise follows Classic details. '
             'page=settings accepts subpage (defaults about); page=media_library accepts subpage for library section. '
             'Settings and dialogs use existing Classic forms; user enters secrets. Dialog connection forms add a server; no credentials accepted. '
-            'serverItem={provider:jellyfin|emby,itemId} uses the currently active Classic server. animeId supports direct positive or custom negative Classic IDs. '
-            'sourceItem={provider:nipaplay|dandanplay_remote,animeId} opens Classic shared/remote details with its episode loader on the active Classic source. '
+            'animeId supports positive or custom negative Classic IDs. '
             'libraryItem={source:local|webdav|smb,animeId} follows the Classic library card: records recently opened, clears NEW baseline and passes its episode context. '
             'dialog=quarterly_comment requires reviewAnimeId from discover.home.review; opens the existing Bangumi editor when signed in. '
             'aboutLink=community|repository|qq_group|website|sponsor uses the Classic URL; qr=true displays its QR dialog (TV defaults to QR). '
@@ -47,7 +52,7 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
           'subpage': StringSchema(
               minLength: 1,
               description:
-                  'For settings: appearance/language/general/storage/network/backup_restore/player/danmaku/external_player/shortcuts/remote_access/remote_media_library/downloader/developer_options/labs/plugins/about/webdav_quick. Only currently available Classic pages can open. For media_library: local_library/local_management/webdav_library/webdav_management/smb_library/smb_management/shared_library/shared_management/dandanplay/jellyfin/emby.'),
+                  'For settings: appearance/language/general/storage/network/backup_restore/player/danmaku/external_player/shortcuts/remote_access/remote_media_library/downloader/developer_options/labs/plugins/about/webdav_quick. Only currently available Classic pages can open. For media_library: local_library/local_management/webdav_library/webdav_management/smb_library/smb_management.'),
           'dialog': StringSchema(values: uiDialogs),
           'pluginId': StringSchema(
               minLength: 1,
@@ -58,20 +63,6 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
           'qr': BooleanSchema(),
           'system': StringSchema(values: ['harness', 'logs']),
           'animeId': IntegerSchema(),
-          'serverItem': ObjectSchema({
-            'provider': StringSchema(values: ['jellyfin', 'emby']),
-            'itemId': StringSchema(minLength: 1),
-          }, required: [
-            'provider',
-            'itemId'
-          ]),
-          'sourceItem': ObjectSchema({
-            'provider': StringSchema(values: ['nipaplay', 'dandanplay_remote']),
-            'animeId': IntegerSchema(),
-          }, required: [
-            'provider',
-            'animeId'
-          ]),
           'libraryItem': ObjectSchema({
             'source': StringSchema(values: ['local', 'webdav', 'smb']),
             'animeId': IntegerSchema(),
@@ -119,7 +110,11 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
     return Completed(UiOpenValue({
       'opened': actual['matched'] != false,
       'interface': actual['interface'] ??
-          (nextPlayer ? 'next' : actual['presentation'] == 'system' ? 'system' : 'classic'),
+          (nextPlayer
+              ? 'next'
+              : actual['presentation'] == 'system'
+                  ? 'system'
+                  : 'classic'),
       'target': target,
       'actual': actual,
       'reason': actual['matched'] == false ? '目标界面当前不可用。' : null,
@@ -128,9 +123,13 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
   }
 
   Future<Outcome<UiOpenValue>> _play(
-      JsonMap target, String path, Invocation invocation, {int? startPositionMs}) async {
+      JsonMap target, String path, Invocation invocation,
+      {int? startPositionMs}) async {
     if (play == null) return _unavailable(target, 'Classic 播放界面尚未连接。');
-    final outcome = await play!({'path': path, if (startPositionMs != null) 'startPositionMs': startPositionMs}, invocation);
+    final outcome = await play!({
+      'path': path,
+      if (startPositionMs != null) 'startPositionMs': startPositionMs
+    }, invocation);
     if (outcome is Failed) return Failed(outcome.failure);
     if (outcome is NeedsDecision) return NeedsDecision(outcome.decision);
     final result = (outcome as Completed).value.toJson();
@@ -155,8 +154,6 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
       'page',
       'dialog',
       'animeId',
-      'serverItem',
-      'sourceItem',
       'libraryItem',
       'aboutLink',
       'system',
@@ -187,9 +184,19 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
       throw const Failure(
           FailureCode.invalidInput, 'Unknown settings subpage.');
     }
+    if (target['page'] == 'media_library' &&
+        target['subpage'] != null &&
+        !const {
+          'local_library',
+          'local_management',
+          'webdav_library',
+          'webdav_management',
+          'smb_library',
+          'smb_management'
+        }.contains(target['subpage'])) {
+      throw const Failure(FailureCode.invalidInput, 'Unknown library subpage.');
+    }
     if (target.containsKey('dialog') ||
-        target.containsKey('serverItem') ||
-        target.containsKey('sourceItem') ||
         target.containsKey('libraryItem') ||
         target.containsKey('aboutLink') ||
         target.containsKey('system') ||
@@ -231,19 +238,22 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
     final merged = await resolveEntity?.call(id);
     if (merged != null) {
       if (merged['sourcePlayback'] case final Map result) {
-        return _opened(target, {'kind': 'playback', ...Map<String, Object?>.from(result)});
+        return _opened(
+            target, {'kind': 'playback', ...Map<String, Object?>.from(result)});
       }
       if (merged['workId'] case final String workId) {
         final opened = await openWork?.call(workId);
-        return opened == true ? _opened(target, {'kind': 'work_detail', 'workId': workId, 'interface': 'next'})
+        return opened == true
+            ? _opened(target,
+                {'kind': 'work_detail', 'workId': workId, 'interface': 'next'})
             : _unavailable(target, '作品详情尚未就绪。');
       }
       final path = (merged['url'] ?? merged['path']) as String;
       // Mesh resolves the stable episode and its latest progress in the
       // playback source. Treating this earlier snapshot as an explicit seek
       // overrides the final position saved when reopening the same episode.
-      final meshEpisode = (merged['episodeId'] as String?)
-              ?.startsWith('mesh-episode:') == true;
+      final meshEpisode =
+          (merged['episodeId'] as String?)?.startsWith('mesh-episode:') == true;
       return _play(target, path, invocation,
           startPositionMs: meshEpisode ? null : merged['resumeMs'] as int?);
     }
@@ -254,7 +264,9 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
     if (entity['kind'] == 'work') {
       final opened = await openWork?.call(id);
       if (opened != null) {
-        return opened ? _opened(target, {'kind': 'work_detail', 'workId': id, 'interface': 'next'})
+        return opened
+            ? _opened(target,
+                {'kind': 'work_detail', 'workId': id, 'interface': 'next'})
             : _unavailable(target, '作品详情还没准备好。');
       }
     }
@@ -293,8 +305,7 @@ final class UiOpenAction extends Action<UiOpenValue, UiOpenValue> {
         "WHERE b.entity_id=? AND b.status='accepted' AND o.provider='dandanplay' AND o.object_type IN ('work','anime')",
         [detailEntity['id']]);
     if (bindings.length != 1) {
-      return _unavailable(target,
-          '还没有找到这部作品的详情。');
+      return _unavailable(target, '还没有找到这部作品的详情。');
     }
     final animeId = int.tryParse(bindings.single['external_id'] as String);
     if (animeId == null || animeId == 0) {

@@ -3,21 +3,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/models/server_profile_model.dart';
-import 'package:nipaplay/providers/shared_remote_library_provider.dart';
-import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
-import 'package:nipaplay/services/emby_service.dart';
-import 'package:nipaplay/services/jellyfin_service.dart';
-import 'package:nipaplay/services/media_server_service_base.dart';
-import 'package:nipaplay/services/multi_address_server_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
-import 'package:nipaplay/services/dandanplay_remote_service.dart';
-import 'package:nipaplay/providers/dandanplay_remote_provider.dart';
 import 'package:nipaplay/services/local_media_management_api.dart';
-import '../state/change_history.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,7 +17,7 @@ import 'search.dart';
 import 'source_facts.dart';
 import 'package:nipaplay/services/address_probe.dart';
 
-/// Source configuration and discovery use the same Classic instances and locators.
+/// Source configuration and discovery reuse SMB/WebDAV instances and locators.
 final class MediaSourcesService {
   MediaSourcesService(this.store);
   final IdentityStore store;
@@ -35,40 +25,24 @@ final class MediaSourcesService {
   /// What was last observed of each source, kept across restarts.
   final facts = SourceFacts();
   Future<String> Function(String id)? canonicalEntityId;
-  Future<String?> Function(String sourceId, JsonMap item)? cachedPoster;
-  Future<String?> Function(String sourceId, String itemId)? loadPoster;
   Future<JsonMap> Function(String entityId)? cachedArtwork;
-  Future<JsonMap> search(String query, {List<String>? sourceIds, int limit = 12}) =>
+  Future<JsonMap> search(String query,
+          {List<String>? sourceIds, int limit = 12}) =>
       searchSources(this, query, sourceIds: sourceIds, limit: limit);
-  final profiles = MultiAddressServerService.instance;
   final smb = SMBService.instance;
   final webdav = WebDAVService.instance;
-  SharedRemoteLibraryProvider? shared;
-  DandanplayRemoteProvider? dandanRemoteProvider;
   Future<JsonMap> Function(JsonMap source, String itemId, int? startPositionMs)?
       playItem;
-  Future<void> Function(String type, List<JsonMap> sorts)? applySort;
-  final dandanRemote = DandanplayRemoteService.instance;
   Future<String?> Function(JsonMap source, Future<void> stopped)?
       requestPassword;
-  Future<void> Function(String type, List<String> ids)? updateGuiSelection;
   late TaskEngine _engine;
   TaskEngine get engine => _engine;
   StreamSubscription<Job>? _jobs;
-  Future<void> _cleanup = Future.value();
   set engine(TaskEngine value) {
     _engine = value;
     _jobs = value.changes.listen((job) {
       if (job.type != 'media.sources.login' || !job.state.isTerminal) return;
       _passwords.remove(job.jobId);
-      if (job.input['method'] == 'quickConnect') {
-        final ref = CredentialRef('media_source_login', job.jobId);
-        _cleanup = _cleanup
-            .then((_) => CredentialStore.instance.vault.delete(ref))
-            .catchError((Object error) {
-          CredentialStore.instance.report(ref, error);
-        });
-      }
     });
   }
 
@@ -76,7 +50,6 @@ final class MediaSourcesService {
     if (AddressProbes.observer == facts.probe) AddressProbes.observer = null;
     await facts.flush();
     await _jobs?.cancel();
-    await _cleanup;
     await _tail;
     _passwords.clear();
   }
@@ -89,13 +62,11 @@ final class MediaSourcesService {
   Future<List<String>> syncRoots(String id) async {
     final selected = await selection(id);
     if (selected.isNotEmpty) return selected;
-    final row = await source(id);
-    if (row['type'] != 'jellyfin' && row['type'] != 'emby') return ['/'];
-    return [for (final library in (await libraries(id))['libraries'] as List)
-      (library as Map)['id'] as String];
+    return ['/'];
   }
 
   final _catalogueStarts = <String, Future<void>>{};
+
   /// The first library visit starts discovery in the existing task engine;
   /// showing the first page does not wait for the whole server to be indexed.
   Future<void> ensureCatalogue(String id) async {
@@ -105,10 +76,12 @@ final class MediaSourcesService {
       try {
         final roots = await syncRoots(id);
         if (roots.isEmpty) return;
-        await engine.submit(type: 'media.sources.sync',
-            title: '同步来源目录与资料', input: {
-              'sourceId': id, 'libraries': roots, ...endpointOf(row),
-            });
+        await engine
+            .submit(type: 'media.sources.sync', title: '同步来源目录与资料', input: {
+          'sourceId': id,
+          'libraries': roots,
+          ...endpointOf(row),
+        });
       } catch (_) {
         _catalogueStarts.remove(scope);
         rethrow;
@@ -122,19 +95,9 @@ final class MediaSourcesService {
     return result;
   }
 
-  MediaServerServiceBase server(String type) => switch (type) {
-        'jellyfin' => JellyfinService.instance,
-        'emby' => EmbyService.instance,
-        _ =>
-          throw const Failure(FailureCode.invalidInput, 'Not a media server.'),
-      };
-
   Future<void> initialize() async {
-    await profiles.initialize();
     await smb.initialize();
     await webdav.initialize();
-    await dandanRemote.loadSavedSettings(loadCredentials: false);
-    BodyChanges.seed('source:dandanplay_remote', await _dandanRows());
     facts.exists = _knownProbeTarget;
     AddressProbes.observer = facts.probe;
   }
@@ -145,9 +108,6 @@ final class MediaSourcesService {
     return switch (id.split(':').first) {
       'smb' => smb.getConnectionByIdOrName(reference) != null,
       'webdav' => webdav.getConnectionByIdOrName(reference) != null,
-      'jellyfin' || 'emby' => profiles.getProfileById(reference) != null,
-      'nipaplay' => shared?.hosts.any((h) => h.id == reference) ?? false,
-      'dandanplay_remote' => dandanRemote.serverUrl != null,
       _ => false,
     };
   }
@@ -203,14 +163,6 @@ final class MediaSourcesService {
 
   Future<List<String>> selection(String sourceId) async {
     final prefs = await SharedPreferences.getInstance();
-    final type = sourceId.split(':').first;
-    if (type == 'dandanplay_remote') return ['/'];
-    if (type == 'jellyfin' || type == 'emby') {
-      final service = server(type);
-      if (service.currentProfile?.id == key(sourceId)) {
-        return service.selectedLibraryIds;
-      }
-    }
     return prefs.getStringList('next.source.$sourceId.libraries') ?? [];
   }
 
@@ -218,24 +170,6 @@ final class MediaSourcesService {
   /// addresses, its last sync, its credential and its last failure.
   Future<List<JsonMap>> list({bool withFacts = false}) async {
     final result = <JsonMap>[];
-    for (final profile in profiles.profiles) {
-      final service = server(profile.serverType);
-      result.add({
-        'sourceId': '${profile.serverType}:${profile.id}',
-        'type': profile.serverType,
-        'name': profile.serverName,
-        'url': profile.currentAddress!.normalizedUrl,
-        'username': profile.username,
-        'connected':
-            service.currentProfile?.id == profile.id && service.isConnected,
-        'addresses': [
-          for (final address in profile.addresses) address.toJson()
-        ],
-        'currentAddressId': service.currentProfile?.id == profile.id
-            ? service.currentAddressId
-            : profile.currentAddress?.id,
-      });
-    }
     for (final c in smb.connections) {
       final effective = smb.effectiveConnection(c);
       result.add({
@@ -266,35 +200,6 @@ final class MediaSourcesService {
         'connected': c.isConnected
       });
     }
-    for (final host in shared?.hosts ?? []) {
-      final uri = Uri.parse(host.baseUrl);
-      final savedUsername = await shared!.hostUsername(host.id);
-      result.add({
-        'sourceId': 'nipaplay:${host.id}',
-        'type': 'nipaplay',
-        'name': host.displayName,
-        'url': uri.replace(userInfo: '').toString(),
-        'username': savedUsername.isNotEmpty
-            ? savedUsername
-            : Uri.decodeComponent(uri.userInfo.split(':').first),
-        'connected': host.isOnline,
-        'isActive': shared!.activeHostId == host.id,
-        'lastConnected': host.lastConnectedAt?.toIso8601String(),
-        'error': host.lastError,
-      });
-    }
-    if (dandanRemote.serverUrl != null) {
-      result.add({
-        'sourceId': 'dandanplay_remote:classic',
-        'type': 'dandanplay_remote',
-        'name': '弹弹play',
-        'url': dandanRemote.serverUrl,
-        'username': '',
-        'connected': dandanRemote.isConnected,
-        'lastSyncedAt': dandanRemote.lastSyncedAt?.toIso8601String(),
-        'error': dandanRemote.lastError
-      });
-    }
     for (final source in result) {
       source.putIfAbsent('address', () => source['url']);
       source['selectedLibraries'] =
@@ -312,8 +217,6 @@ final class MediaSourcesService {
     }
     return result;
   }
-
-  static String? _time(DateTime? value) => value?.toUtc().toIso8601String();
 
   static JsonMap _entry(String role, String address, JsonMap? fact,
       {String? label, bool? enabled}) {
@@ -340,8 +243,9 @@ final class MediaSourcesService {
     final id = source['sourceId'] as String;
     final type = source['type'] as String;
     final saved = await facts.read(id);
-    final probed = ((saved['addresses'] as Map?) ?? const {})
-        .map((key, value) => MapEntry('$key', (value as Map).cast<String, Object?>()));
+    final probed = ((saved['addresses'] as Map?) ?? const {}).map(
+        (key, value) =>
+            MapEntry('$key', (value as Map).cast<String, Object?>()));
     final addresses = <JsonMap>[];
     if (type == 'smb' || type == 'webdav') {
       final classic = type == 'smb'
@@ -350,9 +254,8 @@ final class MediaSourcesService {
       JsonMap? fallback(bool? reachable) =>
           reachable == null ? null : {'reachable': reachable};
       for (final role in ['lan', 'wan']) {
-        final address = (role == 'lan' ? source['url'] : source['wanUrl'])
-                as String? ??
-            '';
+        final address =
+            (role == 'lan' ? source['url'] : source['wanUrl']) as String? ?? '';
         if (address.isEmpty) continue;
         addresses.add(_entry(
             role,
@@ -360,43 +263,6 @@ final class MediaSourcesService {
             probed[role] ??
                 fallback(role == 'lan' ? classic?.lan : classic?.wan)));
       }
-    } else if (type == 'jellyfin' || type == 'emby') {
-      final profile = profiles.getProfileById(key(id));
-      for (final address in profile?.addresses ?? const []) {
-        final fact = probed[address.id];
-        final ok = address.lastSuccessTime;
-        final failed = address.lastFailureTime;
-        addresses.add(_entry(
-            address.id,
-            address.normalizedUrl,
-            fact ??
-                (ok == null && failed == null
-                    ? null
-                    : {
-                        'reachable': failed == null ||
-                            (ok != null && ok.isAfter(failed)),
-                        'lastAttemptAt': _time(
-                            ok != null && (failed == null || ok.isAfter(failed))
-                                ? ok
-                                : failed),
-                        'lastSuccessAt': _time(ok),
-                        'lastFailureAt': _time(failed),
-                      }),
-            label: address.name,
-            enabled: address.isEnabled)
-          ..['failureCount'] = address.failureCount);
-      }
-    } else {
-      final fact = probed['address'] ??
-          (type == 'nipaplay' && source['lastConnected'] != null
-              ? {
-                  'reachable': source['connected'] == true,
-                  'lastAttemptAt': source['lastConnected'],
-                  if (source['connected'] == true)
-                    'lastSuccessAt': source['lastConnected'],
-                }
-              : null);
-      addresses.add(_entry('address', source['url'] as String? ?? '', fact));
     }
     source['addresses'] = addresses;
     final check = (saved['check'] as Map?)?.cast<String, Object?>();
@@ -448,10 +314,6 @@ final class MediaSourcesService {
     final id = source['sourceId'] as String;
     final username = source['username'] as String? ?? '';
     switch (source['type']) {
-      case 'jellyfin':
-      case 'emby':
-        final profile = profiles.getProfileById(key(id));
-        return profile == null ? false : await profile.hasAccessToken();
       case 'smb':
         final held = await smb.getConnectionByIdOrName(key(id))?.hasPassword();
         return held == true ? true : (username.isEmpty ? null : false);
@@ -459,15 +321,8 @@ final class MediaSourcesService {
         final held =
             await webdav.getConnectionByIdOrName(key(id))?.hasPassword();
         return held == true ? true : (username.isEmpty ? null : false);
-      case 'nipaplay':
-        if (username.isEmpty) return null;
-        return (await SharedPreferences.getInstance()).containsKey(
-            'shared_remote_credential_origin.${key(id)}');
       default:
-        final token = (await SharedPreferences.getInstance())
-            .getString('dandanplay_remote_api_token');
-        if (token != null && token.isNotEmpty) return true;
-        return dandanRemote.tokenRequired ? false : null;
+        return null;
     }
   }
 
@@ -496,11 +351,6 @@ final class MediaSourcesService {
 
   String key(String id) => id.substring(id.indexOf(':') + 1);
 
-  SharedRemoteLibraryProvider get sharing =>
-      shared ??
-      (throw const Failure(
-          FailureCode.unavailable, 'The NipaPlay sharing UI is not attached.'));
-
   Future<JsonMap> configure(JsonMap input, {bool update = false}) =>
       serial(() async {
         final old = update ? await source(input['sourceId'] as String) : null;
@@ -510,15 +360,7 @@ final class MediaSourcesService {
         final username =
             input['username'] as String? ?? old?['username'] as String? ?? '';
         String id;
-        if (type == 'dandanplay_remote') {
-          if (!update && dandanRemote.serverUrl != null) {
-            throw const Failure(FailureCode.conflict,
-                'Classic supports one Dandanplay remote source; use update.');
-          }
-          await dandanRemote.configureAddress(validateUrl(
-              input['url'] as String? ?? old?['url'] as String? ?? ''));
-          id = 'dandanplay_remote:classic';
-        } else if (type == 'smb') {
+        if (type == 'smb') {
           final previous = old == null
               ? null
               : smb.getConnectionByIdOrName(key(old['sourceId'] as String))!;
@@ -603,96 +445,9 @@ final class MediaSourcesService {
                   password: '');
           await webdav.configureConnection(c);
           id = 'webdav:${c.id}';
-        } else if (type == 'nipaplay') {
-          final url = validateUrl(
-              input['url'] as String? ?? old?['url'] as String? ?? '');
-          if (old == null) {
-            final host = await sharing.addHost(displayName: name, baseUrl: url);
-            id = 'nipaplay:${host.id}';
-            await sharing.configureHostCredentials(host.id, username);
-          } else {
-            id = old['sourceId'] as String;
-            final host = sharing.hosts.firstWhere((h) => h.id == key(id));
-            final legacy = Uri.parse(host.baseUrl);
-            if (url != old['url'] && legacy.userInfo.isNotEmpty) {
-              final separator = legacy.userInfo.indexOf(':');
-              await sharing.configureHostCredentials(
-                  host.id,
-                  Uri.decodeComponent(separator < 0
-                      ? legacy.userInfo
-                      : legacy.userInfo.substring(0, separator)),
-                  password: separator < 0
-                      ? ''
-                      : Uri.decodeComponent(
-                          legacy.userInfo.substring(separator + 1)));
-            }
-            await sharing.renameHost(key(id), name);
-            if (url != old['url']) await sharing.updateHostUrl(key(id), url);
-            if (username != old['username']) {
-              await sharing.configureHostCredentials(key(id), username);
-            }
-          }
         } else {
-          final service = server(type);
-          final url = validateUrl(
-              input['url'] as String? ?? old?['url'] as String? ?? '');
-          if (old == null) {
-            final existing = profiles.findProfile(
-                serverType: type, username: username, serverUrl: url);
-            if (existing != null) {
-              throw const Failure(FailureCode.conflict,
-                  'Source already configured; use update.');
-            }
-            final profile = (await profiles.addProfile(
-                serverName: name,
-                serverType: type,
-                url: url,
-                username: username,
-                serverId: await service.identifySource(url)))!;
-            await profiles.persistProfiles();
-            id = '$type:${profile.id}';
-          } else {
-            id = old['sourceId'] as String;
-            final profile = profiles.getProfileById(key(id))!;
-            final address = profile.currentAddress!;
-            final changed = url != old['url'] || username != old['username'];
-            if (changed) {
-              final serverId = await service.identifySource(url);
-              if (profile.addresses.length > 1 &&
-                  serverId != profile.serverId) {
-                throw const Failure(FailureCode.conflict,
-                    'This profile has multiple addresses; add a separate source for another server.');
-              }
-              // A changed endpoint/account needs a new login; preserve the old vault entry.
-              final replacement = ServerProfile(
-                  id: profile.id,
-                  serverName: name,
-                  serverType: type,
-                  username: username,
-                  serverId: serverId,
-                  addresses: [
-                    for (final saved in profile.addresses)
-                      saved.id == address.id ? saved.copyWith(url: url) : saved
-                  ]);
-              await profiles.updateProfile(replacement);
-              await profiles.persistProfiles();
-              if (service.currentProfile?.id == profile.id) {
-                service.isConnected = false;
-                service.isReady = false;
-                service.accessToken = null;
-                service.currentProfile = replacement;
-                service.serverUrl = url;
-                service.username = username;
-              }
-            } else {
-              final replacement = profile.copyWith(serverName: name);
-              await profiles.updateProfile(replacement);
-              await profiles.persistProfiles();
-              if (service.currentProfile?.id == profile.id) {
-                service.currentProfile = replacement;
-              }
-            }
-          }
+          throw const Failure(
+              FailureCode.invalidInput, 'Choose SMB or WebDAV.');
         }
         await (await SharedPreferences.getInstance())
             .remove('next.source.$id.lastError');
@@ -704,139 +459,46 @@ final class MediaSourcesService {
             await facts.reset(id);
           }
         }
-        await observeDandan();
         return {'source': await source(id)};
       });
 
   Future<JsonMap> remove(String id) => serial(() async {
         final row = await source(id);
         switch (row['type']) {
-          case 'dandanplay_remote':
-            if (dandanRemoteProvider != null) {
-              await dandanRemoteProvider!.disconnect();
-            } else {
-              await dandanRemote.disconnect();
-            }
           case 'smb':
             await smb.removeConnection(row['name'] as String);
             await smb.persistConnections();
           case 'webdav':
             await webdav.removeConnection(row['name'] as String);
             await webdav.persistConnections();
-          case 'nipaplay':
-            await sharing.removeHostCredentials(key(id));
-            await sharing.removeHost(key(id));
-          default:
-            final service = server(row['type'] as String);
-            if (service.currentProfile?.id == key(id)) {
-              await service.disconnect();
-            } else {
-              await profiles.deleteProfile(key(id));
-            }
-            await profiles.persistProfiles();
         }
         await (await SharedPreferences.getInstance())
             .remove('next.source.$id.libraries');
         await (await SharedPreferences.getInstance())
             .remove('next.source.$id.lastError');
         await facts.clear(id);
-        await observeDandan();
         return {'sourceId': id, 'removed': true, 'indexedFilesPreserved': true};
       });
 
-  Future<void> activate(JsonMap row) async {
-    final type = row['type'] as String;
-    final id = row['sourceId'] as String;
-    if (type == 'jellyfin' || type == 'emby') {
-      final service = server(type);
-      if (service.currentProfile?.id != key(id) || !service.isConnected) {
-        final selected = await selection(id);
-        await service.activateProfile(profiles.getProfileById(key(id))!);
-        await applySelection(type, selected);
-      }
-      if (!service.isConnected) {
-        throw const Failure(
-            FailureCode.unavailable, 'Login is required for this source.');
-      }
-    } else if (type == 'dandanplay_remote') {
-      if (dandanRemoteProvider != null) {
-        await dandanRemoteProvider!.activateSavedConnection();
-      } else if (!dandanRemote.isConnected) {
-        await dandanRemote.loadSavedSettings();
-      }
-      if (!dandanRemote.isConnected) {
-        throw const Failure(
-            FailureCode.unavailable, 'Log in to the Dandanplay remote source.');
-      }
-    } else if (type == 'nipaplay') {
-      if (sharing.activeHostId != key(id)) await sharing.setActiveHost(key(id));
-    }
-  }
-
   Future<JsonMap> play(String sourceId, String itemId,
-      {int? startPositionMs, String? expectedServerId}) => serial(() async {
-    final row = await source(sourceId);
-    if (expectedServerId != null &&
-        (row['type'] == 'dandanplay_remote' ? row['url'] : profiles.getProfileById(key(sourceId))?.serverId) != expectedServerId) {
-      throw const Failure(FailureCode.conflict, 'Source now points to a different server.');
-    }
-    await activate(row);
-    final play = playItem;
-    if (play == null) throw const Failure(FailureCode.unavailable, 'The NipaPlay player is not attached.');
-    return play(row,itemId,startPositionMs);
-  });
+          {int? startPositionMs}) =>
+      serial(() async {
+        final row = await source(sourceId);
+        final play = playItem;
+        if (play == null)
+          throw const Failure(
+              FailureCode.unavailable, 'The NipaPlay player is not attached.');
+        return play(row, itemId, startPositionMs);
+      });
 
   Future<JsonMap> libraries(String id) => serial(() async {
         final row = await source(id);
-        await activate(row);
         final result = <JsonMap>[];
-        switch (row['type']) {
-          case 'dandanplay_remote':
-            await refreshDandanRemote();
-            for (final animeId
-                in dandanRemote.cachedEpisodes.map((e) => e.animeId).toSet()) {
-              final episode = dandanRemote.cachedEpisodes
-                  .firstWhere((e) => e.animeId == animeId);
-              result.add({
-                'id': '${animeId ?? 'unmatched'}',
-                'name': episode.animeTitle,
-                'kind': 'series'
-              });
-            }
-          case 'jellyfin':
-          case 'emby':
-            for (final l
-                in await server(row['type'] as String).catalogLibraries()) {
-              result.add({
-                'id': l['Id'],
-                'name': l['Name'],
-                'kind': l['CollectionType'] ?? 'mixed'
-              });
-            }
-          case 'nipaplay':
-            await sharing.refreshLibrary(userInitiated: true);
-            if (!sharing.hasReachableActiveHost) {
-              throw const Failure(
-                  FailureCode.unavailable, 'Shared library is offline.');
-            }
-            for (final anime in sharing.animeSummaries) {
-              result.add({
-                'id': '${anime.animeId}',
-                'name': anime.nameCn ?? anime.name,
-                'kind': 'series'
-              });
-            }
-          default:
-            for (final entry in await _browse(row, '/',
-                recursive: false, indexFiles: false)) {
-              if (entry['isDirectory'] == true) {
-                result.add({
-                  'id': entry['id'],
-                  'name': entry['name'],
-                  'kind': 'folder'
-                });
-              }
-            }
+        for (final entry in await _browse(row, '/', indexFiles: false)) {
+          if (entry['isDirectory'] == true) {
+            result.add(
+                {'id': entry['id'], 'name': entry['name'], 'kind': 'folder'});
+          }
         }
         return {
           'sourceId': id,
@@ -860,10 +522,6 @@ final class MediaSourcesService {
       }
       await (await SharedPreferences.getInstance())
           .setStringList('next.source.$id.libraries', ids);
-      if (row['type'] == 'jellyfin' || row['type'] == 'emby') {
-        await activate(row);
-        await applySelection(row['type'] as String, ids);
-      }
       return {'sourceId': id, 'selectedLibraries': ids};
     });
   }
@@ -877,7 +535,6 @@ final class MediaSourcesService {
       final code = failureCode(error);
       final latency = clock.elapsedMilliseconds;
       await facts.checked(id, ok: false, errorCode: code, latencyMs: latency);
-      _probed(target, false, latency, code);
       await serial(() async {
         final row = await source(id);
         if (!sameEndpoint(row, target)) {
@@ -898,7 +555,6 @@ final class MediaSourcesService {
     }
     final latency = clock.elapsedMilliseconds;
     await facts.checked(id, ok: true, latencyMs: latency);
-    _probed(target, true, latency, null);
     return serial(() async {
       final row = await source(id);
       if (!sameEndpoint(row, target)) {
@@ -914,23 +570,8 @@ final class MediaSourcesService {
       }
       await (await SharedPreferences.getInstance())
           .remove('next.source.$id.lastError');
-      await observeDandan();
       return {'source': await source(id), 'checked': true};
     });
-  }
-
-  /// Sources with one address and no probe of their own: a check is the
-  /// observation of that address.
-  void _probed(JsonMap row, bool reachable, int latencyMs, String? code) {
-    if (row['type'] != 'nipaplay' && row['type'] != 'dandanplay_remote') return;
-    facts.probe(AddressProbe(
-        sourceId: row['sourceId'] as String,
-        role: 'address',
-        address: row['url'] as String? ?? '',
-        at: DateTime.now().toUtc(),
-        reachable: reachable,
-        latencyMs: latencyMs,
-        errorCode: code));
   }
 
   Future<JsonMap> testConfiguration(JsonMap input) async {
@@ -976,81 +617,8 @@ final class MediaSourcesService {
           password: ''));
       return {'connected': connected, 'authenticated': false};
     }
-    final url = validateUrl(input['url'] as String? ?? '');
-    if (type == 'dandanplay_remote') {
-      return dandanRemote.probeUrl(url);
-    }
-    if (type == 'nipaplay') {
-      return {'connected': await sharing.probeLibraryUrl(url)};
-    }
-    return {
-      'connected': true,
-      'serverId': await server(type).identifySource(url),
-      'authenticated': false
-    };
+    throw const Failure(FailureCode.invalidInput, 'Choose SMB or WebDAV.');
   }
-
-  Future<void> applySelection(String type, List<String> ids) =>
-      updateGuiSelection?.call(type, ids) ??
-      server(type).updateSelectedLibraries(ids);
-
-  Future<void> refreshDandanRemote() async {
-    if (dandanRemoteProvider != null) {
-      await dandanRemoteProvider!.refresh();
-    } else {
-      await dandanRemote.refreshLibrary(force: true);
-    }
-    await observeDandan();
-  }
-
-  Future<JsonMap> sort(JsonMap input) => serial(() async {
-        final row = await source(input['sourceId'] as String);
-        final type = row['type'] as String;
-        server(type);
-        final apply = applySort;
-        if (apply == null) {
-          throw const Failure(FailureCode.unavailable,
-              'The Classic library provider is not attached.');
-        }
-        final sorts = (input['sorts'] as List)
-            .map((v) => Map<String, Object?>.from(v as Map))
-            .toList();
-        if (sorts.isEmpty) {
-          throw const Failure(
-              FailureCode.invalidInput, 'Supply nonempty sorts.');
-        }
-        final prefs = await SharedPreferences.getInstance();
-        final before = jsonDecode(
-            prefs.getString('${type}_library_sort_settings') ?? '{}');
-        BodyChanges.seed('source_sort:$type', [
-          {'id': type, 'sorts': before}
-        ]);
-        await activate(row);
-        await apply(type, sorts);
-        final after =
-            jsonDecode(prefs.getString('${type}_library_sort_settings') ?? '{}')
-                as Map;
-        for (final sort in sorts) {
-          final saved = after[sort['libraryId']] as Map?;
-          if (saved?['sortBy'] != sort['sortBy'] ||
-              saved?['sortOrder'] != sort['sortOrder']) {
-            throw const Failure(FailureCode.unavailable,
-                'Classic did not save the library sort preference.');
-          }
-        }
-        BodyChanges.observe('source_sort:$type', [
-          {'id': type, 'sorts': after}
-        ]);
-        return {'sourceId': row['sourceId'], 'sorts': after};
-      });
-
-  Future<List<JsonMap>> _dandanRows() async => [
-        for (final row in await list())
-          if (row['type'] == 'dandanplay_remote')
-            {'id': row['sourceId'], ...row}
-      ];
-  Future<void> observeDandan() async =>
-      BodyChanges.observe('source:dandanplay_remote', await _dandanRows());
 
   Future<void> scrape(JobContext context) async {
     final id = context.job.input['sourceId'] as String;
@@ -1079,116 +647,11 @@ final class MediaSourcesService {
   }
 
   Future<List<JsonMap>> _browse(JsonMap row, String? parent,
-      {required bool recursive,
-      bool indexFiles = true,
-      List<String>? itemIds,
-      String? searchTerm,
-      String sortBy = 'SortName',
-      String sortOrder = 'Ascending'}) async {
+      {bool indexFiles = true}) async {
     final id = row['sourceId'] as String;
     final type = row['type'] as String;
     final result = <JsonMap>[];
-    if (type == 'jellyfin' || type == 'emby') {
-      final items = await server(type).browseCatalog(
-          parentId: parent,
-          recursive: recursive,
-          fields: catalogMetadataFields,
-          searchTerm: searchTerm,
-          sortBy: sortBy,
-          sortOrder: sortOrder,
-          itemIds: itemIds);
-      for (final item in items) {
-        final folder = item['IsFolder'] == true ||
-            {'CollectionFolder', 'Folder', 'Series', 'Season'}
-                .contains(item['Type']);
-        result.add({
-          'id': item['Id'],
-          'name': item['Name'],
-          'kind': item['Type'],
-          'isDirectory': folder,
-          'size': null,
-          'path': folder ? null : '$type://${item['Id']}',
-          'parentId': item['ParentId'],
-          'seriesId': item['SeriesId'],
-          'seasonId': item['SeasonId'],
-          'number': item['IndexNumber'],
-          'seasonNumber': item['ParentIndexNumber'],
-          'metadata': serverMetadata(item),
-        });
-      }
-    } else if (type == 'dandanplay_remote') {
-      await dandanRemote.refreshLibrary();
-      result.addAll(dandanCatalogEntries(dandanRemote.cachedEpisodes, parent,
-          itemIds: itemIds, serverId: row['url'] as String?));
-    } else if (type == 'nipaplay') {
-      if (parent == null) {
-        for (final anime in sharing.animeSummaries) {
-          result.add({
-            'id': '${anime.animeId}',
-            'name': anime.nameCn ?? anime.name,
-            'kind': 'Series',
-            'isDirectory': true,
-            'size': null,
-            'path': null,
-            'metadata': {
-              'Overview': anime.summary,
-              'imageUrl': anime.imageUrl,
-              'animeId': anime.animeId,
-              'lastWatchTime': anime.lastWatchTime.toIso8601String(),
-              'episodeCount': anime.episodeCount,
-              'hasMissingFiles': anime.hasMissingFiles
-            }
-          });
-        }
-      } else if (int.tryParse(parent) == null) {
-        for (final entry in await sharing.browseRemoteDirectory(parent)) {
-          if (!entry.isDirectory && !sharing.isRemoteFilePlayable(entry)) {
-            continue;
-          }
-          result.add({
-            'id': entry.path,
-            'name': entry.name,
-            'kind': entry.isDirectory ? 'Folder' : 'File',
-            'isDirectory': entry.isDirectory,
-            'size': entry.size,
-            'path': entry.isDirectory
-                ? null
-                : sharing
-                    .buildRemoteFileStreamUri(entry.path)
-                    .replace(userInfo: '')
-                    .toString()
-          });
-        }
-      } else {
-        final animeId = int.parse(parent);
-        for (final episode
-            in await sharing.loadAnimeEpisodes(animeId, force: true)) {
-          result.add({
-            'id': episode.shareId,
-            'name': episode.title,
-            'kind': 'Episode',
-            'isDirectory': false,
-            'size': episode.fileSize,
-            'path': sharing
-                .buildStreamUri(episode)
-                .replace(userInfo: '')
-                .toString(),
-            'metadata': {
-              'animeId': episode.animeId,
-              'episodeId': episode.episodeId,
-              'duration': episode.duration,
-              'lastPosition': episode.lastPosition,
-              'progress': episode.progress,
-              'watched': episode.watched,
-              'lastWatchTime': episode.lastWatchTime?.toIso8601String(),
-              'videoHash': episode.videoHash,
-              'fileExists': episode.fileExists,
-              'fileName': episode.fileName
-            }
-          });
-        }
-      }
-    } else {
+    {
       final path = parent ?? '/';
       final uri = Uri.parse(path);
       if (!path.startsWith('/') ||
@@ -1246,18 +709,8 @@ final class MediaSourcesService {
         }
       }
     }
-    if (searchTerm != null && type != 'jellyfin' && type != 'emby') {
-      final term = searchTerm.toLowerCase();
-      result.removeWhere((e) =>
-          !(e['name'] as String).toLowerCase().contains(term) &&
-          !((e['metadata'] as Map?)?['animeTitle'] as String? ?? '')
-              .toLowerCase()
-              .contains(term));
-    }
     final observedAt = DateTime.now().toUtc().toIso8601String();
     for (final entry in result) {
-      if (type == 'jellyfin' || type == 'emby') entry['serverId'] = server(type).currentProfile?.serverId;
-      if (type == 'dandanplay_remote') entry['serverId'] = row['url'];
       entry['provenance'] =
           sourceProvenance(row, entry['id'] as String, observedAt);
       entry['fileId'] = entry['path'] == null || !indexFiles
@@ -1276,8 +729,10 @@ final class MediaSourcesService {
       final records = <JsonMap>[];
       for (final entry in result) {
         if (entry['kind'] == 'File' &&
-            (type == 'smb' ? !smb.isVideoFile(entry['name'] as String) :
-             type == 'webdav' && !webdav.isVideoFile(entry['name'] as String))) continue;
+            (type == 'smb'
+                ? !smb.isVideoFile(entry['name'] as String)
+                : type == 'webdav' &&
+                    !webdav.isVideoFile(entry['name'] as String))) continue;
         final native = sourceCatalogRecords(id, entry);
         records.addAll(native);
         if (native.isNotEmpty) entry['workId'] = native.first['id'];
@@ -1289,29 +744,14 @@ final class MediaSourcesService {
     return result;
   }
 
-  Future<JsonMap> browse(String id, String? parent,
-          {bool recursive = false,
-          JsonMap? expected,
-          String? searchTerm,
-          String sortBy = 'SortName',
-          String sortOrder = 'Ascending'}) =>
+  Future<JsonMap> browse(String id, String? parent, {JsonMap? expected}) =>
       serial(() async {
         final row = await source(id);
-        if (expected != null &&
-            !holdsEndpoint(row, expected)) {
+        if (expected != null && !holdsEndpoint(row, expected)) {
           throw const Failure(FailureCode.conflict,
               'Source changed during synchronization; submit a new sync.');
         }
-        await activate(row);
-        if (recursive && row['type'] != 'jellyfin' && row['type'] != 'emby') {
-          throw const Failure(FailureCode.invalidInput,
-              'Recursive directory discovery uses media.sources.sync.');
-        }
-        final entries = await _browse(row, parent,
-            recursive: recursive,
-            searchTerm: searchTerm,
-            sortBy: sortBy,
-            sortOrder: sortOrder);
+        final entries = await _browse(row, parent);
         return {'sourceId': id, 'entries': entries, 'total': entries.length};
       });
 
@@ -1321,44 +761,9 @@ final class MediaSourcesService {
               FailureCode.invalidInput, 'Supply nonempty itemIds.');
         }
         final row = await source(id);
-        if (!{
-          'jellyfin',
-          'emby',
-          'smb',
-          'webdav',
-          'dandanplay_remote',
-          'nipaplay'
-        }.contains(row['type'])) {
-          throw const Failure(FailureCode.invalidInput,
-              'Item query supports Jellyfin, Emby, SMB and WebDAV sources.');
-        }
-        await activate(row);
         final entries = <JsonMap>[];
         final wanted = itemIds.toSet();
-        if (row['type'] == 'jellyfin' || row['type'] == 'emby') {
-          if (itemIds.any((item) => item.contains(','))) {
-            throw const Failure(FailureCode.invalidInput,
-                'Media server item IDs cannot contain commas.');
-          }
-          final ids = wanted.toList();
-          for (var start = 0; start < ids.length; start += 100) {
-            entries.addAll(await _browse(row, null,
-                recursive: true,
-                indexFiles: false,
-                itemIds: ids.sublist(start,
-                    start + 100 < ids.length ? start + 100 : ids.length)));
-          }
-        } else if (row['type'] == 'dandanplay_remote') {
-          entries.addAll(await _browse(row, null,
-              recursive: false, indexFiles: false, itemIds: wanted.toList()));
-        } else if (row['type'] == 'nipaplay') {
-          await sharing.refreshLibrary(userInitiated: true);
-          for (final anime in sharing.animeSummaries) {
-            entries.addAll((await _browse(row, '${anime.animeId}',
-                    recursive: false, indexFiles: false))
-                .where((e) => wanted.contains(e['id'])));
-          }
-        } else {
+        {
           final parents = <String>{};
           for (final item in wanted) {
             final path = item.replaceFirst(RegExp(r'/+$'), '');
@@ -1370,8 +775,7 @@ final class MediaSourcesService {
             parents.add(path.substring(0, slash + 1));
           }
           for (final parent in parents) {
-            entries.addAll((await _browse(row, parent,
-                    recursive: false, indexFiles: false))
+            entries.addAll((await _browse(row, parent, indexFiles: false))
                 .where((entry) => wanted.contains(entry['id'])));
           }
         }
@@ -1399,46 +803,8 @@ final class MediaSourcesService {
       throw const Failure(FailureCode.invalidInput,
           'Password mode requires a user-provided password.');
     }
-    if (row['type'] == 'nipaplay' &&
-        row['username'] == '' &&
-        password == null &&
-        method == 'auto') {
-      await serial(() => sharing.setActiveHost(key(row['sourceId'] as String)));
-      return {
-        'sourceId': row['sourceId'],
-        'method': 'shared',
-        'connected': sharing.hasReachableActiveHost
-      };
-    }
     final jobId = newMediaId('source-login');
-    String? code;
-    final vault = CredentialStore.instance.vault;
-    if (method == 'auto' || method == 'quickConnect') {
-      if (row['type'] == 'jellyfin') {
-        final enabled = await JellyfinService.instance
-            .quickConnectRequest(row['url'] as String, '/QuickConnect/Enabled');
-        if (enabled['enabled'] == true) {
-          final start = await JellyfinService.instance.quickConnectRequest(
-              row['url'] as String, '/QuickConnect/Initiate',
-              method: 'POST');
-          await CredentialStore.instance.verifiedWrite(
-              CredentialRef('media_source_login', jobId),
-              start['Secret'] as String);
-          code = start['Code'] as String;
-          method = 'quickConnect';
-        } else if (method == 'quickConnect') {
-          throw const Failure(FailureCode.unavailable,
-              'Quick Connect is disabled on this server.');
-        } else {
-          method = 'window';
-        }
-      } else if (method == 'quickConnect') {
-        throw const Failure(
-            FailureCode.invalidInput, 'Quick Connect requires Jellyfin.');
-      } else {
-        method = 'window';
-      }
-    }
+    if (method == 'auto') method = 'window';
     if (method == 'window' && requestPassword == null) {
       throw const Failure(FailureCode.unavailable,
           'The NipaPlay login window is not attached.');
@@ -1453,45 +819,27 @@ final class MediaSourcesService {
         : await returnTarget?.call(invocation);
     try {
       final job = await engine.submit(
-          type: 'media.sources.login',
-          jobId: jobId,
-          title: SecretRedactor.text('Log in to ${row['name']}'),
-          input: {
-            'sourceId': row['sourceId'],
-            'method': method,
-            ...endpointOf(row),
-            'expiresAt': DateTime.now()
-                .toUtc()
-                .add(const Duration(minutes: 10))
-                .toIso8601String(),
-            if (target != null) 'returnTo': target
-          },
-          details: {
-            if (code != null) 'code': code
-          });
+        type: 'media.sources.login',
+        jobId: jobId,
+        title: SecretRedactor.text('Log in to ${row['name']}'),
+        input: {
+          'sourceId': row['sourceId'],
+          'method': method,
+          ...endpointOf(row),
+          'expiresAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(minutes: 10))
+              .toIso8601String(),
+          if (target != null) 'returnTo': target
+        },
+      );
       return {
         'sourceId': row['sourceId'],
         'method': method,
         'jobId': job.jobId,
-        if (code != null) ...{
-          'code': code,
-          'approval': {
-            'code': code,
-            'message':
-                'Give this code to the user to approve in Jellyfin. Await the approval result with the returned task.',
-            'expiresAt': job.input['expiresAt'],
-            'wait': {
-              'action': 'task.wait',
-              'input': {'jobId': job.jobId}
-            }
-          }
-        }
       };
     } catch (_) {
       _passwords.remove(jobId);
-      if (code != null) {
-        await vault.delete(CredentialRef('media_source_login', jobId));
-      }
       rethrow;
     }
   }
@@ -1514,16 +862,12 @@ final class MediaSourcesService {
     final input = context.job.input;
     final id = input['sourceId'] as String;
     final ref = CredentialRef('media_source_login', context.job.jobId);
-    final vault = CredentialStore.instance.vault;
     var stopped = false;
     context.stopRequested.then((_) => stopped = true);
-    await context.running(
-        phase: input['method'] == 'quickConnect'
-            ? 'awaiting_approval'
-            : 'awaiting_password');
+    await context.running(phase: 'awaiting_password');
     if (context.job.checkpoint['authenticated'] == true) {
       await serial(() async {
-        await activate(await source(id));
+        await source(id);
       });
       await context.succeed(
           JobReceipt(verification: VerificationLevel.verified, details: {
@@ -1544,59 +888,7 @@ final class MediaSourcesService {
     }
 
     try {
-      if (input['method'] == 'quickConnect') {
-        final secret = await vault.read(ref);
-        if (secret == null) {
-          throw const Failure(FailureCode.unavailable,
-              'Quick Connect expired; start a new login.');
-        }
-        while (!stopped &&
-            DateTime.now()
-                .toUtc()
-                .isBefore(DateTime.parse(input['expiresAt'] as String))) {
-          final row = await unchanged();
-          final state = await JellyfinService.instance.quickConnectRequest(
-              row['url'] as String,
-              '/QuickConnect/Connect?${Uri(queryParameters: {
-                    'secret': secret
-                  }).query}');
-          if (state['Authenticated'] == true) {
-            await serial(() async {
-              await unchanged();
-              final selected = await selection(id);
-              final auth = await JellyfinService.instance.quickConnectRequest(
-                  row['url'] as String, '/Users/AuthenticateWithQuickConnect',
-                  method: 'POST', body: {'Secret': secret});
-              final user = auth['User'] as Map;
-              await server('jellyfin').acceptSession(
-                  profiles.getProfileById(key(id))!,
-                  token: auth['AccessToken'] as String,
-                  authenticatedUserId: user['Id'] as String,
-                  authenticatedUsername: user['Name'] as String,
-                  libraryIds: selected);
-              await applySelection('jellyfin', selected);
-            });
-            await context
-                .markSideEffectCommitted(checkpoint: {'authenticated': true});
-            await context.succeed(
-                JobReceipt(verification: VerificationLevel.verified, details: {
-                  'sourceId': id,
-                  'connected': true,
-                  'method': input['method']
-                }),
-                phase: 'connected');
-            return;
-          }
-          await Future.any([
-            Future<void>.delayed(const Duration(seconds: 2)),
-            context.stopRequested
-          ]);
-        }
-        if (!stopped) {
-          throw const Failure(FailureCode.unavailable,
-              'Quick Connect approval timed out; start a new login.');
-        }
-      } else {
+      {
         final row = await unchanged();
         final String? password;
         if (input['method'] == 'password') {
@@ -1621,23 +913,7 @@ final class MediaSourcesService {
           await serial(() async {
             final current = await unchanged();
             final type = current['type'] as String;
-            if (type == 'jellyfin' || type == 'emby') {
-              final service = server(type);
-              final selected = await selection(id);
-              await service.authenticateProfile(
-                  profiles.getProfileById(key(id))!, password!,
-                  libraryIds: selected);
-              await applySelection(type, selected);
-            } else if (type == 'dandanplay_remote') {
-              if (dandanRemoteProvider != null) {
-                await dandanRemoteProvider!
-                    .connect(current['url'] as String, token: password);
-              } else {
-                await dandanRemote.connect(current['url'] as String,
-                    token: password);
-              }
-              await observeDandan();
-            } else if (type == 'smb') {
+            if (type == 'smb') {
               final c = smb.getConnectionByIdOrName(key(id))!;
               final updated = c.copyWith(
                   password: password, credentialOrigin: c.credentialAuthority);
@@ -1648,15 +924,6 @@ final class MediaSourcesService {
               // Explicitly verify persistence; Classic's UI saving method reports network success.
               await smb
                   .configureConnection(updated.copyWith(isConnected: true));
-            } else if (type == 'nipaplay') {
-              await sharing.configureHostCredentials(
-                  key(id), current['username'] as String,
-                  password: password);
-              await sharing.setActiveHost(key(id));
-              if (!sharing.hasReachableActiveHost) {
-                throw const Failure(FailureCode.unavailable,
-                    'NipaPlay shared library authentication failed.');
-              }
             } else {
               final c = webdav.getConnectionByIdOrName(key(id))!;
               final updated = c.copyWith(
@@ -1731,13 +998,12 @@ final class MediaSourcesService {
       if (!seen.add(parent)) {
         continue;
       }
-      const recursive = false;
-      final entries = (await browse(id, parent,
-          recursive: recursive,
-          expected: context.job.input))['entries'] as List<JsonMap>;
+      final entries =
+          (await browse(id, parent, expected: context.job.input))['entries']
+              as List<JsonMap>;
       for (final entry in entries) {
         if (entry['fileId'] case final String fileId) fileIds.add(fileId);
-        if (!recursive && entry['isDirectory'] == true) {
+        if (entry['isDirectory'] == true) {
           pending.add(entry['id'] as String);
         }
       }

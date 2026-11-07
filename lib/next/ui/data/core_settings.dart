@@ -30,7 +30,8 @@ final class CoreSettingsData implements NextSettingsData {
 
   Future<JsonMap> _call(String action, JsonMap input) async {
     await core.ready;
-    final outcome = await (await runtime.harnessReady).invokeJson(action, input, _gui);
+    final outcome =
+        await (await runtime.harnessReady).invokeJson(action, input, _gui);
     return switch (outcome) {
       Completed(:final value) => value.toJson(),
       Failed(:final failure) => throw failure,
@@ -197,9 +198,7 @@ final class CoreSettingsData implements NextSettingsData {
     final r = await _call(
         'media.sources.login', {'sourceId': sourceId, 'method': 'auto'});
     unawaited(_watchJobs());
-    final approval = r['approval'];
     return UiSourceLogin(
-      code: (approval is Map ? approval['code'] : r['code']) as String?,
       connected: r['connected'] == true,
     );
   }
@@ -304,8 +303,7 @@ final class CoreSettingsData implements NextSettingsData {
         'video_player' => 'Video Player',
         final name => name,
       };
-      return UiAbout(
-          version: facts['应用版本'], build: facts['构建号'], facts: facts);
+      return UiAbout(version: facts['应用版本'], build: facts['构建号'], facts: facts);
     } catch (_) {
       return const UiAbout();
     }

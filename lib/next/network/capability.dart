@@ -1,7 +1,6 @@
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:nipaplay/services/dandanplay_http_client.dart';
-import 'package:nipaplay/services/media_server_transport.dart';
 import 'package:nipaplay/utils/network_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../capabilities/classic_action.dart';
@@ -17,8 +16,7 @@ final class NetworkCapability implements Capability {
             const ActionSpec(
                 id: 'network.status',
                 title: '网络路由与故障事实',
-                description:
-                    '读取当前路由、故障转移、媒体服务器 UA、最近请求与上次成功。未观察来源不宣称可达；不返回认证链接、请求头或秘密。',
+                description: '读取当前路由、故障转移、最近请求与上次成功。未观察来源不宣称可达；不返回认证链接、请求头或秘密。',
                 effect: Effect.read,
                 input: ObjectSchema({}),
                 output: ObjectSchema({}, additionalProperties: true)),
@@ -46,8 +44,6 @@ final class NetworkCapability implements Capability {
                     'Selected by the user in Classic network settings.'
               }
             ],
-            'mediaServerUserAgent':
-                await MediaServerTransport.getStoredConnectionUserAgent(),
             'observations': NetworkObservations.facts,
             'sources': [
               for (final row in registered)

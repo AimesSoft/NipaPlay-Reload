@@ -52,7 +52,7 @@ void main() {
           'payload': workJson(UiWork(
               workId: 'w$i', title: '作品 $i', year: 2026, genres: ['奇幻'])),
           'facts': {
-            'sourceIds': [i.isEven ? 'local' : 'jellyfin:test'],
+            'sourceIds': [i.isEven ? 'local' : 'webdav:test'],
             'deviceIds': [i % 3 == 0 ? 'mesh-device' : 'this-device'],
             'identified': i != 4999,
             'types': ['anime'],
@@ -74,7 +74,7 @@ void main() {
             'content': {
               'kind': 'condition',
               'filter': {
-                'sourceIds': ['local', 'jellyfin:test'],
+                'sourceIds': ['local', 'webdav:test'],
                 'types': ['anime'],
                 'watch': 'unwatched',
                 'genres': ['奇幻'],
@@ -97,7 +97,7 @@ void main() {
       'milliseconds': clock.elapsedMilliseconds,
       'firstWork': (first.items.first as UiWorkItem).work.workId
     }));
-    expect(first.total, 3749);
+    expect(first.total, 3750);
     expect(first.items.length, 60);
     expect(second.items.length, 60);
     final extra = {
@@ -114,8 +114,8 @@ void main() {
       'total': updated.total,
       'workId': (updated.items.single as UiWorkItem).work.workId
     }));
-    expect(updated.total, 3750);
-    final original = await library.page('jellyfin:test');
+    expect(updated.total, 3751);
+    final original = await library.page('webdav:test');
     final slice = await library.items(original.categories.single.categoryId,
         offset: 120, limit: 10);
     final work = (slice.items.first as UiWorkItem).work;
@@ -131,9 +131,9 @@ void main() {
     expect(work.title, '未绑定剧集');
     expect(eps.first.playable, true);
     expect(sourceEntityRef(eps.first.episodeId, 'episode'),
-        ['jellyfin:test', 'episode']);
+        ['webdav:test', 'episode']);
     expect(
-        sourceEntityId('work', 'jellyfin:other', 'series'), isNot(work.workId));
+        sourceEntityId('work', 'webdav:other', 'series'), isNot(work.workId));
   });
 }
 
@@ -144,9 +144,9 @@ final class _Sources implements LibrarySourcePort {
   @override
   Future<List<JsonMap>> sources({bool initialize = true}) async => [
         {
-          'sourceId': 'jellyfin:test',
+          'sourceId': 'webdav:test',
           'name': '测试服务器',
-          'type': 'jellyfin',
+          'type': 'webdav',
           'connected': true
         }
       ];

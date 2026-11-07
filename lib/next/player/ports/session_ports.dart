@@ -6,7 +6,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/file_picker_service.dart';
-import 'package:nipaplay/services/remote_subtitle_service.dart';
+import '../sources/http_subtitle.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:path/path.dart' as p;
 
@@ -26,9 +26,9 @@ import 'session_playback.dart';
 
 /// What Next's playback layer cannot do yet (D5): unavailable, with the
 /// feature named in the details.
-Never notInPlaybackLayer(String feature, String message) => throw Failure(
-    FailureCode.unavailable, message,
-    details: {'reason': 'not_in_playback_layer', 'feature': feature});
+Never notInPlaybackLayer(String feature, String message) =>
+    throw Failure(FailureCode.unavailable, message,
+        details: {'reason': 'not_in_playback_layer', 'feature': feature});
 
 /// Who asked, for the intent's record: the person in Next's interface or
 /// Nipa.
@@ -146,8 +146,7 @@ final class SessionPlayerPort implements PlayerPort {
 
   void _requireControlled() {
     if (_playback.externalHandoff?.active == true) {
-      throw const Failure(FailureCode.unavailable,
-          '在外部播放器中播放，NipaPlay 无法控制播放。',
+      throw const Failure(FailureCode.unavailable, '在外部播放器中播放，NipaPlay 无法控制播放。',
           details: {'reason': 'external_player', 'controlAvailable': false});
     }
   }
@@ -164,8 +163,12 @@ final class SessionControls
 
   @override
   Future<JsonMap> inspect(String operation, JsonMap input) async {
-    if (const ['playback.retry', 'playback.navigate', 'playback.chapters',
-        'playback.set_skip_segment'].contains(operation)) {
+    if (const [
+      'playback.retry',
+      'playback.navigate',
+      'playback.chapters',
+      'playback.set_skip_segment'
+    ].contains(operation)) {
       _sameSession(input);
     }
     switch (operation) {
@@ -217,7 +220,11 @@ final class SessionControls
           if (segment != null) {
             await _playback.skipTo(segment, origin: commandOrigin());
           }
-          return {'commandStatus': 'accepted', 'method': 'skip', 'state': _state};
+          return {
+            'commandStatus': 'accepted',
+            'method': 'skip',
+            'state': _state
+          };
         }
         final result = await _playback.navigation
             .navigate(_internal(), input, commandOrigin());
@@ -227,7 +234,8 @@ final class SessionControls
       case 'subtitle.cues':
         return _cues(input);
       case 'danmaku.entries':
-        return _playback.danmaku.entries(input, _playback.position.inMilliseconds);
+        return _playback.danmaku
+            .entries(input, _playback.position.inMilliseconds);
     }
     throw Failure(FailureCode.invalidInput, 'Unknown operation $operation.');
   }
@@ -252,17 +260,17 @@ final class SessionControls
     ({int startMs, int endMs})? range;
     if (clear) {
       if (startMs != null || endMs != null) {
-        throw const Failure(FailureCode.invalidInput,
-            'clear takes no startMs or endMs.');
+        throw const Failure(
+            FailureCode.invalidInput, 'clear takes no startMs or endMs.');
       }
     } else {
       if (startMs == null || endMs == null) {
-        throw const Failure(FailureCode.invalidInput,
-            'Give startMs and endMs, or clear true.');
+        throw const Failure(
+            FailureCode.invalidInput, 'Give startMs and endMs, or clear true.');
       }
       if (endMs <= startMs) {
-        throw const Failure(FailureCode.invalidInput,
-            'endMs must be greater than startMs.');
+        throw const Failure(
+            FailureCode.invalidInput, 'endMs must be greater than startMs.');
       }
       final length = s.duration.inMilliseconds;
       if (length > 0 && endMs > length) {
@@ -308,7 +316,8 @@ final class SessionControls
   }
 
   void _sameSession(JsonMap input) {
-    if (input['sessionId'] != null && input['sessionId'] != _state['sessionId']) {
+    if (input['sessionId'] != null &&
+        input['sessionId'] != _state['sessionId']) {
       throw const Failure(FailureCode.conflict,
           'Playback session changed. Read playback.state.');
     }
@@ -316,7 +325,9 @@ final class SessionControls
 
   PlaybackSession _internal() {
     final session = _playback.session;
-    if (session == null || session.phase.value.done || _playback.externalHandoff?.active == true) {
+    if (session == null ||
+        session.phase.value.done ||
+        _playback.externalHandoff?.active == true) {
       throw const Failure(FailureCode.unavailable,
           'This operation requires an internal playback session.');
     }
@@ -344,7 +355,6 @@ final class SessionControls
             start: start,
             paused: paused,
             origin: commandOrigin(),
-            selection: plan.selection,
             kernel: old.kernelId,
             initialLevels: levels)
         : await _playback.host.open(
@@ -360,10 +370,14 @@ final class SessionControls
             kernel: old.kernelId,
             initialLevels: levels);
     if (!identical(next, _playback.session) || next.phase.value.done) {
-      throw const Failure(FailureCode.conflict, 'Playback changed while retrying.');
+      throw const Failure(
+          FailureCode.conflict, 'Playback changed while retrying.');
     }
-    return {'commandStatus': next.fault.value == null ? 'accepted' : 'failed',
-      'previousSessionId': old.id, 'state': _state};
+    return {
+      'commandStatus': next.fault.value == null ? 'accepted' : 'failed',
+      'previousSessionId': old.id,
+      'state': _state
+    };
   }
 
   /// Event-driven: completes when the session gets there, ends, changes or
@@ -429,9 +443,14 @@ final class SessionControls
 
   Future<JsonMap> _info() async {
     if (_playback.externalHandoff?.active == true) {
-      return {'sessionId': _state['sessionId'], 'observedAt': DateTime.now().toUtc().toIso8601String(),
-        'player': 'external', 'hasVideo': false, 'external': _playback.externalHandoff!.facts(),
-        'unavailableReason': 'external_player'};
+      return {
+        'sessionId': _state['sessionId'],
+        'observedAt': DateTime.now().toUtc().toIso8601String(),
+        'player': 'external',
+        'hasVideo': false,
+        'external': _playback.externalHandoff!.facts(),
+        'unavailableReason': 'external_player'
+      };
     }
     final s = _playback.session;
     final driver = s?.driver;
@@ -513,20 +532,6 @@ final class SessionControls
   /// whether it shows (player-core design §5.1).
   @override
   Future<JsonMap> tracks(JsonMap input) async {
-    // A media server's own streams (the server decides what is decoded)
-    // are listed in place of the kernel's tracks while one plays.
-    if (_playback.sources.plan?.isServer == true) {
-      return {
-        'sessionId': _playback.session?.id,
-        'tracks': [
-          for (final v
-              in _playback.sources.streamOptions()['versions'] as List)
-            if (v['id'] ==
-                _playback.sources.plan?.serverSession?.mediaSourceId)
-              ...v['tracks'] as List
-        ]
-      };
-    }
     final s = _open();
     return PlayerPerf.span('ports.tracks', () => trackFacts(s));
   }
@@ -536,8 +541,7 @@ final class SessionControls
     final audio = s.audio.value;
     final subs = s.subtitles;
     final state = subs.state.value;
-    bool shows(SubtitleWant want) =>
-        state.presented.any((p) => p.want == want);
+    bool shows(SubtitleWant want) => state.presented.any((p) => p.want == want);
     PresentedSubtitle? shown(SubtitleWant want) =>
         state.presented.where((p) => p.want == want).firstOrNull;
     final kernelAudio = audio.kernel ?? 0;
@@ -601,8 +605,8 @@ final class SessionControls
         // puts it on; null: it keeps no choice), against `selected`, what
         // this playback has on now.
         'remembered': state.remembered?.toJson(),
-        'rememberedIsSelected': (state.remembered ?? const SubtitleWant.off()) ==
-            state.want,
+        'rememberedIsSelected':
+            (state.remembered ?? const SubtitleWant.off()) == state.want,
         'presented': [for (final p in state.presented) p.toJson()],
         'presentedIsSelected': subs.presentedIsSelected,
         if (state.failure != null) 'failure': state.failure,
@@ -614,12 +618,6 @@ final class SessionControls
   /// once the kernel reported it, with the receipt.
   @override
   Future<JsonMap> selectTrack(JsonMap input) async {
-    if (input['origin'] == 'server') {
-      return _playback.sources.selectStream({
-        input['kind'] == 'audio' ? 'audioIndex' : 'subtitleIndex':
-            input['index']
-      }, origin: commandOrigin());
-    }
     final s = _open();
     final kind = input['kind'] as String;
     final index = (input['index'] as num).toInt();
@@ -644,9 +642,7 @@ final class SessionControls
     final receipt = kind == 'audio'
         ? await s.selectAudio(index, origin: origin)
         : await s.chooseSubtitle(
-            index < 0
-                ? const SubtitleWant.off()
-                : SubtitleWant.embedded(index),
+            index < 0 ? const SubtitleWant.off() : SubtitleWant.embedded(index),
             origin: origin,
             record: remember);
     return {
@@ -671,16 +667,7 @@ final class SessionControls
           FailureCode.invalidInput, 'Unsupported subtitle file extension.');
     }
     if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      final name = p.posix.basename(uri.path);
-      path = await RemoteSubtitleService.instance.ensureSubtitleCached(
-          SharedRemoteSubtitleCandidate(
-              shareId: 'agent',
-              fileName: name,
-              subtitleUri: uri,
-              authorizationHeader: null,
-              isLikelyMatch: true,
-              name: name,
-              extension: p.extension(name)));
+      path = await cacheHttpSubtitle(uri);
     } else if (!p.isAbsolute(path) || !await File(path).exists()) {
       throw const Failure(FailureCode.notFound,
           'Use an accessible absolute subtitle path or HTTP(S) URL.');
@@ -773,30 +760,30 @@ final class SessionControls
     }
     return {'sessionId': s.id, ...page};
   }
-  @override
-  Future<JsonMap> streamOptions(JsonMap input) async =>
-      _playback.sources.streamOptions();
-  @override
-  Future<JsonMap> selectStream(JsonMap input) async =>
-      _playback.sources.selectStream(input, origin: commandOrigin());
+
   @override
   Future<JsonMap> external(JsonMap input) async {
     final external = _playback.externalHandoff;
     if (external?.active != true) {
-      throw const Failure(FailureCode.unavailable, 'No external player handoff is active.');
+      throw const Failure(
+          FailureCode.unavailable, 'No external player handoff is active.');
     }
     if (input['command'] == 'state') return external!.facts();
-    throw const Failure(FailureCode.unavailable,
-        '在外部播放器中播放，NipaPlay 无法控制播放。',
+    throw const Failure(FailureCode.unavailable, '在外部播放器中播放，NipaPlay 无法控制播放。',
         details: {'reason': 'external_player', 'controlAvailable': false});
   }
+
   @override
   Future<JsonMap> capture(JsonMap input) async {
     _sameSession(input);
-    final result = await _playback.capture.capture(_internal(), input, aspectMode: _playback.fit);
+    final result = await _playback.capture
+        .capture(_internal(), input, aspectMode: _playback.fit);
     if (result['kind'] == 'screenshot') {
-      result['danmakuIncluded'] = result['danmakuIncluded'] == true && _playback.danmakuVisible;
-      if (!_playback.danmakuVisible) result['danmakuReason'] = 'The danmaku display switch is off or no danmaku layer is present.';
+      result['danmakuIncluded'] =
+          result['danmakuIncluded'] == true && _playback.danmakuVisible;
+      if (!_playback.danmakuVisible)
+        result['danmakuReason'] =
+            'The danmaku display switch is off or no danmaku layer is present.';
     }
     return result;
   }
@@ -844,7 +831,8 @@ final class SessionKernelHost implements KernelHost {
   double get rate => _playback.rate;
   @override
   List<String> get externalSubtitles => [
-        for (final f in _playback.session?.subtitles.files ?? const <SubtitleFile>[])
+        for (final f
+            in _playback.session?.subtitles.files ?? const <SubtitleFile>[])
           f.path
       ];
   @override
@@ -892,11 +880,9 @@ final class SessionSubtitleTarget implements SubtitleTarget {
       _session?.subtitles.offer(playbackPath, title);
 
   @override
-  Future<void> applyEmbedded(int index) async => _session?.chooseSubtitle(
-      SubtitleWant.embedded(index),
-      origin: 'library_selection',
-      record: false,
-      fromLibrary: true);
+  Future<void> applyEmbedded(int index) async =>
+      _session?.chooseSubtitle(SubtitleWant.embedded(index),
+          origin: 'library_selection', record: false, fromLibrary: true);
 
   @override
   Future<void> applyExternal(String playbackPath, String title) async =>
@@ -907,11 +893,9 @@ final class SessionSubtitleTarget implements SubtitleTarget {
           title: title);
 
   @override
-  Future<void> clear() async => _session?.chooseSubtitle(
-      const SubtitleWant.off(),
-      origin: 'library_selection',
-      record: false,
-      fromLibrary: true);
+  Future<void> clear() async =>
+      _session?.chooseSubtitle(const SubtitleWant.off(),
+          origin: 'library_selection', record: false, fromLibrary: true);
 
   /// The library's record of the file changed (a subtitle.select, an
   /// import): its files are offered again and its choice put on.
@@ -934,8 +918,8 @@ final class SessionSubtitleTarget implements SubtitleTarget {
     } else if (selected['origin'] == 'embedded') {
       want = SubtitleWant.embedded(selected['index'] as int);
     } else {
-      want = SubtitleWant.file(selected['playbackPath'] as String? ??
-          selected['path'] as String);
+      want = SubtitleWant.file(
+          selected['playbackPath'] as String? ?? selected['path'] as String);
     }
     // The person's own choice, recorded and told back: it stays theirs.
     final current = s.subtitles.state.value;

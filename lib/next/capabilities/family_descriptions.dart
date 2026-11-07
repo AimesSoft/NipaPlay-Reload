@@ -10,22 +10,32 @@ JsonMap actionUsage(ActionSpec spec) {
   }
   return {
     'family': family,
-    'familyDescription': familyFacts[family] ?? 'No family guide registered; use this action’s description and schemas.',
+    'familyDescription': familyFacts[family] ??
+        'No family guide registered; use this action’s description and schemas.',
     'effectMeaning': switch (spec.effect) {
-      Effect.read => 'Classified read; network requests and cache preparation may still occur as described.',
-      Effect.write => 'May change state or start work. This classification does not promise reversibility or idempotency.',
-      Effect.destructive => 'Potentially destructive. Follow the declared preview/confirmation contract; classification alone does not imply a host prompt.',
+      Effect.read =>
+        'Classified read; network requests and cache preparation may still occur as described.',
+      Effect.write =>
+        'May change state or start work. This classification does not promise reversibility or idempotency.',
+      Effect.destructive =>
+        'Potentially destructive. Follow the declared preview/confirmation contract; classification alone does not imply a host prompt.',
     },
-    'resultHandling': 'completed is completion of this Action call. If the result contains a task, inspect its terminal state and receipt; batch results may contain per-item failures. NeedsDecision requires its declared decision flow.',
-    'recovery': 'On outcome_unknown preserve device, caller origin, original inputs and request keys. Query domain receipts or task state. Repeat a write only under this action’s explicit idempotency contract; cancellation is not rollback.',
+    'resultHandling':
+        'completed is completion of this Action call. If the result contains a task, inspect its terminal state and receipt; batch results may contain per-item failures. NeedsDecision requires its declared decision flow.',
+    'recovery':
+        'On outcome_unknown preserve device, caller origin, original inputs and request keys. Query domain receipts or task state. Repeat a write only under this action’s explicit idempotency contract; cancellation is not rollback.',
   };
 }
 
 JsonMap describeAction(ActionSpec spec, {bool includeUsage = true}) => {
-  'id': spec.id, 'title': spec.title, 'description': spec.description,
-  'effect': spec.effect.name, 'inputSchema': spec.input.toJsonSchema(),
-  'outputSchema': spec.output.toJsonSchema(), if (includeUsage) 'usage': actionUsage(spec),
-};
+      'id': spec.id,
+      'title': spec.title,
+      'description': spec.description,
+      'effect': spec.effect.name,
+      'inputSchema': spec.input.toJsonSchema(),
+      'outputSchema': spec.output.toJsonSchema(),
+      if (includeUsage) 'usage': actionUsage(spec),
+    };
 
 /// Versioned body facts; the catalogue always comes from the receiving host.
 JsonMap describeFamily(String family, Iterable<ActionSpec> catalog) {
@@ -62,8 +72,14 @@ final class FamilyDescriptionCapability implements Capability {
               description:
                   'Read the receiving host’s tool interface. A family prefix returns its usage guide and registered actions; an exact Action ID returns its live input/output schemas, effect and usage/recovery guidance. This does not execute the described action or require the documentation bundle. Pass either in family; nipa describe ACTION uses the same contract.',
               effect: Effect.read,
-              input: ObjectSchema({'family': StringSchema(minLength: 1, description: 'Capability prefix or exact Action ID on this host.')},
-                  required: ['family']),
+              input: ObjectSchema({
+                'family': StringSchema(
+                    minLength: 1,
+                    description:
+                        'Capability prefix or exact Action ID on this host.')
+              }, required: [
+                'family'
+              ]),
               output: ObjectSchema({}, additionalProperties: true),
             ),
             (input, invocation) async =>
@@ -112,17 +128,25 @@ const danmakuFamilyDescription =
     'analyze_alignment and update. Positive offsetMs advances comments: '
     'displayTime=sourceTime-offsetMs. Headless exports are under data/exports.';
 
-
 const familyFacts = <String, String>{
-  'capability': 'Tool interface discovery on the receiving host. describe accepts a family prefix or exact Action ID in family. Returns actual registered contracts and usage; documentation lookup is separately available through knowledge.',
-  'activity': 'Record a sourced finding in application activity through activity.report. This records an observation, not proof of a domain transaction or a substitute for its receipt. Do not report unverified work as completed.',
-  'appearance': 'reset_home_sections restores Classic home section preferences; it does not remove Next hero or shelves. Use ui.shelves for Next placement and read resulting UI data.',
-  'shortcuts': 'reset restores registered Classic shortcut settings and preserves setting provenance. Inspect supported settings and read back after resetting; this is a settings write, not a media operation.',
-  'webdav_quick': 'reset restores Classic WebDAV quick-page persistent preferences, including its shared default home preference, while retaining source records. It does not delete remote server files. Read the affected settings before and after reset.',
-  'credentials': 'status reads host credential-vault readiness without exposing secrets. retry uses the host-specific recovery/enrollment flow and may require a user interaction; inspect the action description. Secrets stay outside the harness and knowledge package.',
-  'backup': 'Classic category backups and watch-history import/export. preview inspects a selected backup; restore changes the declared categories and can overwrite/merge values. This is not a full Next database, Mesh identity or personal harness backup. Preserve a stopped-process whole-data-directory backup for complete recovery; inspect the actual categories and results.',
-  'memory': 'Personal harness Markdown memory, separate from runtime transcripts and installed application knowledge. read returns revision; edit/delete require that revision to reject conflicting edits and commit the changed file with caller provenance. Resident files have byte limits, secrets are rejected/redacted. Deleting memory does not erase Git history or conversations. Re-read after mutation; do not blindly retry a stale revision.',
-  'chat': 'Conversation and session operations on the receiving host and its selected runtime. Codex and DSH threads cannot resume across runtimes. Read status before selecting/sending/stopping; send may start an active turn and stop does not undo executed tools. chat.turn.process returns bounded retained process facts, not an unlimited transcript. Session pointers, conversation history and personal memory are separate; inspect each action for host availability and pagination.',
+  'capability':
+      'Tool interface discovery on the receiving host. describe accepts a family prefix or exact Action ID in family. Returns actual registered contracts and usage; documentation lookup is separately available through knowledge.',
+  'activity':
+      'Record a sourced finding in application activity through activity.report. This records an observation, not proof of a domain transaction or a substitute for its receipt. Do not report unverified work as completed.',
+  'appearance':
+      'reset_home_sections restores Classic home section preferences; it does not remove Next hero or shelves. Use ui.shelves for Next placement and read resulting UI data.',
+  'shortcuts':
+      'reset restores registered Classic shortcut settings and preserves setting provenance. Inspect supported settings and read back after resetting; this is a settings write, not a media operation.',
+  'webdav_quick':
+      'reset restores Classic WebDAV quick-page persistent preferences, including its shared default home preference, while retaining source records. It does not delete remote server files. Read the affected settings before and after reset.',
+  'credentials':
+      'status reads host credential-vault readiness without exposing secrets. retry uses the host-specific recovery/enrollment flow and may require a user interaction; inspect the action description. Secrets stay outside the harness and knowledge package.',
+  'backup':
+      'Classic category backups and watch-history import/export. preview inspects a selected backup; restore changes the declared categories and can overwrite/merge values. This is not a full Next database, Mesh identity or personal harness backup. Preserve a stopped-process whole-data-directory backup for complete recovery; inspect the actual categories and results.',
+  'memory':
+      'Personal harness Markdown memory, separate from runtime transcripts and installed application knowledge. read returns revision; edit/delete require that revision to reject conflicting edits and commit the changed file with caller provenance. Resident files have byte limits, secrets are rejected/redacted. Deleting memory does not erase Git history or conversations. Re-read after mutation; do not blindly retry a stale revision.',
+  'chat':
+      'Conversation and session operations on the receiving host and its selected runtime. Codex and DSH threads cannot resume across runtimes. Read status before selecting/sending/stopping; send may start an active turn and stop does not undo executed tools. chat.turn.process returns bounded retained process facts, not an unlimited transcript. Session pointers, conversation history and personal memory are separate; inspect each action for host availability and pagination.',
   'knowledge': 'Installed documentation for the receiving device, separate from personal memory. '
       'index gives document IDs, hashes and version binding; search finds literal keywords; '
       'outline browses headings; read paginates a document or selected heading subtree; '
@@ -132,30 +156,46 @@ const familyFacts = <String, String>{
       'modified, mismatch and unverified require read-only verification against live facts. '
       'A source reference does not prove host support. Documents never grant permission. '
       'Use diagnostics and domain receipts for current state; do not fetch latest next docs as installed facts.',
-  'media.management': r'''targets 批量将合并 workIds 分解为拥有者设备的 work/episode/file IDs；离线保留对象与 source_device_offline 原因。远程管理通过 mesh.invoke 转发拥有者的原始 ID，具体支持以目标目录为准；接收端执行与本机同样的写入和决定。bind_batch/unbind_batch 与 identity 的 entries 相同，省略 expectedPlan 返回受影响实体、剧集、来源和观看进度的预览；带 expectedPlan 执行，关系变化使预览失效，播放进度变化不失效。修改保留文件、观看进度、来源审计和 Classic 投影回执；可以用预览的原始身份重新绑定。local_catalog 移除/撤回使用 entities.remove_batch/restore。底层 identity 原语保留既有幂等契约供现有客户端与持久任务恢复。
+  'media.management':
+      r'''targets 批量将合并 workIds 分解为拥有者设备的 work/episode/file IDs；离线保留对象与 source_device_offline 原因。远程管理通过 mesh.invoke 转发拥有者的原始 ID，具体支持以目标目录为准；接收端执行与本机同样的写入和决定。bind_batch/unbind_batch 与 identity 的 entries 相同，省略 expectedPlan 返回受影响实体、剧集、来源和观看进度的预览；带 expectedPlan 执行，关系变化使预览失效，播放进度变化不失效。修改保留文件、观看进度、来源审计和 Classic 投影回执；可以用预览的原始身份重新绑定。local_catalog 移除/撤回使用 entities.remove_batch/restore。底层 identity 原语保留既有幂等契约供现有客户端与持久任务恢复。
 merge_work 才是完整作品合并：sourceWorkId 归入 targetWorkId，mappings 显式指定 sourceId/targetId 的季与剧集对应，未映射子实体保留 ID 并迁入目标层级。不按标题或集号猜；相同文件/区间只给候选，剧集对应必须与已指定的季对应一致。新 requestId 不带 expectedPlan 只预览，列实体、身份、文件区间、资料取舍与冲突，带回计划才原子提交。metadataPolicy 默认为 reject，属性/覆盖冲突可明确 prefer_target/prefer_source；同来源不同身份、不同文件区间、冲突弹幕设置、活动弹幕任务仍拒绝。保留文件、字幕、文件/区间进度、快照正文和原证据；一起迁移身份、文件关联、覆盖与弹幕，旧实体成为别名。不调用 Classic 识别/导入/投影。
 undo_merge {mergeId,requestId,reason} 同样先预览再携 expectedPlan 提交；相关关系有后续修改或活动弹幕任务则拒绝，进度变化保留。两工具回执按来源持久幂等，重启/响应丢失后重试完全相同输入；已提交 requestId 即使省略 expectedPlan 也返回原回执，重新预览用新 requestId。撤回后旧 merge 重试返回 mergeState:undone，不再次执行。每次最多 1000 个层级实体、4 MiB 关系快照，不做跨节点事务。SQL db.* 继续保留并可经 Mesh 直接在拥有者设备调用。''',
-  'media.files': r'''list 返回索引文件位置；管理合并作品先用 management.targets 找拥有者原始 ID，再在目标身体调用 list。reveal 接收本机授权路径，macOS/Windows 在文件管理器定位文件，Linux 打开父目录，逐项报告受理或失败；系统窗口按用户请求打开。远程调用会在目标设备定位。磁盘删除仍走 media.mesh_files.delete 的 NeedsDecision；不能将接收端转换 URL 当源设备路径。''',
-  'accounts.collections': r'''list(provider,statuses?,limit?,cursor?) 批量列出账号动画收藏，返回 items:[{workId,status,rating}] 与 nextCursor。workId 是提供方编号，不是合并 ID；通过 media.bindings 的已接受身份映射。Bangumi 使用同一个 Classic 鉴权客户端的分页列表，弹弹play复用官方网关的收藏列表，不逐部拉详情。弹弹play列表未提供评分时 rating=null；未知不伪造 0。状态用各提供方词汇。分页观测远端实时列表，Bangumi 远端改动可能改变偏移量；界面应继续读取所有 nextCursor。get/update 保留现有批量逐项结果。''',
-  'sync': r'''status 返回 WebDAV 配置、hasPassword（是否已保存）、启用、当前阶段和最近结果，不返回密码。configure 修改地址/用户名会清除旧密码；login 由用户在 NipaPlay 输入并测试后保存。enabled/configuration 是领域设置，适合专用界面而非普通数值控件。run 返回可等待的同步任务。''',
-  'voice': r'''实验室语音输入在用户实际点击麦克风的设备上运行，支持本机离线和自配云端。status 给服务配置、凭据是否存在、模型、录音阶段、收到音频字节数和错误；不回传密钥、录音或转写。configure 选择 local、azure 或 dashscope。云端配置需用户明确授权目标服务和凭据使用，以 userAuthorization 记录；音频直接交给服务商，可能计费。Azure 结束录音后出文字，百炼 inference 实时更新；模型须匹配协议。配置/开关均不开麦、不自动发送文字，失败不自动切换到云端。切勿把远端会话宿主误认为手机输入设备。''',
-  'media.indexers': r'''status 返回自动附件索引器的启用值、正在执行、排队、上次运行与错误。library.*Enabled 是独立策略开关；关闭排空当前文件、保留队列，显式检查保持可用。自动匹配、弹幕加载和下载完成导入沿用各领域已有设置。''',
-  'window': r'''bounds.get 读取、bounds.set 设置本进程主窗准确位置与尺寸，读写 effect 分开；不激活窗口，变化发 window.bounds_changed；已有 window.control 管 fullscreen/PiP/托盘。坐标为 window_manager 逻辑像素。目标不会按应用名查找。''',
-  'share': r'''prepare 预览文字、公开 URL 或授权本地文件；open 打开该计划的系统面板，由用户选目的地。会核对预览后文件变化。不以打开面板冒充已分享，也不自动上传日志。''',
-  'notification': r'''当前 macOS 宿主有原生 OS 通知：status 读取系统设置，send 受系统授权、声音及系统展示策略管理，list 区分 pending/delivered，cancel 请求移除。未授权默认 blocked，requestPermission 明确请求系统询问用户。accepted 不等于用户看到了横幅；其他平台如实返回 unavailable。''',
-  'diagnostics': r'''startup 立即报告媒体目录、字幕弹幕索引、观看记录与 Mesh 等独立服务的 starting/ready/failed、尝试次数和错误；失败不代表媒体库为空。recover 的 startup.retry 后台重试失败服务或指定 component，library 会重读文件并重建目录，requested 不是完成证明。operations 给本进程能力与 Mesh 阶段，可按 invocationId/action/peerId 关联查询；最多 512 条、30 分钟，缺失表示未知。SQL 提交证据用源设备 db.receipt，传输结果与事务提交分开。status 给健康、版本、资源、日志和迁移观察；file_logs 用受限 fileId 与行游标读取脱敏摘录。recover 执行显式的启动服务重试、日志重启、投影核对、索引器检查，不自动修改用户数据或登录。日志公开发布必须有明确目标与内容；本族不上传。
+  'media.files':
+      r'''list 返回索引文件位置；管理合并作品先用 management.targets 找拥有者原始 ID，再在目标身体调用 list。reveal 接收本机授权路径，macOS/Windows 在文件管理器定位文件，Linux 打开父目录，逐项报告受理或失败；系统窗口按用户请求打开。远程调用会在目标设备定位。磁盘删除仍走 media.mesh_files.delete 的 NeedsDecision；不能将接收端转换 URL 当源设备路径。''',
+  'accounts.collections':
+      r'''list(provider,statuses?,limit?,cursor?) 批量列出账号动画收藏，返回 items:[{workId,status,rating}] 与 nextCursor。workId 是提供方编号，不是合并 ID；通过 media.bindings 的已接受身份映射。Bangumi 使用同一个 Classic 鉴权客户端的分页列表，弹弹play复用官方网关的收藏列表，不逐部拉详情。弹弹play列表未提供评分时 rating=null；未知不伪造 0。状态用各提供方词汇。分页观测远端实时列表，Bangumi 远端改动可能改变偏移量；界面应继续读取所有 nextCursor。get/update 保留现有批量逐项结果。''',
+  'sync':
+      r'''status 返回 WebDAV 配置、hasPassword（是否已保存）、启用、当前阶段和最近结果，不返回密码。configure 修改地址/用户名会清除旧密码；login 由用户在 NipaPlay 输入并测试后保存。enabled/configuration 是领域设置，适合专用界面而非普通数值控件。run 返回可等待的同步任务。''',
+  'voice':
+      r'''实验室语音输入在用户实际点击麦克风的设备上运行，支持本机离线和自配云端。status 给服务配置、凭据是否存在、模型、录音阶段、收到音频字节数和错误；不回传密钥、录音或转写。configure 选择 local、azure 或 dashscope。云端配置需用户明确授权目标服务和凭据使用，以 userAuthorization 记录；音频直接交给服务商，可能计费。Azure 结束录音后出文字，百炼 inference 实时更新；模型须匹配协议。配置/开关均不开麦、不自动发送文字，失败不自动切换到云端。切勿把远端会话宿主误认为手机输入设备。''',
+  'media.indexers':
+      r'''status 返回自动附件索引器的启用值、正在执行、排队、上次运行与错误。library.*Enabled 是独立策略开关；关闭排空当前文件、保留队列，显式检查保持可用。自动匹配、弹幕加载和下载完成导入沿用各领域已有设置。''',
+  'window':
+      r'''bounds.get 读取、bounds.set 设置本进程主窗准确位置与尺寸，读写 effect 分开；不激活窗口，变化发 window.bounds_changed；已有 window.control 管 fullscreen/PiP/托盘。坐标为 window_manager 逻辑像素。目标不会按应用名查找。''',
+  'share':
+      r'''prepare 预览文字、公开 URL 或授权本地文件；open 打开该计划的系统面板，由用户选目的地。会核对预览后文件变化。不以打开面板冒充已分享，也不自动上传日志。''',
+  'notification':
+      r'''当前 macOS 宿主有原生 OS 通知：status 读取系统设置，send 受系统授权、声音及系统展示策略管理，list 区分 pending/delivered，cancel 请求移除。未授权默认 blocked，requestPermission 明确请求系统询问用户。accepted 不等于用户看到了横幅；其他平台如实返回 unavailable。''',
+  'diagnostics':
+      r'''startup 立即报告媒体目录、字幕弹幕索引、观看记录与 Mesh 等独立服务的 starting/ready/failed、尝试次数和错误；失败不代表媒体库为空。recover 的 startup.retry 后台重试失败服务或指定 component，library 会重读文件并重建目录，requested 不是完成证明。operations 给本进程能力与 Mesh 阶段，可按 invocationId/action/peerId 关联查询；最多 512 条、30 分钟，缺失表示未知。SQL 提交证据用源设备 db.receipt，传输结果与事务提交分开。status 给健康、版本、资源、日志和迁移观察；file_logs 用受限 fileId 与行游标读取脱敏摘录。recover 执行显式的启动服务重试、日志重启、投影核对、索引器检查，不自动修改用户数据或登录。日志公开发布必须有明确目标与内容；本族不上传。
 - status 的 player.details 与 playback.info 来自同一次内核查询：videoCodec、audioCodec、videoWidth/Height、fps、hwdec（正在用的硬解方式，软解为 no，未知为 null）、decoder、hardwareDecoding、droppedFrames、buffering。
 - errors 读 Next 开启期间本进程的未捕获错误（Flutter 框架错误、未捕获的异步错误、isolate 错误），同一错误再次出现只累计次数；以及上一次开着 Next、却没有经过 NipaPlay 退出流程就结束的运行（unclean_exit），带那次最后记下的播放。原生崩溃没有 Dart 堆栈，只表现为 unclean_exit。
 - player_log 读播放内核交给应用的最近若干行：Media Kit 是 mpv 日志消息（默认只有 error 级），MDK 是媒体事件与状态以及 MDK 自己的日志（全进程一份，不属于某个播放器），Erika 是播放错误、解码器切换、音频输出变化与视频参数，再加上 Erika 自己的日志环（全进程一份：source=engine 是 Erika 的运行诊断，source=ffmpeg 是 Erika 内 FFmpeg 的警告与错误，已由 Erika 脱敏），在读取时与 Erika 播放器关闭前抄进来。player_log_file 让 Media Kit 把 mpv 完整日志写进数据目录的文件，再用 player_log 的 file=true 分页读。
 - MDK 的日志处理器全进程只有一个：Next 开启时接过来，每一行原样交给原来的处理器，Next 关闭时交还；设了 MDK_LOG 时 MDK 自己写 stderr，Next 不接，player_log 的 mdkLog 说明这一点。
 - errors 另给 thisRun（本进程记下的不同错误数与出现次数）和 uncleanExits（总数、还没被 errors 返回过的条数、最近一次的时间）；返回过的异常退出算已读，跨重启保留；summaryOnly 只看计数，不改变已读。
 - 这些记录只在 Next 开启时进行；原有的错误处理、日志级别与界面日志设置不变。''',
-  'cache': r'''plan(kinds,maxBytes) 返回实际回收对象、估计字节和保留原因，prune(planId) 重新核对引用与变化并返回逐项结果。仅可重取缓存回收无 NeedsDecision。已保存的 Next 弹幕是持久媒体数据，包括在线获取与播放时取得的内容，不参与缓存空间回收；删除须明确调用 danmaku.cache_delete。计划是当前进程的预览，不允许夹带任意路径。''',
-  'storage': r'''status 给目录真实用量和卷可用空间。父目录包含子目录，不相加。watch 显式订阅空间阈值、unwatch 取消；仅当前进程有效，转换发 storage.space_changed。可重取缓存用 cache.plan/prune；字幕、导入弹幕、用户下载与无法证明可重取的图片保留。磁盘用户文件删除/覆盖沿用 media.mesh_files 的 NeedsDecision。 `state.query storage.volumes`、`storage.directories` 以行给出同样的事实，可过滤。''',
-  'network': r'''status 给路由、代理、故障转移、媒体服务器连接 UA 及来源最近错误/上次成功。check 显式检查已登记来源或官方网关 healthz，不更换路由或登录。观测历史只覆盖当前进程，未观察值不宣称可达。第三方凭据去向仍由用户设置；秘密不进输出。 `state.query network.routes`、`network.observations` 以行给出同样的事实；来源逐地址的连通性在 `media.sources` 族的 `addresses[]` 与 `media.source_addresses` 视图。''',
-  'events': r'''身体变化共用 hook 与 followup 的持久事实日志。describe 列出事件；wait(afterCursor) 有界等待和分页，游标跨重启；只重读事实，不重跑脚本。followup.register 订阅下一次事件；hook 名称就是事件名。播放位置不逐帧发事件；seek_requested 是受理意图，settlement 必须另核对。playback.failed 的 facts 是一条播放失败记录，与 playback.failures 的条目相同（stage、category、内核原文等）。''',
-  'download.limits': r'''get 读取原生内置下载会话限速，set 调整上传/下载字节每秒预算并返回引擎读回值。0 为无限制，正值至少 16384；省略方向保留现值。不自动初始化会话；applied=false 不能宣称已限速。只影响本机内置会话，重建后恢复默认无限制，不改变服务端限流。''',
-  'media.entities': r'''Local catalog entities have stable caller-supplied IDs and expectedRevision on update. parentId is an actual local parent, never an external ID. fileIds on an episode replace its local associations. Removal includes descendants, retains tombstones and exact relationship before-images, and returns undoId; restore refuses subsequent conflicting changes. These operations do not manufacture Classic platform matches.''',
+  'cache':
+      r'''plan(kinds,maxBytes) 返回实际回收对象、估计字节和保留原因，prune(planId) 重新核对引用与变化并返回逐项结果。仅可重取缓存回收无 NeedsDecision。已保存的 Next 弹幕是持久媒体数据，包括在线获取与播放时取得的内容，不参与缓存空间回收；删除须明确调用 danmaku.cache_delete。计划是当前进程的预览，不允许夹带任意路径。''',
+  'storage':
+      r'''status 给目录真实用量和卷可用空间。父目录包含子目录，不相加。watch 显式订阅空间阈值、unwatch 取消；仅当前进程有效，转换发 storage.space_changed。可重取缓存用 cache.plan/prune；字幕、导入弹幕、用户下载与无法证明可重取的图片保留。磁盘用户文件删除/覆盖沿用 media.mesh_files 的 NeedsDecision。 `state.query storage.volumes`、`storage.directories` 以行给出同样的事实，可过滤。''',
+  'network':
+      r'''status 给路由、代理、故障转移 及来源最近错误/上次成功。check 显式检查已登记来源或官方网关 healthz，不更换路由或登录。观测历史只覆盖当前进程，未观察值不宣称可达。第三方凭据去向仍由用户设置；秘密不进输出。 `state.query network.routes`、`network.observations` 以行给出同样的事实；来源逐地址的连通性在 `media.sources` 族的 `addresses[]` 与 `media.source_addresses` 视图。''',
+  'events':
+      r'''身体变化共用 hook 与 followup 的持久事实日志。describe 列出事件；wait(afterCursor) 有界等待和分页，游标跨重启；只重读事实，不重跑脚本。followup.register 订阅下一次事件；hook 名称就是事件名。播放位置不逐帧发事件；seek_requested 是受理意图，settlement 必须另核对。playback.failed 的 facts 是一条播放失败记录，与 playback.failures 的条目相同（stage、category、内核原文等）。''',
+  'download.limits':
+      r'''get 读取原生内置下载会话限速，set 调整上传/下载字节每秒预算并返回引擎读回值。0 为无限制，正值至少 16384；省略方向保留现值。不自动初始化会话；applied=false 不能宣称已限速。只影响本机内置会话，重建后恢复默认无限制，不改变服务端限流。''',
+  'media.entities':
+      r'''Local catalog entities have stable caller-supplied IDs and expectedRevision on update. parentId is an actual local parent, never an external ID. fileIds on an episode replace its local associations. Removal includes descendants, retains tombstones and exact relationship before-images, and returns undoId; restore refuses subsequent conflicting changes. These operations do not manufacture Classic platform matches.''',
   'ui':
       r'''- **提醒和异步问题**：ui.notify 由 Agent 自行决定时机和标题正文，立即进入提醒列表；不由工具完成自动生成总结。ui.ask 立即返回 pending，问题展示不等待回合结束；继续独立工作，依赖答案的写入等待。ui.inbox.list 查询状态，dismiss 收起不算同意，cancel 才取消问题；respond 是用户界面专用回答通道，不替用户调用。回答固定回原设备、原会话，DSH/Codex 支持时插话，否则排队；结果不明不重复回答或重复执行。错误提醒保留宿主收到的原始错误内容；进度与回执仍是任务事实。notification.agentPopups 只控制普通浮窗。
 - **两套界面**：Classic 是原来的界面；在「设置 → 实验室」开启 Next 后，主界面换成 Next。你工作的结果显示在 Next 里。两套界面各有自己的播放器与会话；切换时关闭当前会话并保存进度，不自动接续另一边的播放。
@@ -165,8 +205,8 @@ undo_merge {mergeId,requestId,reason} 同样先预览再携 expectedPlan 提交�
   - **书架**：继续观看；今天更新（用户在追、今天出了新集的作品，需要弹弹play 身份）；你摆的书架；最近添加（最新 20 部作品）。
 - **发现**：弹弹play 的每日放送与推荐。
 - **媒体库**：
-  - 角落菜单先列“本地”（本机和组网设备合并的目录），再列各个 SMB、WebDAV、Jellyfin、Emby。一个来源一页，形式是书架或类别卡片。
-  - 每个来源有原始结构：本地只有“全部”，Jellyfin/Emby 是已选的服务器库及其层级，共享是文件夹。用户要求时，你用 `ui.library.*` 整理类别；原始结构和整理可以切换，切回原始会保留整理。
+  - 角落菜单先列“本地”（本机和组网设备合并的目录），再列各个 SMB、WebDAV。一个来源一页，形式是书架或类别卡片。
+  - 每个来源有原始结构：本地只有“全部”，SMB/WebDAV 保留文件夹层级。用户要求时，你用 `ui.library.*` 整理类别；原始结构和整理可以切换，切回原始会保留整理。
   - 类别有三种内容：条件（本机持续计算，新作品自动进来，不需要你在线）、手选（一串作品）、来源原样（某个库或文件夹）。已绑定身份的服务器作品可以和本地作品进同一个条件类别。
   - 分类由用户提出，不要自作主张地分类。
   - 原始类别的重排和隐藏只在本机生效，不改服务器或共享；`ui.library.restore` 恢复隐藏。离线来源显示上次读到的目录，作品不能播放。
@@ -227,14 +267,16 @@ NipaPlay 自己会做一部分：实体有对应 TMDB 身份时取图，把下�
 - **你取得的结果都可以交给 NipaPlay 保存**（弹幕、元数据、身份），它会记录来源并检查一致性。缺少入口时，如实告诉用户。
 - **专用原语之外，也可以直接读写库**：`db.describe` 列出 next.db 的表、含义、可写范围和跨表规则（classic_match 如何在显式 import_history 时导入、覆盖优先于快照、图片覆盖存在哪）；`db.query` 用 SQL 只读查询；`db.write` 先预演再提交，`db.undo` 撤回。专用原语仍是便捷入口，已有身份、资料、绑定的契约不变；直接写入不往 Classic 投影。
 - **从视频取画面**：`media.frames`：从视频文件的指定时间取画面，每张写成本机临时的 JPEG（默认）或 PNG 文件，并返回路径、宽高和画面实际所在的时间。用途举例：看某一集几个时间点的样子，把两集同一段落的画面放在一起比对，给用户看他说的那一刻。媒体用 path（本机绝对路径、file:// 或 media.library.readable / media.mesh_files.readable 给出的 http(s) 地址）或已记录剧集的 animeId + episodeId 指定。时间用 atMs（毫秒数组）或 range {startMs,endMs,everyMs}（含 endMs，everyMs 不小于 100），二者给一个。单位全是毫秒。每次最多 60 张，超出整个调用被拒绝，一张也不取。尺寸用 width 或 maxEdge（最长边，默认 640，最大 3840），保持比例，不放大到超过视频本身。timeoutMs 限制整次调用（默认 60 秒，最大 300 秒）。取不到的帧在 frames 里带 error.code（beyond_duration、decode_failed、timeout、skipped_after_timeout）而不影响其他帧；durationMs 与视频尺寸是文件的事实，未知时为 null。画面来自独立的解码器，不暂停、不跳转、不重开正在播放的视频，调用结束前释放：有 Erika 时用 Erika 自己的单帧导出（独立的解复用与软解，PNG 由 Erika 直接编码），不能用时退回 MDK；engine 写实际用的引擎，退回时 engineFallback 给出 Erika 没用上的原因。文件是临时的，一天后清理。这个能力只给画面，画面里是什么由你判断。要自己看画面，用 `read_image` 读这些文件；图片直接随请求交给模型，NipaPlay 不预先探测模型收不收图。模型或服务商不接受图片时，请求会带回服务商的错误，这时可以换能看图的模型，或者用别的办法；在 DSH 高级配置里把 `model.input` 设为 `["text"]` 的纯文字模型不会收到图片。''',
-  'db': r'''next.db 的直接读写入口，与 media.*、danmaku.* 等专用原语并存。凭据不在这个库里。这些能力可通过 mesh.invoke 或 nipa --device 调用，作用于目标设备自己的 next.db，使用目标设备原始实体 ID。
+  'db':
+      r'''next.db 的直接读写入口，与 media.*、danmaku.* 等专用原语并存。凭据不在这个库里。这些能力可通过 mesh.invoke 或 nipa --device 调用，作用于目标设备自己的 next.db，使用目标设备原始实体 ID。
 - **读**：`db.describe` 给每张表的列、主键、外键、索引、含义，以及它可不可写、为什么；还给跨表规则（`semantics`）。`db.query` 执行一条 SELECT（含 WITH … SELECT），`?` 按位置绑定 params。SQLite 自己保证只读：非 SELECT 在语法层被拒，连接处于 query_only。结果受 limit 与 maxBytes 限制，被截断时 `truncated` 为 true，`nextOffset` 是续读位置（自己加 ORDER BY 让分页稳定）；过长的单元格被截短。值里的凭据被遮蔽。
 - **写**：`db.write` 一次提交一批 INSERT/UPDATE/DELETE（至多 100 条，同一事务）。不带 previewId 只预演：事务回滚，按表返回插入、更新、删除的行及前后值（太多时给计数和样例）和 `previewId`。带 `previewId` 提交的就是预演过的效果：这些行在预演后被改过，就拒绝并什么都不写，重新预演即可。未提交的 previewId 绑定调用来源，只在目标进程内存里保留约 10 分钟。提交成功后的回执持久保存在 db_operations；响应丢失或目标重启后，同一来源用同一 previewId 重试会返回原回执，不再执行 SQL。提交时提供的 statements 与 reason 在重试时必须一致。提交后刷新尚未完成时，恢复回执可能带 committed:true、postCommitPending:true。
 - **边界由 SQLite 执行**：只有 describe 标为可写的表能改（别的表的写入被 SQLite 触发器中止）；DDL、PRAGMA、ATTACH、事务控制、多条语句不被 SQLite 当作单条 INSERT/UPDATE/DELETE 接受；外键、JSON 列和少量不变量在提交前检查，违反就整批回滚并列出原因。可写的是媒体身份与资料（media_entities、media_bindings、media_overrides、media_snapshots……）、danmaku_bindings、ui_shelves、ui_presentations；任务引擎、后续、会话、各类历史与审计、缓存和投影队列只读。
 - **记录与通知**：每次提交写入 db_commits（SQL、参数、改动计数、前后镜像、origin、invocationId、actor），并在 activity 里留一条；发出 `media.assets.changed`（kind 为 metadata、artwork、danmaku 或 identity），刷新读这些行的界面、媒体库索引和封面缓存。直接写入不往 Classic 投影，不产生专用原语的回执和领域历史，不自动递增 media_entities.revision。
 - **回执**：`db.receipt {kind:"write",requestKey:原previewId}` 查询同一来源的持久 SQL 回执；撤回用 kind:"undo" 和原 requestId。committed 由数据同事务写入证明，跨重启有效；postCommitPending 单独标记后续通知。unknown 不证明未执行，不换 key 重做。
 - **撤回**：`db.undo {commitId}` 恢复那次提交的前镜像。每一行当前内容必须仍等于那次提交的后镜像，否则整个撤回被拒绝并列出冲突的行；`dryRun:true` 只看不改。撤回本身也是一次提交，可再撤回。远程实际撤回须带稳定 requestId；同一来源以相同 requestId、commitId 和 reason 重试，取回原回执而不重复撤回。本地旧调用可省略 requestId。''',
-  'danmaku': danmakuFamilyDescription + r'''- **弹幕**：
+  'danmaku': danmakuFamilyDescription +
+      r'''- **弹幕**：
   - **长期保存**：fetch、attach、import 以及播放时自动获取成功的弹幕都保存为持久内容，重启和缓存空间清理不会删除。表名和参数里的 cache 是历史命名。刷新失败保留旧内容；明确删除用 danmaku.cache_delete。
   - **播放时自动匹配**：按 danmaku.autoLoadStrategy 和 danmaku.skipMatching 设置，先复用已有弹幕；原绑定缺内容时按原视频号补取；无弹幕绑定时先读取 accepted 的 Dandanplay episode 元数据身份，直接获取且不求哈希（skipMatching 只跳过匹配，不阻止已知 ID）；仍无准确身份的本地文件使用既有弹弹play 头部 16 MiB MD5 哈希匹配，只有唯一匹配才自动获取并保存。无匹配、多匹配或网络失败均不猜标题、不阻断播放。Mesh 在文件所在设备做同样的准备，再发送轨道给播放端；播放端不对临时串流地址求哈希。
   - **轨道**：一条弹幕轨道属于某个文件或某一集，有它的来源平台（弹弹play、优酷、B 站、本地文件……）和该平台上的视频；同一平台的同一个视频只保留一条，再次交入就是刷新。
@@ -246,8 +288,9 @@ NipaPlay 自己会做一部分：实体有对应 TMDB 身份时取图，把下�
       r'''Per-file subtitle facts persist independently from playback. Imports copy content into managed storage and batch errors retain index and recovery information. update edits imported language/title/source with expectedRevision; remove releases an imported association and retains its copy. reset_selection restores automatic selection; select null explicitly disables. Current internal playback and persistent selection use the same facts. copy_delete alone deletes unreferenced managed copies and returns NeedsDecision with an exact fingerprint. cues reads active external timed text with delay-aware current/context lines; embedded or bitmap limitations are explicit.
 - **字幕**：按视频文件记录内嵌轨与匹配的外挂字幕，包含语言、标题、格式、来源、可用性和默认选择。内嵌语言来自容器声明，外挂语言来自文件名，未知记为 `und`；文件名语言不是内容核验，记录没有识别烧录在画面中的字幕。资源标题里的“内嵌”通常是压进画面的硬字幕，不会出现在轨道里；“内封”才是可选的字幕轨。单视频目录的 `Subs/`、`Subtitles/` 下语言字幕也会记录。`media.metadata.ui_facts` 给出每集的字幕语言、内嵌或外挂轨道及覆盖。`subtitle.tracks` 读取记录；`subtitle.import` 批量交入字幕文件及语言、来源，内容复制进 NipaPlay 数据目录，交完原文件不再需要，视频目录可以只读。Next 播放时按记录恢复字幕：显式选择和已有 Classic 选择优先，之后按应用语言设置决定简中或繁中优先，再选中文、英文；文本外挂先于内嵌轨。默认选择及依据也在记录中，`subtitle.select` 可记录选择或关闭字幕。`playback.select_track` 和 `playback.load_subtitle` 带 `remember`（布尔，默认 false）：false 只对当前播放生效，不写字幕记录，也不写 Classic 共用的外挂字幕列表；true 把这次选择写进字幕记录（外挂文件同时进入共用的外挂字幕列表），下次打开同一视频照用；返回值的 `remembered` 是这次是否写入了记录。用户在播放器界面上选的字幕总是记住。`playback.tracks` 的 `subtitles.selected` 是当前正在用的，`subtitles.remembered` 是字幕记录里为这个视频保存的（null 表示没有保存），`rememberedIsSelected` 说明两者是否一致；每条字幕轨道另有 `remembered` 标记。
 - 无界面宿主支持字幕事实、同名外挂索引、导入和显式默认选择；配置 ffprobe 时记录内嵌轨道，未配置时内嵌状态为 unavailable。它不播放字幕、不读取 Classic 字幕偏好或观看历史；默认字幕由调用者显式选择。''',
-  'download': 'preview 接受 magnet、本地 .torrent/file URI 和 HTTP(S) 种子地址；复用 add 的有界元数据获取、hash 校验和缓存，不创建任务或下载媒体字节。GUI delete 返回文件清单 NeedsDecision；delete.request 创建持久 disk_deletion 任务，等待当地用户确认并重检清单；用户同意、拒绝、关闭窗口或取消后，结果（状态、是否已删、deletedFiles）作为后续回到发起它的会话，忙时排队，你已登记 `followup.register when {jobId}` 的不再重复送。delete 加 fileIndices（仅限单个 jobId）只删下载里的这几个文件：清单和确认窗口只列它们；用户同意后先把它们从引擎的选择里去掉再删数据，其余文件继续下载或做种；回读里这些文件 included 为 false、actualSize 为 null，deletedFiles 列出已删的；确认前文件或选择变了就拒绝；只能是输出目录内的本地文件，不删目录。remove 保留文件。\n' +
-      r'''- **下载器**：内置 BT 引擎支持 magnet、种子文件和 HTTP(S) 种子链接，使用 Classic 的下载目录设置；新任务可以指定目录和是否建立任务文件夹，重复添加同一哈希不会搬动已有文件。由你发起的下载，视频文件通过校验并登记入库时、任务完成或失败时，以及连续五分钟没有新字节时（`download.stalled`，带当时的已下字节和连接、已发现、失效 peer 数；拿不到元数据也算，那时带 `metadata: false` 和最近一次错误，已下字节为 0，未知的总字节与 peer 数为 null，拿到元数据这段就过去；每段停滞送一次，有了新字节才算过去），事实都会自动作为后续回到发起它的会话；取消的任务不再回报。Codex 会话忙时排队，DSH 可在活动回合的下一步接收；宿主不可用时等待。第一份文件事实和停滞立即入队，其余文件按十分钟合并，任务结束立即送回剩余事实；你已登记的同事件后续不会再多送一份。停滞也是公开事件（对象是 `stalled:任务号:序号`），不论下载由谁发起，都可以写 `hooks/download.stalled` 或用 `followup.register` 的 `when: {event: 'download.stalled', objectId: 任务号}` 等它的下一次停滞（省略 objectId 等任意下载）。`download.read` 给出实际落盘路径、逐文件已校验字节、完整与可播状态、连接/已发现/待连接 peer、最近采样间的进展和所在盘可用字节。初始化时逐文件进度可能未知；公开引擎接口不提供做种数或来源持有的片段分布，返回 null。可以在添加时指定文件索引，也可以用 `download.select_files` 改变任务要下载的文件；不删除已下的数据（要删数据用 `download.delete` 的 fileIndices）。引擎没有普通文件优先级接口。
+  'download':
+      'preview 接受 magnet、本地 .torrent/file URI 和 HTTP(S) 种子地址；复用 add 的有界元数据获取、hash 校验和缓存，不创建任务或下载媒体字节。GUI delete 返回文件清单 NeedsDecision；delete.request 创建持久 disk_deletion 任务，等待当地用户确认并重检清单；用户同意、拒绝、关闭窗口或取消后，结果（状态、是否已删、deletedFiles）作为后续回到发起它的会话，忙时排队，你已登记 `followup.register when {jobId}` 的不再重复送。delete 加 fileIndices（仅限单个 jobId）只删下载里的这几个文件：清单和确认窗口只列它们；用户同意后先把它们从引擎的选择里去掉再删数据，其余文件继续下载或做种；回读里这些文件 included 为 false、actualSize 为 null，deletedFiles 列出已删的；确认前文件或选择变了就拒绝；只能是输出目录内的本地文件，不删目录。remove 保留文件。\n' +
+          r'''- **下载器**：内置 BT 引擎支持 magnet、种子文件和 HTTP(S) 种子链接，使用 Classic 的下载目录设置；新任务可以指定目录和是否建立任务文件夹，重复添加同一哈希不会搬动已有文件。由你发起的下载，视频文件通过校验并登记入库时、任务完成或失败时，以及连续五分钟没有新字节时（`download.stalled`，带当时的已下字节和连接、已发现、失效 peer 数；拿不到元数据也算，那时带 `metadata: false` 和最近一次错误，已下字节为 0，未知的总字节与 peer 数为 null，拿到元数据这段就过去；每段停滞送一次，有了新字节才算过去），事实都会自动作为后续回到发起它的会话；取消的任务不再回报。Codex 会话忙时排队，DSH 可在活动回合的下一步接收；宿主不可用时等待。第一份文件事实和停滞立即入队，其余文件按十分钟合并，任务结束立即送回剩余事实；你已登记的同事件后续不会再多送一份。停滞也是公开事件（对象是 `stalled:任务号:序号`），不论下载由谁发起，都可以写 `hooks/download.stalled` 或用 `followup.register` 的 `when: {event: 'download.stalled', objectId: 任务号}` 等它的下一次停滞（省略 objectId 等任意下载）。`download.read` 给出实际落盘路径、逐文件已校验字节、完整与可播状态、连接/已发现/待连接 peer、最近采样间的进展和所在盘可用字节。初始化时逐文件进度可能未知；公开引擎接口不提供做种数或来源持有的片段分布，返回 null。可以在添加时指定文件索引，也可以用 `download.select_files` 改变任务要下载的文件；不删除已下的数据（要删数据用 `download.delete` 的 fileIndices）。引擎没有普通文件优先级接口。
 - **单个下载文件完成时**：引擎确认全部片段通过校验、NipaPlay 核对路径和大小后，本地视频就登记入库，无需等整个任务结束。Next 只登记文件，不调用 Classic 扫描器；由 Agent 查询候选并显式绑定，不虚构作品。`download.file_completed` 事件的对象是 `任务号:文件索引`，包含文件校验事实和文件当时的 `media`（`fileId`、`workIds`、`episodes`；每个剧集带 `identitySources`，说明这条文件—剧集关联来自哪里：Classic 自动识别 `classic_match`、写入时带 `boundBy` 和 `origin` 的显式绑定，或 `local_catalog`；没有关联时 `episodes` 为空，`download.read` 里已登记文件的 `media` 是读取时的当前状态），可以触发同名 hook 或登记的后续。完整文件的持久校验记录允许访问该文件，不把下载目录或未完成的邻居当作媒体库根目录。整个任务完成仍有原来的回执和 `download.completed` 事件；回执保留 `fileIds` 和当时已有的 `workIds`，后来绑定的作品通过文件当前的剧集对应找到。扩展已完成的文件选择会返回新的观察任务，旧回执保留。
 - **HTTP 下载**：`download.add` 带 `backend: {kind: "http"}` 时，source 是一个 http:// 或 https:// 文件地址（其他协议拒绝），NipaPlay 用自己的 HTTP 下载器把它当普通文件下载，走同样的任务、停滞（`download.stalled`）、`download.file_completed` 和入库流程；不解压、不从文件名猜内容，zip 之类非视频文件照实报告 `not_video`。文件放在 downloadDirectory 或下载目录设置里（createFolderForTask 为 true 才建以文件名命名的文件夹），文件名是服务器给的（Content-Disposition 的 filename，否则最终地址路径的最后一段），已有同名文件不覆盖，新文件加 " (1)"、" (2)"；数据先写 `文件名.nipaplay-part`，完整且校验通过才改名，媒体库不会看到半个文件。暂停、继续、取消和重启后用 Range 续传，服务器不支持时从头下；可选 `connections`（整数 1–8，默认 1）把文件分成这么多段、用各自的连接并行下载到同一个 `.nipaplay-part`，只在服务器给了 `Accept-Ranges: bytes` 和 Content-Length 时生效，否则退回单连接；`health.http.connections` 如实记 `{requested, used, reason}`（used 等于 requested 时 reason 为 null，否则是 `no_range`、`unknown_length`、`too_small` 或 `range_ignored`），多连接时另有每段的 start、end、completedBytes。已下字节是各段之和，所有段都没有新字节才算停滞，某一段出错只重试那一段，续传时每段从自己已有的字节继续；`health.http.resume` 记 `confirmed`、`ignored`、`rejected` 或 `untested`。连接失败和 5xx/408/429 会重试且不算进展，所以照常触发五分钟停滞；其他 4xx 直接令任务失败。可选 `checksum: {algorithm: md5|sha1|sha256, value}` 在最后一个字节后核对，不符则任务失败，失败和回执里都有期望值与实际值，数据留在 `.nipaplay-part`；不给 checksum 时回执的 `checksum` 记录算出的 sha256，`matched` 为 null（没有核对）。没有 peer，`health` 里的 peer 计数为 null。任务的 `infoHash` 是 `http-` 加规范化地址（去掉 # 片段）的 SHA-1，与种子 infoHash 不会相同。`download.preview` 带同样的 backend 时只发 HEAD（被拒绝才发 `Range: bytes=0-0` 的 GET 并在响应头后关闭），返回最终地址、状态码、Content-Length、Content-Type、是否支持 Range、服务器给的文件名、Last-Modified 和 ETag，不下载内容，不创建任务。
 - **下载引擎汇总**：`state.query downloads.engine` 每个后端（builtin、http，以及已配置的每个 qBittorrent）一行：是否启用（`download.enabled`）、运行/排队/暂停/等待/已结束的任务数、后端报告的总下载与上传速率、会话限速读回值（0 为不限；读不到为 null）。下载关闭时不询问后端，速率为 null；后端出错时带 `error` 码。http 后端没有限速控制（`limitsSupported` 为 false）。qBittorrent 的行另有 `id`、`name`、`address`（不含登录）、`local`（它是否跑在这台电脑上）、`online`（刚刚问过它是否应答；下载关闭时不问，为 null）、`version`、`apiVersion`；它关着时 `online` 为 false、`error` 为 `unavailable`，速率为 null。启动时给你的下载摘要里也列出这些 qBittorrent。
@@ -279,14 +322,14 @@ NipaPlay 自己会做一部分：实体有对应 TMDB 身份时取图，把下�
   'agent':
       r'''- **子代理（subagent）**：运行你的 agent 程序原生的子代理，在同一个 harness 的独立会话里工作；用户在 NipaPlay 里看到它是一项后台任务，能用 `task.cancel` 停止。它结束时的回复回到派它的会话：你还在回合里就作为下一步的输入，回合已结束就开一个新回合；同一个结果不会交回两次。
 - **宿主派发**：`agent.dispatch` 接收标题、说明及可选的返回线程，脚本或 hooks 在没有父 Agent 回合时也能启动独立回合，默认返回主会话。宿主派发最多同时运行两个，更多的排队；`agent.dispatch.report` 是宿主派发回合的一句话进度接口。原生子代理的并发由运行它的 agent 程序管理。''',
-  'settings':
-      r'''- **设置的每次修改都记录来源**：谁改的、何时、为什么。用户说"以后都这样"时，就是一条持久偏好，修改时写明理由。
+  'settings': r'''- **设置的每次修改都记录来源**：谁改的、何时、为什么。用户说"以后都这样"时，就是一条持久偏好，修改时写明理由。
 - **存储值与生效值**：`settings.get`、`settings.set` 和 `settings.describe` 的每一项并列返回 `value`（存储值）和 `effective`（运行中实际在用的值），以及 `effectiveState`、`effectiveSource`、`effectiveReason`、`effectiveDetail`。`effectiveState` 为 `same`（两者相同）、`differs`（不同，原因在 `effectiveReason`：`restart_required` 需重启、`reload_required` 下次打开媒体才用（播放器内核、HTTP 代理、macOS 原生视频、Erika Android 输出模式：没有打开的媒体时 settings.set 之后播放器立刻按存储值重建；正在看的媒体不受打扰，下一个媒体打开后在按存储值新建的播放器上重开一次，重建后恢复为 `same`）、`runtime_adjusted` 播放器按当前状态调整了值、`speed_boost_active` 长按加速中）、`inactive`（存储值没有在用，`effective` 为 null；`overridden` 被另一项设置覆盖、`inactive_dependency` 依赖的设置关着、`kernel_unsupported` 当前内核不支持，`effectiveDetail` 点名那一项）、`unknown`（取不到运行值，`effective` 为 null；`applies_at_next_open`、`loaded_when_page_created`、`player_not_attached`、`no_runtime_probe`、`probe_failed`）。`effectiveSource` 为 `live`（读自运行中的组件）、`startup`（应用启动时读入的存储值，只在启动时读取的设置）或 `storage`（没有可单独观察的运行值，保存它的 setter 就是运行组件使用的那个）。
 - **会把密钥或流量送往别处的设置要用户同意**：`danmaku.spoilerAiApiUrl`（防剧透 AI 的密钥和弹幕）、`network.httpProxy`、`plugins.githubProxyUrl`、`network.bangumiServerUrl`（Bangumi 令牌和请求）、`network.allowInvalidCertificates`（全局信任自签名证书）。用户在对话中已明确授权具体变更及其影响时，`settings.set` 可附 `userAuthorization` 记录实际指令并直接应用，无需重复点窗口。未附授权时，把它们设为非空（开关设为开）返回 NeedsDecision，什么都不改；同一次调用里的其他修改也一并等待，同一次调用里这几项的无效值会让整个调用被拒绝。选项 `settings.set.request` 创建 `setting_consent` 任务并在 NipaPlay 里问用户：只有用户点“更改”才按原调用（原 reason、expectedRevision）写入；用户拒绝则任务失败，信息是“用户没有同意修改设置”，设置不变。用户回答后（更改、取消或关窗）结果作为后续回到发起它的会话，忙时排队，你已对该 jobId 登记 `followup.register` 的不再重复送。设为空串或关闭、`settings.reset`、值没有变化，以及用户自己在设置页改，都不需要问。
 - 实验室语音输入：`voice.configure` 选择本机或用户授权的云端服务，`voice.status` 查询配置和录音故障。本机模式在实际输入设备上设置 `labs.voiceModel` 和 `labs.voiceEnabled`；本机模式开启后异步下载，`labs.voiceStatus` 的 ready/installed 才证明就绪。`labs.voiceModelDownload:true` 重试下载，false 关闭并删除所选模型。支持桌面与 iPhone/iPad，录音在本机转写；设置开关不开始录音，用户点击麦克风后输入、确认发送。手机会话宿主可能在远端，不能把宿主误当作输入设备。
-- 以下设置读写 Classic 界面里的同一份偏好：`network.bangumiServerUrl`（空串为官方服务器，`effective` 是请求实际使用的完整地址）、`network.mediaServerDeviceId`（空串为自动生成，`effective` 是 Jellyfin/Emby 请求实际带的 DeviceId）、`appearance.largeScreenLayout`、`appearance.classicLocalLibrarySort`、`appearance.collectionSort.<local|webdav|smb>`、`appearance.unwatchedOnly.<jellyfin|emby|shared>`、`playback.<jellyfin|emby>DefaultQuality` 与 `playback.<jellyfin|emby>Transcoding`。后几类视图偏好在页面创建时读取（`apply` 为 restart_app，`effectiveReason` 为 loaded_when_page_created）。
+- 以下设置读写 Classic 的同一份偏好：`network.bangumiServerUrl`、`appearance.largeScreenLayout`、`appearance.classicLocalLibrarySort`、`appearance.collectionSort.<local|webdav|smb>`。页面偏好在创建时读取；具体生效事实见 settings.get。
 - **没有设置认领的偏好**：`settings.prefs.list` 列出应用偏好（SharedPreferences）里的所有键，标出类别、类型和大小，不含值。`class` 为 `claimed`（某个注册表设置存放它，`claimedBy` 点名；用 `settings.set`）、`credential`（按名字或策略是秘密）、`boundary`（授权边界：远程访问、遥控、Agent、模型、组网）、`routing`（按名字是地址、代理、服务器或证书信任而没有设置认领）、`open`。`settings.prefs.get` 读值：看起来像秘密的文本被遮蔽，超过 4000 字符的被截断；`credential` 和 `boundary` 的值任何动作都不返回（边界的非秘密事实见 `app.runtime`）。`settings.prefs.set` 是兜底，只能写 `open` 的键：先预览（改前改后和 `previewId`，只有发起者可用一次），再带 `previewId` 写入；预览之后偏好变了、或值像凭据，就拒绝；已有的键保持类型；除类型外不校验值。每次写入记录 `commitId`（`prefs-N`）、来源、reason、改前改后，`settings.prefs.history` 列出，`settings.prefs.undo` 撤销（该偏好仍是那次写入留下的值才行，撤销本身也是一次可撤销的记录）。已被设置认领的键、凭据、授权边界和 routing 键不能这样写，只有用户能改，或经校验它的设置。''',
-  'history': r'''观看进度由播放器写入；mark_watched_batch 可以标记看过。state.query history.entries 提供稳定 entryId、fileId、canonical workId/libraryEpisodeId 和本机缓存 poster/still；旧 episodeId 仍是 Classic 数字编号。无绑定/无缓存返回 null，不联网取图。历史按 lastWatchedAt 降序及 entryId 排序，游标存排序值，删掉已读条目或最后锚点仍能继续；这是实时观测，条目的观看时间变化仍可能重排。remove 支持 entryIds/paths/animeIds 的并集，包括 locator=null 的条目，只删除记录，保留视频。''',
+  'history':
+      r'''观看进度由播放器写入；mark_watched_batch 可以标记看过。state.query history.entries 提供稳定 entryId、fileId、canonical workId/libraryEpisodeId 和本机缓存 poster/still；旧 episodeId 仍是 Classic 数字编号。无绑定/无缓存返回 null，不联网取图。历史按 lastWatchedAt 降序及 entryId 排序，游标存排序值，删掉已读条目或最后锚点仍能继续；这是实时观测，条目的观看时间变化仍可能重排。remove 支持 entryIds/paths/animeIds 的并集，包括 locator=null 的条目，只删除记录，保留视频。''',
   'task': 'UiTask.type 带 executor 类型，例如 download、media.scan_classic；kind 仍区分 background/helper。任务关联的作品不存在时仍呈现任务，不假造作品或图片。\n' +
       r'''后台任务共用持久快照、来源和回执。control 批量暂停/恢复/取消，逐项给支持与受理事实；paused 可能仍在排空当前文件。get/wait 核对完成。resources 读取实际容量；tasks.*Concurrency 设置只改变新工作派发。不能安全重放的执行器拒绝暂停。终态回执不改写，取消不删除文件。
 - `describe ACTION` 给出输入与输出契约，`call task.list` 可筛选任务（默认最新的在前、每页 50 个，`total` 是匹配总数；用 `limit`、`offset` 翻页，`nextOffset` 给出下一页的起点，没有时已是最后一页；需要正序时传 `order:"oldest"`），`call task.get '{"jobId":"..."}'` 给出单个任务详情。查询默认每页 50 行，可用 `limit`、`select` 与返回的 `nextCursor` 控制读取范围。
@@ -297,8 +340,8 @@ NipaPlay 自己会做一部分：实体有对应 TMDB 身份时取图，把下�
   'state':
       r'''只读视图读已有索引，不重新探测视频。查询默认每页 50 行，支持 limit、select 和 nextCursor。用 ./nipa call state.describe '{"view":"视图名"}' 读取字段、单位、关系与查询约束；不指定 view 列出全部视图。
 - 系统状态视图，只陈述观察到的事实，每个时间都是那次观察发生的时刻，没有观察过就是 null：`media.sources`、`media.source_addresses`（来源及其每个地址）、`accounts`、`network.routes`、`network.observations`、`storage.volumes`、`storage.directories`、`library.scan`、`app.update`、`harness.hooks`、`harness.schedules`、`downloads.engine`。字段含义用 `state.describe` 读。这些视图读现有状态，不联系服务器、不启动下载器。''',
-  'app':
-      appFamilyDescription + r'''update.check 立即复用 Classic 发布检查；失败时 hasUpdate/latestVersion 为 null，错误与检查时间保留。update.status 读取上次检查；update.open 打开已核对公开发布页。没有应用内更新安装或下载能力。instance 读取当前进程事实。
+  'app': appFamilyDescription +
+      r'''update.check 立即复用 Classic 发布检查；失败时 hasUpdate/latestVersion 为 null，错误与检查时间保留。update.status 读取上次检查；update.open 打开已核对公开发布页。没有应用内更新安装或下载能力。instance 读取当前进程事实。
 - `app.runtime` 读取这台设备上只有用户能改的设置的非秘密事实：`remoteAccess`（服务是否在运行、端口、自启动、IPv6、接收端是否开启、受信任设备数量，没有设备身份和令牌）、`mesh`（是否加入、状态、设备名、协调服务地址（不含凭据）、端口、仅本机、局域网发现、手动地址、文件代理端口、是否允许远程运行程序）、`agent`（Agent 端点开关）、`runtime`（`selected` 按环境和实验配置选中的是 codex 还是 dsh；`running` 当前对话宿主的运行时、模型、提供方，没有宿主时为 null；`codex` 的来源、版本与是否已安装）、`model`（NipaPlay 里设置的提供方、不含凭据的地址、模型名和 `keyConfigured`，或沿用的 Codex 配置里写的模型）。密钥不返回；这些设置不能通过 Action 修改。
 - `app.restart`（仅 macOS 与 Windows）：先启动一个脱离的辅助进程，一秒后与 `app.quit` 一样正常退出；辅助进程最多等 60 秒让本进程退出，然后用同一个可执行文件、同样的启动参数和环境（实验配置的环境变量原样带回）再启动一次，本进程没有退出就什么都不启动。结束的是连接着你的这个实例及其端点，新进程有新的进程号并自行启动端点，重连后用 `app.instance` 确认。回执只表示已安排，不证明新进程已启动。`apply` 为 `restart_app` 的设置在新进程里生效。其他平台返回 unavailable，读不到启动参数或启动不了辅助进程时也返回 unavailable，并且什么都不重启。
 这台机器上可能装着多个 NipaPlay（正式版、开发构建、实验副本）；按应用名或 bundle id 打开的未必是 `nipa` 连接的那个实例。`nipa status` 的实例事实和 `ui.*` 的界面操作、截图来自当前连接的实例。
@@ -322,22 +365,20 @@ Classic 与 Next 使用各自的播放会话；部分设置、观看记录和进
 - 这些改动不跨内核实例：关闭 Next 界面时会话关闭，实例随之销毁。长期生效的改动用 settings.set；播放中保存内核相关设置不影响正在播放的实例，下一次打开按新值，settings.get 的 effective 报告正在播放的实例是按什么值建的。''',
   'discover': r'''弹弹play 每日放送与推荐。''',
   'plugins': r'''应用插件。''',
-  'media.sources': r'''SMB、WebDAV、Jellyfin、Emby、弹弹play 远程等媒体来源。
-- 弹弹play 远程默认展示全部作品，不逐部勾选。首次进入 Jellyfin/Emby/弹弹play 来源会登记后台目录同步，页面仍分页读取。browse/sync 保存来源原生作品、季、集、文件关联与资料快照，返回的 workId/episodeId 可用于 identity、metadata、artwork 与完整度检查。保留已有人工作品绑定和字段覆盖。
-- 来源原生身份的 provider 是 https://sources.nipaplay.app，按设备/连接/实际服务器隔离；刷新它的资料用 media.sources.sync。ProviderIds 和 sourceProviderIds 是服务器给出的匹配证据，核实后再显式绑定 TMDB/Bangumi/弹弹play。已有服务器资料可直接利用，不要求从零刮削。改标题、封面、展示规则作用于 Next，不回写服务器。
-- search 结果的 poster 是已有本机缓存路径；没有缓存为 null，不逐项取图。workTitle 给已绑定作品名。artwork(sourceId,itemId) 懒加载服务器海报，复用 X48 图片供应者，只返回本机路径，不返回鉴权 URL。
-- `media.sources.search {query,sourceIds?,limit?}` 是只读搜索：Jellyfin/Emby 用服务器 SearchTerm 和有界分页，SMB/WebDAV 只查已有文件索引，不枚举目录、不登记新文件、不写发现记录。省略 sourceIds 搜所有支持的已配置来源；limit 限制每个来源（默认 12）。返回 sources[]，每个来源单独给出 entries、total 或 error。离线或登录失败如实返回，其他来源保留结果；索引来源的 unverified 是未知连通状态，不能当成在线。
-- 结果有 sourceId、itemId、标题、可播放事实；已绑定条目带 Next workId/episodeId，服务器原样条目另有 sourceWorkId/sourceEpisodeId。作品 ID 用 ui.open，来源条目用 media.sources.play {sourceId,itemId}。来源分组在界面上可逐个 sourceIds 请求，分别显示结果与错误。
-- browse/sync 是发现与写索引入口；不要用它们实现每次输入的搜索。
-- 每个来源还带重启后仍在的观察事实，列表不联系服务器；同样的事实在 `state.query` 的 `media.sources` 与 `media.source_addresses` 里可过滤。`addresses[]` 给每个已配置地址最近一次尝试：`reachability`（reachable、unreachable，没有尝试过是 unknown，不等于离线）、`lastAttemptAt`、`lastSuccessAt`、`lastFailureAt`、稳定的 `errorCode`（如 timeout、connection_refused、dns_failed、network_unreachable、tls_failed、auth_failed、credential_missing、http_状态码、connection_failed）和 `latencyMs`。SMB/WebDAV 地址在启动检测和测试连接时探测，Jellyfin/Emby 的各地址在连接时尝试，只有一个地址的来源在 `media.sources.check` 时记录。`lastCheck` 是最近一次检查，`sync` 是最近一次同步（result 为 running、succeeded、failed、cancelled，进程结束时仍在跑的记为 interrupted；`lastSuccessAt`、`indexed`、`errorCode`、`jobId`），`lastError` 带 `code`、`at`。`credential.state`：none（不需要登录）、saved（已有保存的登录，不读保险库，保险库里的条目没了会在使用时以 credential_missing 出现）、missing（需要登录而没有保存）、rejected（来源在最近一次接受之后拒绝了保存的登录），另有 `lastRejectedAt`、`lastVerifiedAt`；从不含凭据。改了地址或账号后，旧的探测与凭据观察清除。
-- browse/sync 把条目登记为文件时，首次登记的条目发出 `library.file_added`（`via` 为 `media_source`，`path` 是来源条目的位置，`fileId` 为登记的文件）；由你的调用发起时计入新进媒体库的事实，见 `followup` 族。
-- WebDAV、SMB 各有内网和公网两个地址，至少一个非空，空表示未配置。WebDAV 是 url（内网）和 wanUrl（公网）；SMB 是 host/port 和 wanHost/wanPort（同时以 smb:// 的 url、wanUrl 给出）。两个都有时 Classic 优先内网，address 是当前正在使用的那个，可能无需编辑就在内网与公网间变化；Jellyfin、Emby、NipaPlay、Dandanplay 只有 url，address 与它相同。
-- put/update 接受这些字段；省略的字段（包括另一套地址）保持不变，空字符串清除该地址，但至少保留一个。地址规则不变：WebDAV 只允许 HTTP(S)，不带凭据、query、fragment；SMB 主机不带凭据或路径。
-- 已保存的密码属于保存时的那组地址：删除某个地址或在内网与公网间切换仍可使用，新增或更换为不同的地址、或换账号，需要重新 login。''',
-  'media.library': r'''`media.library.search_merged {query,limit?,episodeLimit?}` 只读搜索 X48 本机与认证 Mesh 合并目录的标题、原名、已有别名、年份及剧集标题；空白分词为 AND，忽略大小写，按字面子串匹配。返回 works[]、episodes[{work,episode}]、workTotal/episodeTotal，默认每组最多 12。返回 workId/episodeId 可以直接用于 Next 作品页和 ui.open；海报是本机路径，设备与 playable 是目录最近观察。索引每 5 秒随目录更新，media.library.refresh 可立即刷新；首次搜索建立索引，其后不逐次读全库。离线 Mesh 保留事实并标为不可播放。
+  'media.sources': r'''SMB、WebDAV 文件来源。
+- list 读取配置与已有观察，不联系来源、不读取凭据。add/update 配置地址和用户名，login 单独登录；可在明确用户授权后使用 password 与 userAuthorization，未提供密码时打开登录窗口。任务输入和回执不保存秘密。
+- browse/sync 发现文件并保留来源目录事实；原生身份命名空间是 https://sources.nipaplay.app，已有 ID 格式保持不变。用户与梨花通过明确匹配建立作品身份，刷新不改人工绑定和覆盖。
+- search 只读已有文件名和路径索引，basis=indexed，不枚举目录、不登记文件。每个来源独立返回 entries、total 或 error；未检查的连通状态是未知。poster 为已有作品图片缓存，无缓存为 null，不请求来源海报。
+- play {sourceId,itemId} 在 Next 播放发现的文件。scrape 保留 SMB/WebDAV 的字节哈希识别。WebDAV 多端同步使用独立的 sync 族。
+- 每个来源的 addresses、lastCheck、sync、lastError、credential 都是带时间的观察，未观察值为 null；可通过 media.sources 和 media.source_addresses 状态视图读取。密码状态不含秘密，改地址或账号会清除旧观察。
+- WebDAV 支持 url/wanUrl，SMB 支持 host/port 和 wanHost/wanPort；至少一个地址非空，address 表示当前使用的地址。新增地址或换账号后需要重新登录。
+- 首次登记文件发出 library.file_added，via=media_source；发现不创建 Classic 观看历史。''',
+  'media.library':
+      r'''`media.library.search_merged {query,limit?,episodeLimit?}` 只读搜索 X48 本机与认证 Mesh 合并目录的标题、原名、已有别名、年份及剧集标题；空白分词为 AND，忽略大小写，按字面子串匹配。返回 works[]、episodes[{work,episode}]、workTotal/episodeTotal，默认每组最多 12。返回 workId/episodeId 可以直接用于 Next 作品页和 ui.open；海报是本机路径，设备与 playable 是目录最近观察。索引每 5 秒随目录更新，media.library.refresh 可立即刷新；首次搜索建立索引，其后不逐次读全库。离线 Mesh 保留事实并标为不可播放。
 `media.library.status` 立即查询本机观察到的 Mesh 目录状态，不发起网络或等待刷新；reachability、catalogueFreshness、version、lastAttemptAt/lastSuccessAt 与图片阶段分别给出，unknown 不是离线。刷新中也可查询，主动刷新用 refresh。
 原 media.library.search 保留 Classic 观看记录语义与 animeId。不要将这个 animeId 当成合并 workId。''',
-  'media.metadata': r'''`media.metadata.search/search_batch` 读取在线候选，每个结果另带 workId。它是本机与认证 Mesh 合并媒体库已接受 exact/contains 作品或发行身份的 Next workId；没有对应身份就是 null，不按同名推断。首次读取可能准备可重建的目录与图片缓存，不接受候选或写绑定。资料、身份与图片能力的其余约定见 nipa describe media。''',
+  'media.metadata':
+      r'''`media.metadata.search/search_batch` 读取在线候选，每个结果另带 workId。它是本机与认证 Mesh 合并媒体库已接受 exact/contains 作品或发行身份的 Next workId；没有对应身份就是 null，不按同名推断。首次读取可能准备可重建的目录与图片缓存，不接受候选或写绑定。资料、身份与图片能力的其余约定见 nipa describe media。''',
   'media.mesh_files':
       r'''`mesh.refresh {}` 在当前设备刷新组网发现，不重启监听或重放业务操作；重复请求合并并遵守冷却，普通远端离线无需循环刷新。`mesh.devices.runtime.coordinator` 可查看上报与地址查询错误、最后成功时间和下次重试时间。`mesh.devices` 返回同账号设备、连通状态、各设备实际开放的能力和经过双向 TLS 认证的设备自我描述。自我描述包含平台、宿主角色、媒体库根目录、下载目录，以及宿主配置的存储路径与梨花所在设备；路径属于描述它的那台设备。无界面节点提供媒体库、下载、任务、hooks 和定时程序；它装好运行环境、设了模型并开着 agent 开关时也运行自己的梨花。每台设备的描述里 `agent` 说明那里的梨花现在是否在运行（runs）、不在运行的原因（reason）、模型、是否正有回合在进行（busy）和对话数（conversations），都是实时的。设备第一次出现的时间在 `firstSeenAt`，`acknowledged` 只在有屏幕的设备上随人的回答变化。网络加入、签发者、监听策略和梨花所在设备由宿主配置，Action 不能开放这些权限。`./nipa --device NAME list`、`describe ACTION`、`call ACTION ...` 和 `watch JOB_ID` 使用该设备的实时目录；名称也可换成设备 ID，重名不会任选一个。
 

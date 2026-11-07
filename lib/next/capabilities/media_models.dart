@@ -365,8 +365,13 @@ final class PlaybackSnapshot implements JsonEncodable {
           'autoNext': autoNext,
         },
         'status': status,
-        'observedState': error != null ? 'error' : buffering == true ? 'buffering'
-            : ready == false && hasVideo ? 'loading' : status,
+        'observedState': error != null
+            ? 'error'
+            : buffering == true
+                ? 'buffering'
+                : ready == false && hasVideo
+                    ? 'loading'
+                    : status,
         'sessionId': sessionId,
         'ready': ready,
         'buffering': buffering,
@@ -508,7 +513,8 @@ final class ContinueWatchingOutput implements JsonEncodable {
 const playbackOpenInputSchema = ObjectSchema({
   'path': StringSchema(
     minLength: 1,
-    description: 'Absolute local file path, URL, jellyfin://itemId or emby://itemId. '
+    description:
+        'Absolute local file path, HTTP(S) URL, SMB or WebDAV locator. '
         'Watch history is optional. Mutually exclusive '
         'with animeId and episodeId.',
   ),
@@ -575,7 +581,12 @@ final class PlaybackOpenOutput implements JsonEncodable {
   final PlaybackSnapshot state;
 
   @override
-  JsonMap toJson() => {'path': path, 'player': player, 'state': state.toJson(), 'commandStatus': 'accepted'};
+  JsonMap toJson() => {
+        'path': path,
+        'player': player,
+        'state': state.toJson(),
+        'commandStatus': 'accepted'
+      };
 }
 
 const playbackStateOutputSchema = ObjectSchema({

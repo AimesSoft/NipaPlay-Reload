@@ -18,6 +18,8 @@ abstract final class NetworkObservations {
         _ => 'request_failed',
       };
   static void record(String source, {Uri? uri, int? status, String? error}) {
+    // Classic's server transport also reports here; Next does not expose it.
+    if (source == 'media_server') return;
     final id = uri == null ? source : '$source:${uri.host}:${uri.port}';
     final previous = _facts[id];
     final now = DateTime.now().toUtc().toIso8601String();

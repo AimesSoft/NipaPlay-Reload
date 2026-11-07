@@ -12,11 +12,8 @@ class ServiceIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final asset = switch (provider) {
-      'dandanplay' || 'dandanplay_remote' => 'assets/dandanplay.png',
+      'dandanplay' => 'assets/dandanplay.png',
       'bangumi' => 'assets/bangumi.png',
-      'jellyfin' => 'assets/jellyfin.svg',
-      'emby' => 'assets/emby.svg',
-      'nipaplay' => 'assets/nipaplay.png',
       _ => null,
     };
     if (asset != null) {

@@ -25,7 +25,7 @@ import '../widgets/menu.dart';
 import '../widgets/segmented.dart';
 
 /// 片库: one source at a time, chosen from its title (本地 — this device
-/// with the mesh — then each SMB, WebDAV, Jellyfin and Emby). Its
+/// with the mesh — then each SMB and WebDAV). Its
 /// categories show as shelves of previews or as cards with a fan of
 /// posters; a source with a single category shows that category's grid
 /// directly. Its own structure or Nipa's arrangement, when Nipa made one.
@@ -186,8 +186,8 @@ class _LibraryPageState extends State<LibraryPage>
     setState(() => _menu = _Menu.none);
     Navigator.of(context)
         .push(categoryRoute(ref, deviceLine: _deviceLine))
-        .then((_) => shell.scrolled.value =
-            _scroll.hasClients && _scroll.offset > 24);
+        .then((_) =>
+            shell.scrolled.value = _scroll.hasClients && _scroll.offset > 24);
   }
 
   void _openCategory(UiCategory c) => _open(CategoryRef(
@@ -293,7 +293,10 @@ class _LibraryPageState extends State<LibraryPage>
           slivers: [
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
-                  NextLayout.gutter(context), NextLayout.underBar(context) + 40, NextLayout.end(context), 28),
+                  NextLayout.gutter(context),
+                  NextLayout.underBar(context) + 40,
+                  NextLayout.end(context),
+                  28),
               sliver: SliverToBoxAdapter(child: _header()),
             ),
             if (_loadError case final error?)
@@ -333,77 +336,76 @@ class _LibraryPageState extends State<LibraryPage>
         ? page.categories.single
         : null;
     final lead = <Widget>[
-        CompositedTransformTarget(
-          link: _sourceLink,
-          child: SourceTitle(
-            name: _status?.label ?? _source?.name ?? '媒体库',
-            open: _menu == _Menu.sources,
-            onTap: () => _toggle(_Menu.sources),
-          ),
+      CompositedTransformTarget(
+        link: _sourceLink,
+        child: SourceTitle(
+          name: _status?.label ?? _source?.name ?? '媒体库',
+          open: _menu == _Menu.sources,
+          onTap: () => _toggle(_Menu.sources),
         ),
-        if (only?.count case final count?) ...[
-          const SizedBox(width: 14),
-          Text('$count', style: NextText.num(18, color: NextColors.p3)),
-        ],
+      ),
+      if (only?.count case final count?) ...[
+        const SizedBox(width: 14),
+        Text('$count', style: NextText.num(18, color: NextColors.p3)),
+      ],
     ];
     final tail = <Widget>[
-        if (page != null && page.hasArrangement) ...[
-          Segmented<bool>(
-            value: page.arranged,
-            options: [
-              for (final (arranged, text) in const [(false, '原始'), (true, '整理过')])
-                (
-                  arranged,
-                  text,
-                  (c) => Text(text, style: NextText.sans(12.5, color: c))
-                ),
-            ],
-            onChanged: (arranged) =>
-                _actions.useOriginal(_sourceId!, !arranged),
-          ),
-          const SizedBox(width: 12),
-        ],
-        if (page != null && only == null) ...[
-          Segmented<UiLibraryForm>(
-            value: page.form,
-            options: [
+      if (page != null && page.hasArrangement) ...[
+        Segmented<bool>(
+          value: page.arranged,
+          options: [
+            for (final (arranged, text) in const [(false, '原始'), (true, '整理过')])
               (
-                UiLibraryForm.shelves,
-                '书架',
-                (c) => NextIcon(NextGlyph.rows, size: 15, color: c)
+                arranged,
+                text,
+                (c) => Text(text, style: NextText.sans(12.5, color: c))
               ),
-              (
-                UiLibraryForm.cards,
-                '卡片',
-                (c) => NextIcon(NextGlyph.grid, size: 15, color: c)
-              ),
-            ],
-            onChanged: (form) => _actions.setForm(_sourceId!, form),
-          ),
-          const SizedBox(width: 12),
-        ],
-        if (only != null && only.sorts.length > 1) ...[
-          CompositedTransformTarget(
-            link: _sortLink,
-            child: MenuPill(
-              label: _sortOf(only).label,
-              onTap: () => _toggle(_Menu.sort),
+          ],
+          onChanged: (arranged) => _actions.useOriginal(_sourceId!, !arranged),
+        ),
+        const SizedBox(width: 12),
+      ],
+      if (page != null && only == null) ...[
+        Segmented<UiLibraryForm>(
+          value: page.form,
+          options: [
+            (
+              UiLibraryForm.shelves,
+              '书架',
+              (c) => NextIcon(NextGlyph.rows, size: 15, color: c)
             ),
-          ),
-          const SizedBox(width: 12),
-        ],
-        if (page != null)
-          CompositedTransformTarget(
-            link: _editLink,
-            child: RoundGhostButton(
-              size: 32,
-              label: '调整',
-              onTap: () => _toggle(_Menu.edit),
-              child: Text('⋯',
-                  style: NextText.sans(13,
-                      weight: FontWeight.w600, color: NextColors.paper)),
+            (
+              UiLibraryForm.cards,
+              '卡片',
+              (c) => NextIcon(NextGlyph.grid, size: 15, color: c)
             ),
+          ],
+          onChanged: (form) => _actions.setForm(_sourceId!, form),
+        ),
+        const SizedBox(width: 12),
+      ],
+      if (only != null && only.sorts.length > 1) ...[
+        CompositedTransformTarget(
+          link: _sortLink,
+          child: MenuPill(
+            label: _sortOf(only).label,
+            onTap: () => _toggle(_Menu.sort),
           ),
+        ),
+        const SizedBox(width: 12),
+      ],
+      if (page != null)
+        CompositedTransformTarget(
+          link: _editLink,
+          child: RoundGhostButton(
+            size: 32,
+            label: '调整',
+            onTap: () => _toggle(_Menu.edit),
+            child: Text('⋯',
+                style: NextText.sans(13,
+                    weight: FontWeight.w600, color: NextColors.paper)),
+          ),
+        ),
     ];
     // A phone: the source on its own line, what changes the view under it.
     if (NextLayout.compact(context)) {
@@ -447,8 +449,8 @@ class _LibraryPageState extends State<LibraryPage>
     if (_single case final items?) {
       return [
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(
-              NextLayout.gutter(context), 0, NextLayout.end(context), batchBarRoom),
+          padding: EdgeInsets.fromLTRB(NextLayout.gutter(context), 0,
+              NextLayout.end(context), batchBarRoom),
           sliver: CategoryGrid(items: items, on: _on, deviceLine: _deviceLine),
         ),
       ];
@@ -475,7 +477,8 @@ class _LibraryPageState extends State<LibraryPage>
         ],
       UiLibraryForm.cards => [
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(NextLayout.gutter(context), 0, NextLayout.end(context), 64 + NextLayout.foot(context)),
+            padding: EdgeInsets.fromLTRB(NextLayout.gutter(context), 0,
+                NextLayout.end(context), 64 + NextLayout.foot(context)),
             sliver: SliverLayoutBuilder(builder: (context, constraints) {
               const gap = 24.0;
               final width = constraints.crossAxisExtent;
@@ -583,8 +586,6 @@ class _LibraryPageState extends State<LibraryPage>
     final kind = switch (s.kind) {
       UiSourceKind.smb => 'SMB',
       UiSourceKind.webdav => 'WebDAV',
-      UiSourceKind.jellyfin => 'Jellyfin',
-      UiSourceKind.emby => 'Emby',
       UiSourceKind.local || UiSourceKind.other => null,
     };
     if (kind == null || s.name.toLowerCase().contains(kind.toLowerCase())) {
@@ -664,7 +665,9 @@ class _CategoryShelf extends StatelessWidget {
             key: PageStorageKey('shelf/${category.categoryId}'),
             scrollDirection: Axis.horizontal,
             clipBehavior: Clip.none,
-            padding: EdgeInsets.only(left: NextLayout.gutter(context), right: NextLayout.end(context)),
+            padding: EdgeInsets.only(
+                left: NextLayout.gutter(context),
+                right: NextLayout.end(context)),
             itemCount: preview.length,
             separatorBuilder: (_, __) => const SizedBox(width: 18),
             itemBuilder: (context, i) => libraryTile(preview[i], _tile, on,
