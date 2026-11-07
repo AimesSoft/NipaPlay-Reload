@@ -817,6 +817,12 @@ void main() {
     final previousKernel = ApplicationSettings.currentKernel;
     ApplicationSettings.currentKernel = () => PlayerKernelType.erika.name;
     addTearDown(() => ApplicationSettings.currentKernel = previousKernel);
+    // Classic visibility reads the factory, while Next applicability reads
+    // currentKernel. Configure both sides of the shared settings surface.
+    final previousFactoryKernel = PlayerFactory.getKernelType();
+    addTearDown(() => PlayerFactory.saveKernelType(previousFactoryKernel));
+    await PlayerFactory.saveKernelType(PlayerKernelType.erika);
+    expect(PlayerFactory.getKernelType(), PlayerKernelType.erika);
 
     final described = await call('settings.describe', {
       'keys': ['player.erikaUpscalerMode'],

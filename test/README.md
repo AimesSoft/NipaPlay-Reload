@@ -33,3 +33,16 @@ The `Build tvOS` workflow validates the real build. Tests should not require its
 shell commands to stay inline when they can live in a helper script, or require
 tvOS to share the desktop Erika version when its dependency profile pins a
 hosted release separately.
+
+The chat-reader and turn-store tests always check decoding, redaction, migration,
+restoration, and bounded storage writes. Their timer/stopwatch thresholds are
+opt-in, because shared-runner scheduling delays are not evidence that the code
+blocked the UI. Run the timing assertions on a dedicated machine with:
+
+```sh
+flutter test --no-pub --concurrency=1 \
+  --dart-define=NIPAPLAY_PERFORMANCE_TESTS=true \
+  test/next/chat_line_reader_test.dart \
+  test/next/turn_process_store_main_thread_test.dart \
+  test/next/turn_process_store_cost_test.dart
+```

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'support/performance_budgets.dart';
 import 'package:nipaplay/next/chat/turn_process_store.dart';
 import 'package:nipaplay/next/harness_redaction.dart';
 
@@ -102,7 +103,9 @@ void main() {
       turn(store, 'long$i', [command('c', cases[i])]);
       // ignore: avoid_print
       print('observe ${cases[i].length} chars: ${watch.elapsedMilliseconds} ms');
-      expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+      if (enforcePerformanceBudgets) {
+        expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+      }
       final kept = ((await store.read('one', 'long$i'))!['items'] as List)
           .single['aggregatedOutput'] as String;
       final whole = redactHarnessText(cases[i]);
