@@ -339,11 +339,16 @@ void main() {
       for (final s in sources) (s.name, s.kind)
     ], [
       ('客厅 Jellyfin', UiSourceKind.jellyfin),
+      // A dandanplay remote library is searched too (its files play).
+      ('远程', UiSourceKind.other),
       ('家里的 NAS', UiSourceKind.smb),
       ('书房 Emby', UiSourceKind.emby),
     ]);
 
-    final server = await search.searchSource(sources[0], '芙莉莲', limit: 3);
+    UiSearchSource source(UiSourceKind kind) =>
+        sources.firstWhere((s) => s.kind == kind);
+    final server = await search
+        .searchSource(source(UiSourceKind.jellyfin), '芙莉莲', limit: 3);
     expect(server.failed, isFalse);
     final [series, ep] = server.hits;
     expect(series.kind, UiSourceHitKind.work);
@@ -360,7 +365,8 @@ void main() {
     expect(ep.poster, isNull);
     expect(await search.sourceArtwork(ep), '/cache/e3.jpg');
 
-    final share = await search.searchSource(sources[1], '芙莉莲', limit: 3);
+    final share = await search
+        .searchSource(source(UiSourceKind.smb), '芙莉莲', limit: 3);
     expect(share.failed, isFalse);
     final [loose, bound] = share.hits;
     expect(loose.kind, UiSourceHitKind.file);
@@ -376,7 +382,8 @@ void main() {
     expect(bound.episode?.episodeId, 'mesh-episode:1:3');
     expect(bound.title, '葬送的芙莉莲 03.mkv');
 
-    final failed = await search.searchSource(sources[2], '芙莉莲', limit: 3);
+    final failed = await search
+        .searchSource(source(UiSourceKind.emby), '芙莉莲', limit: 3);
     expect(failed.failed, isTrue);
     expect(failed.hits, isEmpty);
 
