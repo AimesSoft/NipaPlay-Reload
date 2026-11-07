@@ -15,12 +15,32 @@ class AppDelegate: FlutterAppDelegate {
   private var quietLaunchObserver: NSObjectProtocol?
 
   @objc override func applicationWillFinishLaunching(_ notification: Notification) {
+    configureFileDescriptorLimit()
     configureBundledMoltenVKIfAvailable()
     if LabProfile.quiet {
       // Launched from the user's terminal, macOS hands activation to the new
       // process; remember whom to give it back to.
       quietLaunchFront = NSWorkspace.shared.frontmostApplication
     }
+  }
+
+  private func configureFileDescriptorLimit() {
+    // Finder-launched applications can inherit a soft limit of just 256.
+    // Torrent peer sockets share it with Mesh, HTTP, files and Keychain IPC.
+    // Raise only this process's soft limit, preserving the existing hard limit.
+    var limits = rlimit()
+    guard getrlimit(RLIMIT_NOFILE, &limits) == 0 else {
+      NSLog("[AppDelegate] Cannot read file descriptor limit: errno %d", errno)
+      return
+    }
+    let wanted = min(rlim_t(8192), limits.rlim_max)
+    guard limits.rlim_cur < wanted else { return }
+    limits.rlim_cur = wanted
+    guard setrlimit(RLIMIT_NOFILE, &limits) == 0 else {
+      NSLog("[AppDelegate] Cannot raise file descriptor limit: errno %d", errno)
+      return
+    }
+    NSLog("[AppDelegate] File descriptor soft limit: %llu", limits.rlim_cur)
   }
 
   /// A quiet lab instance returns the front to whoever had it, during the
