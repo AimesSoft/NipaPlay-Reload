@@ -103,8 +103,11 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
 
   void _externalChanged() {
     if (externalHandoff?.active == true) {
-      _transport.value = const PlaybackTransport(status: 'external',
-          phase: PlaybackPhase.playing, hasVideo: false, systemDrawn: false);
+      _transport.value = const PlaybackTransport(
+          status: 'external',
+          phase: PlaybackPhase.playing,
+          hasVideo: false,
+          systemDrawn: false);
     } else {
       _sync();
     }
@@ -190,6 +193,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     }
     openingEnded();
   }
+
   final danmaku = SessionDanmakuController();
   SessionDanmakuPort? _danmakuPort;
   Future<bool> Function(String path)? _localDanmakuLoader;
@@ -234,7 +238,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     final sources = skipSources;
     if (sources == null) return;
     if (danmaku.settings['player.introSkipEnabled'] != true) {
-      aniskipFacts = const {'available': false, 'reason': 'intro_skip_disabled'};
+      aniskipFacts = const {
+        'available': false,
+        'reason': 'intro_skip_disabled'
+      };
       return;
     }
     try {
@@ -247,8 +254,11 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
         danmaku.setSkipSegments('aniskip', outcome.segments);
       }
     } catch (error) {
-      aniskipFacts = {'available': false, 'reason': 'lookup_failed',
-        'error': error.toString()};
+      aniskipFacts = {
+        'available': false,
+        'reason': 'lookup_failed',
+        'error': error.toString()
+      };
       debugPrint('[NextSkip] AniSkip: $error');
     }
   }
@@ -260,11 +270,12 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     // plugin's renderer chosen in the settings, else the engine chosen.
     final drawing = danmaku.native
         ? 'player_native'
-        : plugin?.selectionId ?? switch (DanmakuKernelFactory.getKernelType()) {
-            DanmakuRenderEngine.dfmPlus => 'dfm_plus',
-            DanmakuRenderEngine.nipaplayNext => 'nipaplay_next',
-            final engine => engine.name,
-          };
+        : plugin?.selectionId ??
+            switch (DanmakuKernelFactory.getKernelType()) {
+              DanmakuRenderEngine.dfmPlus => 'dfm_plus',
+              DanmakuRenderEngine.nipaplayNext => 'nipaplay_next',
+              final engine => engine.name,
+            };
     return {
       'id': drawing,
       if (danmaku.native) 'kernel': _session?.driver?.kernel.id,
@@ -309,8 +320,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     }
     aniskipFacts = const {'available': false, 'reason': 'not_asked'};
     final driver = next?.driver;
-    danmaku.bind(next?.id, sink: driver is SessionNativeDanmakuDriver
-        ? (driver as SessionNativeDanmakuDriver).danmakuSink : null);
+    danmaku.bind(next?.id,
+        sink: driver is SessionNativeDanmakuDriver
+            ? (driver as SessionNativeDanmakuDriver).danmakuSink
+            : null);
     unawaited(preview.reset());
     if (next != null) {
       _generation++;
@@ -371,16 +384,24 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
         } else {
           final driver = s?.driver;
           if (driver is SessionNativeDanmakuDriver && !danmaku.native) {
-            danmaku.attachNative((driver as SessionNativeDanmakuDriver).danmakuSink);
+            danmaku.attachNative(
+                (driver as SessionNativeDanmakuDriver).danmakuSink);
           }
-          danmaku.inputs(duration: s?.duration.inMilliseconds ?? 0,
+          danmaku.inputs(
+              duration: s?.duration.inMilliseconds ?? 0,
               chapterFacts: s?.media.value?.chapters);
-          if (s != null && phase!.open && _skipSession != s.id && skipSources != null) {
+          if (s != null &&
+              phase!.open &&
+              _skipSession != s.id &&
+              skipSources != null) {
             _skipSession = s.id;
             aniskipFacts = const {'available': false, 'reason': 'not_asked'};
             unawaited(_loadSkipSources(s));
           }
-          if (s != null && phase!.open && _sidecarSession != s.id && _localDanmakuLoader != null) {
+          if (s != null &&
+              phase!.open &&
+              _sidecarSession != s.id &&
+              _localDanmakuLoader != null) {
             _sidecarSession = s.id;
             unawaited(_loadSidecar(s.path));
           }
@@ -411,22 +432,23 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     if (s == null || phase == null) return PlaybackTransport.idle;
     PlaybackTransport t(String status, PlaybackPhase phase, bool video) =>
         PlaybackTransport(
-            status: status, phase: phase, hasVideo: video,
+            status: status,
+            phase: phase,
+            hasVideo: video,
             systemDrawn: s.surface.value is PlatformVideoSurface);
     return switch (phase) {
       SessionPhase.resolving ||
       SessionPhase.starting ||
-      SessionPhase.loading || SessionPhase.swapping =>
+      SessionPhase.loading ||
+      SessionPhase.swapping =>
         t('loading', PlaybackPhase.opening, false),
       SessionPhase.preparing => t('ready', PlaybackPhase.ready, true),
-      SessionPhase.active => s.transport.value.observed ==
-              KernelTransport.playing
-          ? t('playing', PlaybackPhase.playing, true)
-          : t('paused', PlaybackPhase.paused, true),
+      SessionPhase.active =>
+        s.transport.value.observed == KernelTransport.playing
+            ? t('playing', PlaybackPhase.playing, true)
+            : t('paused', PlaybackPhase.paused, true),
       SessionPhase.failed => t('error', PlaybackPhase.failed, false),
-      SessionPhase.closing ||
-      SessionPhase.closed =>
-        PlaybackTransport.idle,
+      SessionPhase.closing || SessionPhase.closed => PlaybackTransport.idle,
     };
   }
 
@@ -519,30 +541,30 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   }
 
   Future<void> _loadSidecar(String path) async {
-    try { await _localDanmakuLoader?.call(path); }
-    catch (error) { debugPrint('[NextDanmaku] sidecar: $error'); }
+    try {
+      await _localDanmakuLoader?.call(path);
+    } catch (error) {
+      debugPrint('[NextDanmaku] sidecar: $error');
+    }
   }
 
   @override
   Capability localOperations(
           SettingsRegistry settings, BuildContext Function() context) =>
       (_localOperations ??
-          (throw StateError('No local operations for Next\'s playback.')))(
+              (throw StateError('No local operations for Next\'s playback.')))(
           settings, context, this);
 
   @override
-  PlaybackSnapshot snapshot() => PlayerPerf.span('session.snapshot', port.snapshot);
+  PlaybackSnapshot snapshot() =>
+      PlayerPerf.span('session.snapshot', port.snapshot);
 
   @override
   Future<JsonMap> diagnostics() async => {
         'available': true,
         'layer': 'next_core',
         ...host.facts(),
-        'sources': {
-          'autoNext': sources.autoNext,
-          'progress': sources.progress?.lastReport,
-          'progressError': sources.progress?.lastError
-        },
+        'sources': {'autoNext': sources.autoNext},
         'perf': PlayerPerf.read(),
         'danmaku': danmaku.facts(),
       };
@@ -608,8 +630,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       await host.close(reason: 'external_handoff');
       await windows.returnToMain();
       try {
-        final resume = start ?? Duration(milliseconds: history?.lastPosition ??
-            await host.records.resumeAt(item.videoPath));
+        final resume = start ??
+            Duration(
+                milliseconds: history?.lastPosition ??
+                    await host.records.resumeAt(item.videoPath));
         await external.open(item, start: resume);
       } on ProcessException catch (error) {
         throw Failure(FailureCode.unavailable, '外部播放器启动失败：${error.message}',
@@ -647,7 +671,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       unawaited(_session?.seek(position, origin: 'gui'));
 
   @override
-  void toggleDanmaku() => unawaited(danmaku.writeSetting('danmaku.visible', !danmaku.visible));
+  void toggleDanmaku() =>
+      unawaited(danmaku.writeSetting('danmaku.visible', !danmaku.visible));
 
   @override
   Future<void> toggleFullscreen() => _setFullscreen(!_fullscreen.value);
@@ -679,7 +704,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     // Kept as Classic keeps it, once the slider rests.
     _persistVolume?.cancel();
     _persistVolume = Timer(const Duration(milliseconds: 400), () {
-      unawaited(SettingsAccess.persist('player_volume',
+      unawaited(SettingsAccess.persist(
+          'player_volume',
           () async => (await SharedPreferences.getInstance())
               .setDouble('player_volume', volume)));
     });
@@ -761,17 +787,22 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     if (edge == null) return;
     final rate = clock.rate <= 0 ? 1.0 : clock.rate;
     // A little past the edge, so the clock has crossed it when asked.
-    final wait = Duration(microseconds: ((edge - now) / rate * 1e6).ceil() + 20000);
+    final wait =
+        Duration(microseconds: ((edge - now) / rate * 1e6).ceil() + 20000);
     _skipEdge = Timer(wait, () {
       _skipEdge = null;
       PlayerPerf.span('facade.skipEdge', _armSkipEdge);
     });
   }
+
   SkipSegment? get activeSkipSegment {
     if (danmaku.settings['player.introSkipEnabled'] != true) return null;
     final seconds = position.inMicroseconds / 1e6;
-    return danmaku.timeline.segments.where((s) => s.containsSeconds(seconds)).firstOrNull;
+    return danmaku.timeline.segments
+        .where((s) => s.containsSeconds(seconds))
+        .firstOrNull;
   }
+
   @override
   Future<void> skip() async {
     final segment = activeSkipSegment;
@@ -841,9 +872,9 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     }
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.comma || key == LogicalKeyboardKey.period) {
-      unawaited(inspection.inspect('playback.navigate',
-          {'frameDelta': key == LogicalKeyboardKey.comma ? -1 : 1})
-          .catchError((Object error) => <String, Object?>{'error': '$error'}));
+      unawaited(inspection.inspect('playback.navigate', {
+        'frameDelta': key == LogicalKeyboardKey.comma ? -1 : 1
+      }).catchError((Object error) => <String, Object?>{'error': '$error'}));
       _show();
       return true;
     }
@@ -855,8 +886,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       unawaited(setVolume(volume > 0 ? 0 : 1));
       return true;
     }
-    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
-      unawaited(setVolume(volume + (key == LogicalKeyboardKey.arrowUp ? 0.05 : -0.05)));
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown) {
+      unawaited(setVolume(
+          volume + (key == LogicalKeyboardKey.arrowUp ? 0.05 : -0.05)));
       _show();
       return true;
     }
@@ -933,8 +966,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       _rate = levels.rate;
       final prefs = await SharedPreferences.getInstance();
       preview.enabled = prefs.getBool('timeline_preview_enabled') ?? false;
-      aspectMode.value = VideoAspectMode.values.where((m) =>
-          m.name == prefs.getString('video_aspect_mode')).firstOrNull ?? VideoAspectMode.contain;
+      aspectMode.value = VideoAspectMode.values
+              .where((m) => m.name == prefs.getString('video_aspect_mode'))
+              .firstOrNull ??
+          VideoAspectMode.contain;
     } catch (error) {
       debugPrint('[NextPlayer] levels: $error');
     }
@@ -954,8 +989,11 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   }
 
   @override
-  List<double>? heat() => danmaku.settings['danmaku.showDensityChart'] == true
-      && danmaku.timeline.heat.isNotEmpty ? danmaku.timeline.heat : null;
+  List<double>? heat() =>
+      danmaku.settings['danmaku.showDensityChart'] == true &&
+              danmaku.timeline.heat.isNotEmpty
+          ? danmaku.timeline.heat
+          : null;
 
   // ---- subtitles and audio, as the menus show and set them ----
 
@@ -1041,7 +1079,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   Future<void> setRate(double rate) async {
     _rate = rate;
     await _session?.setRate(rate, origin: 'gui');
-    unawaited(SettingsAccess.persist('playback_rate',
+    unawaited(SettingsAccess.persist(
+        'playback_rate',
         () async => (await SharedPreferences.getInstance())
             .setDouble('playback_rate', rate)));
   }
@@ -1050,24 +1089,6 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   /// ticked.
   @override
   List<AudioChoice> audio() {
-    // A media server's own streams (the server picks which is decoded) take
-    // the list when one plays; otherwise the kernel's tracks.
-    final plan = sources.plan;
-    final version = plan?.serverSession?.selectedSource;
-    if (version != null) {
-      return [
-        for (final track in version.mediaStreams)
-          if (track['Type'] == 'Audio')
-            AudioChoice(
-                track['DisplayTitle'] as String? ??
-                    track['Title'] as String? ??
-                    track['Language'] as String? ??
-                    '音轨 ${track['Index']}',
-                track['Index'] as int,
-                server: true,
-                selected: plan!.selection['audioIndex'] == track['Index'])
-      ];
-    }
     final s = _session;
     final tracks = s?.media.value?.audio ?? const <TrackFacts>[];
     if (s == null || tracks.isEmpty) return const [];
@@ -1085,10 +1106,6 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
 
   @override
   Future<void> chooseAudio(AudioChoice choice) async {
-    if (choice.server) {
-      await sources.selectStream({'audioIndex': choice.index});
-      return;
-    }
     if (choice.selected) return;
     await _session?.selectAudio(choice.index, origin: 'gui');
   }
@@ -1101,9 +1118,12 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   Future<void> setFit(VideoAspectMode mode) async {
     aspectMode.value = mode;
     _frame.poke();
-    await SettingsAccess.persist('video_aspect_mode', () async =>
-        (await SharedPreferences.getInstance()).setString('video_aspect_mode', mode.name));
+    await SettingsAccess.persist(
+        'video_aspect_mode',
+        () async => (await SharedPreferences.getInstance())
+            .setString('video_aspect_mode', mode.name));
   }
+
   @override
   Future<String?> screenshot() async {
     final s = _session;
@@ -1111,16 +1131,23 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     final prefs = await SharedPreferences.getInstance();
     String? output;
     if (prefs.getInt('screenshot_save_target') == 0) {
-      final extension = prefs.getString('screenshot_format') == 'png' ? 'png' : 'jpg';
+      final extension =
+          prefs.getString('screenshot_format') == 'png' ? 'png' : 'jpg';
       final location = await getSaveLocation(
-          suggestedName: 'NipaPlay_${DateTime.now().millisecondsSinceEpoch}.$extension',
-          acceptedTypeGroups: [XTypeGroup(label: '图片', extensions: [extension])]);
+          suggestedName:
+              'NipaPlay_${DateTime.now().millisecondsSinceEpoch}.$extension',
+          acceptedTypeGroups: [
+            XTypeGroup(label: '图片', extensions: [extension])
+          ]);
       if (location == null) return null;
       output = location.path;
     }
-    return (await controls.capture({'kind': 'screenshot',
-      if (output != null) 'outputPath': output}))['path'] as String;
+    return (await controls.capture({
+      'kind': 'screenshot',
+      if (output != null) 'outputPath': output
+    }))['path'] as String;
   }
+
   @override
   Future<void> open(String path) =>
       launchUrl(Uri.file(path), mode: LaunchMode.externalApplication);
@@ -1132,8 +1159,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     await windows.setPictureInPicture(!windows.pictureInPicture, videoAspect);
   }
 
-  Future<void> detach() => windows.detach(
-      (_) => NextDetachedPlayer(playback: this), videoAspect);
+  Future<void> detach() =>
+      windows.detach((_) => NextDetachedPlayer(playback: this), videoAspect);
 
   Future<void> featureSettingChanged(String key, Object? value) async {
     if (key == 'player.timelinePreviewEnabled') {
@@ -1157,7 +1184,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   @override
   PlayerDial get danmakuOpacity => _titan
       ? PlayerDial(danmaku.titan.opacity, 0.2, 1, 0.05, DialUnit.percent)
-      : PlayerDial(danmaku.number('danmaku.opacity'), 0, 1, 0.01, DialUnit.percent);
+      : PlayerDial(
+          danmaku.number('danmaku.opacity'), 0, 1, 0.01, DialUnit.percent);
   @override
   Future<void> setDanmakuOpacity(double value) async {
     if (_titan) {
@@ -1166,6 +1194,7 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       await danmaku.writeSetting('danmaku.opacity', value);
     }
   }
+
   @override
   PlayerDial get danmakuSize => _titan
       ? PlayerDial(danmaku.titan.fontSize, 0.5, 2, 0.05, DialUnit.times)
@@ -1175,16 +1204,24 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     if (!_titan) return danmaku.writeSetting('danmaku.fontSize', value);
     danmaku.setTitan(danmaku.titan.copyWith(fontSize: value), commit: done);
   }
+
   @override
   double get danmakuArea => danmaku.number('danmaku.displayArea');
   @override
-  Future<void> setDanmakuArea(double area) => danmaku.writeSetting('danmaku.displayArea', area);
+  Future<void> setDanmakuArea(double area) =>
+      danmaku.writeSetting('danmaku.displayArea', area);
   @override
-  bool blocked(DanmakuLane lane) => danmaku.settings['danmaku.block${lane.name[0].toUpperCase()}${lane.name.substring(1)}'] == true;
+  bool blocked(DanmakuLane lane) =>
+      danmaku.settings[
+          'danmaku.block${lane.name[0].toUpperCase()}${lane.name.substring(1)}'] ==
+      true;
   @override
-  Future<void> block(DanmakuLane lane, bool on) => danmaku.writeSetting('danmaku.block${lane.name[0].toUpperCase()}${lane.name.substring(1)}', on);
+  Future<void> block(DanmakuLane lane, bool on) => danmaku.writeSetting(
+      'danmaku.block${lane.name[0].toUpperCase()}${lane.name.substring(1)}',
+      on);
   @override
-  PlayerDial get danmakuOffset => PlayerDial(danmaku.offset, -30, 30, 0.1, DialUnit.seconds);
+  PlayerDial get danmakuOffset =>
+      PlayerDial(danmaku.offset, -30, 30, 0.1, DialUnit.seconds);
   @override
   void setDanmakuOffset(double seconds) =>
       unawaited(danmaku.writeSetting('danmaku.manualOffset', seconds));

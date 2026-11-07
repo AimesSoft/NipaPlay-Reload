@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'classic_mode_policy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nipaplay/models/dandanplay_remote_model.dart';
@@ -92,7 +93,9 @@ class DandanplayRemoteService {
 
     _baseUrl = savedBase;
     _tokenRequired = savedTokenRequired;
-    if (!loadCredentials) return;
+    if (!loadCredentials || !await ClassicModePolicy.allowsImplicitWork()) {
+      return;
+    }
     _apiToken = await CredentialStore.instance.read(prefs, _tokenKey);
 
     Future<void> refreshTask() async {
@@ -364,6 +367,9 @@ class DandanplayRemoteService {
   }
 
   http.Client _getClient() {
+    if (!ClassicModePolicy.classicActive) {
+      throw StateError('Classic 远程媒体请求在 Next 中暂停。');
+    }
     _client ??= http.Client();
     return _client!;
   }

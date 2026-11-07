@@ -2,28 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:nipaplay/services/webdav_service.dart';
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide Action;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/models/server_profile_model.dart';
 import 'package:nipaplay/next/media/identity_store.dart';
 import 'package:nipaplay/next/media_sources/capability.dart';
 import 'package:nipaplay/next/media_sources/login_dialog.dart';
 import 'package:nipaplay/next/media_sources/service.dart';
 import 'package:nipaplay/next/media_sources/sync.dart';
-import 'package:nipaplay/next/ui_data/library_sources.dart';
 import 'package:nipaplay/utils/auto_sync_settings.dart';
 import 'package:nipaplay/services/backup_category.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
-import 'package:nipaplay/providers/shared_remote_library_provider.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/credential_vault.dart';
-import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -91,67 +84,6 @@ void main() {
     return result;
   }
 
-  test('source search reads cached poster; explicit artwork loads through Classic', () async {
-    final previousHttp = HttpOverrides.current;
-    HttpOverrides.global = _DirectHttp();
-    final fixture = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() async {
-      await fixture.close(force: true);
-      HttpOverrides.global = previousHttp;
-    });
-    final recorder = ui.PictureRecorder();
-    ui.Canvas(recorder).drawColor(const ui.Color(0xff335577), ui.BlendMode.src);
-    final picture = recorder.endRecording();
-    final raster = await picture.toImage(2, 2);
-    final bytes = (await raster.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
-    raster.dispose();
-    picture.dispose();
-    var images = 0;
-    fixture.listen((request) async {
-      if (request.uri.path.contains('/Images/')) {
-        images++;
-        request.response.add(bytes);
-      } else {
-        request.response.headers.contentType = ContentType.json;
-        request.response.write(jsonEncode(request.uri.path == '/Items'
-          ? {'Items': [{'Id': 'series', 'Name': '缓存海报', 'Type': 'Series', 'ImageTags': {'Primary': 'one'}}], 'TotalRecordCount': 1}
-          : {'Id': 'x60-server'}));
-      }
-      await request.response.close();
-    });
-    final id = ((await call('media.sources.add', {'type': 'jellyfin', 'name': 'X60 fixture',
-      'url': 'http://127.0.0.1:${fixture.port}'}))['source'] as Map)['sourceId'] as String;
-    final server = sources.server('jellyfin');
-    addTearDown(() {
-      server
-        ..currentProfile = null
-        ..serverUrl = null
-        ..accessToken = null
-        ..userId = null
-        ..isConnected = false;
-    });
-    server
-      ..currentProfile = sources.profiles.getProfileById(sources.key(id))
-      ..serverUrl = 'http://127.0.0.1:${fixture.port}'
-      ..accessToken = 'fixture-session'
-      ..userId = 'fixture-user'
-      ..isConnected = true;
-    final port = ClassicLibrarySources(sources, root);
-    sources.cachedPoster = (id, item) => port.cachedImage(id, item, 'Primary');
-    sources.loadPoster = (id, item) async => port.image(id, await port.item(id, item), 'Primary');
-    Future<Map> entry() async => (((await call('media.sources.search', {'query': '缓存', 'sourceIds': [id]}))['sources'] as List).single['entries'] as List).single as Map;
-    expect((await entry())['poster'], isNull);
-    expect(images, 0);
-    final poster = (await call('media.sources.artwork', {'sourceId': id, 'itemId': 'series'}))['poster'] as String;
-    expect(await File(poster).readAsBytes(), bytes);
-    expect((await entry())['poster'], poster);
-    expect(images, 1);
-    expect(await jobs.database.query('media_entities'), isEmpty);
-    expect(await jobs.database.query('media_bindings'), isEmpty);
-    expect(poster, startsWith(root.path));
-    expect(poster.contains('api_key'), false);
-  });
-
   test(
       'metadata editing and list preserve unresolved refs; removal keeps files',
       () async {
@@ -192,16 +124,24 @@ void main() {
     expect((await store.entity(fileId))['revision'], 0);
   });
 
-  test('sync endpoint changes clear credentials; category patches retain settings', () async {
+  test(
+      'sync endpoint changes clear credentials; category patches retain settings',
+      () async {
     final sync = SyncService(sources);
-    await AutoSyncSettings.saveWebDavConfiguration(serverUrl: 'http://example.test/dav/',
-      username: 'viewer', password: 'sync-private', remotePath: '/sync', intervalMinutes: 15,
-      categories: {BackupCategory.watchHistory}, syncOnRecordChange: true);
+    await AutoSyncSettings.saveWebDavConfiguration(
+        serverUrl: 'http://example.test/dav/',
+        username: 'viewer',
+        password: 'sync-private',
+        remotePath: '/sync',
+        intervalMinutes: 15,
+        categories: {BackupCategory.watchHistory},
+        syncOnRecordChange: true);
     await sync.configure({'intervalMinutes': 20});
     expect(await AutoSyncSettings.getPassword(), 'sync-private');
     expect((await sync.status())['hasPassword'], true);
     expect((await sync.configuration())['categories'], ['watchHistory']);
-    await expectLater(sync.configure({'categories': <String>[]}), throwsA(isA<Failure>()));
+    await expectLater(
+        sync.configure({'categories': <String>[]}), throwsA(isA<Failure>()));
     expect(await AutoSyncSettings.getPassword(), 'sync-private');
     await sync.configure({'url': 'http://other.test/dav'});
     expect(await AutoSyncSettings.getPassword(), '');
@@ -210,8 +150,11 @@ void main() {
     expect(await AutoSyncSettings.getRemotePath(), '/sync');
     expect(jsonEncode(await sync.status()), isNot(contains('sync-private')));
     final actions = SyncCapability(sync).actions;
-    expect(actions.where((a) => a.spec.input.properties.containsKey('password'))
-        .map((a) => a.spec.id), ['sync.login']);
+    expect(
+        actions
+            .where((a) => a.spec.input.properties.containsKey('password'))
+            .map((a) => a.spec.id),
+        ['sync.login']);
     final login = actions.singleWhere((a) => a.spec.id == 'sync.login');
     expect(login.spec.input.properties['password']!.secret, isTrue);
     expect(login.spec.input.properties, contains('userAuthorization'));
@@ -337,7 +280,8 @@ void main() {
     }))['source'] as Map)['sourceId'] as String;
     String bare(Object? url) => '$url'.replaceFirst(RegExp(r'/+$'), '');
     Future<Map<String, Map>> listed() async => {
-          for (final row in (await call('media.sources.list', {}))['sources'] as List)
+          for (final row
+              in (await call('media.sources.list', {}))['sources'] as List)
             (row as Map)['sourceId'] as String: row
         };
     var rows = await listed();
@@ -354,14 +298,16 @@ void main() {
     // Updating one address keeps the other; an empty string clears.
     await call('media.sources.update',
         {'sourceId': dav, 'wanUrl': 'https://other.example.com'});
-    await call('media.sources.update', {'sourceId': smb, 'host': '192.168.1.9'});
+    await call(
+        'media.sources.update', {'sourceId': smb, 'host': '192.168.1.9'});
     rows = await listed();
     expect(bare(rows[dav]!['url']), 'http://192.168.1.2/dav');
     expect(bare(rows[dav]!['wanUrl']), 'https://other.example.com');
     expect(rows[smb]!['host'], '192.168.1.9');
     expect(rows[smb]!['wanHost'], 'nas.example.com');
     await call('media.sources.update', {'sourceId': dav, 'url': ''});
-    expect(bare((await listed())[dav]!['address']), 'https://other.example.com');
+    expect(
+        bare((await listed())[dav]!['address']), 'https://other.example.com');
     for (final bad in [
       {'sourceId': dav, 'wanUrl': ''},
       {'sourceId': dav, 'url': 'http://user:pw@192.168.1.2'},
@@ -393,7 +339,8 @@ void main() {
           }
         ]));
     await sources.initialize();
-    WebDAVConnection current() => sources.webdav.getConnectionByIdOrName('dav-dual')!;
+    WebDAVConnection current() =>
+        sources.webdav.getConnectionByIdOrName('dav-dual')!;
     expect(current().url, '');
     await current().resolvePassword();
     await call('media.sources.update',
@@ -404,58 +351,10 @@ void main() {
         {'sourceId': 'webdav:dav-dual', 'url': 'http://192.168.1.2'});
     await expectLater(current().resolvePassword(), throwsStateError);
     // Removing it again restores the original set.
-    await call('media.sources.update', {'sourceId': 'webdav:dav-dual', 'url': ''});
+    await call(
+        'media.sources.update', {'sourceId': 'webdav:dav-dual', 'url': ''});
     await current().resolvePassword();
     expect(vault.values[ref], 'dual-secret');
-  });
-
-  test(
-      'different server cannot inherit a profile with existing address aliases',
-      () async {
-    final previousHttp = HttpOverrides.current;
-    HttpOverrides.global = _DirectHttp();
-    final fixture = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() async {
-      await fixture.close(force: true);
-      HttpOverrides.global = previousHttp;
-    });
-    fixture.listen((request) async {
-      expect(request.headers.value('Authorization'), isNull);
-      request.response.write(jsonEncode({'Id': 'another-server'}));
-      await request.response.close();
-    });
-    const ref = CredentialRef('server_profiles', 'aliased');
-    vault.values[ref] = 'retained-session-token';
-    final profile = ServerProfile(
-        id: 'aliased',
-        serverName: 'Aliases',
-        serverType: 'jellyfin',
-        username: 'viewer',
-        serverId: 'original-server',
-        addresses: [
-          ServerAddress(id: 'first', url: 'http://old.test', name: 'Primary'),
-          ServerAddress(
-              id: 'second', url: 'http://alias.test', name: 'Secondary')
-        ]);
-    final prefs = await SharedPreferences.getInstance();
-    final before = jsonEncode([
-      {...profile.toJson(), 'accessToken': ref.placeholder}
-    ]);
-    await prefs.setString('server_profiles', before);
-    await sources.initialize();
-    final outcome = await harness.invokeJson(
-        'media.sources.update',
-        {
-          'sourceId': 'jellyfin:aliased',
-          'url': 'http://127.0.0.1:${fixture.port}'
-        },
-        Invocation(origin: 'test'));
-    expect(outcome, isA<Failed>());
-    expect(jsonEncode(outcome.toEnvelope()), contains('multiple addresses'));
-    expect(prefs.getString('server_profiles'), before);
-    expect(vault.reads, isEmpty);
-    expect(vault.writes, isEmpty);
-    expect(vault.values[ref], 'retained-session-token');
   });
 
   test(
@@ -469,8 +368,22 @@ void main() {
             .properties
             .containsKey('password'),
         true);
-    expect(harness.lookup('media.sources.login')!.spec.input.properties['password']!.secret, true);
-    expect(harness.lookup('media.sources.login')!.spec.input.properties.containsKey('userAuthorization'), true);
+    expect(
+        harness
+            .lookup('media.sources.login')!
+            .spec
+            .input
+            .properties['password']!
+            .secret,
+        true);
+    expect(
+        harness
+            .lookup('media.sources.login')!
+            .spec
+            .input
+            .properties
+            .containsKey('userAuthorization'),
+        true);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
         'webdav_connections',
@@ -503,66 +416,6 @@ void main() {
     expect(vault.reads, isEmpty);
   });
 
-  test('Quick Connect pause preserves vault secret; resume and cancel clean it',
-      () async {
-    final previousHttp = HttpOverrides.current;
-    HttpOverrides.global = _DirectHttp();
-    final fixture = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() async {
-      await fixture.close(force: true);
-      HttpOverrides.global = previousHttp;
-    });
-    var polls = 0;
-    fixture.listen((request) async {
-      request.response.headers.contentType = ContentType.json;
-      final Object value = switch (request.uri.path) {
-        '/System/Info/Public' => {'Id': 'fixture-server'},
-        '/QuickConnect/Enabled' => true,
-        '/QuickConnect/Initiate' => {
-            'Code': '123456',
-            'Secret': 'fixture-approval-secret'
-          },
-        '/QuickConnect/Connect' => {'Authenticated': false},
-        _ => {'Items': [], 'TotalRecordCount': 0},
-      };
-      if (request.uri.path == '/QuickConnect/Connect') polls++;
-      request.response.write(jsonEncode(value));
-      await request.response.close();
-    });
-    final added = await call('media.sources.add', {
-      'type': 'jellyfin',
-      'name': 'Test',
-      'url': 'http://127.0.0.1:${fixture.port}',
-      'username': 'viewer'
-    });
-    final id = (added['source'] as Map)['sourceId'] as String;
-    final login = await call(
-        'media.sources.login', {'sourceId': id, 'method': 'quickConnect'});
-    final jobId = login['jobId'] as String;
-    final ref = CredentialRef('media_source_login', jobId);
-    while (polls == 0) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-    await engine.pause(jobId);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(vault.values[ref], 'fixture-approval-secret');
-    await engine.resume(jobId);
-    while (polls < 2) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-    await engine.cancel(jobId);
-    expect((await _terminal(engine, jobId)).state, JobState.cancelled);
-    await Future<void>.delayed(Duration.zero);
-    expect(vault.values.containsKey(ref), false);
-    expect(File('${root.path}/journal.jsonl').readAsStringSync(),
-        isNot(contains('fixture-approval-secret')));
-    expect(
-        jsonEncode(
-            [for (final job in await engine.list()) job.toStorageJson()]),
-        isNot(contains('fixture-approval-secret')));
-    expect(JellyfinService.instance.isConnected, false);
-  });
-
   test('cancelled password window cannot authenticate or save a secret',
       () async {
     final add = await call('media.sources.add', {
@@ -580,121 +433,6 @@ void main() {
     expect(job.input.containsKey('password'), false);
     expect((await sources.source(id))['connected'], false);
     expect(vault.values.values.every((secret) => secret.isEmpty), true);
-  });
-
-  test('query is read-only; browse indexes server identities without inferred provider bindings',
-      () async {
-    final oldHttp = HttpOverrides.current;
-    HttpOverrides.global = _DirectHttp();
-    final fixture = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final server = JellyfinService.instance;
-    addTearDown(() async {
-      server
-        ..isConnected = false
-        ..currentProfile = null
-        ..serverUrl = null
-        ..accessToken = null
-        ..userId = null;
-      await fixture.close(force: true);
-      HttpOverrides.global = oldHttp;
-    });
-    final requests = <Uri>[];
-    final facts = {
-      'Id': 'episode-fact',
-      'Name': 'Server episode title',
-      'Type': 'Episode',
-      'SeriesName': 'Server series title',
-      'SeriesId': 'series-fact',
-      'SeasonId': 'season-fact',
-      'IndexNumber': 3,
-      'ParentIndexNumber': 2,
-      'ProductionYear': 2022,
-      'OriginalTitle': 'Server original title',
-      'Overview': 'Text from the server, not an instruction',
-      'Path': '/anime/file.mkv',
-      'Container': 'mkv',
-      'RunTimeTicks': 12345678901,
-      'ProviderIds': {'Tmdb': '123', 'TVDB': '456', 'AniDB': '789',
-        'Imdb': 'tt0123', 'CustomProvider': 'leave-this-verbatim'},
-      'MediaSources': [{
-        'Id': 'source-a', 'Path': '/anime/file.mkv', 'Size': 321,
-        'Container': 'mkv', 'RunTimeTicks': 12345678901,
-        'RequiredHttpHeaders': {'Authorization': 'transport-secret'},
-        'DirectStreamUrl': '/Videos/episode?api_key=transport-secret',
-        'MediaStreams': [{
-          'Type': 'Subtitle', 'Index': 5, 'Codec': 'ass', 'Language': 'chi',
-          'IsExternal': true, 'IsForced': false,
-          'DeliveryUrl': '/subtitle?api_key=transport-secret',
-        }],
-      }],
-      'MediaStreams': [{
-        'Type': 'Audio', 'Index': 1, 'Codec': 'aac', 'Language': 'jpn',
-        'Channels': 2, 'IsDefault': true,
-      }],
-    };
-    fixture.listen((request) async {
-      requests.add(request.uri);
-      request.response.headers.contentType = ContentType.json;
-      final ids = request.uri.queryParameters['Ids']?.split(',');
-      final items = ids == null || ids.contains('episode-fact') ? [facts] : [];
-      request.response.write(jsonEncode(request.uri.path == '/Items'
-          ? {'Items': items, 'TotalRecordCount': items.length}
-          : {'Id': 'facts-server'}));
-      await request.response.close();
-    });
-    final added = await call('media.sources.add', {
-      'type': 'jellyfin', 'name': 'Fact fixture',
-      'url': 'http://127.0.0.1:${fixture.port}',
-    });
-    final id = (added['source'] as Map)['sourceId'] as String;
-    server
-      ..currentProfile = sources.profiles.getProfileById(sources.key(id))
-      ..serverUrl = 'http://127.0.0.1:${fixture.port}'
-      ..accessToken = 'fixture-session'
-      ..userId = 'fixture-user'
-      ..isConnected = true;
-    final query = await call('media.sources.query', {
-      'sourceId': id, 'itemIds': ['episode-fact', 'missing'],
-    });
-    final queried = (query['entries'] as List).single as Map;
-    final metadata = queried['metadata'] as Map;
-    expect(metadata['ProviderIds'], facts['ProviderIds']);
-    expect(metadata['RunTimeTicks'], facts['RunTimeTicks']);
-    expect(metadata['MediaStreams'], facts['MediaStreams']);
-    expect(metadata['Path'], '/anime/file.mkv');
-    expect(queried['path'], 'jellyfin://episode-fact');
-    expect(queried['fileId'], isNull);
-    expect(query['missingItemIds'], ['missing']);
-    expect((queried['provenance'] as Map)['sourceId'], id);
-    expect((queried['provenance'] as Map)['itemId'], 'episode-fact');
-    expect(jsonEncode(query), isNot(contains('transport-secret')));
-    expect(await jobs.database.query('media_locations'), isEmpty);
-    expect(await jobs.database.query('media_bindings'), isEmpty);
-    expect(await jobs.database.query('media_external_objects'), isEmpty);
-    final browsed = await call('media.sources.browse', {'sourceId': id});
-    final entry = (browsed['entries'] as List).single as Map;
-    expect(entry['metadata'], metadata);
-    expect(entry['fileId'], isNotNull);
-    expect((await store.entity(entry['fileId'] as String))['revision'], 0);
-    final bindings = await jobs.database.query('media_bindings');
-    expect(bindings, isNotEmpty);
-    expect(bindings.every((b) => b['source'] == 'source_catalog'), isTrue);
-    final objects = await jobs.database.query('media_external_objects');
-    expect(objects, isNotEmpty);
-    expect(objects.every((o) => o['provider'] == 'https://sources.nipaplay.app'),
-        isTrue);
-    expect(requests.where((r) => r.path == '/Items').every((r) =>
-        r.queryParameters['Fields']!.contains('ProviderIds') &&
-        r.queryParameters['Fields']!.contains('MediaStreams')), isTrue);
-    expect(requests.singleWhere((r) => r.queryParameters.containsKey('Ids'))
-        .queryParameters.containsKey('IncludeItemTypes'), isFalse);
-    print('X20 controlled loopback fixture (not server-recognized IDs): '
-        '${jsonEncode({'ProviderIds': metadata['ProviderIds'],
-          'OriginalTitle': metadata['OriginalTitle'],
-          'ProductionYear': metadata['ProductionYear'],
-          'SeriesName': metadata['SeriesName'],
-          'MediaStreams': (metadata['MediaSources'] as List).single['MediaStreams'],
-          'queryCreatedFiles': 0, 'bindings': 0})}');
   });
 
   test('directory query accepts Unicode and commas but rejects traversal',
@@ -727,23 +465,30 @@ void main() {
       await request.response.close();
     });
     final added = await call('media.sources.add', {
-      'type': 'webdav', 'name': 'Directory facts',
+      'type': 'webdav',
+      'name': 'Directory facts',
       'url': 'http://127.0.0.1:${fixture.port}',
     });
     final id = (added['source'] as Map)['sourceId'] as String;
     final result = await call('media.sources.query', {
-      'sourceId': id, 'itemIds': ['/files/剧名/episode,1.mp4'],
+      'sourceId': id,
+      'itemIds': ['/files/剧名/episode,1.mp4'],
     });
     final entry = (result['entries'] as List).single as Map;
     expect((entry['metadata'] as Map)['Size'], 42);
-    expect((entry['metadata'] as Map)['LastModified'], '2025-05-25T14:38:57.000Z');
+    expect(
+        (entry['metadata'] as Map)['LastModified'], '2025-05-25T14:38:57.000Z');
     expect(entry['fileId'], isNull);
     expect(await jobs.database.query('media_locations'), isEmpty);
     final before = requests;
     for (final parent in ['/files/../', '/files/%2e%2e/', '/files/%2f../']) {
-      final outcome = await harness.invokeJson('media.sources.browse', {
-        'sourceId': id, 'parentId': parent,
-      }, Invocation(origin: 'test'));
+      final outcome = await harness.invokeJson(
+          'media.sources.browse',
+          {
+            'sourceId': id,
+            'parentId': parent,
+          },
+          Invocation(origin: 'test'));
       expect(outcome, isA<Failed>());
       expect((outcome as Failed).failure.code, FailureCode.invalidInput);
     }
@@ -785,53 +530,6 @@ void main() {
     await tester.tap(find.text('登录').last);
     await tester.pumpAndSettle();
     expect(await second, 'user-typed-secret');
-  });
-
-  test(
-      'shared Basic credentials stay in vault and request uses Classic provider',
-      () async {
-    final requested = <http.Request>[];
-    final shared = SharedRemoteLibraryProvider(
-        clientFactory: (_) => MockClient((request) async {
-              requested.add(request);
-              return http.Response(
-                  jsonEncode({'success': true, 'items': []}), 200);
-            }));
-    addTearDown(shared.dispose);
-    while (shared.isInitializing) {
-      await Future<void>.delayed(Duration.zero);
-    }
-    final host = await shared.addHost(
-        displayName: 'Shared', baseUrl: 'http://shared.test/prefix');
-    await shared.configureHostCredentials(host.id, 'viewer',
-        password: 'shared-secret');
-    requested.clear();
-    await shared.refreshLibrary(userInitiated: true);
-    expect(requested.single.url.path, '/prefix/api/media/local/share/animes');
-    expect(requested.single.url.userInfo, isEmpty);
-    expect(requested.single.headers['authorization'],
-        'Basic ${base64Encode(utf8.encode('viewer:shared-secret'))}');
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('shared_remote_hosts'),
-        isNot(contains('shared-secret')));
-    sources.shared = shared;
-    final result = await call('media.sources.list', {});
-    expect(jsonEncode(result), isNot(contains('shared-secret')));
-    expect(((result['sources'] as List).single as Map)['username'], 'viewer');
-    expect(
-        vault.values[CredentialRef('shared_remote_hosts', 'basic:${host.id}')],
-        'shared-secret');
-    requested.clear();
-    final reads = Map.of(vault.reads);
-    await call('media.sources.update',
-        {'sourceId': 'nipaplay:${host.id}', 'url': 'http://other.test/prefix'});
-    expect(shared.hasReachableActiveHost, false);
-    expect(shared.errorMessage, contains('credential_origin_changed'));
-    expect(requested, isEmpty);
-    expect(vault.reads, reads);
-    expect(
-        vault.values[CredentialRef('shared_remote_hosts', 'basic:${host.id}')],
-        'shared-secret');
   });
 }
 

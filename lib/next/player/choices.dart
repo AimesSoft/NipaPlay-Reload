@@ -60,15 +60,10 @@ final class EpisodeChoice {
 /// One audio track the viewer can choose.
 @immutable
 final class AudioChoice {
-  const AudioChoice(this.label, this.index,
-      {this.selected = false, this.server = false});
+  const AudioChoice(this.label, this.index, {this.selected = false});
   final String label;
   final int index;
   final bool selected;
-
-  /// A track of the stream a Jellyfin or Emby server transcodes, not of the
-  /// file the player decodes.
-  final bool server;
 }
 
 /// A setting turned on a scale: where it is and how far it goes.

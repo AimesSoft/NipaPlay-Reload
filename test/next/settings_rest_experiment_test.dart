@@ -436,11 +436,13 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
       expect((batch['results'] as List).map((e) => e['status']),
           ['failed', 'completed']);
       final linkedDestination = Link(ppath.join(root.path, 'broken-link.txt'));
-      await linkedDestination.create(ppath.join(root.path, 'missing-target.txt'));
+      await linkedDestination
+          .create(ppath.join(root.path, 'missing-target.txt'));
       final linkAttempt = await api.invokeJson('diagnostics.export',
           {'path': linkedDestination.path}, h.Invocation(origin: 'mcp'));
       expect(linkAttempt, isA<h.Failed>());
-      expect(await File(ppath.join(root.path, 'missing-target.txt')).exists(), false);
+      expect(await File(ppath.join(root.path, 'missing-target.txt')).exists(),
+          false);
       print(
           'X18 diagnostics export: text preserved; batch=[failed(conflict),completed]');
       // Roundtrip the Classic .npb format with preferences, history and matches.
@@ -465,17 +467,7 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
       await prefs.setStringList('x18_preserve_list', ['α', 'β']);
       await prefs.setStringList('nipaplay_scanned_folders', [root.path]);
       await prefs.setInt('web_server_port', 1180);
-      await prefs.setString(
-          'server_profiles',
-          jsonEncode([
-            {
-              'id': 'x18-server',
-              'serverName': 'X18 public server',
-              'serverType': 'emby',
-              'username': 'fixture-user',
-              'addresses': [],
-            }
-          ]));
+
       final selected = BackupCategory.values.map((e) => e.name).toList();
       final path = ppath.join(root.path, 'roundtrip.npb');
       await call('backup.export', {'path': path, 'categories': selected});
@@ -529,8 +521,8 @@ function pluginHandleUIAction(actionId) { return {type:'text',title:'Fixture',co
       expect(
           (await registry.get('webdavQuick.searchMaxResults'))['value'], 500);
       // Verify the repaired Classic backup treatment of plugin enable lists.
-      final builtin = classic.plugins.plugins.firstWhere(
-          (p) => p.manifest.id == 'builtin.danmaku_regex_filter');
+      final builtin = classic.plugins.plugins
+          .firstWhere((p) => p.manifest.id == 'builtin.danmaku_regex_filter');
       final enableKey = 'plugins.enabled.${builtin.manifest.id}';
       await call('settings.set', {
         'key': enableKey,

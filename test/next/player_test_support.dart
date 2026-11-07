@@ -239,7 +239,7 @@ class FakePlayerState extends ChangeNotifier implements VideoPlayerState {
   @override
   int get bufferedPosition => 4 * 60 * 1000;
 
-  /// Classic offers a next episode (as it does for any Jellyfin or Emby
+  /// Classic offers a next episode (as it does for any file-service
   /// stream, films too).
   @override
   bool canPlayNextEpisode = true;

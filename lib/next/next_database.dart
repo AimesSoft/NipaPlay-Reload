@@ -6,6 +6,7 @@ import 'sqlite_library.dart';
 import 'danmaku/migration.dart';
 import 'danmaku/files.dart';
 import 'media/media_migration.dart';
+import 'media/external_sources_migration.dart';
 import 'media/primitives_migration.dart';
 import 'media/metadata_edit_migration.dart';
 import 'media/classic_match_migration.dart';
@@ -55,6 +56,7 @@ const _migrations = [
   migrateDbOperations,
   migrateWorkMerges,
   migrateMediaPresentation,
+  migrateExternalSources,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
@@ -79,13 +81,16 @@ Future<Database> openNextDatabase(Directory root,
           legacyPath: harmonyLegacyDatabasePath(databasePath, legacyDirectory),
           factory: _customSqliteFactory);
     }
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS ||
+    if (Platform.isWindows ||
+        Platform.isLinux ||
+        Platform.isMacOS ||
         Platform.operatingSystem == 'ohos') {
       sqfliteFfiInit();
       // Each factory isolate must register the Linux runtime library name or
       // the bundled HarmonyOS library before sqlite3 first opens a connection.
       factory = Platform.isLinux || Platform.operatingSystem == 'ohos'
-          ? _customSqliteFactory : databaseFactoryFfi;
+          ? _customSqliteFactory
+          : databaseFactoryFfi;
     } else {
       factory = databaseFactory;
     }
@@ -106,6 +111,7 @@ Future<Database> openNextDatabase(Directory root,
         onUpgrade: _migrate,
       ));
   try {
+    await finishExternalSourcesMigration(root, db);
     final files = DanmakuFiles(db);
     await files.migrate();
     return db;

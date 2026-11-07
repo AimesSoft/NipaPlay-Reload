@@ -87,8 +87,8 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
 
   static const _words = <SettingsSection, String>{
     SettingsSection.accounts: '账号 登录 退出 弹弹play bangumi 同步 观看记录',
-    SettingsSection.sources: '媒体来源 服务器 jellyfin emby smb webdav nas 网盘 库 共享 '
-        '本机 文件夹 扫描 附近 nipaplay',
+    SettingsSection.sources: '媒体来源 smb webdav nas 网盘 库 '
+        '本机 文件夹 扫描',
     SettingsSection.devices: '设备 组网 本机名 运行程序 远程 局域网 远程访问 信任 遥控 ipv6',
     SettingsSection.downloads: '下载 下载器 qbittorrent 种子 磁力 seedbox 做种 远端',
     SettingsSection.sync: '同步 多端 webdav 坚果云 nextcloud 服务器 备份 记录',
@@ -409,7 +409,8 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
       color: NextColors.ink,
       child: Padding(
         padding: EdgeInsets.only(top: NextLayout.barTop(context)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // Back on glass on the bar's row (its right holds the shell's
           // own).
           SizedBox(
@@ -670,20 +671,21 @@ class _SearchField extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: TvOSRemoteTextInputControl(
-                title: '搜索设置',
-                focusNode: searchFocus,
-                child: TextField(
-                controller: search,
-                focusNode: useTvOSRemoteTextInput(context) ? null : searchFocus,
-                cursorColor: NextColors.accent,
-                cursorWidth: 1.5,
-                style: NextText.sans(13),
-                onChanged: (_) => onSearch(),
-                decoration: InputDecoration.collapsed(
-                  hintText: '搜索',
-                  hintStyle: NextText.sans(13, color: NextColors.p4),
-                ),
-              )),
+                  title: '搜索设置',
+                  focusNode: searchFocus,
+                  child: TextField(
+                    controller: search,
+                    focusNode:
+                        useTvOSRemoteTextInput(context) ? null : searchFocus,
+                    cursorColor: NextColors.accent,
+                    cursorWidth: 1.5,
+                    style: NextText.sans(13),
+                    onChanged: (_) => onSearch(),
+                    decoration: InputDecoration.collapsed(
+                      hintText: '搜索',
+                      hintStyle: NextText.sans(13, color: NextColors.p4),
+                    ),
+                  )),
             ),
           ]),
         ),

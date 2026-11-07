@@ -67,12 +67,8 @@ class ServiceMark extends StatelessWidget {
   static (String, Color) of(String kind) => switch (kind) {
         'dandanplay' => ('弹', const Color(0xFF00A0E9)),
         'bangumi' => ('B', const Color(0xFFF25D6B)),
-        'jellyfin' => ('J', const Color(0xFF8A6CF0)),
-        'emby' => ('E', const Color(0xFF52B54B)),
         'smb' => ('S', const Color(0xFF4A90D9)),
         'webdav' => ('W', const Color(0xFFE0A33A)),
-        'nipaplay' => ('N', const Color(0xFFFF6F8A)),
-        'dandanplay_remote' => ('弹', const Color(0xFF00A0E9)),
         _ => ('·', NextColors.p3),
       };
 
@@ -289,8 +285,7 @@ class _AccountTile extends StatelessWidget {
 }
 
 /// Media servers and shares: each one's place and state, opened to change,
-/// log in, check, choose its libraries or remove; adding one, NipaPlay
-/// shares nearby among them; and the folders on this computer.
+/// log in, check, choose folders or remove; and folders on this computer.
 class SourcesSection extends StatefulWidget {
   const SourcesSection(
       {super.key, required this.data, required this.folders, this.open});
@@ -312,7 +307,7 @@ class SourcesSectionState extends State<SourcesSection> {
   List<UiMediaSource>? _sources;
   String? _open;
   late bool _adding = widget.open == 'new';
-  String _newType = 'jellyfin';
+  String _newType = 'smb';
   final _addRow = GlobalKey();
   final _folders = GlobalKey<_FoldersState>();
   StreamSubscription<void>? _changes;
@@ -405,16 +400,6 @@ class SourcesSectionState extends State<SourcesSection> {
               ? _SourceEditor(
                   key: ValueKey(_newType),
                   type: _newType,
-                  nearby: () => _Nearby(
-                    folders: widget.folders,
-                    known: {
-                      for (final s in sources) Uri.tryParse(s.url)?.authority
-                    },
-                    onAdd: (share) => _add(UiSourceDraft(
-                        type: 'nipaplay',
-                        name: share.name,
-                        url: share.address)),
-                  ),
                   onSave: _add,
                 )
               : null,
@@ -439,123 +424,6 @@ class _PlusMark extends StatelessWidget {
         ),
         child: const NextIcon(NextGlyph.plus, size: 14, color: NextColors.p2),
       );
-}
-
-/// NipaPlay shares answering on this network, each a tap from added.
-class _Nearby extends StatefulWidget {
-  const _Nearby(
-      {required this.folders, required this.known, required this.onAdd});
-  final NextFolders folders;
-
-  /// Where the sources already added are (host and port).
-  final Set<String?> known;
-  final Future<void> Function(UiShare share) onAdd;
-
-  @override
-  State<_Nearby> createState() => _NearbyState();
-}
-
-class _NearbyState extends State<_Nearby> {
-  List<UiShare>? _found;
-  String? _failed;
-  String? _adding;
-
-  @override
-  void initState() {
-    super.initState();
-    _look();
-  }
-
-  Future<void> _look() async {
-    setState(() {
-      _found = null;
-      _failed = null;
-    });
-    try {
-      final found = await widget.folders.nearby();
-      if (mounted) setState(() => _found = found);
-    } catch (e) {
-      if (mounted) setState(() => _failed = callFailure(e));
-    }
-  }
-
-  Future<void> _add(UiShare share) async {
-    setState(() {
-      _adding = share.address;
-      _failed = null;
-    });
-    try {
-      await widget.onAdd(share);
-    } catch (e) {
-      if (mounted) setState(() => _failed = callFailure(e));
-    }
-    if (mounted) setState(() => _adding = null);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final found = [
-      for (final s in _found ?? const <UiShare>[])
-        if (!widget.known.contains(Uri.tryParse(s.address)?.authority)) s
-    ];
-    final quiet = NextText.sans(12.5, color: NextColors.p3);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(
-          width: 64,
-          height: 30,
-          child: Align(
-              alignment: Alignment.centerLeft, child: Text('附近', style: quiet)),
-        ),
-        Expanded(
-          child: _found == null && _failed == null
-              ? const SizedBox(
-                  height: 30,
-                  child:
-                      Align(alignment: Alignment.centerLeft, child: BusyDots()))
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final s in found)
-                      SizedBox(
-                        height: 38,
-                        child: Row(children: [
-                          Flexible(
-                            child: Text(s.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: NextText.sans(13.5)),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(Uri.tryParse(s.address)?.authority ?? s.address,
-                              style: NextText.num(12, color: NextColors.p3)),
-                          const SizedBox(width: 14),
-                          PillButton(
-                              label: '添加',
-                              busy: _adding == s.address,
-                              onTap: _adding == null ? () => _add(s) : null),
-                        ]),
-                      ),
-                    if (found.isEmpty || _failed != null)
-                      SizedBox(
-                        height: 30,
-                        child: Row(children: [
-                          Text(_failed ?? '没有发现',
-                              style: NextText.sans(12.5,
-                                  color: _failed == null
-                                      ? NextColors.p4
-                                      : NextColors.accent2)),
-                          const SizedBox(width: 12),
-                          PillButton(label: '再找', onTap: _look),
-                        ]),
-                      ),
-                  ],
-                ),
-        ),
-      ]),
-    );
-  }
 }
 
 /// The folders on this computer NipaPlay looks through: each one scanned
@@ -803,7 +671,6 @@ class _SourceRow extends StatefulWidget {
 class _SourceRowState extends State<_SourceRow> {
   List<UiSourceLibrary>? _libraries;
   late List<String> _selected = [...widget.source.selected];
-  String? _code;
   String? _status;
   bool _checking = false;
   bool _logging = false;
@@ -812,9 +679,6 @@ class _SourceRowState extends State<_SourceRow> {
   void didUpdateWidget(_SourceRow oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.open && !oldWidget.open) _loadLibraries();
-    if (widget.source.state == UiSourceState.connected && _code != null) {
-      _code = null;
-    }
     if (oldWidget.source.selected.join() != widget.source.selected.join()) {
       _selected = [...widget.source.selected];
     }
@@ -823,12 +687,10 @@ class _SourceRowState extends State<_SourceRow> {
   @override
   void initState() {
     super.initState();
-    if (widget.open && widget.source.type != 'dandanplay_remote')
-      _loadLibraries();
+    if (widget.open) _loadLibraries();
   }
 
   Future<void> _loadLibraries() async {
-    if (widget.source.type == 'dandanplay_remote') return;
     try {
       final libraries = await widget.data.libraries(widget.source.sourceId);
       if (mounted) setState(() => _libraries = libraries);
@@ -858,9 +720,7 @@ class _SourceRowState extends State<_SourceRow> {
       _status = null;
     });
     try {
-      final r = await widget.data.loginSource(widget.source.sourceId);
-      if (!mounted) return;
-      setState(() => _code = r.code);
+      await widget.data.loginSource(widget.source.sourceId);
     } catch (_) {
       if (mounted) setState(() => _status = '没能登录');
     } finally {
@@ -925,7 +785,6 @@ class _SourceRowState extends State<_SourceRow> {
                     widget.onChanged();
                   },
                 ),
-                if (_code != null) _QuickConnect(code: _code!),
                 if (_libraries case final libraries? when libraries.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(64, 6, 18, 6),
@@ -989,41 +848,15 @@ class _SourceRowState extends State<_SourceRow> {
   }
 }
 
-class _QuickConnect extends StatelessWidget {
-  const _QuickConnect({required this.code});
-  final String code;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(64, 6, 18, 6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: NextColors.accentSoft,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(children: [
-            Text('在服务器上批准', style: NextText.sans(12.5, color: NextColors.p2)),
-            const Spacer(),
-            Text(code,
-                style: NextText.num(22,
-                    weight: FontWeight.w600, letterSpacing: 4)),
-          ]),
-        ),
-      );
-}
-
 /// A source's place and account; a new one starts with its kind.
 class _SourceEditor extends StatefulWidget {
   const _SourceEditor(
-      {super.key, this.source, this.type, this.nearby, required this.onSave});
+      {super.key, this.source, this.type, required this.onSave});
   final UiMediaSource? source;
 
   /// A new one's kind to begin with.
   final String? type;
 
-  /// NipaPlay shares nearby, when a new one is NipaPlay.
-  final Widget Function()? nearby;
   final Future<void> Function(UiSourceDraft draft) onSave;
 
   @override
@@ -1031,7 +864,7 @@ class _SourceEditor extends StatefulWidget {
 }
 
 class _SourceEditorState extends State<_SourceEditor> {
-  late String _type = widget.source?.type ?? widget.type ?? 'jellyfin';
+  late String _type = widget.source?.type ?? widget.type ?? 'smb';
   late String _name = widget.source?.name ?? '';
   late String _url = widget.source?.url ?? '';
   late String _user = widget.source?.username ?? '';
@@ -1115,16 +948,13 @@ class _SourceEditorState extends State<_SourceEditor> {
               onChanged: (t) => setState(() => _type = t),
             ),
           ),
-        if (fresh && _type == 'nipaplay' && widget.nearby != null)
-          widget.nearby!(),
         _field('名称', _name, (v) => _name = v),
         if (byHost) ...[
           _field('主机', _host, (v) => _host = v, hint: '192.168.1.2'),
           _field('端口', _port, (v) => _port = v, hint: '445', width: 96),
         ] else
           _field('地址', _url, (v) => _url = v, hint: 'http://'),
-        if (_type != 'dandanplay_remote')
-          _field('用户名', _user, (v) => _user = v),
+        _field('用户名', _user, (v) => _user = v),
         if (_changed || _error != null)
           Padding(
             padding: const EdgeInsets.only(left: 64, top: 4),

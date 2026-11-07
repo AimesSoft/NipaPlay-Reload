@@ -38,8 +38,7 @@ abstract interface class NextSettingsData {
   Future<UiMediaSource> updateSource(String sourceId, UiSourceDraft draft);
   Future<void> removeSource(String sourceId);
 
-  /// Quick Connect when the server has it (a code to approve there),
-  /// otherwise NipaPlay's own password window.
+  /// NipaPlay's own password window.
   Future<UiSourceLogin> loginSource(String sourceId);
   Future<UiSourceCheck> checkSource(String sourceId);
   Future<List<UiSourceLibrary>> libraries(String sourceId);
@@ -296,7 +295,7 @@ final class UiMediaSource {
   });
   final String sourceId;
 
-  /// jellyfin, emby, smb, webdav, nipaplay, dandanplay_remote.
+  /// smb or webdav.
   final String type;
   final String name;
   final String url;
@@ -310,21 +309,13 @@ final class UiMediaSource {
   final List<String> selected;
 
   static const types = [
-    'jellyfin',
-    'emby',
     'smb',
     'webdav',
-    'nipaplay',
-    'dandanplay_remote'
   ];
 
   static String typeName(String type) => switch (type) {
-        'jellyfin' => 'Jellyfin',
-        'emby' => 'Emby',
         'smb' => 'SMB',
         'webdav' => 'WebDAV',
-        'nipaplay' => 'NipaPlay',
-        'dandanplay_remote' => '弹弹play 远程',
         _ => type,
       };
 
@@ -388,10 +379,8 @@ final class UiSourceDraft {
 }
 
 final class UiSourceLogin {
-  const UiSourceLogin({this.code, this.message, this.connected = false});
+  const UiSourceLogin({this.message, this.connected = false});
 
-  /// Quick Connect: the code to approve on the server.
-  final String? code;
   final String? message;
   final bool connected;
 }

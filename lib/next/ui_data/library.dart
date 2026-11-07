@@ -1,7 +1,7 @@
 /// What the library page reads: a corner menu of sources, each a page of
 /// categories, each category a slice that loads as it scrolls.
 ///
-/// A source shows either its own structure (Jellyfin's libraries and folders,
+/// A source shows either its own structure (shares and folders,
 /// a share's folders) or the arrangement Nipa made for it on request; the
 /// viewer can switch between them. Every string is shown as is.
 library;
@@ -10,7 +10,7 @@ import 'ui_data.dart';
 
 abstract interface class NextLibraryData {
   /// The corner menu: this device together with the mesh first, then each
-  /// connected SMB, WebDAV, Jellyfin and Emby source.
+  /// connected SMB or WebDAV source.
   Future<List<UiLibrarySource>> sources();
 
   /// One source's page as it is arranged now. An offline source shows what
@@ -33,6 +33,7 @@ abstract interface class NextLibraryActions {
 
   /// Shows the source's own structure, or Nipa's arrangement of it.
   Future<void> useOriginal(String sourceId, bool original);
+
   /// Moves a category to [index] among the page's categories.
   Future<void> moveCategory(String categoryId, int index);
 
@@ -44,7 +45,7 @@ abstract interface class NextLibraryActions {
   Future<void> restoreCategory(String categoryId);
 }
 
-enum UiSourceKind { local, smb, webdav, jellyfin, emby, other }
+enum UiSourceKind { local, smb, webdav, other }
 
 /// Rows of previews, or a grid of category cards.
 enum UiLibraryForm { shelves, cards }

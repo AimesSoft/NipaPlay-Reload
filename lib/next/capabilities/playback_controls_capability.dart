@@ -7,8 +7,6 @@ abstract interface class PlaybackControlsPort {
   Future<JsonMap> selectTrack(JsonMap input);
   Future<JsonMap> loadSubtitle(JsonMap input);
   Future<JsonMap> removeSubtitle(JsonMap input);
-  Future<JsonMap> streamOptions(JsonMap input);
-  Future<JsonMap> selectStream(JsonMap input);
   Future<JsonMap> external(JsonMap input);
   Future<JsonMap> capture(JsonMap input);
   Future<JsonMap> close(JsonMap input);
@@ -21,7 +19,7 @@ final class PlaybackControlsCapability implements Capability {
           _Operation(
               'playback.tracks',
               'List player tracks',
-              'Lists embedded, mounted external and server audio/subtitle tracks. '
+              'Lists embedded and mounted external audio/subtitle tracks. '
                   'Also lists Next managed danmaku tracks with binding ID and count. Audio/subtitle indexes are scoped to kind and origin; use these values in select_track.',
               Effect.read,
               const ObjectSchema({}),
@@ -29,8 +27,8 @@ final class PlaybackControlsCapability implements Capability {
           _Operation(
               'playback.select_track',
               'Select a player track',
-              'Select an embedded or server audio/subtitle track, or disable subtitles '
-                  'with index -1. Server selection reloads the current stream. '
+              'Select an embedded audio/subtitle track, or disable subtitles '
+                  'with index -1. '
                   'remember (default false): true also records a subtitle choice in the '
                   'subtitle library, which puts it on the next time this video opens; '
                   'false applies to the current playback only. The result reports '
@@ -38,7 +36,7 @@ final class PlaybackControlsCapability implements Capability {
               Effect.write,
               const ObjectSchema({
                 'kind': StringSchema(values: ['audio', 'subtitle']),
-                'origin': StringSchema(values: ['embedded', 'server']),
+                'origin': StringSchema(values: ['embedded']),
                 'index': IntegerSchema(minimum: -1),
                 'remember': BooleanSchema(),
               }, required: [
@@ -74,40 +72,6 @@ final class PlaybackControlsCapability implements Capability {
               const ObjectSchema({'path': StringSchema(minLength: 1)},
                   required: ['path']),
               port.removeSubtitle),
-          _Operation(
-              'playback.stream_options',
-              'Read stream versions and quality',
-              'Reads current Jellyfin/Emby media versions, server tracks, quality presets '
-                  'and transcoding settings without exposing authenticated stream URLs.',
-              Effect.read,
-              const ObjectSchema({}),
-              port.streamOptions),
-          _Operation(
-              'playback.select_stream',
-              'Apply stream choices',
-              'Applies version, quality, transcoding and server audio/subtitle burn-in '
-                  'through the active playback session reload. Quality/transcode settings use the same '
-                  'saved defaults as Classic. Omitted fields retain current selections; '
-                  'subtitleIndex -1 disables server subtitle selection.',
-              Effect.write,
-              const ObjectSchema({
-                'mediaSourceId': StringSchema(minLength: 1),
-                'quality': StringSchema(values: [
-                  'auto',
-                  'original',
-                  'bandwidth40m',
-                  'bandwidth20m',
-                  'bandwidth10m',
-                  'bandwidth5m',
-                  'bandwidth2m',
-                  'bandwidth1m'
-                ]),
-                'transcode': BooleanSchema(),
-                'audioIndex': IntegerSchema(minimum: 0),
-                'subtitleIndex': IntegerSchema(minimum: -1),
-                'burnIn': BooleanSchema(),
-              }),
-              port.selectStream),
           _Operation(
               'playback.external',
               'Control an external player session',
@@ -170,14 +134,17 @@ final class PlaybackControlsCapability implements Capability {
                     description:
                         'Screenshot request after applying the default setting.'),
                 'danmakuIncluded': BooleanSchema(
-                    description: 'Whether the displayed danmaku layer is included. '
+                    description:
+                        'Whether the displayed danmaku layer is included. '
                         'It may be empty; this is not on-screen comment telemetry.'),
                 'danmakuReason': StringSchema(
                     nullable: true,
                     description:
                         'Why the screenshot excludes danmaku; null when included.'),
               }, required: [
-                'path', 'bytes', 'kind'
+                'path',
+                'bytes',
+                'kind'
               ], additionalProperties: true)),
           _Operation(
               'playback.close',
@@ -196,7 +163,9 @@ final class PlaybackControlsCapability implements Capability {
               const ObjectSchema(
                   {'initialDirectory': StringSchema(minLength: 1)}),
               port.authorizeDirectory),
-          if (port is PlaybackInspectionPort) ...PlaybackInspectionCapability(port as PlaybackInspectionPort).actions,
+          if (port is PlaybackInspectionPort)
+            ...PlaybackInspectionCapability(port as PlaybackInspectionPort)
+                .actions,
         ];
 
   @override
@@ -214,7 +183,8 @@ final class _Operation
     extends Action<PlaybackControlData, PlaybackControlData> {
   _Operation(String id, String title, String description, Effect effect,
       ObjectSchema input, this._run,
-      {ObjectSchema output = const ObjectSchema({}, additionalProperties: true)})
+      {ObjectSchema output =
+          const ObjectSchema({}, additionalProperties: true)})
       : spec = ActionSpec(
             id: id,
             title: title,

@@ -32,9 +32,9 @@ import 'media/startup_index.dart';
 import 'media/media_runtime.dart';
 import 'media/media_probe.dart';
 import 'media_sources/service.dart';
+import 'media/external_sources_migration.dart';
 import 'media_sources/capability.dart';
 import 'media_sources/sync.dart';
-import 'media_sources/remote_admin.dart';
 import 'accounts/service.dart';
 import 'accounts/capability.dart';
 import 'media/metadata_provider.dart';
@@ -179,8 +179,8 @@ final class NextCore {
   /// Asks the person at this screen about a device that just joined
   /// (true: not theirs; null: not answered). Tests replace it.
   Future<bool?> Function(JsonMap device) meshJoinPrompt = (device) =>
-      showMeshJoinPrompt(device['name'] as String? ?? '未命名设备',
-          device['platform'] as String?);
+      showMeshJoinPrompt(
+          device['name'] as String? ?? '未命名设备', device['platform'] as String?);
   StreamSubscription<JsonMap>? _joinNotices;
   Future<void> _joinPrompts = Future.value();
   late final List<Capability> capabilities;
@@ -279,11 +279,14 @@ final class NextCore {
     }
     deviceId = await loadDeviceIdentity(root);
     if (Platform.operatingSystem == 'tvos') {
-      await TelevisionStorage.save('device.json',
-          await File('${root.path}/device.json').readAsString(), credentialVault);
+      await TelevisionStorage.save(
+          'device.json',
+          await File('${root.path}/device.json').readAsString(),
+          credentialVault);
     }
     phase('device identity');
     final database = await openNextDatabase(root, factory: databaseFactory);
+    await finishExternalSourcesPreferences(database);
     phase('database open');
     final jobs = SqliteJobStore.fromDatabase(database);
     changeHistory = ChangeHistory(database);
@@ -314,8 +317,9 @@ final class NextCore {
             await SharedPreferences.getInstance(), 'dandanplay_token'));
     delegations = createMeshDelegations(mesh);
     _joinNotices = mesh.joinNotices.listen((device) {
-      _joinPrompts = _joinPrompts.then((_) => _askAboutJoin(device)).catchError(
-          (Object _) {});
+      _joinPrompts = _joinPrompts
+          .then((_) => _askAboutJoin(device))
+          .catchError((Object _) {});
     });
     final nextUiEntry = NextUiPreference.setting();
     phase('settings entries: next ui');
@@ -353,8 +357,11 @@ final class NextCore {
         media.service.authorizedPath(path, directory: directory);
     danmaku = await DanmakuRuntime.create(media.service.store,
         authorizeLocalFile: media.service.authorizedPath);
-    danmaku.automatic = AutomaticDanmaku(danmaku.service, matchHash: (path) async {
-      final result = await media.service.matchHashes([{'path': path}]);
+    danmaku.automatic =
+        AutomaticDanmaku(danmaku.service, matchHash: (path) async {
+      final result = await media.service.matchHashes([
+        {'path': path}
+      ]);
       final files = result['files'] as List;
       final found = files.single as JsonMap;
       if (found['error'] != null) return [];
@@ -363,7 +370,8 @@ final class NextCore {
           for (final episode in (candidate as JsonMap)['episodes'] as List)
             DanmakuVideo(
                 sourceId: 'dandanplay',
-                videoId: ((episode as JsonMap)['ref'] as JsonMap)['externalId'] as String,
+                videoId: ((episode as JsonMap)['ref'] as JsonMap)['externalId']
+                    as String,
                 title: '${candidate['title']} · ${episode['title']}',
                 durationMs: 0,
                 objectType: 'episode')
@@ -384,7 +392,6 @@ final class NextCore {
       ...media.executors,
       ...mediaSourcesExecutors(mediaSources),
       SyncExecutor(sync),
-      RemoteConnectionExecutor(mediaSources),
       ...accountExecutors(accounts),
       ...danmaku.executors,
       hooks,
@@ -499,9 +506,6 @@ final class NextCore {
         await hooks
             .emit('media.assets.changed', id, {'kind': 'subtitle', ...facts});
       }
-      if (domain == 'source' || domain == 'source_sort') {
-        await hooks.emit('media.sources.state_changed', id, facts);
-      }
     };
     _networkEvents = NetworkObservations.changes.stream.listen((facts) {
       unawaited(
@@ -553,11 +557,6 @@ final class NextCore {
         port: ClassicLibrarySources(mediaSources, root));
     phase('state: library data');
     await Future<void>.delayed(Duration.zero);
-    final sourceImages = libraryData.port! as ClassicLibrarySources;
-    mediaSources.cachedPoster =
-        (id, item) => sourceImages.cachedImage(id, item, 'Primary');
-    mediaSources.loadPoster = (id, itemId) async =>
-        sourceImages.image(id, await sourceImages.item(id, itemId), 'Primary');
     mediaSources.cachedArtwork = uiData.artwork.cached;
     uiData.libraryData = libraryData;
     libraryData.register(state);
@@ -566,8 +565,9 @@ final class NextCore {
     uiData.meshLibrary = MeshLibrary(uiData, mesh,
         subtitleProbe: mediaSubtitleProbe, startupPhase: _startupPhase,
         prepareDanmaku: (path, fileId, episodeId) async {
-          await danmaku.automatic!.prepare(path, fileId: fileId, episodeId: episodeId);
-        });
+      await danmaku.automatic!
+          .prepare(path, fileId: fileId, episodeId: episodeId);
+    });
     memory.redact = uiData.meshLibrary!.worker.redactText;
     hooks.redact = uiData.meshLibrary!.worker.redactJson;
     phase('state: mesh library');
@@ -634,7 +634,6 @@ final class NextCore {
       media.capability,
       MediaSourcesCapability(mediaSources),
       SyncCapability(sync),
-      RemoteAdminCapability(mediaSources),
       AccountsCapability(accounts),
       danmaku.capability,
     ]);
@@ -807,11 +806,13 @@ final class NextCore {
         try {
           await mediaSources.ensureCatalogue(source['sourceId'] as String);
         } catch (error) {
-          stderr.writeln('tvOS source catalogue recovery: ${error.runtimeType}');
+          stderr
+              .writeln('tvOS source catalogue recovery: ${error.runtimeType}');
         }
       }
     } catch (error) {
-      stderr.writeln('tvOS source configuration recovery: ${error.runtimeType}');
+      stderr
+          .writeln('tvOS source configuration recovery: ${error.runtimeType}');
     }
   }
 

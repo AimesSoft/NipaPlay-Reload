@@ -38,8 +38,7 @@ final _time = _text('UTC ISO-8601 time of the observation; null when none.');
 final _code = _text('Stable failure code; exception text is never kept.');
 
 final _addressFields = {
-  'role': _text(
-      'lan or wan for SMB and WebDAV; the address id for Jellyfin and Emby; address for a source with one address.'),
+  'role': _text('lan or wan for SMB and WebDAV.'),
   'label': _text('Name of the address, when it has one.'),
   'address': _text('Configured address, without credentials.'),
   'enabled': _bool('Whether the address is in use; null when not applicable.'),
@@ -78,7 +77,7 @@ List<StateView> systemStateViews(SystemStatusSources s) {
           'Configured media sources with what was last observed of each, kept across restarts. Every time is the moment of that observation (null: none); nothing here contacts a server. reachability unknown means no attempt was observed, not that the address is down. credentialState: none (the source needs no login), saved (a login is on record; the vault is not read), missing (a login is needed and none is saved) or rejected (the source refused the saved login after it last accepted one). Credentials are never part of the facts.',
           {
             'sourceId': _text('Source ID, as in media.sources.list.'),
-            'type': _text('smb, webdav, jellyfin, emby, nipaplay or dandanplay_remote.'),
+            'type': _text('smb or webdav.'),
             'name': _text('Source name.'),
             'address': _text('Address in use now.'),
             'username': _text('Configured account name; empty when none.'),
@@ -112,16 +111,14 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'addresses': ArraySchema(ObjectSchema(_addressFields),
                 description: 'Every configured address with its last attempt.'),
           },
-          () async => [
-                for (final row in await sourceRows()) _sourceRow(row)
-              ],
+          () async => [for (final row in await sourceRows()) _sourceRow(row)],
           relations: {
             'addressRows': const StateRelation(
                 'media.source_addresses', 'sourceId', 'sourceId')
           }),
       _view(
           'media.source_addresses',
-          'One row per configured address of each media source with the last attempt on it: when, what it found, a stable error code and how long it took. Classic probes SMB and WebDAV addresses at startup and when connections are tested; Jellyfin and Emby addresses when connecting; a source with one address when it is checked.',
+          'One row per configured address of each media source with the last attempt on it: when, what it found, a stable error code and how long it took. Classic probes SMB and WebDAV addresses at startup and when connections are tested.',
           {
             'sourceId': _text('Source ID.'),
             'sourceType': _text('Source type.'),
@@ -156,13 +153,14 @@ List<StateView> systemStateViews(SystemStatusSources s) {
           'How requests leave this device now: the proxy in effect and the Dandanplay gateway route. Observed from settings, no request is made.',
           {
             'provider': _text('proxy or dandanplay.'),
-            'mode': _text('system or explicit (proxy); gateway mode (dandanplay).'),
+            'mode':
+                _text('system or explicit (proxy); gateway mode (dandanplay).'),
             'host': _text('Proxy host when explicit.'),
             'port': _int('Proxy port when explicit.'),
             'effectiveGateway': _text('Gateway origin in use.'),
-            'failoverUntil': _int('Unix milliseconds until which the fallback gateway is used; null when none.'),
-          },
-          () async {
+            'failoverUntil': _int(
+                'Unix milliseconds until which the fallback gateway is used; null when none.'),
+          }, () async {
         final r = await s.network!();
         final proxy = _map(r['effectiveProxy']);
         return [
@@ -191,11 +189,11 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'availability': _text('reachable or failed.'),
             'httpStatus': _int('Last HTTP status.'),
             'errorCode': _code,
-            'retryable': _bool('Whether the failure is of the kind that a repeat can change.'),
+            'retryable': _bool(
+                'Whether the failure is of the kind that a repeat can change.'),
             'lastAttemptAt': _time,
             'lastSuccessAt': _time,
-          },
-          () async {
+          }, () async {
         final r = await s.network!();
         return [
           for (final o in (r['observations'] as List? ?? const []))
@@ -223,8 +221,7 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'totalBytes': _int('Total bytes; null when unreadable.'),
             'error': _code,
             'observedAt': _time,
-          },
-          () async {
+          }, () async {
         final r = await s.storage!();
         return [
           for (final v in (r['volumes'] as List? ?? const []))
@@ -251,8 +248,7 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'uniqueData': _bool('Holds data that exists nowhere else.'),
             'overlap': _text('Note on containing other directories.'),
             'observedAt': _time,
-          },
-          () async {
+          }, () async {
         final r = await s.storage!();
         return [
           for (final d in (r['directories'] as List? ?? const []))
@@ -291,8 +287,7 @@ List<StateView> systemStateViews(SystemStatusSources s) {
                   'reason': _text('Recorded reason.'),
                 }),
                 description: 'Files that failed recognition.'),
-          },
-          () async {
+          }, () async {
         final r = await s.scan!();
         final roots = (r['roots'] as List? ?? const []);
         final failed = (r['failedFiles'] as List? ?? const []);
@@ -324,12 +319,13 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'checked': _bool('This process has made a check.'),
             'checkedAt': _time,
             'currentVersion': _text('Version running.'),
-            'latestVersion': _text('Latest published version; null when the check failed.'),
-            'hasUpdate': _bool('A newer version is published; null when the check failed.'),
+            'latestVersion':
+                _text('Latest published version; null when the check failed.'),
+            'hasUpdate': _bool(
+                'A newer version is published; null when the check failed.'),
             'publishedAt': _text('Publication time of the latest version.'),
             'errorCode': _code,
-          },
-          () async {
+          }, () async {
         final r = await s.update!();
         final result = _map(r['result']);
         return [
@@ -360,10 +356,10 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'lastExitCode': _int('Exit code of the last run.'),
             'lastElapsedMs': _int('Duration of the last run.'),
             'lastTimedOut': _bool('The last run exceeded its deadline.'),
-            'lastLaunchError': _text('Why the last run could not start, redacted.'),
+            'lastLaunchError':
+                _text('Why the last run could not start, redacted.'),
             'lastJobId': _text('Task of the last run.'),
-          },
-          () async {
+          }, () async {
         final r = await s.hooks!();
         return [
           for (final h in (r['hooks'] as List? ?? const []))
@@ -377,7 +373,8 @@ List<StateView> systemStateViews(SystemStatusSources s) {
           'harness.schedules',
           'Every entry of hooks/schedules.json: valid or not with the reason, the program and whether it can run, when it runs next, the last run and the occurrences that were not started (skippedLate: the clock was late by 2 seconds or more and the occurrence was dropped, not replayed; skippedWhileRunning: the previous run had not finished). If any entry is invalid none runs. nextDueAt, the skip counts and lastTickAt cover this process only. file: absent, valid or invalid.',
           {
-            'index': _int('Position in the file; null for a file-level problem.'),
+            'index':
+                _int('Position in the file; null for a file-level problem.'),
             'id': _text('Schedule id.'),
             'valid': _bool('The entry is well formed.'),
             'reason': _text('Why the entry or file is invalid.'),
@@ -390,8 +387,10 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'dailyAt': _text('Time of day HH:mm, when daily.'),
             'nextDueAt': _time,
             'lastStartedDueAt': _time,
-            'skippedLate': _int('Occurrences dropped because the clock was late.'),
-            'skippedWhileRunning': _int('Occurrences dropped because the previous run was still going.'),
+            'skippedLate':
+                _int('Occurrences dropped because the clock was late.'),
+            'skippedWhileRunning': _int(
+                'Occurrences dropped because the previous run was still going.'),
             'lastSkippedDueAt': _time,
             'runs': _int('Runs held by the task list.'),
             'lastRunAt': _time,
@@ -400,10 +399,10 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'lastExitCode': _int('Exit code of the last run.'),
             'lastElapsedMs': _int('Duration of the last run.'),
             'lastTimedOut': _bool('The last run exceeded its deadline.'),
-            'lastLaunchError': _text('Why the last run could not start, redacted.'),
+            'lastLaunchError':
+                _text('Why the last run could not start, redacted.'),
             'lastJobId': _text('Task of the last run.'),
-          },
-          () async {
+          }, () async {
         final r = await s.hooks!();
         final schedule = _map(r['schedules']);
         final shared = {
@@ -414,7 +413,12 @@ List<StateView> systemStateViews(SystemStatusSources s) {
         final entries = (schedule['entries'] as List? ?? const []);
         if (entries.isEmpty && schedule['file'] == 'invalid') {
           return [
-            {'index': null, 'valid': false, 'reason': schedule['error'], ...shared}
+            {
+              'index': null,
+              'valid': false,
+              'reason': schedule['error'],
+              ...shared
+            }
           ];
         }
         return [
@@ -435,23 +439,27 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'backend': _text('builtin, http or qbittorrent.'),
             'id': _text('qbittorrent only: the id to name it in download.add.'),
             'name': _text('qbittorrent only: the name the person gave it.'),
-            'address': _text('qbittorrent only: where its WebUI is, without credentials.'),
+            'address': _text(
+                'qbittorrent only: where its WebUI is, without credentials.'),
             'local': _bool('qbittorrent only: it runs on this computer.'),
-            'online': _bool('qbittorrent only: it answered just now; null while downloads are off (not asked).'),
+            'online': _bool(
+                'qbittorrent only: it answered just now; null while downloads are off (not asked).'),
             'version': _text('qbittorrent only: its version, as it said.'),
             'apiVersion': _text('qbittorrent only: its WebUI API version.'),
             'enabled': _bool('Downloads are enabled.'),
             'running': _int('Tasks downloading.'),
             'queued': _int('Tasks waiting to start.'),
             'paused': _int('Paused tasks.'),
-            'waiting': _int('Tasks waiting for a retry, the user, a decision, or interrupted.'),
+            'waiting': _int(
+                'Tasks waiting for a retry, the user, a decision, or interrupted.'),
             'finished': _int('Tasks in a terminal state.'),
             'total': _int('Tasks of this backend.'),
             'downloadBytesPerSecond': _int('Total download rate.'),
             'uploadBytesPerSecond': _int('Total upload rate.'),
             'limitsSupported': _bool('The backend can limit its rate.'),
             'sessionInitialized': _bool('The native session is up.'),
-            'downloadLimitBytesPerSecond': _int('Download limit; 0 is unlimited.'),
+            'downloadLimitBytesPerSecond':
+                _int('Download limit; 0 is unlimited.'),
             'uploadLimitBytesPerSecond': _int('Upload limit; 0 is unlimited.'),
             'error': _code,
             'observedAt': _time,
@@ -467,7 +475,8 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'local': _bool('It runs on this computer.'),
             'infoHash': _text('The torrent\'s info hash.'),
             'title': _text('The torrent name as qBittorrent shows it.'),
-            'state': _text('qBittorrent\'s state word (downloading, stalledUP, stoppedUP, pausedDL, ...).'),
+            'state': _text(
+                'qBittorrent\'s state word (downloading, stalledUP, stoppedUP, pausedDL, ...).'),
             'paused': _bool('Paused or stopped.'),
             'finished': _bool('All wanted files complete.'),
             'completedBytes': _int('Bytes done of the wanted files.'),
@@ -476,7 +485,8 @@ List<StateView> systemStateViews(SystemStatusSources s) {
             'uploadBytesPerSecond': _int('Upload rate.'),
             'savePath': _text('Where qBittorrent saves it, on its machine.'),
             'category': _text('Its qBittorrent category; empty for none.'),
-            'jobId': _text('The download task that follows it; null when none.'),
+            'jobId':
+                _text('The download task that follows it; null when none.'),
           },
           () async => await s.downloadTorrents!()),
   ];
@@ -511,9 +521,8 @@ JsonMap _sourceRow(JsonMap row) {
     'connected': row['connected'],
     'selectedLibraryCount': (row['selectedLibraries'] as List?)?.length,
     'addressCount': addresses.length,
-    'unreachableAddressCount': addresses
-        .where((a) => _map(a)['reachability'] == 'unreachable')
-        .length,
+    'unreachableAddressCount':
+        addresses.where((a) => _map(a)['reachability'] == 'unreachable').length,
     'credentialState': credential['state'],
     'credentialLastRejectedAt': credential['lastRejectedAt'],
     'credentialLastRejectedCode': credential['lastRejectedCode'],

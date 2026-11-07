@@ -197,24 +197,17 @@
 | `media.metadata.ui_facts` | read | 读取来源获取状态、合并字段与全部资料缺项 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |
 | `media.metadata.ui_facts_batch` | read | 批量读取资料完整情况 | 通用/组合 | 允许 | [源码](../../../lib/next/ui_data/capability.dart) |
 | `media.sources.add` | write | Configure a media source | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
-| `media.sources.addresses` | write | List or modify Classic server addresses in one batch | Core | 允许 | [源码](../../../lib/next/media_sources/remote_admin.dart) |
-| `media.sources.artwork` | read | 读取来源海报 | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.browse` | write | Browse remote content | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.check` | write | Check a media source connection | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
-| `media.sources.discover` | read | 发现局域网共享来源 | Core | 允许 | [源码](../../../lib/next/system/desktop.dart) |
 | `media.sources.libraries` | read | List available source libraries | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.list` | read | List media sources | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.login` | write | Initiate media source login | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.play` | write | 播放远程影片 | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.query` | read | Query remote item metadata | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
-| `media.sources.remote_admin.connections` | write | Manage peer WebDAV/SMB connections | Core | 允许 | [源码](../../../lib/next/media_sources/remote_admin.dart) |
-| `media.sources.remote_admin.folders` | write | Manage peer scan roots in bulk | Core | 允许 | [源码](../../../lib/next/media_sources/remote_admin.dart) |
-| `media.sources.remote_admin.status` | write | Refresh the selected NipaPlay peer management state through the Classic provider: folders, saved WebDAV/SMB configurations (LAN url/host/port and WAN wanUrl/wanHost/wanPort, empty … | Core | 允许 | [源码](../../../lib/next/media_sources/remote_admin.dart) |
 | `media.sources.remove` | destructive | Remove a media source | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.scrape` | write | 识别远程媒体 | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.search` | read | 只读搜索媒体来源 | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.select` | write | Select source libraries | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
-| `media.sources.sort` | write | 设置媒体库排序 | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.sync` | write | Synchronize source discovery | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `media.sources.update` | write | Update a media source | Core | 允许 | [源码](../../../lib/next/media_sources/capability.dart) |
 | `memory.context` | read | 读取常驻记忆及最近事实 | 通用/组合 | 允许 | [源码](../../../lib/next/memory/capability.dart) |
@@ -258,13 +251,11 @@
 | `playback.restore_kernel_properties` | write | Restore kernel properties | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/kernel_control.dart) |
 | `playback.retry` | write | Explicitly reload the current internal source | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_inspection.dart) |
 | `playback.seek` | write | Seek in the current video | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_capability.dart) |
-| `playback.select_stream` | write | Apply stream choices | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_controls_capability.dart) |
 | `playback.select_track` | write | Select a player track | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_controls_capability.dart) |
 | `playback.set_kernel_properties` | write | Change kernel properties for this playback | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/kernel_control.dart) |
 | `playback.set_paused` | write | Set playback pause | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_capability.dart) |
 | `playback.set_skip_segment` | write | Set or clear the opening or ending of the file that plays now | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_inspection.dart) |
 | `playback.state` | read | Get playback state | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_capability.dart) |
-| `playback.stream_options` | read | Read stream versions and quality | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_controls_capability.dart) |
 | `playback.switch_episode` | write | Switch the current episode | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_capability.dart) |
 | `playback.tracks` | read | List player tracks | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_controls_capability.dart) |
 | `playback.wait` | read | Bounded observation of this session only | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/playback_inspection.dart) |

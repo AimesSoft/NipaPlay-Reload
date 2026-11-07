@@ -192,14 +192,6 @@ final class FakeSettings implements NextSettingsData {
 
   final _sources = <UiMediaSource>[
     const UiMediaSource(
-        sourceId: 'jellyfin',
-        type: 'jellyfin',
-        name: '客厅 Jellyfin',
-        url: 'http://192.168.1.20:8096',
-        username: 'hikari',
-        state: UiSourceState.connected,
-        selected: ['anime', 'movies']),
-    const UiMediaSource(
         sourceId: 'smb',
         type: 'smb',
         name: '家里的 NAS',
@@ -213,22 +205,9 @@ final class FakeSettings implements NextSettingsData {
         name: '网盘',
         url: 'https://dav.example.net/remote.php/dav',
         username: 'hikari'),
-    const UiMediaSource(
-        sourceId: 'emby',
-        type: 'emby',
-        name: '书房 Emby',
-        url: 'http://study.local:8096',
-        username: 'hikari',
-        state: UiSourceState.failed),
   ];
 
   static const _libraries = <String, List<UiSourceLibrary>>{
-    'jellyfin': [
-      UiSourceLibrary(id: 'anime', name: '番剧'),
-      UiSourceLibrary(id: 'movies', name: '电影'),
-      UiSourceLibrary(id: 'docs', name: '纪录片'),
-      UiSourceLibrary(id: 'live', name: '演唱会'),
-    ],
     'smb': [
       UiSourceLibrary(id: 'Anime', name: 'Anime'),
       UiSourceLibrary(id: 'Movies', name: 'Movies'),
@@ -290,15 +269,13 @@ final class FakeSettings implements NextSettingsData {
 
   @override
   Future<UiSourceLogin> loginSource(String id) async {
-    final i = _index(id);
-    final quick = _sources[i].type == 'jellyfin';
-    Timer(Duration(milliseconds: quick ? 6000 : 1500), () {
+    Timer(const Duration(milliseconds: 1500), () {
       final at = _index(id);
       if (at < 0) return;
       _sources[at] = _with(_sources[at], state: UiSourceState.connected);
       _changed();
     });
-    return UiSourceLogin(code: quick ? '428913' : null);
+    return const UiSourceLogin();
   }
 
   @override
@@ -312,8 +289,7 @@ final class FakeSettings implements NextSettingsData {
 
   @override
   Future<List<UiSourceLibrary>> libraries(String id) async =>
-      _libraries[_sources[_index(id)].type == 'jellyfin' ? 'jellyfin' : id] ??
-      const [];
+      _libraries[id] ?? const [];
 
   @override
   Future<void> selectLibraries(String id, List<String> ids) async {
@@ -336,7 +312,7 @@ final class FakeSettings implements NextSettingsData {
         '喜欢京阿尼和 CloverWorks 的作品；《孤独摇滚！》看了三遍。\n'
         '对机战兴趣一般，除非朋友推荐。\n',
     'topics/living-room.md': '# 客厅的电视\n\n'
-        '周末晚上在客厅用 Jellyfin 看，网络偶尔慢，先缓存再看。\n',
+        '周末晚上在客厅从 NAS 看，网络偶尔慢，先缓存再看。\n',
     'topics/backlog.md': '# 补番计划\n\n'
         '- 《星际牛仔》\n- 《少女终末旅行》\n- 《来自深渊》第二季\n',
   };
@@ -976,7 +952,10 @@ final class FakeSettings implements NextSettingsData {
 
 /// The host's own settings, scripted.
 final class FakeHostSettings
-    implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings {
+    implements
+        NextHostSettings,
+        NextHostDeviceSettings,
+        NextHostRuntimeSettings {
   String modelState = 'key';
 
   /// The runtime Nipa thinks in.
@@ -1103,8 +1082,7 @@ final class FakeHostSettings
   }
 
   @override
-  Future<UiAgentRuntime> agentRuntime() async =>
-      UiAgentRuntime(kind: runtime);
+  Future<UiAgentRuntime> agentRuntime() async => UiAgentRuntime(kind: runtime);
 
   @override
   Future<void> setAgentRuntime(UiAgentRuntimeKind kind) async {

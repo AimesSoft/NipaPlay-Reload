@@ -24,6 +24,11 @@ final class ClassicWorkPermit {
 }
 
 abstract final class ClassicModePolicy {
+  static final _changes = ValueNotifier<bool>(false);
+  static void addListener(VoidCallback listener) =>
+      _changes.addListener(listener);
+  static void removeListener(VoidCallback listener) =>
+      _changes.removeListener(listener);
   static bool _nextOpen = false;
   static bool _known = false;
   static int _generation = 0;
@@ -59,20 +64,25 @@ abstract final class ClassicModePolicy {
       labs.removeListener(changed);
       preference.removeListener(changed);
       if (identical(_binding, owner)) {
+        final wasActive = classicActive;
         _known = false;
         _generation++;
         _binding = null;
         _ready = null;
         _readLive = null;
+        if (wasActive) _changes.value = false;
       }
     };
   }
 
   static void _observe(bool nextOpen) {
+    final wasActive = classicActive;
     _known = true;
-    if (_nextOpen == nextOpen) return;
-    _nextOpen = nextOpen;
-    _generation++;
+    if (_nextOpen != nextOpen) {
+      _nextOpen = nextOpen;
+      _generation++;
+    }
+    if (wasActive != classicActive) _changes.value = classicActive;
   }
 
   static Future<void> _refresh() async {

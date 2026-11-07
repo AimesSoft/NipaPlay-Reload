@@ -236,14 +236,14 @@ void main() {
       await app(tester, next: true);
       final stopped = Completer<void>();
       final login = showMediaSourceLogin({
-        'name': '家里的 Jellyfin',
-        'type': 'jellyfin',
+        'name': '家里的 WebDAV',
+        'type': 'webdav',
         'url': 'http://192.168.1.20:8096',
         'username': 'sakiko'
       }, stopped.future);
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsNothing);
-      expect(find.text('登录 家里的 Jellyfin'), findsOneWidget);
+      expect(find.text('登录 家里的 WebDAV'), findsOneWidget);
       expect(find.text('http://192.168.1.20:8096'), findsOneWidget);
       final fields = tester.widgetList<TextField>(find.byType(TextField));
       expect(fields, hasLength(2));
@@ -256,8 +256,8 @@ void main() {
       expect(await login, 'user-typed-secret');
 
       final again = showMediaSourceLogin({
-        'name': '家里的 Jellyfin',
-        'type': 'jellyfin',
+        'name': '家里的 WebDAV',
+        'type': 'webdav',
         'url': 'http://192.168.1.20:8096',
         'username': 'sakiko'
       }, Completer<void>().future);

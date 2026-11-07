@@ -36,7 +36,15 @@ List<String>? sourceEntityRef(String id, String kind) {
         utf8.decode(base64Url.decode(id.substring('source-$kind:'.length))));
     if (value is List &&
         (value.length == 2 || value.length == 3) &&
-        value.every((v) => v is String)) return value.cast<String>();
+        value.every((v) => v is String)) {
+      // Retained explicit identities can keep their original IDs after their
+      // source is retired; resolve them as ordinary local entities.
+      if (!const {'local', 'smb', 'webdav'}
+          .contains((value.first as String).split(':').first)) {
+        return null;
+      }
+      return value.cast<String>();
+    }
   } on FormatException {
     throw const Failure(
         FailureCode.invalidInput, 'Malformed source entity id.');
@@ -87,7 +95,10 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
         UiLibrarySource(
             sourceId: row['sourceId'] as String,
             name: row['name'] as String,
-            kind: UiSourceKind.values.where((k) => k.name == row['type']).firstOrNull ?? UiSourceKind.other,
+            kind: UiSourceKind.values
+                    .where((k) => k.name == row['type'])
+                    .firstOrNull ??
+                UiSourceKind.other,
             online: row['connected'] == true)
     ];
   }
@@ -477,9 +488,8 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
         if (original.length == 3) 'serverId': original[2]
       };
     } else {
-      final id =
-          await ui.meshLibrary?.localEpisodeId(next.episodeId) ??
-              next.episodeId;
+      final id = await ui.meshLibrary?.localEpisodeId(next.episodeId) ??
+          next.episodeId;
       final rows = await db.rawQuery(
           'SELECT f.attributes FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id '
           'JOIN media_entities f ON f.id=l.file_id WHERE e.episode_id=? AND l.owner_device_id=? '
@@ -550,8 +560,10 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
       final workId = sourceCatalogRecords(sourceId, item).first['id'] as String;
       final episode = await _sourceEpisode(sourceId, workId, item);
       return UiWorkItem(UiWork(
-          workId: workId, title: episode.title ?? item['name'] as String,
-          artwork: UiArtwork(poster: episode.still), next: episode));
+          workId: workId,
+          title: episode.title ?? item['name'] as String,
+          artwork: UiArtwork(poster: episode.still),
+          next: episode));
     }
     final id = sourceEntityId('work', sourceId, item['id'] as String,
         serverId: item['serverId'] as String?);
@@ -574,13 +586,15 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
     final rows = await db.query('ui_cache', where: 'id=?', whereArgs: [id]);
     if (rows.isNotEmpty) {
       final item = decodeMediaJson(rows.single['payload']);
-      await ui.media.store.observeSourceCatalog(sourceCatalogRecords(ref[0], item));
+      await ui.media.store
+          .observeSourceCatalog(sourceCatalogRecords(ref[0], item));
       return item;
     }
     final item =
         publicHarnessFacts(await _sourcePort!.item(ref[0], ref[1])) as JsonMap;
     await _cacheItem(id, item);
-    await ui.media.store.observeSourceCatalog(sourceCatalogRecords(ref[0], item));
+    await ui.media.store
+        .observeSourceCatalog(sourceCatalogRecords(ref[0], item));
     return item;
   }
 
@@ -629,12 +643,14 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
         runtime: film ? next?.runtime : null,
         ratings: [
           for (final r in (metadata['ratings'] as List).cast<Map>())
-            UiRating(r['label'] as String? ?? r['source'] as String, (r['value'] as num).toDouble())
+            UiRating(r['label'] as String? ?? r['source'] as String,
+                (r['value'] as num).toDouble())
         ],
         artwork: UiArtwork(
             poster: art['poster'] as String? ?? sourcePoster,
             backdrop: art['backdrop'] as String? ?? sourceBackdrop,
-            logo: art['logo'] as String?, tint: art['tint'] as int?),
+            logo: art['logo'] as String?,
+            tint: art['tint'] as int?),
         next: next));
   }
 
@@ -643,8 +659,10 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
     final episodeId = sourceEntityId('episode', sourceId, item['id'] as String,
         serverId: item['serverId'] as String?);
     await _cacheItem(episodeId, {...item, 'workId': workId});
-    await ui.media.store.observeSourceCatalog(sourceCatalogRecords(sourceId, item));
-    final fields = (await ui.media.store.mergedMetadata(episodeId))['fields'] as Map;
+    await ui.media.store
+        .observeSourceCatalog(sourceCatalogRecords(sourceId, item));
+    final fields =
+        (await ui.media.store.mergedMetadata(episodeId))['fields'] as Map;
     final sourceStill = await _sourcePort!.image(sourceId, item, 'Primary');
     final art = await ui.artwork.load(episodeId);
     final m = item['metadata'] as Map? ?? {};

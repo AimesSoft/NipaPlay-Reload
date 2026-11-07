@@ -23,7 +23,8 @@ final class NextUpkeep {
     final inside = app?['path'] is String &&
         downloads?['path'] is String &&
         p.isWithin(app!['path'] as String, downloads!['path'] as String);
-    final volume = ((r['volumes'] as List?) ?? const []).cast<Map>().firstOrNull;
+    final volume =
+        ((r['volumes'] as List?) ?? const []).cast<Map>().firstOrNull;
     return UiSpace(
       app: appBytes == null
           ? null
@@ -55,8 +56,7 @@ final class NextUpkeep {
 
   /// Clears what can be fetched again of [kindId]; the bytes freed.
   Future<int> clear(String kindId) async {
-    final members =
-        UiCacheKind.all.firstWhere((k) => k.$1 == kindId).$3;
+    final members = UiCacheKind.all.firstWhere((k) => k.$1 == kindId).$3;
     final plan = await calls.call('cache.plan', {'kinds': members});
     final r = await calls.call('cache.prune', {'planId': plan['planId']});
     return (r['removedBytes'] as num?)?.toInt() ?? 0;
@@ -110,7 +110,11 @@ final class UiCacheKind {
 
 final class UiUpdateCheck {
   const UiUpdateCheck(
-      {this.current, this.latest, this.newer, this.page = false, this.failed = false});
+      {this.current,
+      this.latest,
+      this.newer,
+      this.page = false,
+      this.failed = false});
   final String? current;
   final String? latest;
 
@@ -137,15 +141,16 @@ final class NextPlugins {
   final GuiCalls calls;
 
   Future<List<UiPlugin>> installed() async => [
-        for (final p in ((await calls.call('plugins.list', {}))['plugins']
-                as List)
-            .cast<Map>())
+        for (final p
+            in ((await calls.call('plugins.list', {}))['plugins'] as List)
+                .cast<Map>())
           UiPlugin.from(p, installed: true)
       ];
 
   /// The market's plugins, with the installed ones that have a newer version.
   Future<UiMarket> market({bool refresh = false}) async {
-    final r = await calls.call('plugins.market', {if (refresh) 'refresh': true});
+    final r =
+        await calls.call('plugins.market', {if (refresh) 'refresh': true});
     final updates = <String, String>{
       for (final e in ((r['updates'] as Map?) ?? const {}).entries)
         if (e.value != null) '${e.key}': '${e.value}'
@@ -254,7 +259,8 @@ final class NextSync {
   NextSync(this.calls);
   final GuiCalls calls;
 
-  Future<UiSync> status() async => UiSync.from(await calls.call('sync.status', {}));
+  Future<UiSync> status() async =>
+      UiSync.from(await calls.call('sync.status', {}));
 
   /// Saves the server, folder, interval and what goes along; omitted
   /// parts stay.
@@ -277,7 +283,8 @@ final class NextSync {
 
   /// NipaPlay's own password window.
   Future<void> login() => calls.call('sync.login', {});
-  Future<void> setEnabled(bool on) => calls.call('sync.enable', {'enabled': on});
+  Future<void> setEnabled(bool on) =>
+      calls.call('sync.enable', {'enabled': on});
 
   /// Whether the server answers with the saved account.
   Future<bool> test() async {
@@ -350,8 +357,7 @@ final class UiSync {
 }
 
 /// Folders on this computer NipaPlay looks through
-/// (`media.library.roots.*`, `media.library.scan`), and NipaPlay
-/// shares nearby (`media.sources.discover`).
+/// (`media.library.roots.*`, `media.library.scan`).
 final class NextFolders {
   NextFolders(this.calls);
   final GuiCalls calls;
@@ -371,28 +377,22 @@ final class NextFolders {
 
   /// Indexes [paths] (all when null) and returns the last submitted task.
   /// No identity is chosen; all submitted tasks are visible in the task list.
-  Future<String> scan([List<String>? paths, bool organizeAddedFolder = false]) async {
+  Future<String> scan(
+      [List<String>? paths, bool organizeAddedFolder = false]) async {
     final stamp = DateTime.now().microsecondsSinceEpoch;
     String? lastJobId;
     for (final root in (paths ?? (await list()).paths).toSet()) {
-      final result = await calls.call('media.library.scan',
-          {'root': root, 'requestId': 'gui-scan-$stamp-$root',
-            if (organizeAddedFolder) 'organizeAddedFolder': true});
+      final result = await calls.call('media.library.scan', {
+        'root': root,
+        'requestId': 'gui-scan-$stamp-$root',
+        if (organizeAddedFolder) 'organizeAddedFolder': true
+      });
       lastJobId = (result['job'] as Map)['jobId'] as String;
     }
     if (lastJobId == null) {
       throw const Failure(FailureCode.invalidInput, '请先添加媒体文件夹。');
     }
     return lastJobId;
-  }
-
-  /// NipaPlay shares answering on this network.
-  Future<List<UiShare>> nearby() async {
-    final r = await calls.call('media.sources.discover', {'timeoutMs': 1500});
-    return [
-      for (final c in (r['candidates'] as List).cast<Map>())
-        UiShare(name: '${c['name'] ?? c['address']}', address: '${c['address']}')
-    ];
   }
 }
 
@@ -420,10 +420,4 @@ final class UiFolders {
             '${f['path']}'
         ],
       );
-}
-
-final class UiShare {
-  const UiShare({required this.name, required this.address});
-  final String name;
-  final String address;
 }

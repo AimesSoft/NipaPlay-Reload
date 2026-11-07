@@ -33,12 +33,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// the input, unsaid.
 void main() {
   UiWork work(String id, String title) => UiWork(workId: id, title: title);
-  const jellyfin = UiSearchSource(
-      sourceId: 'jf-1', name: '客厅 Jellyfin', kind: UiSourceKind.jellyfin);
+  const davLiving = UiSearchSource(
+      sourceId: 'dav-1', name: '客厅 WebDAV', kind: UiSourceKind.webdav);
   const nas = UiSearchSource(
       sourceId: 'smb-1', name: '家里的 NAS', kind: UiSourceKind.smb);
-  const emby = UiSearchSource(
-      sourceId: 'emby-1', name: '书房 Emby', kind: UiSourceKind.emby);
+  const davStudy = UiSearchSource(
+      sourceId: 'dav-2', name: '书房 WebDAV', kind: UiSourceKind.webdav);
   UiSourceHit file(String name, {UiSearchSource source = nas}) => UiSourceHit(
       source: source,
       itemId: '/下载/$name',
@@ -99,7 +99,7 @@ void main() {
     final data = _Search(
       sources: () async {
         lists++;
-        return const [jellyfin, nas, emby];
+        return const [davLiving, nas, davStudy];
       },
       searchSource: (source, q) =>
           (answers['${source.sourceId} $q'] = Completer()).future,
@@ -109,7 +109,7 @@ void main() {
     expect(lists, 1, reason: 'the sources are read as the panel opens');
     search.text.text = '未知';
     await Future<void>.delayed(const Duration(milliseconds: 10));
-    expect(answers.keys, ['jf-1 未知', 'smb-1 未知', 'emby-1 未知']);
+    expect(answers.keys, ['dav-1 未知', 'smb-1 未知', 'dav-2 未知']);
 
     // The share answers first: its rows show while the others search.
     answers['smb-1 未知']!
@@ -122,22 +122,22 @@ void main() {
         isA<SourceEntry>()
             .having((e) => e.hit.title, 'title', '[字幕组] 未知作品 - 01.mkv'));
 
-    answers['emby-1 未知']!.completeError(StateError('unreachable'));
-    answers['jf-1 未知']!.complete(const UiSourceAnswer([]));
+    answers['dav-2 未知']!.completeError(StateError('unreachable'));
+    answers['dav-1 未知']!.complete(const UiSourceAnswer([]));
     await Future<void>.delayed(Duration.zero);
     group = search.groups[SearchGroupKind.sources]!;
     expect(group.state, SearchGroupState.done);
-    expect(group.unanswered, ['书房 Emby']);
+    expect(group.unanswered, ['书房 WebDAV']);
 
     // Nothing anywhere, but one source could not say: not “nothing found”.
     search.text.text = '无';
     await Future<void>.delayed(const Duration(milliseconds: 10));
     answers['smb-1 无']!.complete(const UiSourceAnswer([]));
-    answers['jf-1 无']!.complete(const UiSourceAnswer([]));
+    answers['dav-1 无']!.complete(const UiSourceAnswer([]));
     // A source that failed (no total) answers without throwing.
-    answers['emby-1 无']!.complete(const UiSourceAnswer([], failed: true));
+    answers['dav-2 无']!.complete(const UiSourceAnswer([], failed: true));
     await Future<void>.delayed(Duration.zero);
-    expect(search.groups[SearchGroupKind.sources]!.unanswered, ['书房 Emby']);
+    expect(search.groups[SearchGroupKind.sources]!.unanswered, ['书房 WebDAV']);
     expect(search.entries.single, isA<NipaEntry>());
     expect(search.nothingFound, isFalse);
 
@@ -153,8 +153,8 @@ void main() {
           title: 'b.mkv',
           reachable: false)
     ], failed: true));
-    answers['jf-1 下载']!.complete(const UiSourceAnswer([]));
-    answers['emby-1 下载']!.complete(const UiSourceAnswer([]));
+    answers['dav-1 下载']!.complete(const UiSourceAnswer([]));
+    answers['dav-2 下载']!.complete(const UiSourceAnswer([]));
     await Future<void>.delayed(Duration.zero);
     expect(search.groups[SearchGroupKind.sources]!.unanswered, isEmpty);
     expect(
@@ -194,38 +194,6 @@ void main() {
     expect(none.groups.keys, isNot(contains(SearchGroupKind.sources)));
     expect(none.nothingFound, isTrue);
     none.dispose();
-  });
-
-  test('a source row\'s missing picture is asked for once, a share\'s never',
-      () async {
-    final asked = <String>[];
-    final data = _Search(artwork: (hit) async {
-      asked.add(hit.itemId);
-      if (hit.title == 'broken') throw StateError('no picture');
-      return '/cache/${hit.title}.jpg';
-    });
-    final search = NextSearch(data);
-    final served = SourceEntry(file('e3', source: jellyfin));
-    final broken = SourceEntry(file('broken', source: emby));
-    const pictured = SourceEntry(UiSourceHit(
-        source: jellyfin,
-        itemId: 'series',
-        kind: UiSourceHitKind.work,
-        title: '葬送的芙莉莲',
-        poster: '/cache/series.jpg'));
-    final shared = SourceEntry(file('芙莉莲 OVA.mkv'));
-    for (var i = 0; i < 3; i++) {
-      for (final e in [served, broken, pictured, shared]) {
-        search.wantArtwork(e);
-      }
-      await Future<void>.delayed(Duration.zero);
-    }
-    expect(asked, ['/下载/e3', '/下载/broken']);
-    expect(search.artworkOf(served), '/cache/e3.jpg');
-    expect(search.artworkOf(broken), isNull);
-    expect(search.artworkOf(pictured), '/cache/series.jpg');
-    expect(search.artworkOf(shared), isNull);
-    search.dispose();
   });
 
   test('online, a work the library shows is not repeated, by its ID', () async {
@@ -338,35 +306,14 @@ void main() {
     expect([
       for (final s in sources) (s.name, s.kind)
     ], [
-      ('客厅 Jellyfin', UiSourceKind.jellyfin),
-      // A dandanplay remote library is searched too (its files play).
-      ('远程', UiSourceKind.other),
       ('家里的 NAS', UiSourceKind.smb),
-      ('书房 Emby', UiSourceKind.emby),
+      ('书房 WebDAV', UiSourceKind.webdav),
     ]);
 
     UiSearchSource source(UiSourceKind kind) =>
         sources.firstWhere((s) => s.kind == kind);
-    final server = await search
-        .searchSource(source(UiSourceKind.jellyfin), '芙莉莲', limit: 3);
-    expect(server.failed, isFalse);
-    final [series, ep] = server.hits;
-    expect(series.kind, UiSourceHitKind.work);
-    expect(series.work?.workId, 'mesh-work:1', reason: 'bound: the library');
-    expect(series.work?.year, 2023);
-    expect(series.poster, '/cache/series.jpg');
-    expect(series.workTitle, '葬送的芙莉莲');
-    expect(ep.kind, UiSourceHitKind.episode);
-    expect(ep.work?.workId, 'source-work:series');
-    expect(ep.work?.title, '葬送的芙莉莲');
-    expect(ep.episode?.episodeId, 'source-episode:e3');
-    expect(ep.episode?.number, 3);
-    expect(ep.playable, isTrue);
-    expect(ep.poster, isNull);
-    expect(await search.sourceArtwork(ep), '/cache/e3.jpg');
-
-    final share = await search
-        .searchSource(source(UiSourceKind.smb), '芙莉莲', limit: 3);
+    final share =
+        await search.searchSource(source(UiSourceKind.smb), '芙莉莲', limit: 3);
     expect(share.failed, isFalse);
     final [loose, bound] = share.hits;
     expect(loose.kind, UiSourceHitKind.file);
@@ -382,12 +329,12 @@ void main() {
     expect(bound.episode?.episodeId, 'mesh-episode:1:3');
     expect(bound.title, '葬送的芙莉莲 03.mkv');
 
-    final failed = await search
-        .searchSource(source(UiSourceKind.emby), '芙莉莲', limit: 3);
+    final failed =
+        await search.searchSource(source(UiSourceKind.webdav), '芙莉莲', limit: 3);
     expect(failed.failed, isTrue);
     expect(failed.hits, isEmpty);
 
-    for (final hit in [...server.hits, ...share.hits]) {
+    for (final hit in share.hits) {
       expect(hit.work?.workId, isNot(hit.itemId));
       expect(hit.episode?.episodeId, isNot(hit.itemId));
     }
@@ -399,16 +346,18 @@ void main() {
       ('media.metadata.search', 'gui', h.Effect.read),
       ('media.sources.list', 'gui', h.Effect.read),
       ('media.sources.search', 'gui', h.Effect.read),
-      ('media.sources.artwork', 'gui', h.Effect.read),
-      ('media.sources.search', 'gui', h.Effect.read),
       ('media.sources.search', 'gui', h.Effect.read),
     ]);
     expect(calls[4].input, {
       'query': '芙莉莲',
-      'sourceIds': ['jf-1'],
+      'sourceIds': ['smb-1'],
       'limit': 3
     });
-    expect(calls[5].input, {'sourceId': 'jf-1', 'itemId': 'e3'});
+    expect(calls[5].input, {
+      'query': '芙莉莲',
+      'sourceIds': ['dav-2'],
+      'limit': 3
+    });
   });
 
   test('recent terms: latest first, ten at most, kept, cleared for good',
@@ -541,7 +490,7 @@ void main() {
   });
 
   testWidgets(
-      'sources show their works, episodes and files; one that cannot answer '
+      'sources show files; one that cannot answer '
       'says so alone; a found work the library has is marked', (tester) async {
     final search = NextSearch(
         _Search(
@@ -551,31 +500,8 @@ void main() {
             work('b', '间谍家家酒 剧场版'),
             work(Found.id('dandanplay', '7'), '间谍家家酒 第二季'),
           ],
-          sources: () async => const [jellyfin, nas, emby],
+          sources: () async => const [nas, davStudy],
           searchSource: (source, q) async => switch (source.sourceId) {
-            'jf-1' => const UiSourceAnswer([
-                UiSourceHit(
-                    source: jellyfin,
-                    itemId: 'series',
-                    kind: UiSourceHitKind.work,
-                    title: '间谍过家家',
-                    work: UiWork(
-                        workId: 'source-work:s', title: '间谍过家家', year: 2022)),
-                UiSourceHit(
-                  source: jellyfin,
-                  itemId: 'e2',
-                  kind: UiSourceHitKind.episode,
-                  title: '守护妻子的秘密',
-                  work: UiWork(workId: 'source-work:s', title: '间谍过家家'),
-                  episode: UiEpisode(
-                      episodeId: 'source-episode:e2',
-                      workId: 'source-work:s',
-                      number: 2,
-                      title: '守护妻子的秘密',
-                      playable: true),
-                  playable: true,
-                ),
-              ]),
             'smb-1' => UiSourceAnswer([file('间谍 花絮.mkv')]),
             _ => throw StateError('unreachable'),
           },
@@ -594,12 +520,10 @@ void main() {
     expect(find.text('已入库'), findsOneWidget, reason: 'only the library\'s');
     expect(find.text('间谍家家酒 第二季'), findsOneWidget);
     expect(find.text('来源'), findsOneWidget);
-    expect(find.text('客厅 Jellyfin · 2022'), findsOneWidget);
-    expect(find.text('第 2 集 · 守护妻子的秘密'), findsOneWidget);
-    expect(find.text('间谍过家家 · 客厅 Jellyfin'), findsOneWidget);
     expect(find.text('间谍 花絮.mkv'), findsOneWidget);
     expect(find.text('家里的 NAS'), findsOneWidget);
-    expect(find.textContaining('书房 Emby', findRichText: true), findsOneWidget);
+    expect(
+        find.textContaining('书房 WebDAV', findRichText: true), findsOneWidget);
     expect(find.textContaining('暂时搜不了', findRichText: true), findsOneWidget);
     expect(find.text('没有找到'), findsNothing);
     expect(find.textContaining('/下载/', findRichText: true), findsNothing,
@@ -693,7 +617,7 @@ void main() {
     shell.openSearch();
     shell.search.text.text = '芙莉莲';
     shell.openSearchEntry(const SourceEntry(UiSourceHit(
-        source: jellyfin,
+        source: davLiving,
         itemId: 'e3',
         kind: UiSourceHitKind.episode,
         title: '杀人魔法',
@@ -722,9 +646,7 @@ final class _Search implements NextSearchData {
     Future<List<UiWork>> Function(String)? online,
     Future<List<UiSearchSource>> Function()? sources,
     Future<UiSourceAnswer> Function(UiSearchSource, String)? searchSource,
-    Future<String?> Function(UiSourceHit)? artwork,
-  })  : artworkFor = artwork ?? ((_) async => null),
-        libraryFor = library ?? ((_) async => const UiLibraryHits()),
+  })  : libraryFor = library ?? ((_) async => const UiLibraryHits()),
         onlineFor = online ?? ((_) async => const []),
         sourcesFor = sources ?? (() async => const []),
         sourceFor = searchSource ?? ((_, __) async => const UiSourceAnswer([]));
@@ -733,10 +655,6 @@ final class _Search implements NextSearchData {
   final Future<List<UiWork>> Function(String) onlineFor;
   final Future<List<UiSearchSource>> Function() sourcesFor;
   final Future<UiSourceAnswer> Function(UiSearchSource, String) sourceFor;
-  final Future<String?> Function(UiSourceHit) artworkFor;
-
-  @override
-  Future<String?> sourceArtwork(UiSourceHit hit) => artworkFor(hit);
 
   @override
   Future<UiLibraryHits> library(String query) => libraryFor(query);
@@ -909,9 +827,9 @@ final class _MergedSearch extends h.Action<_Json, _Json> {
 }
 
 /// `media.sources.list` and `media.sources.search`, answering as
-/// MediaSourcesCapability does: a Jellyfin (a bound series and an episode
+/// MediaSourcesCapability does: a WebDAV (a bound series and an episode
 /// of its own), a NipaPlay remote (not searched), a share whose state is
-/// unknown (a loose file and a bound one) and an Emby that failed.
+/// unknown (a loose file and a bound one) and an WebDAV that failed.
 final class _Sources implements h.Capability {
   @override
   late final List<h.Action> actions = [
@@ -919,10 +837,8 @@ final class _Sources implements h.Capability {
         'media.sources.list',
         (_) => {
               'sources': [
-                {'sourceId': 'jf-1', 'type': 'jellyfin', 'name': '客厅 Jellyfin'},
-                {'sourceId': 'dr-1', 'type': 'dandanplay_remote', 'name': '远程'},
                 {'sourceId': 'smb-1', 'type': 'smb', 'name': '家里的 NAS'},
-                {'sourceId': 'emby-1', 'type': 'emby', 'name': '书房 Emby'},
+                {'sourceId': 'dav-2', 'type': 'webdav', 'name': '书房 WebDAV'},
               ]
             }),
     _SourceAction('media.sources.search', (input) {
@@ -930,11 +846,11 @@ final class _Sources implements h.Capability {
       return {
         'sources': [
           switch (id) {
-            'jf-1' => {
+            'dav-1' => {
                 'sourceId': id,
-                'name': '客厅 Jellyfin',
-                'type': 'jellyfin',
-                'basis': 'server',
+                'name': '客厅 WebDAV',
+                'type': 'webdav',
+                'basis': 'indexed',
                 'connectionState': 'connected',
                 'total': 2,
                 'entries': [
@@ -1009,9 +925,9 @@ final class _Sources implements h.Capability {
               },
             _ => {
                 'sourceId': id,
-                'name': '书房 Emby',
-                'type': 'emby',
-                'basis': 'server',
+                'name': '书房 WebDAV',
+                'type': 'webdav',
+                'basis': 'indexed',
                 'connectionState': 'failed',
                 'entries': <Object>[],
                 'total': null,
@@ -1024,10 +940,6 @@ final class _Sources implements h.Capability {
         ]
       };
     }),
-    _SourceAction(
-        'media.sources.artwork',
-        (input) =>
-            {'poster': input['itemId'] == 'e3' ? '/cache/e3.jpg' : null}),
   ];
 }
 
@@ -1044,21 +956,13 @@ final class _SourceAction extends h.Action<_Json, _Json> {
         effect: h.Effect.read,
         input: id == 'media.sources.list'
             ? const h.ObjectSchema({})
-            : id == 'media.sources.artwork'
-                ? const h.ObjectSchema({
-                    'sourceId': h.StringSchema(minLength: 1),
-                    'itemId': h.StringSchema(minLength: 1),
-                  }, required: [
-                    'sourceId',
-                    'itemId'
-                  ])
-                : const h.ObjectSchema({
-                    'query': h.StringSchema(minLength: 1),
-                    'sourceIds': h.ArraySchema(h.StringSchema(minLength: 1)),
-                    'limit': h.IntegerSchema(minimum: 1, maximum: 100),
-                  }, required: [
-                    'query'
-                  ]),
+            : const h.ObjectSchema({
+                'query': h.StringSchema(minLength: 1),
+                'sourceIds': h.ArraySchema(h.StringSchema(minLength: 1)),
+                'limit': h.IntegerSchema(minimum: 1, maximum: 100),
+              }, required: [
+                'query'
+              ]),
         output: const h.ObjectSchema({}, additionalProperties: true),
       );
 

@@ -39,8 +39,8 @@ void main() {
   });
   tearDown(() => NextShell.debugServices = null);
 
-  Finder button(String label) => find.byWidgetPredicate(
-      (w) => w is Pressable && w.semanticLabel == label);
+  Finder button(String label) =>
+      find.byWidgetPredicate((w) => w is Pressable && w.semanticLabel == label);
 
   testWidgets('Next on: its own controls have no mounted Classic page',
       (tester) async {
@@ -52,8 +52,8 @@ void main() {
         reason: 'the pages are hidden under the video');
 
     expect(find.textContaining('葬送的芙莉莲', findRichText: true), findsOneWidget);
-    expect(find.textContaining('第5话 死者的幻影', findRichText: true),
-        findsOneWidget);
+    expect(
+        find.textContaining('第5话 死者的幻影', findRichText: true), findsOneWidget);
     expect(find.textContaining('01:05', findRichText: true), findsOneWidget);
     expect(find.textContaining('24:00', findRichText: true), findsOneWidget);
     for (final label in [
@@ -122,8 +122,8 @@ void main() {
     p.state.notifyListeners();
     await tester.pump();
     await tester.pump();
-    expect(find.textContaining('躲在超市后门抽烟的两人', findRichText: true),
-        findsOneWidget);
+    expect(
+        find.textContaining('躲在超市后门抽烟的两人', findRichText: true), findsOneWidget);
     expect(find.textContaining('第 1 集 在超市后门吸烟的二人', findRichText: true),
         findsOneWidget);
     expect(find.textContaining('葬送的芙莉莲', findRichText: true), findsNothing,
@@ -260,7 +260,8 @@ void main() {
     expect(sheet().right, 1440 - NextStage.margin);
     const room = 1440 - (520 + 2 * NextStage.margin);
     const drawn = Size(room, 900 * room / 1440);
-    expect(picture(), Rect.fromLTWH(0, (900 - drawn.height) / 2, room, drawn.height),
+    expect(picture(),
+        Rect.fromLTWH(0, (900 - drawn.height) / 2, room, drawn.height),
         reason: 'the window less the panel and its margins, centred');
 
     // The controls are the picture's, left of the panel, all within reach.
@@ -513,8 +514,7 @@ void main() {
     expect(find.byType(EpisodeMenu), findsNothing, reason: 'the menu closed');
   });
 
-  testWidgets('a file only Classic knows: Classic\'s playlist',
-      (tester) async {
+  testWidgets('a file only Classic knows: Classic\'s playlist', (tester) async {
     addTearDown(resetPlayerTestLibrary);
     final p = await pumpPlayer(tester, status: PlayerStatus.playing);
     p.state.currentVideoPath = '/v/unknown.mkv';
@@ -632,7 +632,7 @@ void main() {
     putInPlayerTestLibrary('/v/Frieren - 06.mkv', frierenWork, episodes, 'f6');
     putInPlayerTestLibrary('/v/Frieren - 07.mkv', frierenWork, episodes, 'f7');
     putInPlayerTestLibrary(
-        'jellyfin://server/film',
+        'webdav://server/film',
         const UiWork(workId: 'raya', title: '寻龙记'),
         const [
           UiEpisode(
@@ -649,7 +649,7 @@ void main() {
     expect(button('下一集'), findsNothing,
         reason: "the last of its season; the next season's is not next");
 
-    await watch(tester, p, 'jellyfin://server/film');
+    await watch(tester, p, 'webdav://server/film');
     expect(button('下一集'), findsNothing, reason: 'a film');
 
     await watch(tester, p, '/v/unknown.mkv');
@@ -660,8 +660,8 @@ void main() {
   testWidgets('the next one not here yet: no 下一集 until it can be played',
       (tester) async {
     addTearDown(resetPlayerTestLibrary);
-    putInPlayerTestLibrary('/v/Frieren - 05.mkv', frierenWork,
-        frieren(missing: {6, 7}), 'f5');
+    putInPlayerTestLibrary(
+        '/v/Frieren - 05.mkv', frierenWork, frieren(missing: {6, 7}), 'f5');
     final p = await pumpPlayer(tester, status: PlayerStatus.playing);
     await watch(tester, p, '/v/Frieren - 05.mkv');
     expect(button('下一集'), findsNothing,

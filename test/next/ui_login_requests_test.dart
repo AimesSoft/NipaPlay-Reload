@@ -35,12 +35,11 @@ void main() {
     expect(logins.pending, isEmpty);
   });
 
-  test('a cancelled login takes its card away and ends with nothing',
-      () async {
+  test('a cancelled login takes its card away and ends with nothing', () async {
     final logins = LoginRequests()..showing = () => true;
     final stopped = Completer<void>();
     final future = logins.request<String>(
-        'Emby', () async => fail('no window after cancel'), stopped.future);
+        'WebDAV', () async => fail('no window after cancel'), stopped.future);
     stopped.complete();
     expect(await future, isNull);
     expect(logins.pending, isEmpty);

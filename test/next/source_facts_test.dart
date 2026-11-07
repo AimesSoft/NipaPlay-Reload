@@ -58,7 +58,8 @@ void main() {
         ownerDeviceId: 'test-device',
         executors: mediaSourcesExecutors(sources));
     sources.engine = engine;
-    harness = Harness([MediaSourcesCapability(sources), TaskCapability(engine)]);
+    harness =
+        Harness([MediaSourcesCapability(sources), TaskCapability(engine)]);
     await engine.start();
   });
   tearDown(() async {
@@ -81,8 +82,8 @@ void main() {
   }
 
   Future<Map<String, Map>> listed() async => {
-        for (final row in (await call('media.sources.list', {}))['sources']
-            as List)
+        for (final row
+            in (await call('media.sources.list', {}))['sources'] as List)
           (row as Map)['sourceId'] as String: row
       };
 
@@ -113,7 +114,8 @@ void main() {
     expect(row['credential'], containsPair('state', 'none'));
   });
 
-  test('each address records its own attempt, with code and latency, across restarts',
+  test(
+      'each address records its own attempt, with code and latency, across restarts',
       () async {
     final refused = await closedPort();
     final denying = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -188,7 +190,8 @@ void main() {
     expect(prefs.getKeys().where((k) => k.contains('ghost')), isEmpty);
   });
 
-  test('a failed check keeps its time and code, and a rejected login is told apart from none',
+  test(
+      'a failed check keeps its time and code, and a rejected login is told apart from none',
       () async {
     final denying = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => denying.close(force: true));
@@ -209,7 +212,8 @@ void main() {
     const ref = CredentialRef('webdav_connections', 'locked-secret');
     vault.values[ref] = 'secret-value';
     await sources.webdav.configureConnection(connection.copyWith(
-        password: 'secret-value', credentialOrigin: connection.credentialAuthority));
+        password: 'secret-value',
+        credentialOrigin: connection.credentialAuthority));
     expect(((await listed())[id]!['credential'] as Map)['state'], 'saved');
 
     final outcome = await harness.invokeJson(
@@ -232,35 +236,37 @@ void main() {
     expect(jsonEncode(row), isNot(contains('secret-value')));
   });
 
-  test('a failed sync is recorded with its time, code and job; a restart leaves running as interrupted',
+  test(
+      'a failed sync is recorded with its time, code and job; a restart leaves running as interrupted',
       () async {
     final fixture = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => fixture.close(force: true));
     fixture.listen((request) async {
       request.response.headers.contentType = ContentType.json;
-      request.response.write(jsonEncode({'Id': 'away-server'}));
+      request.response.statusCode = 401;
       await request.response.close();
     });
     final id = ((await call('media.sources.add', {
-      'type': 'jellyfin',
+      'type': 'webdav',
       'name': 'Away',
       'url': 'http://127.0.0.1:${fixture.port}',
       'username': 'u'
     }))['source'] as Map)['sourceId'] as String;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('next.source.$id.libraries', ['lib']);
-    final job = (await call('media.sources.sync', {'sourceId': id}))['jobId']
-        as String;
+    await prefs.setStringList('next.source.$id.libraries', ['/']);
+    final job =
+        (await call('media.sources.sync', {'sourceId': id}))['jobId'] as String;
     final done = await _terminal(engine, job);
     expect(done.state, JobState.failed);
     await sources.facts.flush();
     var sync = (await listed())[id]!['sync'] as Map;
     expect(sync['result'], 'failed');
     expect(sync['jobId'], job);
-    expect(sync['errorCode'], 'login_required');
+    expect(sync['errorCode'], 'auth_failed');
     expect(sync['finishedAt'], isNotNull);
     expect(sync['lastSuccessAt'], isNull);
-    expect(((await listed())[id]!['lastError'] as Map)['code'], sync['errorCode']);
+    expect(
+        ((await listed())[id]!['lastError'] as Map)['code'], sync['errorCode']);
 
     // A sync left running by a previous process is reported as interrupted.
     await prefs.setString(
@@ -277,7 +283,8 @@ void main() {
     expect(sync['startedAt'], '2026-01-01T00:00:00.000Z');
   });
 
-  test('removing a source forgets its facts; changing its address forgets the probes',
+  test(
+      'removing a source forgets its facts; changing its address forgets the probes',
       () async {
     final id = ((await call('media.sources.add', {
       'type': 'webdav',
@@ -293,11 +300,16 @@ void main() {
         latencyMs: 3));
     await sources.facts.flush();
     expect(
-        ((await listed())[id]!['addresses'] as List).cast<Map>().single['reachability'],
+        ((await listed())[id]!['addresses'] as List)
+            .cast<Map>()
+            .single['reachability'],
         'reachable');
-    await call('media.sources.update', {'sourceId': id, 'url': 'http://192.168.1.3/dav'});
+    await call('media.sources.update',
+        {'sourceId': id, 'url': 'http://192.168.1.3/dav'});
     expect(
-        ((await listed())[id]!['addresses'] as List).cast<Map>().single['reachability'],
+        ((await listed())[id]!['addresses'] as List)
+            .cast<Map>()
+            .single['reachability'],
         'unknown');
     AddressProbes.report(AddressProbe(
         sourceId: id,

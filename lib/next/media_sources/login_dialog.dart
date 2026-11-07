@@ -74,8 +74,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
     Navigator.of(context).pop();
   }
 
-  String get secretLabel =>
-      widget.source['type'] == 'dandanplay_remote' ? 'API 密钥' : '密码';
+  String get secretLabel => '密码';
 
   @override
   Widget build(BuildContext context) =>
@@ -89,8 +88,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
       subtitle: widget.source['url'] as String?,
       onCancel: cancel,
       body: [
-        if (username.isNotEmpty)
-          NextDialogField(label: '用户名', value: username),
+        if (username.isNotEmpty) NextDialogField(label: '用户名', value: username),
         NextDialogField(
             label: secretLabel,
             controller: password,
@@ -112,7 +110,8 @@ class _PasswordDialogState extends State<_PasswordDialog> {
             width: 400,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               TextFormField(
-                  initialValue: '${widget.source['address'] ?? widget.source['url']}',
+                  initialValue:
+                      '${widget.source['address'] ?? widget.source['url']}',
                   readOnly: true,
                   decoration: const InputDecoration(labelText: '服务器地址')),
               TextFormField(

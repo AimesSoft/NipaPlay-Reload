@@ -125,7 +125,7 @@ void main() {
       () async {
     final port = _MutableSource();
     library.port = port;
-    final workId = sourceEntityId('work', 'jellyfin:test', 'same-item',
+    final workId = sourceEntityId('work', 'webdav:test', 'same-item',
         serverId: 'first-server');
     final work = await ui.work(workId);
     expect(work!.title, '测试作品');
@@ -138,7 +138,7 @@ void main() {
     await expectLater(
         library.validatedSourceRef(episode, 'episode'), throwsA(conflict));
     await expectLater(
-        library.items(sourceEntityId('folder', 'jellyfin:test', 'same-folder',
+        library.items(sourceEntityId('folder', 'webdav:test', 'same-folder',
             serverId: 'first-server')),
         throwsA(conflict));
     expect(port.itemReads, readsBeforeReconfiguration);
@@ -147,7 +147,7 @@ void main() {
       'source snapshots retain metadata but exclude authenticated transport URLs',
       () async {
     library.port = _MutableSource();
-    await ui.work(sourceEntityId('work', 'jellyfin:test', 'same-item',
+    await ui.work(sourceEntityId('work', 'webdav:test', 'same-item',
         serverId: 'first-server'));
     final saved = jsonEncode(await jobs.database.query('ui_cache'));
     expect(saved, isNot(contains('x48-transport-marker')));
@@ -265,7 +265,7 @@ void main() {
     expect((await library.page('local')).categories.single.categoryId, id);
   });
 
-  for (final type in ['jellyfin', 'emby', 'smb', 'webdav']) {
+  for (final type in ['smb', 'webdav']) {
     test(
         '$type last successful pages and covers survive disconnect and service recreation',
         () async {
@@ -345,21 +345,6 @@ void main() {
     expect(cached.artwork.poster, work.artwork.poster);
   });
 
-  test('a server\'s Movie is a film; its Series is not', () async {
-    Future<UiWork> first(_CatalogueSource port) async {
-      library.port = port;
-      final page = await library.page(port.sourceId);
-      return (page.categories.first.preview.first as UiWorkItem).work;
-    }
-
-    final film = await first(_CatalogueSource(root.path));
-    expect(film.film, isTrue);
-    expect((await ui.work(film.workId))!.film, isTrue);
-    final series =
-        await first(_CatalogueSource(root.path, type: 'emby')..series = true);
-    expect(series.film, isFalse);
-  });
-
   test(
       'source caches reject malformed responses and never cross actual server identities',
       () async {
@@ -408,11 +393,11 @@ void main() {
     final port = _CatalogueSource(root.path);
     library.port = port;
     final file = await ui.media.store
-        .ensureRemoteFile('jellyfin://episode', port.sourceId, {
+        .ensureRemoteFile('webdav://episode', port.sourceId, {
       'sourceId': port.sourceId,
       'serverId': port.actualServer,
       'itemId': 'episode',
-      'type': 'jellyfin'
+      'type': 'webdav'
     });
     await jobs.database.insert('media_entities', {
       'id': 'release',
@@ -496,14 +481,15 @@ void main() {
 }
 
 final class _CatalogueSource implements LibrarySourcePort {
-  _CatalogueSource(this.root, {this.type = 'jellyfin'});
+  _CatalogueSource(this.root, {this.type = 'webdav'});
   final String root, type;
   final rootNames = ['A', 'B', 'C'];
   bool online = true, malformed = false, series = false;
   Object disconnectedError = const SocketException('disconnected test source');
   String server = 'test-server';
   String get sourceId => '$type:catalogue';
-  String? get actualServer => type == 'smb' || type == 'webdav' ? null : server;
+  // Compatibility coverage for the optional third ID component on file sources.
+  String? get actualServer => server;
   void requireOnline() {
     if (!online) throw disconnectedError;
   }
@@ -523,7 +509,7 @@ final class _CatalogueSource implements LibrarySourcePort {
     requireOnline();
     if (malformed) throw const FormatException('invalid test response');
     return [
-      for (final name in actualServer == null ? ['/'] : rootNames)
+      for (final name in type == 'smb' ? ['/'] : rootNames)
         {
           'id': name,
           'name': '库$name',
@@ -590,9 +576,9 @@ final class _MutableSource implements LibrarySourcePort {
   @override
   Future<List<JsonMap>> sources({bool initialize = true}) async => [
         {
-          'sourceId': 'jellyfin:test',
+          'sourceId': 'webdav:test',
           'name': '测试来源',
-          'type': 'jellyfin',
+          'type': 'webdav',
           'connected': true,
           'serverId': serverId
         }

@@ -75,17 +75,17 @@ final class _Action extends Action<_Json, _Json> {
       title: '媒体库 · $op',
       description: switch (op) {
         'put' =>
-          'Atomically replace categories in entries. Globally unique categoryId; replacement retains order. content kind=condition uses local filter (OR within arrays, AND across dimensions); manual uses ordered workIds; original references sourceId/parentId. Server works require accepted identity for conditions. Unknown year, genre or rating does not match its filter; rating is the first displayed rating. The filter applies to the merged work, without an implicit page source constraint. The arrangement is stored on the executing device; it does not modify server/share content or synchronize layouts to other devices. Optional coverWorkIds (up to 3) and sort. Shows arrangement, retains origin/activity. Classification is requested by the user.',
+          'Atomically replace categories in entries. Globally unique categoryId; replacement retains order. content kind=condition uses local filter (OR within arrays, AND across dimensions); manual uses ordered workIds; original references sourceId/parentId. Unknown year, genre or rating does not match its filter; rating is the first displayed rating. The filter applies to the merged work, without an implicit page source constraint. The arrangement is stored on the executing device; it does not modify source files or synchronize layouts to other devices. Optional coverWorkIds (up to 3) and sort. Shows arrangement, retains origin/activity. Classification is requested by the user.',
         'configure' =>
           'Batch source form shelves/cards and original true/false; switching preserves arrangements. Settings belong to the executing device, not the server or other devices.',
         'move' =>
           'Batch categoryId/index (zero-based) moves among visible categories. Original order is persisted only in this device\'s NipaPlay; server/share order never changes.',
         'remove' =>
-          'Batch categoryId: arranged categories are removed from the arrangement; original categories are only hidden in this device\'s NipaPlay. Never deletes or changes server/share content or media/identities. Hidden IDs appear in page.hiddenCategories and library.arrangements.hiddenOriginal; restore them with ui.library.restore.',
+          'Batch categoryId: arranged categories are removed from the arrangement; original categories are only hidden in this device\'s NipaPlay. Never deletes or changes source files or media/identities. Hidden IDs appear in page.hiddenCategories and library.arrangements.hiddenOriginal; restore them with ui.library.restore.',
         'restore' =>
-          'Batch categoryId from page.hiddenCategories or library.arrangements.hiddenOriginal. Unhides original categories in this device\'s NipaPlay, preserving their order and server/share content. Does not recreate removed arranged categories.',
+          'Batch categoryId from page.hiddenCategories or library.arrangements.hiddenOriginal. Unhides original categories in this device\'s NipaPlay, preserving their order and source files. Does not recreate removed arranged categories.',
         'sources' =>
-          'Local merged catalogue first, then configured SMB, WebDAV, Jellyfin and Emby.',
+          'Local merged catalogue first, then configured SMB and WebDAV.',
         'page' =>
           'Read categories, hiddenCategories for ui.library.restore, cached local covers and bounded previews. Offline sources return last successful observations (empty if never read); their works are not playable.',
         _ =>

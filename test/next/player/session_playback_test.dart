@@ -35,11 +35,12 @@ void main() {
   });
   tearDown(() => temp.delete(recursive: true));
 
-  test('controls hidden: nothing over the video is told to redraw as it plays;'
+  test(
+      'controls hidden: nothing over the video is told to redraw as it plays;'
       ' shown: once a second', () async {
     final rig = FakeHost();
-    final playback = SessionPlayback(rig.host,
-        hideAfter: const Duration(milliseconds: 100));
+    final playback =
+        SessionPlayback(rig.host, hideAfter: const Duration(milliseconds: 100));
     var frames = 0;
     void counted() => frames++;
     playback.frame.addListener(counted);
@@ -76,7 +77,8 @@ void main() {
     final playback = SessionPlayback(rig.host);
     await playback.openItem(PlayableItem(videoPath: video));
     final statuses = <String>[];
-    playback.transport.addListener(() => statuses.add(playback.transport.value.status));
+    playback.transport
+        .addListener(() => statuses.add(playback.transport.value.status));
     playback.togglePlay();
     expect(playback.playIntent, isFalse);
     await pumpEventQueue();
@@ -102,8 +104,8 @@ void main() {
     final id = state['sessionId'] as String;
     expect(id, startsWith('internal:$pid:'));
 
-    final waiting = playback.controls.inspect(
-        'playback.wait', {'sessionId': id, 'until': 'paused', 'timeoutMs': 3000});
+    final waiting = playback.controls.inspect('playback.wait',
+        {'sessionId': id, 'until': 'paused', 'timeoutMs': 3000});
     await pumpEventQueue();
     await playback.port.setPaused(true);
     final waited = await waiting;
@@ -149,16 +151,15 @@ void main() {
     expect(entries['sessionId'], isNull);
     expect(entries['total'], 0);
     expect(entries['items'], isEmpty);
-    final network = await failure(() => playback.openItem(
-        PlayableItem(videoPath: 'jellyfin://item-1')));
-    expect(network.code, FailureCode.unavailable);
-    expect(network.details['stage'], 'source_resolution');
+    final network = await failure(
+        () => playback.openItem(PlayableItem(videoPath: 'webdav://item-1')));
+    expect(network.code, FailureCode.notFound);
     await playback.dispose();
   });
 
   test('the same actions stay in the catalogue when unavailable', () {
-    final inner = PlaybackControlsCapability(SessionControls(
-        SessionPlayback(FakeHost().host)));
+    final inner = PlaybackControlsCapability(
+        SessionControls(SessionPlayback(FakeHost().host)));
     final wrapped = NotInPlaybackLayer(inner, 'x', 'not yet');
     expect([for (final a in wrapped.actions) a.spec.id],
         [for (final a in inner.actions) a.spec.id]);
@@ -205,8 +206,7 @@ void main() {
   testWidgets('the stage draws the surface; a click plays or pauses',
       (tester) async {
     final host = _StageHost();
-    await tester.pumpWidget(
-        MaterialApp(home: NextVideoStage(host: host)));
+    await tester.pumpWidget(MaterialApp(home: NextVideoStage(host: host)));
     expect(find.byType(Texture), findsNothing);
     host.picture.value = const TextureSurface(3, width: 1280, height: 720);
     await tester.pump();

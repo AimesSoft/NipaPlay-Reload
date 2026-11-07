@@ -12,7 +12,7 @@ const _source = ObjectSchema({
   'name': _text,
   'url': StringSchema(
       description:
-          'LAN address (WebDAV url, SMB smb://host:port); empty when only a WAN address is configured. Jellyfin, Emby, NipaPlay and Dandanplay have this single address.'),
+          'LAN address (WebDAV url, SMB smb://host:port); empty when only a WAN address is configured. '),
   'wanUrl': StringSchema(
       description:
           'WebDAV/SMB WAN address; empty when none is configured. Absent on other types.'),
@@ -28,9 +28,7 @@ const _source = ObjectSchema({
   'selectedLibraries': ArraySchema(_text),
   'addresses': ArraySchema(
       ObjectSchema({
-        'role': StringSchema(
-            description:
-                'lan or wan for SMB and WebDAV; the address id for Jellyfin and Emby; address for a source with one address.'),
+        'role': StringSchema(description: 'lan or wan for SMB and WebDAV; '),
         'label': StringSchema(description: 'Address name, when it has one.'),
         'address': StringSchema(),
         'enabled': BooleanSchema(),
@@ -88,32 +86,10 @@ const _provenance = ObjectSchema({
   'observedAt'
 ]);
 const _metadata = ObjectSchema({
-  'Name': StringSchema(nullable: true),
-  'SeriesName': StringSchema(nullable: true),
-  'SeasonName': StringSchema(nullable: true),
-  'IndexNumber': IntegerSchema(nullable: true),
-  'ParentIndexNumber': IntegerSchema(nullable: true),
-  'ProductionYear': IntegerSchema(nullable: true),
-  'OriginalTitle': StringSchema(nullable: true),
-  'Overview': StringSchema(nullable: true),
   'Path': StringSchema(nullable: true),
-  'Container': StringSchema(nullable: true),
-  'Size': IntegerSchema(nullable: true, description: 'Bytes, as reported.'),
-  'LastModified': StringSchema(nullable: true, description: 'UTC ISO 8601.'),
-  'RunTimeTicks': IntegerSchema(
-      nullable: true, description: 'Server runtime in 100 nanosecond ticks.'),
-  'ProviderIds': ObjectSchema({},
-      additionalProperties: true,
-      nullable: true,
-      description: 'IDs of this item only; native provider keys and values.'),
-  'MediaSources':
-      ArraySchema(ObjectSchema({}, additionalProperties: true), nullable: true),
-  'MediaStreams':
-      ArraySchema(ObjectSchema({}, additionalProperties: true), nullable: true),
-},
-    additionalProperties: true,
-    description:
-        'Facts supplied by provenance server, retaining native keys and values. Missing fields mean the server did not supply them; no parent IDs are inherited or recognition inferred. Playback credential URLs/headers are excluded. Entry path is the Classic locator; metadata.Path is the server file path.');
+  'Size': IntegerSchema(nullable: true),
+  'LastModified': StringSchema(nullable: true),
+}, additionalProperties: true, description: 'Observed file facts.');
 const _entry = ObjectSchema({
   'id': _text,
   'name': StringSchema(),
@@ -152,47 +128,23 @@ final class MediaSourcesCapability implements Capability {
 
 final _specs = [
   const ActionSpec(
-      id: 'media.sources.artwork',
-      title: '读取来源海报',
-      description: 'Lazily load a Jellyfin/Emby or Dandanplay remote item poster using the X48 source image provider. '
-          'Returns only a cached local poster path or null. Authentication stays in the Classic client; '
-          'does not register files or identity. SMB/WebDAV have no server posters.',
-      effect: Effect.read,
-      input: ObjectSchema({'sourceId': _text, 'itemId': _text}, required: ['sourceId', 'itemId']),
-      output: ObjectSchema({'poster': StringSchema(nullable: true)}, required: ['poster'])),
-  const ActionSpec(
       id: 'media.sources.search',
       title: '只读搜索媒体来源',
-      description: 'Read-only search, independently reported per source. Dandanplay remote searches its refreshed native series/episode catalogue without creating identities. Jellyfin/Emby use bounded server SearchTerm across all libraries (Series/Movie/Episode/Video). SMB/WebDAV search only previously discovered file names and paths in the existing unified index; never enumerate, browse, register files, create identities or write discovery journal. sourceIds selects a batch; omitted selects configured supported sources; limit bounds each source (default 12). Returns sources[] with sourceId/name/type, basis server/indexed, connectionState, entries, total (null on error), optional error. A failed source does not discard other results. Indexed connectionState is the last known observation, unverified means unknown connectivity, not proven offline. Entries expose itemId, nullable accepted workId/episodeId, fileId, playable; server sourceWorkId/sourceEpisodeId open original Next pages. Unbound shared files play with media.sources.play {sourceId,itemId}. Searches activate the requested saved server session, using existing Classic clients. Call with one sourceId per GUI group to render independently.',
+      description:
+          'Search previously indexed SMB/WebDAV file names and paths. Results are independently reported per source with basis=indexed. Never browse, enumerate or register files. limit bounds each source; omitted sourceIds selects configured sources.',
       effect: Effect.read,
       input: ObjectSchema({
         'query': _text,
         'sourceIds': ArraySchema(_text),
         'limit': IntegerSchema(minimum: 1, maximum: 100),
-      }, required: ['query']),
-      output: ObjectSchema({'sources': ArraySchema(ObjectSchema({}, additionalProperties: true))}, required: ['sources'])),
-  const ActionSpec(
-      id: 'media.sources.sort',
-      title: '设置媒体库排序',
-      description:
-          'Save a batch of Jellyfin/Emby Classic per-library sorting preferences. sorts[] contains libraryId, sortBy (server field names, comma separated), sortOrder Ascending/Descending. Uses Classic Provider and persistence, applies to subsequent Classic library loads. Empty sorts is invalid. For temporary request ordering use browse sortBy/sortOrder.',
-      effect: Effect.write,
-      input: ObjectSchema({
-        'sourceId': _text,
-        'sorts': ArraySchema(ObjectSchema({
-          'libraryId': _text,
-          'sortBy': _text,
-          'sortOrder': StringSchema(values: ['Ascending', 'Descending'])
-        }, required: [
-          'libraryId',
-          'sortBy',
-          'sortOrder'
-        ]))
       }, required: [
-        'sourceId',
-        'sorts'
+        'query'
       ]),
-      output: ObjectSchema({}, additionalProperties: true)),
+      output: ObjectSchema({
+        'sources': ArraySchema(ObjectSchema({}, additionalProperties: true))
+      }, required: [
+        'sources'
+      ])),
   const ActionSpec(
       id: 'media.sources.scrape',
       title: '识别远程媒体',
@@ -206,7 +158,7 @@ final _specs = [
       id: 'media.sources.play',
       title: '播放远程影片',
       description:
-          'Play itemId returned by browse/query in the context of sourceId. Activates that Classic source first. Dandanplay remote and NipaPlay shared items retain Classic episode identity and resume context; credentials remain internal. Optional startPositionMs overrides resume. Returns the Classic player snapshot. Does not open a password prompt; log in first.',
+          'Play a discovered SMB/WebDAV itemId in sourceId using the Next player. Optional startPositionMs overrides resume. Credentials stay internal; log in first.',
       effect: Effect.write,
       input: ObjectSchema({
         'sourceId': _text,
@@ -221,17 +173,13 @@ final _specs = [
       id: 'media.sources.check',
       title: 'Check a media source connection',
       description:
-          'With sourceId, perform an authenticated live catalog request through Classic and persist success/failure status. With type plus url (or SMB host or wanHost, port, domain), test temporary configuration without saving it or requesting credentials. Temporary Jellyfin/Emby/Dandanplay tests probe public identity/welcome, WebDAV/SMB use anonymous credentials, NipaPlay uses existing same-origin host credentials if available. No passwords are accepted. Failure to authenticate temporary settings means use add then login. Listing sources itself never probes the network.',
+          'Check a configured SMB/WebDAV source, or test temporary configuration with anonymous credentials. Does not save temporary settings. Listing itself never probes the network.',
       effect: Effect.write,
       input: ObjectSchema({
         'sourceId': _text,
         'type': StringSchema(values: [
-          'jellyfin',
-          'emby',
           'smb',
           'webdav',
-          'nipaplay',
-          'dandanplay_remote'
         ]),
         ..._configuration
       }, oneOfRequired: [
@@ -243,15 +191,12 @@ final _specs = [
         'checked': BooleanSchema(),
         'connected': BooleanSchema(),
         'authenticated': BooleanSchema(),
-        'serverId': _text,
-        'tokenRequired': BooleanSchema(),
-        'version': _text
       }, additionalProperties: true)),
   const ActionSpec(
       id: 'media.sources.list',
       title: 'List media sources',
       description:
-          'List Classic sources and last observed connection status without reading credentials or contacting servers. Unverified does not mean offline. Besides the current fields each source carries observed facts that survive a restart, each with the time it was observed and null where nothing was: addresses[] (every configured address with role, reachability reachable/unreachable/unknown, lastAttemptAt, lastSuccessAt, lastFailureAt, errorCode, latencyMs; Classic probes SMB/WebDAV addresses at startup and when connections are tested, Jellyfin/Emby addresses when connecting, others when checked); lastCheck {at, result, errorCode, latencyMs} of the last media.sources.check; sync {result running/succeeded/failed/cancelled/interrupted or null, jobId, startedAt, finishedAt, lastSuccessAt, indexed, errorCode}; lastError {code, at, message}; credential {state none (needs no login)/saved (a login is on record; the vault is not read, so an entry that has gone shows as credential_missing when used)/missing/rejected, lastRejectedAt, lastRejectedCode, lastVerifiedAt}, which never holds the credential. rejected means the source refused the saved login after the last time it accepted it. errorCode is a stable code such as timeout, connection_refused, dns_failed, network_unreachable, tls_failed, auth_failed, login_required, credential_missing, http_<status>, connection_failed. address is the address in use now. WebDAV and SMB can have a LAN and a WAN address: WebDAV url (LAN) and wanUrl (WAN); SMB host/port and wanHost/wanPort, also given as smb:// url and wanUrl. At least one is non-empty; an empty one is not configured. Classic prefers LAN when both are set, so address can change between LAN and WAN without any edit.',
+          'List Classic sources and last observed connection status without reading credentials or contacting servers. Unverified does not mean offline. Besides the current fields each source carries observed facts that survive a restart, each with the time it was observed and null where nothing was: addresses[] (every configured address with role, reachability reachable/unreachable/unknown, lastAttemptAt, lastSuccessAt, lastFailureAt, errorCode, latencyMs; Classic probes SMB/WebDAV addresses at startup and when connections are tested, observations remain until refreshed); lastCheck {at, result, errorCode, latencyMs} of the last media.sources.check; sync {result running/succeeded/failed/cancelled/interrupted or null, jobId, startedAt, finishedAt, lastSuccessAt, indexed, errorCode}; lastError {code, at, message}; credential {state none (needs no login)/saved (a login is on record; the vault is not read, so an entry that has gone shows as credential_missing when used)/missing/rejected, lastRejectedAt, lastRejectedCode, lastVerifiedAt}, which never holds the credential. rejected means the source refused the saved login after the last time it accepted it. errorCode is a stable code such as timeout, connection_refused, dns_failed, network_unreachable, tls_failed, auth_failed, login_required, credential_missing, http_<status>, connection_failed. address is the address in use now. WebDAV and SMB can have a LAN and a WAN address: WebDAV url (LAN) and wanUrl (WAN); SMB host/port and wanHost/wanPort, also given as smb:// url and wanUrl. At least one is non-empty; an empty one is not configured. Classic prefers LAN when both are set, so address can change between LAN and WAN without any edit.',
       effect: Effect.read,
       input: ObjectSchema({}),
       output: ObjectSchema({'sources': ArraySchema(_source)},
@@ -260,16 +205,12 @@ final _specs = [
       id: 'media.sources.add',
       title: 'Configure a media source',
       description:
-          'Add a Classic Jellyfin, Emby, SMB, WebDAV, NipaPlay shared or dandanplay_remote source. HTTP sources require url; WebDAV may instead give wanUrl (or both). SMB requires host or wanHost (or both) and optionally port/wanPort/domain. Addresses are validated like Classic: HTTP(S) only, no credentials, query or fragment; SMB hosts have no credentials or path. Saves addresses and username; use login separately. Classic has one dandanplay_remote source, use update to replace its address. NipaPlay sharing uses the existing paired-host client.',
+          'Configure an SMB or WebDAV source. Save addresses and username; use login separately. WebDAV accepts url and wanUrl; SMB accepts host/port and wanHost/wanPort, plus domain. At least one address is required.',
       effect: Effect.write,
       input: ObjectSchema({
         'type': StringSchema(values: [
-          'jellyfin',
-          'emby',
           'smb',
           'webdav',
-          'nipaplay',
-          'dandanplay_remote'
         ]),
         ..._configuration
       }, required: [
@@ -292,8 +233,7 @@ final _specs = [
       description:
           'Remove a source connection without confirmation. Indexed file identities, bindings and playback history remain; no disk files are deleted.',
       effect: Effect.destructive,
-      input: ObjectSchema({'sourceId': _text},
-          required: ['sourceId']),
+      input: ObjectSchema({'sourceId': _text}, required: ['sourceId']),
       output: ObjectSchema({
         'sourceId': _text,
         'removed': BooleanSchema(),
@@ -308,11 +248,11 @@ final _specs = [
       id: 'media.sources.login',
       title: 'Initiate media source login',
       description:
-          'With explicit user authorization, pass password (or the dandanplay_remote API token in password) and userAuthorization to authenticate without a manual window. Use credentials supplied by the user or from a location they explicitly authorize; never search unrelated credentials. Secrets are redacted from application audit and kept out of job inputs and receipts. Without a password, auto uses Jellyfin Quick Connect when enabled, otherwise opens NipaPlay with address and username prefilled. A quickConnect result contains a code to give the user and jobId for task.wait. User-completed window/Quick Connect outcomes return to the asking conversation; direct password login is observed through task.wait. Login expires after ten minutes. An unauthenticated NipaPlay shared source can connect directly.',
+          'Authenticate an SMB/WebDAV source. With explicit userAuthorization, supply a user-provided password. Without a password, auto opens the login window. Secrets stay out of task inputs and receipts. User-completed outcomes return to the asking conversation. Login expires after ten minutes.',
       effect: Effect.write,
       input: ObjectSchema({
         'sourceId': _text,
-        'method': StringSchema(values: ['auto', 'quickConnect', 'window', 'password']),
+        'method': StringSchema(values: ['auto', 'window', 'password']),
         'password': StringSchema(secret: true),
         'userAuthorization': userAuthorizationSchema,
       }, required: [
@@ -322,24 +262,6 @@ final _specs = [
         'sourceId': _text,
         'method': _text,
         'jobId': _text,
-        'code': _text,
-        'approval': ObjectSchema({
-          'code': _text,
-          'message': _text,
-          'expiresAt': _text,
-          'wait': ObjectSchema({
-            'action': _text,
-            'input': ObjectSchema({'jobId': _text}, required: ['jobId'])
-          }, required: [
-            'action',
-            'input'
-          ])
-        }, required: [
-          'code',
-          'message',
-          'expiresAt',
-          'wait'
-        ]),
         'connected': BooleanSchema()
       }, required: [
         'sourceId',
@@ -349,7 +271,7 @@ final _specs = [
       id: 'media.sources.libraries',
       title: 'List available source libraries',
       description:
-          'Fetch available libraries, SMB shares, WebDAV root folders, or shared series via Classic clients. Uses only this source credentials. Returns IDs for selection.',
+          'List SMB shares or WebDAV root folders using this source credentials. Returns IDs for selection.',
       effect: Effect.read,
       input: _sourceId,
       output: ObjectSchema({
@@ -367,7 +289,7 @@ final _specs = [
       id: 'media.sources.select',
       title: 'Select source libraries',
       description:
-          'Replace sync selection with library IDs from libraries. Empty selection uses all libraries. Dandanplay remote exposes the complete catalogue without per-series display selection. Jellyfin/Emby selection uses the Classic service preferences. Does not remove files or change identities.',
+          'Replace sync selection with folder IDs returned by libraries. Empty selection uses the source root. Does not remove files or change identities.',
       effect: Effect.write,
       input: ObjectSchema({'sourceId': _text, 'libraries': ArraySchema(_text)},
           required: ['sourceId', 'libraries']),
@@ -378,15 +300,11 @@ final _specs = [
       id: 'media.sources.browse',
       title: 'Browse remote content',
       description:
-          'Discover a source root or parentId (library/folder/series/season) including never-played items. Jellyfin/Emby searchTerm is server-side and can span all libraries; use recursive=true for playable results. sortBy (server field names, comma separated) and sortOrder Ascending/Descending control that request. Other source types filter names in the requested directory or series. Dandanplay remote root returns series; parentId is animeId or unmatched. Returns complete metadata and source provenance using Classic pagination. Directory recursion uses sync. Play with media.sources.play {sourceId,itemId}. Each playable result enters the unified file index. Jellyfin/Emby/Dandanplay native works, seasons and episodes are persisted with source-scoped identities and metadata snapshots; workId/episodeId address standard management tools. Server ProviderIds remain evidence, not automatically accepted cross-provider matches. Existing file assignments and edits are preserved. No Classic recognition or watch-history creation.',
+          'Browse an SMB/WebDAV root or parent folder and register discovered files and source-native catalogue facts. Recursion uses media.sources.sync. Metadata contains file facts; matching is explicit. Existing assignments and edits are preserved.',
       effect: Effect.write,
       input: ObjectSchema({
         'sourceId': _text,
         'parentId': _text,
-        'recursive': BooleanSchema(),
-        'searchTerm': _text,
-        'sortBy': _text,
-        'sortOrder': StringSchema(values: ['Ascending', 'Descending'])
       }, required: [
         'sourceId'
       ]),
@@ -403,7 +321,7 @@ final _specs = [
       id: 'media.sources.query',
       title: 'Query remote item metadata',
       description:
-          'Fetch live facts for a batch of Jellyfin/Emby item IDs, SMB/WebDAV entry paths, or Dandanplay remote/NipaPlay shared episode IDs returned by browse. Includes metadata, source provenance and shared peer progress; missingItemIds lists IDs not returned by the server. Query series/season IDs explicitly for their ProviderIds; no inheritance or recognition. Does not register files or write bindings; fileId is null.',
+          'Read live SMB/WebDAV file facts for entry paths returned by browse. Does not register files or write bindings. missingItemIds reports entries absent from the response.',
       effect: Effect.read,
       input: ObjectSchema({'sourceId': _text, 'itemIds': ArraySchema(_text)},
           required: ['sourceId', 'itemIds']),
@@ -422,7 +340,7 @@ final _specs = [
       id: 'media.sources.sync',
       title: 'Synchronize source discovery',
       description:
-          'Submit a cancellable task to discover source hierarchy, register files and persist native server metadata for standard identity/metadata/artwork management. Optional parentIds narrows discovery; otherwise use selected libraries, or all roots when no selection exists. Dandanplay remote defaults to its entire catalogue. This refreshes server facts, not TMDB/Bangumi. Existing assignments and overrides survive refresh; missing items are not deleted. Wait for the task receipt.',
+          'Submit a cancellable task to discover SMB/WebDAV directories, register files and persist source-native facts. Optional parentIds narrows discovery; otherwise use selected folders or the root. Existing assignments and edits survive refresh. Missing files are not deleted.',
       effect: Effect.write,
       input: ObjectSchema({'sourceId': _text, 'parentIds': ArraySchema(_text)},
           required: ['sourceId']),
@@ -451,16 +369,10 @@ final class _SourceAction extends Action<_Json, _Json> {
       await service.ensureInitialized();
       final JsonMap result;
       switch (spec.id) {
-        case 'media.sources.artwork':
-          final load = service.loadPoster;
-          if (load == null) throw const Failure(FailureCode.unavailable, 'Source image host is not attached.');
-          result = {'poster': await load(json['sourceId'] as String, json['itemId'] as String)};
         case 'media.sources.search':
           result = await service.search(json['query'] as String,
               sourceIds: (json['sourceIds'] as List?)?.cast<String>(),
               limit: json['limit'] as int? ?? 12);
-        case 'media.sources.sort':
-          result = await service.sort(json);
         case 'media.sources.scrape':
           final row = await service.source(json['sourceId'] as String);
           if (!{'webdav', 'smb'}.contains(row['type']) ||
@@ -472,8 +384,9 @@ final class _SourceAction extends Action<_Json, _Json> {
               type: 'media.sources.scrape', title: '识别远程媒体', input: json);
           result = {'jobId': job.jobId};
         case 'media.sources.play':
-          result = await service.play(json['sourceId'] as String, json['itemId'] as String,
-            startPositionMs: json['startPositionMs'] as int?);
+          result = await service.play(
+              json['sourceId'] as String, json['itemId'] as String,
+              startPositionMs: json['startPositionMs'] as int?);
         case 'media.sources.check':
           result = json['sourceId'] == null
               ? await service.testConfiguration(json)
@@ -495,11 +408,9 @@ final class _SourceAction extends Action<_Json, _Json> {
               (json['libraries'] as List).cast<String>());
         case 'media.sources.browse':
           result = await service.browse(
-              json['sourceId'] as String, json['parentId'] as String?,
-              recursive: json['recursive'] == true,
-              searchTerm: json['searchTerm'] as String?,
-              sortBy: json['sortBy'] as String? ?? 'SortName',
-              sortOrder: json['sortOrder'] as String? ?? 'Ascending');
+            json['sourceId'] as String,
+            json['parentId'] as String?,
+          );
         case 'media.sources.query':
           result = await service.query(json['sourceId'] as String,
               (json['itemIds'] as List).cast<String>());

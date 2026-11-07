@@ -161,14 +161,9 @@ void main() {
     for (var i = 0; i < 2; i++) {
       await seedRow(await video('alternate-$i'), 8004, 8000401 + i);
     }
-    for (var i = 0; i < 160; i++) {
-      await seedRow(
-          i < 100
-              ? 'jellyfin://fixture-server/item-$i'
-              : '${media.path}/cleared-$i.mkv',
-          9999,
-          99990000 + i,
-          matched: i < 100);
+    for (var i = 100; i < 160; i++) {
+      await seedRow('${media.path}/cleared-$i.mkv', 9999, 99990000 + i,
+          matched: false);
     }
     final before = await classicDb.query('watch_history', orderBy: 'id');
     await connect();

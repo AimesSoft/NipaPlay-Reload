@@ -1,9 +1,7 @@
 part of 'fake_world.dart';
 
 /// The 片库 page's sources for screenshots and experiments: this device
-/// (everything, or Nipa's arrangement of it), a Jellyfin server with its
 /// libraries and folders, an SMB share by folder, a WebDAV share of one
-/// folder and an Emby server that cannot be reached. Over a thousand works, the sample posters reused.
 final class FakeLibrary implements NextLibraryData, NextLibraryActions {
   FakeLibrary(this.world) {
     _sources = _build();
@@ -82,40 +80,6 @@ final class FakeLibrary implements NextLibraryData, NextLibraryActions {
         c('local:movies', '电影', works: ['sintel']),
         c('local:unfinished', '工作站上没看完的', works: ['lycoris', 'spyfamily']),
       ]),
-      _Source('jellyfin', '客厅 Jellyfin', UiSourceKind.jellyfin,
-          form: UiLibraryForm.cards,
-          original: [
-            c('jf:anime', '动画', works: gen(1200, 1100), folders: [
-              c('jf:anime/new', '新番', works: [
-                'frieren',
-                'kusuriya',
-                'dungeon',
-                'oshinoko',
-                'kaiju8',
-                'yurucamp',
-              ]),
-              c('jf:anime/years', '按年份', folders: [
-                for (final (i, year) in ['2024', '2023', '2022', '2019'].indexed)
-                  c('jf:anime/years/$year', year, works: gen(2400 + i * 15, 15)),
-              ]),
-              c('jf:anime/classic', '经典', works: [
-                'changan',
-                'edgerunners',
-              ], folders: [
-                c('jf:anime/classic/kyoani', '京都动画',
-                    works: ['violet', 'bocchi']),
-              ]),
-            ]),
-            c('jf:movies', '电影', works: ['sintel', ...gen(b, b)]),
-          ],
-          arrangement: [
-            c('jf:healing', '治愈系',
-                works: ['violet', 'yurucamp', 'frieren', 'bocchi', 'spyfamily']),
-            c('jf:hot', '热血',
-                works: ['kaiju8', 'edgerunners', 'lycoris', 'dungeon']),
-            c('jf:binge', '一口气看完',
-                works: ['lycoris', 'edgerunners', 'oshinoko', ...gen(2500, 9)]),
-          ]),
       _Source('smb', '家里的 NAS', UiSourceKind.smb, original: [
         c('smb:anime', '动画', works: gen(2600, 30), folders: [
           c('smb:anime/old', '旧番', works: gen(2630, 12)),
@@ -123,16 +87,12 @@ final class FakeLibrary implements NextLibraryData, NextLibraryActions {
         c('smb:movies', '电影', works: ['sintel', 'gen:${b + 3}']),
         c('smb:downloads', '下载',
             works: [for (var n = 0; n < 6; n++) 'raw:$n'], tint: 0xFF35506A),
-        c('smb:recordings', '录像', works: [for (var n = 5; n < 9; n++) 'raw:$n']),
+        c('smb:recordings', '录像',
+            works: [for (var n = 5; n < 9; n++) 'raw:$n']),
       ]),
       _Source('webdav', '网盘', UiSourceKind.webdav, original: [
         c('dav:series', '剧集', works: gen(2700, 40)),
       ]),
-      _Source('emby', '书房 Emby', UiSourceKind.emby,
-          online: false,
-          original: [
-            c('emby:movies', '电影', works: gen(b * 2, 8)),
-          ]),
     ];
   }
 
@@ -291,7 +251,8 @@ final class FakeLibrary implements NextLibraryData, NextLibraryActions {
           _view(c, preview: s.form == UiLibraryForm.shelves)
       ],
       hiddenCategories: [
-        if (!s.arranged) for (final c in s.hidden) _view(c, preview: false)
+        if (!s.arranged)
+          for (final c in s.hidden) _view(c, preview: false)
       ],
     );
   }
@@ -355,20 +316,21 @@ final class FakeLibrary implements NextLibraryData, NextLibraryActions {
 }
 
 final class _Source {
-  _Source(this.id, this.name, this.kind,
-      {required List<_Category> original,
-      List<_Category>? arrangement,
-      this.online = true,
-      this.form = UiLibraryForm.shelves})
-      : original = [...original],
+  _Source(
+    this.id,
+    this.name,
+    this.kind, {
+    required List<_Category> original,
+    List<_Category>? arrangement,
+  })  : original = [...original],
         arrangement = arrangement == null ? null : [...arrangement];
   final String id;
   final String name;
   final UiSourceKind kind;
-  final bool online;
+  final bool online = true;
   final List<_Category> original;
   final List<_Category>? arrangement;
-  UiLibraryForm form;
+  UiLibraryForm form = UiLibraryForm.shelves;
   bool arranged = false;
   final hidden = <_Category>[];
 

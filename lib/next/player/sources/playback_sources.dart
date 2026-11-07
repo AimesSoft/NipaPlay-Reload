@@ -2,11 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
-import 'package:nipaplay/providers/emby_transcode_provider.dart';
-import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/utils/media_identity_resolver.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,7 +11,6 @@ import '../../harness_redaction.dart';
 import '../core/host.dart';
 import '../core/session.dart';
 import '../kernel/driver.dart' show KernelId;
-import 'progress.dart';
 import 'resolver.dart';
 
 /// Source and episode operations own only Dart data. All transport and
@@ -30,7 +26,6 @@ final class PlaybackSources extends ChangeNotifier {
   final Future<(String, int)> Function() readEndSettings;
   late final StreamSubscription<PlaybackEvent> _events;
   SourcePlan? plan;
-  SourceProgress? progress;
   PlaybackSession? _bound;
   int _ticket = 0;
   int _endGeneration = 0;
@@ -84,7 +79,6 @@ final class PlaybackSources extends ChangeNotifier {
       {Duration? start,
       bool? paused,
       String origin = 'gui',
-      JsonMap selection = const {},
       bool direct = false,
       KernelId? kernel,
       PlayerLevels? initialLevels}) async {
@@ -97,8 +91,8 @@ final class PlaybackSources extends ChangeNotifier {
         start ?? (saved > 0 ? Duration(milliseconds: saved) : null);
     final SourcePlan prepared;
     try {
-      prepared = await resolver.resolve(item,
-          start: resolverStart, selection: selection, direct: direct);
+      prepared =
+          await resolver.resolve(item, start: resolverStart, direct: direct);
     } on Failure {
       rethrow;
     } catch (e) {
@@ -110,15 +104,14 @@ final class PlaybackSources extends ChangeNotifier {
           });
     }
     if (_disposed || ticket != _ticket) {
-      await prepared.progress?.stopTranscoding();
       throw const Failure(
           FailureCode.conflict, 'Playback changed while resolving the source.');
     }
     // Danmaku are found beside the opening, never before it: a hash match or
     // a download of the comments joins the video when it is done.
     if (prepareDanmaku case final prepare?) {
-      unawaited(prepare(prepared.source.locator).catchError(
-          (Object e) => debugPrint('[NextDanmaku] prepare: $e')));
+      unawaited(prepare(prepared.source.locator)
+          .catchError((Object e) => debugPrint('[NextDanmaku] prepare: $e')));
     }
     final current = host.current.value;
     final reopening = current != null &&
@@ -128,7 +121,6 @@ final class PlaybackSources extends ChangeNotifier {
         ? saved
         : await host.records.resumeAt(prepared.source.locator);
     if (_disposed || ticket != _ticket) {
-      await prepared.progress?.stopTranscoding();
       throw const Failure(
           FailureCode.conflict, 'Playback changed while loading its progress.');
     }
@@ -168,11 +160,6 @@ final class PlaybackSources extends ChangeNotifier {
       _index = -1;
       _endHandled = null;
       error = null;
-      if (prepared.source.kind != 'local') {
-        progress = SourceProgress(session, prepared);
-      } else {
-        progress = null;
-      }
       _playlistLoading = _loadPlaylist(session, prepared);
       notifyListeners();
     });
@@ -353,122 +340,6 @@ final class PlaybackSources extends ChangeNotifier {
           }
         });
     }
-  }
-
-  JsonMap streamOptions() {
-    final source = plan;
-    final session = source?.serverSession;
-    if (source == null || session == null || _bound?.phase.value.done == true) {
-      throw const Failure(FailureCode.unavailable,
-          'The current source is not a Jellyfin or Emby session.');
-    }
-    return {
-      'server': source.source.kind,
-      'itemId': session.itemId,
-      'isTranscoding': session.isTranscoding,
-      ...source.selection,
-      'qualities': [for (final q in JellyfinVideoQuality.values) q.name],
-      'versions': [
-        for (final version in session.mediaSources)
-          {
-            'id': version.id,
-            'name': version.name,
-            'size': version.size,
-            'bitrate': version.bitRate,
-            'container': version.container,
-            'supportsTranscoding': version.supportsTranscoding,
-            'tracks': [
-              for (final stream in version.mediaStreams)
-                if (stream['Type'] == 'Audio' || stream['Type'] == 'Subtitle')
-                  {
-                    'index': stream['Index'],
-                    'kind': (stream['Type'] as String).toLowerCase(),
-                    'origin': 'server',
-                    'codec': stream['Codec'],
-                    'language': stream['Language'],
-                    'title': stream['DisplayTitle'] ?? stream['Title'],
-                    'external': stream['IsExternal'] == true,
-                    'default': stream['IsDefault'] == true,
-                    'selected': source.selection[stream['Type'] == 'Audio'
-                            ? 'audioIndex'
-                            : 'subtitleIndex'] ==
-                        stream['Index'],
-                  }
-            ],
-          }
-      ],
-    };
-  }
-
-  Future<JsonMap> selectStream(JsonMap input, {String origin = 'gui'}) async {
-    final before = streamOptions();
-    final session = _bound!;
-    final source = plan!;
-    final selection = {...source.selection, ...input};
-    final versions = source.serverSession!.mediaSources;
-    final version =
-        versions.where((v) => v.id == selection['mediaSourceId']).firstOrNull;
-    if (version == null) {
-      throw const Failure(
-          FailureCode.notFound, 'The media version does not exist.');
-    }
-    if (selection['mediaSourceId'] != before['mediaSourceId']) {
-      if (!input.containsKey('audioIndex')) selection.remove('audioIndex');
-      if (!input.containsKey('subtitleIndex')) {
-        selection.remove('subtitleIndex');
-      }
-    }
-    for (final (key, kind) in [
-      ('audioIndex', 'Audio'),
-      ('subtitleIndex', 'Subtitle')
-    ]) {
-      final index = selection[key];
-      if (index == null || key == 'subtitleIndex' && index == -1) continue;
-      if (!version.mediaStreams
-          .any((t) => t['Type'] == kind && t['Index'] == index)) {
-        throw Failure(
-            FailureCode.notFound, 'The $kind track is not in this version.');
-      }
-    }
-    if (input['transcode'] == false && !input.containsKey('quality')) {
-      selection['quality'] = 'original';
-    }
-    final quality =
-        JellyfinVideoQuality.values.byName(selection['quality'] as String);
-    final reduced = quality != JellyfinVideoQuality.original;
-    final enabled = input['transcode'] as bool? ??
-        (reduced || selection['transcode'] == true);
-    if (!enabled && reduced ||
-        selection['burnIn'] == true &&
-            (!enabled ||
-                !reduced ||
-                selection['subtitleIndex'] == null ||
-                selection['subtitleIndex'] == -1)) {
-      throw const Failure(FailureCode.invalidInput,
-          'Reduced quality and subtitle burn-in require transcoding and a selected subtitle.');
-    }
-    final emby = source.source.kind == 'emby';
-    final saved = emby
-        ? await EmbyTranscodeProvider().setDefaultVideoQuality(quality) &&
-            await EmbyTranscodeProvider().setTranscodeEnabled(enabled)
-        : await JellyfinTranscodeProvider().setDefaultVideoQuality(quality) &&
-            await JellyfinTranscodeProvider().setTranscodeEnabled(enabled);
-    if (!saved) {
-      throw const Failure(FailureCode.unavailable,
-          'Could not save the shared stream settings.');
-    }
-    _check(session);
-    final next = await open(source.item,
-        start: session.position,
-        paused: !session.transport.value.playIntent,
-        origin: origin,
-        selection: selection);
-    if (next.phase.value == SessionPhase.failed) {
-      throw Failure(
-          FailureCode.unavailable, 'The selected stream failed to open.',
-          details: next.fault.value?.toJson() ?? const {});
-    }
-    return streamOptions();
   }
 
   @override

@@ -8,7 +8,8 @@ import 'registry.dart';
 /// value that is stored. [value] is null when it is not known ([state]
 /// `unknown`) or when the stored value is not in use at all (`inactive`).
 final class Effective {
-  const Effective._(this.value, this.state, this.source, this.reason, this.detail);
+  const Effective._(
+      this.value, this.state, this.source, this.reason, this.detail);
 
   /// The running value equals the stored one.
   const Effective.same(Object? value, {String source = 'live', String? detail})
@@ -69,9 +70,6 @@ const pageLoadedSettings = {
   'appearance.collectionSort.local',
   'appearance.collectionSort.webdav',
   'appearance.collectionSort.smb',
-  'appearance.unwatchedOnly.jellyfin',
-  'appearance.unwatchedOnly.emby',
-  'appearance.unwatchedOnly.shared',
   'diagnostics.logViewerAutoScroll',
   'diagnostics.logViewerShowTimestamp',
 };
@@ -117,7 +115,8 @@ Effective compareEffective(
 /// start, values read when a page is created, runtime-only values, and the
 /// apply mode. Settings with a running reader get theirs from the host.
 Future<Effective> baseEffective(SettingEntry entry, Object? stored,
-    {required Map<String, Object?> startup, required ReadOther readOther}) async {
+    {required Map<String, Object?> startup,
+    required ReadOther readOther}) async {
   final key = entry.key;
   if (startupLoadedSettings.contains(key) && startup.containsKey(key)) {
     return compareEffective(entry, stored, startup[key],

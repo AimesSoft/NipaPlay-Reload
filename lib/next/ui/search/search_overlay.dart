@@ -492,17 +492,11 @@ class _RowState extends State<_Row> {
   @override
   void initState() {
     super.initState();
-    _wantArtwork();
-  }
-
-  void _wantArtwork() {
-    if (widget.entry case final SourceEntry e) widget.search.wantArtwork(e);
   }
 
   @override
   void didUpdateWidget(_Row old) {
     super.didUpdateWidget(old);
-    _wantArtwork();
     if (widget.selected && !old.selected && widget.search.movedByKeyboard) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
