@@ -294,6 +294,6 @@ TMDB 的图片 URL、语言选择、评分、类型、集数、制作公司和�
 
 SQLite v12 增加 `media_file_aliases`，事务合并历史的通用 remote 文件和唯一来源范围下的同 URL 文件；保留旧 ID、观察、回执与合并前的行存档。运行时登记也执行相同合并，重复执行不再改变结果。不同服务器范围继续独立。
 
-SQLite v11 只追加 `ui_presentations / ui_shelves / ui_cache`。任务变化通过 TaskEngine.changes 推送；目录由数据库适配器在相关写入提交后检查触发器维护的 change_epochs，再通知 changes，不按时间查询。事务内多行只在提交后通知一次，回滚和 mesh 派生缓存不通知。目录 worker 的第二连接使用独立句柄，将提交消息发回主 isolate。Classic 历史/日历仍由 StateSources.changed 推送；进入后台抑制前台通知，回前台补读一次。移除了午夜定时刷新，日期在回前台或下一次真实变化时更新。通知可能因缓存落盘多一次，不承诺每条领域事件一条通知。首次作品/剧集读取可能等待图片下载。
+SQLite v11 只追加 `ui_presentations / ui_shelves / ui_cache`。任务变化通过 TaskEngine.changes 推送；目录由数据库适配器在相关写入提交后检查触发器维护的 change_epochs，再通知 changes，不按时间查询。事务内多行只在提交后通知一次，回滚和 mesh 派生缓存不通知。目录 worker 的第二连接使用独立句柄，将提交消息发回主 isolate。Classic 历史/日历仍由 StateSources.changed 推送；进入后台抑制前台通知，回前台补读一次。前台使用下一个本地午夜的单次定时器推进“今天”，后台取消，恢复后重新计算下一个午夜。通知可能因缓存落盘多一次，不承诺每条领域事件一条通知。首次作品/剧集读取可能等待图片下载。
 
 Debug 且临时 profile 才注册 `ext.nipaplay.uiData`，供实验读同一界面接口、采样流、模拟会话边界、触发真实 hook 和通过正常保险库写入固定测试文件。该入口不在 Agent 能力目录，不在生产启用。

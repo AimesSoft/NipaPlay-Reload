@@ -26,6 +26,10 @@ import 'presence.dart';
 import 'response_chunks.dart';
 import 'system_bonjour.dart';
 import 'trust.dart';
+import 'credential_watch.dart';
+import '../system/foreground.dart';
+import '../system/network_changes.dart';
+import '../system/network_watch.dart';
 export 'host.dart' show authorizeMeshPeer;
 export 'trust.dart'
     show meshDefaultCoordinator, meshProductionIssuerPem, inspectMeshTrust;
@@ -105,6 +109,7 @@ final class MeshRuntime implements MeshDeviceSource {
     this.candidateLookupBase = const Duration(seconds: 30),
     this.candidateLookupInterval = const Duration(minutes: 10),
     this.interfaceProvider,
+    this.networkChanges,
     this.networkPollInterval = const Duration(seconds: 5),
     this.networkChangeDelay = const Duration(seconds: 2),
     this.networkReportMinGap = const Duration(minutes: 2),
@@ -142,6 +147,7 @@ final class MeshRuntime implements MeshDeviceSource {
   final Duration candidateLookupBase;
   final Duration candidateLookupInterval;
   final Future<List<NetworkInterfaceSnapshot>> Function()? interfaceProvider;
+  final Stream<void>? networkChanges;
   final Duration networkPollInterval, networkChangeDelay, networkReportMinGap;
   final int Function()? _clockSeconds;
 
@@ -185,9 +191,11 @@ final class MeshRuntime implements MeshDeviceSource {
   int _generation = 0;
   int _configurationGeneration = 0;
   Future<void>? _stopping;
-  Timer? _heartbeat, _loginWatch;
-  Timer? _networkPoll, _networkDebounce, _networkReport;
-  bool _networkPolling = false, _networkWatching = false;
+  Timer? _heartbeat;
+  MeshCredentialWatch? _loginWatch;
+  ForegroundNetworkWatch? _networkWatch;
+  Timer? _networkDebounce, _networkReport;
+  bool _networkPolling = false, _networkWatching = false, _networkAgain = false;
   String? _observedAddresses, _publishedAddresses;
   DateTime? _lastAddressReportAt, _lastAddressReportSuccessAt;
   DateTime? _nextHeartbeatAt, _coordinatorRetryNotBefore;
@@ -417,7 +425,7 @@ final class MeshRuntime implements MeshDeviceSource {
   Future<void> _stopConfigured() async {
     _configurationGeneration++;
     _stopNetworkWatch();
-    _loginWatch?.cancel();
+    await _loginWatch?.close();
     _loginWatch = null;
     _loginCheck = null;
     _heartbeat?.cancel();
@@ -474,7 +482,7 @@ final class MeshRuntime implements MeshDeviceSource {
     bool current() => !_closed && generation == _configurationGeneration;
     await _stopping;
     if (!current()) return;
-    _loginWatch?.cancel();
+    await _loginWatch?.close();
     _loginWatch = null;
     // Mesh is on by default: `mesh.json` exists only once the user changed an
     // advanced setting, and then it says what differs from the defaults.
@@ -520,8 +528,10 @@ final class MeshRuntime implements MeshDeviceSource {
         token);
     Future<void> checkLogin() async {
       if (!current()) return;
+      NextRefreshMetrics.record('mesh.credentials.check');
       final value = await token();
       if (!current()) return;
+      _loginWatch?.observed(value);
       // Keep the token only inside its request; this marker is not a credential.
       final marker = value == null ? null : identityHash(value);
       if (marker == _loginIdentity &&
@@ -544,11 +554,20 @@ final class MeshRuntime implements MeshDeviceSource {
           broadcast: _broadcast);
     }
 
-    _loginCheck = checkLogin;
-    await _queue(checkLogin);
+    Future<void> observeLogin() async {
+      try { await checkLogin(); }
+      finally {
+        if (current()) {
+          _loginWatch?.retryAt(_node == null && _loginIdentity != null
+              ? _nextJoinAttempt : null);
+        }
+      }
+    }
+    _loginCheck = observeLogin;
+    _loginWatch = MeshCredentialWatch(() => unawaited(_queue(observeLogin)),
+        networkEvents: networkChanges ?? SystemNetworkChanges.changes)..start();
+    await _queue(observeLogin);
     if (!current()) return;
-    _loginWatch =
-        Timer.periodic(const Duration(seconds: 30), (_) => _queue(checkLogin));
   }
 
   String identityHash(String tokenValue) {
@@ -761,8 +780,11 @@ final class MeshRuntime implements MeshDeviceSource {
     _publishedAddresses = null;
     final discovery = _discovery!;
     _networkWatching = true;
-    _networkPoll = Timer.periodic(networkPollInterval,
-        (_) => unawaited(_checkNetwork(discovery: discovery)));
+    _networkWatch = ForegroundNetworkWatch(
+        () => unawaited(_checkNetwork(discovery: discovery)),
+        // 测试或自定义接口源必须提供相应事件，否则使用前台兼容检查。
+        events: networkChanges ?? (interfaceProvider == null ? SystemNetworkChanges.changes : null),
+        fallbackInterval: networkPollInterval)..start();
   }
 
   Future<List<JsonMap>> _currentAddresses() async => [
@@ -794,19 +816,25 @@ final class MeshRuntime implements MeshDeviceSource {
   }
 
   Future<void> _checkNetwork({required MeshDiscovery discovery}) async {
-    if (_networkPolling ||
-        !_networkWatching ||
+    if (!_networkWatching ||
+        !NextForeground.active ||
         _closed ||
         !identical(_discovery, discovery)) {
+      return;
+    }
+    if (_networkPolling) {
+      _networkAgain = true;
       return;
     }
     _networkPolling = true;
     try {
       final signature = _addressSignature(await _currentAddresses());
       if (!_networkWatching ||
+          !NextForeground.active ||
           _closed ||
           !identical(_discovery, discovery) ||
-          signature == _observedAddresses) {
+          signature == _observedAddresses &&
+              (_publishedAddresses == null || signature == _publishedAddresses)) {
         return;
       }
       final previous = _observedAddresses;
@@ -816,6 +844,7 @@ final class MeshRuntime implements MeshDeviceSource {
       _networkDebounce = Timer(networkChangeDelay, () {
         unawaited(_queue(() async {
           if (!_networkWatching ||
+              !NextForeground.active ||
               !identical(_discovery, discovery) ||
               _observedAddresses == _publishedAddresses) {
             return;
@@ -840,6 +869,11 @@ final class MeshRuntime implements MeshDeviceSource {
       // A transient interface enumeration failure is not an empty network.
     } finally {
       _networkPolling = false;
+      if (_networkAgain) {
+        _networkAgain = false;
+        final next = _discovery;
+        if (next != null) unawaited(_checkNetwork(discovery: next));
+      }
     }
   }
 
@@ -854,6 +888,7 @@ final class MeshRuntime implements MeshDeviceSource {
     _networkReport = Timer(wait, () {
       unawaited(_queue(() async {
         if (!_networkWatching ||
+            !NextForeground.active ||
             !identical(_discovery, discovery) ||
             _coordinatorSyncPending ||
             _observedAddresses == _publishedAddresses) {
@@ -874,7 +909,9 @@ final class MeshRuntime implements MeshDeviceSource {
 
   void _stopNetworkWatch() {
     _networkWatching = false;
-    _networkPoll?.cancel();
+    _networkAgain = false;
+    unawaited(_networkWatch?.close());
+    _networkWatch = null;
     _networkDebounce?.cancel();
     _networkReport?.cancel();
   }
@@ -1520,7 +1557,7 @@ final class MeshRuntime implements MeshDeviceSource {
   JsonMap get runtimeFacts => {
         'status': status,
         'listenerActive': _node != null,
-        'loginWatchActive': _loginWatch?.isActive == true,
+        'loginWatchActive': _loginWatch != null,
         'stopping': _stopping != null,
         'closed': _closed,
         'listenPort': port,
@@ -2758,7 +2795,8 @@ final class MeshRuntime implements MeshDeviceSource {
     await _stopping;
     _stopNetworkWatch();
     _responseChunks.clear();
-    _loginWatch?.cancel();
+    await _loginWatch?.close();
+    _loginWatch = null;
     _heartbeat?.cancel();
     _deferredRefresh?.cancel();
     await _operations;

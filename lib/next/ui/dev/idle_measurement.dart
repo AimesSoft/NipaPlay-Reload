@@ -50,6 +50,7 @@ Future<Map<String, Object?>> measureNextIdle(Duration duration) async {
         entry.key: entry.value - (before[entry.key] ?? 0),
   };
   final summaries = await _summarize(builds, rasters);
+  final periodic = NextRefreshMetrics.periodicCount(refreshes);
   return {
     'seconds': duration.inMilliseconds / 1000,
     'frames': builds.length,
@@ -57,9 +58,9 @@ Future<Map<String, Object?>> measureNextIdle(Duration duration) async {
     'build': summaries.$1,
     'raster': summaries.$2,
     'refreshes': refreshes,
-    'periodicRefreshes': refreshes['mesh.legacy.periodic'] ?? 0,
+    'periodicRefreshes': periodic,
     'dataRefreshes': refreshes.values.fold<int>(0, (a, b) => a + b) -
-        (refreshes['mesh.legacy.periodic'] ?? 0),
+        periodic,
   };
 }
 

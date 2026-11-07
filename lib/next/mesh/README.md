@@ -149,10 +149,14 @@ mesh.invoke 拒绝 destructive，mesh.invoke_destructive 只接受 destructive�
 并拒绝其新连接。被吊销节点的地址上报会被拒绝，此时仍同步快照并关闭自身监听和会话。
 网络失败保留当前状态供下次心跳重试；7 天证书到期后 TLS 拒绝连接。
 
-UDP 32124 每 30 秒广播 deviceId 和监听端口，同时在 mDNS（UDP 5353，与系统 mDNSResponder/avahi
+桌面和无界面宿主的 UDP 32124 每 30 秒广播 deviceId 和监听端口，同时在 mDNS（UDP 5353，与系统 mDNSResponder/avahi
 共用端口）上发布并应答 `_nipaplay-mesh._tcp.local.` 服务（SRV 端口、TXT 里的 deviceId，A/AAAA 只含非虚拟网卡
 的地址），iPad 以后用系统 Bonjour 即可发现。两者都只是地址线索，且不带身份：线索不会触发协调服务请求，
 连接仍必须通过双向 TLS 和设备名单。
+手机、平板、电视仅在应用前台广播和回应查询，进入后台取消广播计时器，恢复后立即广播一次。
+iOS 的系统 Bonjour 在后台停止发布和浏览，回前台重新启动。iOS/macOS 的接口变化由
+`NWPathMonitor` 经 `nipaplay/network_path` 方法通道通知，不再每 5 秒枚举接口；
+其他平台和无 Flutter 通道的宿主保留兼容检查，但仅前台运行。约 15 分钟的心跳不变。
 候选地址不含 docker、utun、awdl 等虚拟网卡；排序为上次连通的路由、同网段、手填地址、其他私网地址；
 并行尝试，每 250 毫秒错开启动下一个，最先成功的路由写入 mesh-routes.json。
 网络禁止广播时仍可通过协调服务地址直连。手填 overlay、公网、manual、relay 候选
@@ -221,8 +225,9 @@ Mesh 默认启用：协调服务地址内置为 `https://nipaplay.aimes-soft.com
 无界面宿主与桌面一样默认监听所有网卡并上报局域网地址（要限制在本机就写 `loopbackOnly`）。加入本身不依赖广播。设备自我描述来自已认证
 的 `mesh/describe`，不是协调服务代报的磁盘信息；角色与存储标签由宿主配置。
 地址可通过 settings.set {key:"mesh.addressCandidates", value:[...]} 修改，下个心跳上报。
-登录和退出由现有账号宿主处理；账号凭据仍只在保险库中。Mesh 每 30 秒在本地检查凭据变化，
-变化时关闭旧会话；失败的加入尝试至少隔 15 分钟再试。
+登录和退出由现有账号宿主处理；账号凭据仍只在保险库中。成功持久化令牌、无界面保险库写入或删除、
+系统网络变化及回前台会触发登录检查；JWT 的 exp 提前一分钟设置单次截止点，稳定登录不设周期凭据检查。
+变化时关闭旧会话，令牌到期不替代设备证书续期。未加入成功时仅保留前台单次重试，遵循既有重试间隔。
 
 开发构建使用 NIPAPLAY_MESH_DEV_CA=/absolute/path/to/public-ca.pem。
 Release 忽略该变量，仅使用内置信任常量 meshProductionIssuerPem：主根和备用根两段公开证书 PEM

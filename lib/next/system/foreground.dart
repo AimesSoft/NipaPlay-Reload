@@ -19,4 +19,7 @@ abstract final class NextRefreshMetrics {
   static void record(String source) =>
       _counts.update(source, (n) => n + 1, ifAbsent: () => 1);
   static Map<String, int> snapshot() => Map.of(_counts);
+  static int periodicCount(Map<String, int> counts) => counts.entries
+      .where((entry) => entry.key.endsWith('.periodic'))
+      .fold(0, (sum, entry) => sum + entry.value);
 }

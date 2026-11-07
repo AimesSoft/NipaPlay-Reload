@@ -5,6 +5,9 @@ import 'package:nipa_harness/nipa_harness.dart';
 import '../platform/lab_profile.dart';
 import 'bonjour.dart';
 import 'system_bonjour.dart';
+import '../system/device_work_policy.dart';
+import '../system/foreground.dart';
+import '../system/foreground_broadcast.dart';
 
 typedef NetworkInterfaceSnapshot = ({
   String name,
@@ -165,7 +168,9 @@ final class MeshDiscovery {
     this.enableBonjour = true,
     this.bonjourPort = MeshBonjour.defaultMdnsPort,
     this.allowInLabProfile = false,
-  }) : _interfaces = interfaces;
+    bool? foregroundOnly,
+  }) : foregroundOnly = foregroundOnly ?? DeviceWorkPolicy.foregroundDiscovery,
+       _interfaces = interfaces;
 
   final String deviceId;
   final int port;
@@ -174,10 +179,14 @@ final class MeshDiscovery {
   final bool enableBonjour;
   final int bonjourPort;
   final bool allowInLabProfile;
+  final bool foregroundOnly;
 
   RawDatagramSocket? _socket;
   StreamSubscription<RawSocketEvent>? _subscription;
-  Timer? _broadcast;
+  ForegroundBroadcast? _broadcast;
+  StreamSubscription<bool>? _systemForeground;
+  Future<void> _systemTurn = Future.value();
+  bool _closed = false;
   MeshBonjour? _bonjour;
   SystemBonjour? _systemBonjour;
   final _hints = <String, List<({JsonMap address, DateTime expires})>>{};
@@ -264,6 +273,7 @@ final class MeshDiscovery {
 
   Future<void> start() async {
     if (LabProfile.active && !allowInLabProfile) return;
+    _closed = false;
     if (SystemBonjour.available) {
       // The system's Bonjour alone: no hand-written mDNS and no UDP
       // broadcast (the latter needs a multicast entitlement Apple grants on
@@ -282,7 +292,23 @@ final class MeshDiscovery {
           );
         },
       );
-      await system.start();
+      void update() {
+        _systemTurn = _systemTurn.then((_) async {
+          if (_closed || !identical(_systemBonjour, system)) return;
+          if (!foregroundOnly || NextForeground.active) {
+            await system.start();
+          } else {
+            await system.close();
+          }
+        }).catchError((Object _) {
+          // 发现只是地址线索；不能阻止 TLS 直连或生命周期清理。
+        });
+      }
+      if (foregroundOnly) {
+        _systemForeground = NextForeground.changes.listen((_) => update());
+      }
+      update();
+      await _systemTurn;
       return;
     }
     if (enableBonjour) {
@@ -293,6 +319,7 @@ final class MeshDiscovery {
         localAddresses: localLanAddresses,
         mdnsPort: bonjourPort,
         allowInLabProfile: allowInLabProfile,
+        foregroundOnly: foregroundOnly,
         onPeerDiscovered: (peer, host, peerPort, ttlSeconds) {
           recordHint(
             peer,
@@ -311,6 +338,10 @@ final class MeshDiscovery {
       discoveryPort,
       reuseAddress: true,
     );
+    if (_closed) {
+      socket.close();
+      return;
+    }
     socket.broadcastEnabled = true;
     _socket = socket;
     _subscription = socket.listen((event) {
@@ -343,6 +374,7 @@ final class MeshDiscovery {
       }
     });
     void announce() {
+      if (_closed || foregroundOnly && !NextForeground.active) return;
       try {
         socket.send(
           utf8.encode(
@@ -355,13 +387,17 @@ final class MeshDiscovery {
       }
     }
 
-    announce();
-    _broadcast = Timer.periodic(const Duration(seconds: 30), (_) => announce());
+    _broadcast = ForegroundBroadcast(announce,
+        foregroundOnly: foregroundOnly)..start();
   }
 
   Future<void> close() async {
-    _broadcast?.cancel();
+    _closed = true;
+    await _broadcast?.close();
     _broadcast = null;
+    await _systemForeground?.cancel();
+    _systemForeground = null;
+    await _systemTurn;
     await _subscription?.cancel();
     _subscription = null;
     _socket?.close();

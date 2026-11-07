@@ -19,6 +19,8 @@ import 'http_download_backend.dart';
 import 'qbittorrent_download_backend.dart';
 import 'qbittorrent_hub.dart';
 import '../../security/credential_vault.dart';
+import '../system/device_work_policy.dart';
+import '../system/foreground.dart';
 
 final class DownloadRuntime extends ChangeNotifier {
   DownloadRuntime(
@@ -27,6 +29,7 @@ final class DownloadRuntime extends ChangeNotifier {
       required Future<bool> Function() isEnabled,
       required Future<Set<String>> Function() loadImportedKeys,
       Duration refreshInterval = const Duration(seconds: 5),
+      bool? supportsDownloads,
       HttpDownloadBackend? httpBackend})
       : _backend = backend,
         http = httpBackend ??
@@ -36,6 +39,7 @@ final class DownloadRuntime extends ChangeNotifier {
         _library = library,
         _enabled = isEnabled,
         _loadImportedKeys = loadImportedKeys,
+        _supportsDownloads = supportsDownloads ?? DeviceWorkPolicy.downloads,
         _refreshInterval = refreshInterval {
     _backends = DownloadBackends([backend, http]);
     executor = DownloadExecutor(
@@ -62,6 +66,11 @@ final class DownloadRuntime extends ChangeNotifier {
   final Future<bool> Function() _enabled;
   final Future<Set<String>> Function() _loadImportedKeys;
   final Duration _refreshInterval;
+  final bool _supportsDownloads;
+  StreamSubscription<Job>? _jobs;
+  final _activeDownloads = <String>{};
+  Map<String, Job>? _startupChanges;
+  bool _observationStarted = false, _observing = false;
   Failure? lastSessionError;
   final _native = TorrentDownloadService.instance;
   Set<String> autoScannedKeys = const {};
@@ -107,6 +116,29 @@ final class DownloadRuntime extends ChangeNotifier {
   }
 
   Future<void> _startObservation() async {
+    if (!_supportsDownloads) return;
+    _startupChanges = {};
+    _jobs = engine.changes.listen((job) {
+      if (job.type != 'download') return;
+      final duringStartup = _startupChanges;
+      if (duringStartup != null) {
+        duringStartup[job.jobId] = job;
+        return;
+      }
+      _trackDownload(job);
+      _scheduleRefresh(immediate: true);
+    });
+    final store = engine.store;
+    if (store is SqliteJobStore) {
+      _activeDownloads.addAll(await store.observingDownloadIds());
+    } else {
+      for (final job in await engine.listActive()) {
+        if (job.type == 'download') _trackDownload(job);
+      }
+    }
+    for (final job in _startupChanges!.values) { _trackDownload(job); }
+    _startupChanges = null;
+    if (_closed) return;
     final hub = qbittorrent;
     if (hub != null) {
       await hub.load();
@@ -115,10 +147,21 @@ final class DownloadRuntime extends ChangeNotifier {
       }
     }
     await _observeSession();
+    _observationStarted = true;
     _scheduleRefresh();
   }
 
+  void _trackDownload(Job job) {
+    if (const {JobState.queued, JobState.running, JobState.cancelling}.contains(job.state)) {
+      _activeDownloads.add(job.jobId);
+    } else {
+      _activeDownloads.remove(job.jobId);
+    }
+  }
+
   Future<void> _observeSession() async {
+    _observing = true;
+    NextRefreshMetrics.record('downloads.observation');
     try {
       await refresh();
       lastSessionError = null;
@@ -129,12 +172,21 @@ final class DownloadRuntime extends ChangeNotifier {
       lastSessionError = failure;
       debugPrint('下载后端暂时不可用: ${failure.message}');
       if (!_closed) notifyListeners();
+    } finally {
+      _observing = false;
     }
   }
 
-  void _scheduleRefresh() {
-    if (_closed) return;
-    _timer = Timer(_refreshInterval, () async {
+  void _scheduleRefresh({bool immediate = false}) {
+    if (_closed || !_supportsDownloads || _activeDownloads.isEmpty) {
+      _timer?.cancel();
+      _timer = null;
+      return;
+    }
+    if (!_observationStarted || _observing || _timer?.isActive == true) return;
+    _timer = Timer(immediate ? Duration.zero : _refreshInterval, () async {
+      _timer = null;
+      if (!immediate) NextRefreshMetrics.record('downloads.observation.periodic');
       try {
         await _observeSession();
       } finally {
@@ -146,7 +198,7 @@ final class DownloadRuntime extends ChangeNotifier {
   Future<void> refresh() =>
       _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
   Future<void> _refresh() async {
-    if (_closed) return;
+    if (_closed || !_supportsDownloads) return;
     final jobsByHash = <String, Job>{};
     if (await _enabled()) {
       await _backend.initialize();
@@ -211,7 +263,7 @@ final class DownloadRuntime extends ChangeNotifier {
   /// limits set on it. Nothing is started to find out: the backends are
   /// asked only while downloads are enabled, as the periodic refresh does.
   Future<List<JsonMap>> engineStatus() async {
-    final enabled = await _enabled();
+    final enabled = _supportsDownloads && await _enabled();
     final jobs = await engine.list(type: 'download');
     final observedAt = DateTime.now().toUtc().toIso8601String();
     final rows = <JsonMap>[];
@@ -311,7 +363,7 @@ final class DownloadRuntime extends ChangeNotifier {
   /// one. A qBittorrent that does not answer contributes no rows (its state is
   /// in [engineStatus]); nothing is started.
   Future<List<JsonMap>> qbittorrentTorrents() async {
-    if (!await _enabled()) return const [];
+    if (!_supportsDownloads || !await _enabled()) return const [];
     final jobs = await engine.list(type: 'download');
     final tracked = <String, String>{};
     for (final job in jobs) {
@@ -415,7 +467,10 @@ final class DownloadRuntime extends ChangeNotifier {
   Future<void> stop() async {
     _closed = true;
     _timer?.cancel();
+    await _jobs?.cancel();
     await ready;
+    // startup 的订阅可能在 stop 开始后才完成登记。
+    await _jobs?.cancel();
     await _refreshing;
     await http.close();
   }

@@ -31,6 +31,7 @@ import '../chat/turn_boundaries.dart';
 import '../util/slicer.dart';
 import '../db/notifications.dart';
 import '../system/foreground.dart';
+import '../system/midnight_refresh.dart';
 
 /// The `library.files` rows, found by episode and by file.
 final class LocalFiles {
@@ -129,6 +130,7 @@ final class UiDataService
   StreamSubscription<void>? _catalogue;
   StreamSubscription<bool>? _foreground;
   bool _started = false;
+  late final _midnight = MidnightRefresh(_changed);
   Future<void> _publishing = Future.value();
   bool _closed = false;
   @override
@@ -174,6 +176,7 @@ final class UiDataService
   Future<void> start() async {
     if (_started || _closed) return;
     _started = true;
+    _midnight.start();
     _catalogue = CatalogueChanges.forPath(db.path).listen((_) => _changed());
     _foreground = NextForeground.changes.listen((active) {
       if (active) {
@@ -1537,6 +1540,7 @@ final class UiDataService
   /// again. Its streams stay open for whoever listens then.
   Future<void> pause() async {
     _started = false;
+    await _midnight.close();
     await _catalogue?.cancel();
     _catalogue = null;
     await _foreground?.cancel();
@@ -1550,6 +1554,7 @@ final class UiDataService
 
   Future<void> close() async {
     _closed = true;
+    await _midnight.close();
     await _catalogue?.cancel();
     await _foreground?.cancel();
     await _classic?.cancel();

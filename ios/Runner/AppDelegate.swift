@@ -3,6 +3,43 @@ import UIKit
 import AVKit
 import CryptoKit
 import Photos
+import Network
+
+/// Next 按需监听系统路径变化；停止监听后不保留后台监视器。
+private final class NipaNetworkPathMonitor {
+  private var monitor: NWPathMonitor?
+  private var generation = 0
+  private let channel: FlutterMethodChannel
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(name: "nipaplay/network_path", binaryMessenger: messenger)
+    channel.setMethodCallHandler { [self] call, result in
+      switch call.method {
+      case "start":
+        if monitor == nil {
+          generation += 1
+          let currentGeneration = generation
+          let next = NWPathMonitor()
+          monitor = next
+          next.pathUpdateHandler = { [weak self] _ in
+            DispatchQueue.main.async { [weak self] in
+              guard let self, self.monitor != nil,
+                    self.generation == currentGeneration else { return }
+              self.channel.invokeMethod("changed", arguments: nil)
+            }
+          }
+          next.start(queue: DispatchQueue(label: "nipaplay.next.network-path", qos: .utility))
+        }
+        result(nil)
+      case "stop":
+        generation += 1
+        monitor?.cancel()
+        monitor = nil
+        result(nil)
+      default: result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+}
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -35,6 +72,7 @@ import Photos
 
     let registrar = engineBridge.applicationRegistrar
     let messenger = registrar.messenger()
+    _ = NipaNetworkPathMonitor(messenger: messenger)
     NipaKeychain.register(with: messenger)
     NipaMeshBonjour.register(with: messenger)
 

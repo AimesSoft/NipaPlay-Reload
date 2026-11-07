@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import '../../security/credential_vault.dart';
 import '../../security/secret_redactor.dart';
+import '../system/credential_changes.dart';
 
 /// Host-only private credential files, never registered as an Action or setting.
 final class HeadlessVault implements CredentialVault {
@@ -43,11 +44,13 @@ final class HeadlessVault implements CredentialVault {
     }
     await pending.rename(file.path);
     SecretRedactor.remember(ref, secret);
+    CredentialChanges.committed(ref);
   }
   @override
   Future<void> delete(CredentialRef ref) async {
     await initialize();
     final file = _file(ref);
     if (await file.exists()) await file.delete();
+    CredentialChanges.committed(ref);
   }
 }
