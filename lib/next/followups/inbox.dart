@@ -23,6 +23,7 @@ extension AgentInbox on Followups {
     await database.insert(
         'agent_inbox_preferences', {'key': key, 'value': jsonEncode(value)},
         conflictAlgorithm: ConflictAlgorithm.replace);
+    _inboxChanged();
   }
 
   Future<JsonMap?> folderRequest(Invocation invocation) async {
@@ -125,6 +126,7 @@ extension AgentInbox on Followups {
           'created_at': now,
           'snapshot': jsonEncode(row)
         });
+        _inboxChanged();
         return row;
       });
 
@@ -193,6 +195,7 @@ extension AgentInbox on Followups {
               tx, delivery, 'registered', invocation.origin, invocation.id);
         });
         _schedule();
+        _inboxChanged();
         return row;
       });
 
@@ -212,6 +215,7 @@ extension AgentInbox on Followups {
         await database.update(
             'agent_inbox', {'state': row['state'], 'snapshot': jsonEncode(row)},
             where: 'id=?', whereArgs: [id]);
+        _inboxChanged();
         return row;
       });
 
@@ -271,6 +275,7 @@ extension AgentInbox on Followups {
           },
           conflictAlgorithm: ConflictAlgorithm.ignore);
     }
+    _inboxChanged();
   }
 
   Future<void> _collectFolderRequests(_Tasks tasks) async {

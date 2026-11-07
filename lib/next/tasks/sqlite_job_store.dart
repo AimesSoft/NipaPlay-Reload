@@ -56,6 +56,15 @@ final class SqliteJobStore implements JobStore, JobCountStore, JobPageStore {
         JobState.cancelled.wireName,
       ]);
 
+  /// 下载观察只需要活动 ID；不把其他类型或历史任务的大快照解码到主 isolate。
+  Future<Set<String>> observingDownloadIds() async => {
+        for (final row in await _database.rawQuery(
+            'SELECT job_id FROM jobs WHERE type=? AND state IN (?, ?, ?)',
+            ['download', JobState.queued.wireName, JobState.running.wireName,
+              JobState.cancelling.wireName]))
+          row['job_id'] as String,
+      };
+
   @override
   Future<List<JobStateCount>> countByStateAndType(
       {required Set<JobState> states}) async {

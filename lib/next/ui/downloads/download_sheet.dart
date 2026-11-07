@@ -13,6 +13,7 @@ import '../widgets/icons.dart';
 import '../widgets/progress.dart';
 import '../widgets/sheet.dart';
 import 'units.dart';
+import '../widgets/visible_updates.dart';
 
 /// A download's own sheet: how far, how fast, from how many, and each of
 /// its files to keep or leave out; pause, go on, delete.
@@ -44,11 +45,11 @@ class DownloadSheet extends StatefulWidget {
 }
 
 class _DownloadSheetState extends State<DownloadSheet>
+    with VisibleUpdates<DownloadSheet>
     implements DownloadSheetDebug {
   NextDownloads get _downloads => widget.services.downloads;
   UiDownload? _d;
   Object? _readError;
-  Timer? _poll;
 
   /// The person's choice of files, until the downloader has it.
   Set<int>? _chosen;
@@ -57,15 +58,13 @@ class _DownloadSheetState extends State<DownloadSheet>
   bool _busy = false;
 
   @override
-  void initState() {
-    super.initState();
-    _read();
-    _poll = Timer.periodic(const Duration(seconds: 1), (_) => _read());
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    watchUpdates(widget.services.calls.changes, _read);
   }
 
   @override
   void dispose() {
-    _poll?.cancel();
     _send?.cancel();
     super.dispose();
   }

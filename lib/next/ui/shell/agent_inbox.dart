@@ -12,6 +12,7 @@ import '../widgets/buttons.dart';
 import '../widgets/glass.dart';
 import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
+import '../widgets/visible_updates.dart';
 
 /// Nonmodal, never requests focus on arrival. The queue remains accessible
 /// when popups are disabled or a question is hidden.
@@ -36,8 +37,8 @@ class AgentInboxOverlay extends StatefulWidget {
   State<AgentInboxOverlay> createState() => _AgentInboxOverlayState();
 }
 
-class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
-  Timer? _timer;
+class _AgentInboxOverlayState extends State<AgentInboxOverlay>
+    with VisibleUpdates<AgentInboxOverlay> {
   StreamSubscription? _events;
   final _text = TextEditingController();
   List<JsonMap> _items = [];
@@ -52,8 +53,12 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
     super.initState();
     _events = widget.events.listen(_event);
     widget.errors?.addListener(_externalError);
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _load());
-    unawaited(_load());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    watchUpdates(widget.calls.changes, _load);
   }
 
   Future<JsonMap> _call(String action, JsonMap input, [String? peer]) => peer ==
@@ -175,7 +180,6 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay> {
 
   @override
   void dispose() {
-    _timer?.cancel();
     _events?.cancel();
     widget.errors?.removeListener(_externalError);
     _text.dispose();

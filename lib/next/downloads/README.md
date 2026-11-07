@@ -1,5 +1,11 @@
 # Download completion and identification
 
+Next 的桌面/无界面下载运行时启动时核对一次已有会话，之后仅在任务引擎存在
+queued / running / cancelling 的下载任务时维持后端观察。任务变化直接更新活动 ID，
+没有任务、全部暂停或结束时取消观察定时器，新任务出现时重新启动；其他任务不会唤醒下载观察。
+启动查询只读取所需活动下载的 ID，不解码历史或其他任务的大快照。手机和电视等不支持下载的设备
+不初始化下载后端，不建立观察订阅和定时器。用户明确刷新仍可在支持下载的设备上核对已有会话。
+
 `download.preview` accepts a magnet, local .torrent path/file URI or HTTP(S)
 torrent URL. File/URL previews reuse add's prepared bytes and metadata cache,
 preserve torrent file indices and do not create a native task or download media.

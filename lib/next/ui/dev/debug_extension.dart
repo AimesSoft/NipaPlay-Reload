@@ -8,7 +8,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb, kReleaseMode;
 import 'package:flutter/widgets.dart';
 import 'package:nipa_harness/nipa_harness.dart' show Failure, Invocation;
 import 'package:provider/provider.dart';
@@ -56,15 +56,19 @@ import '../widgets/words.dart';
 import 'dev_services.dart';
 import 'fake_settings.dart';
 import 'fake_world.dart';
+import 'idle_measurement.dart';
 import '../settings/settings_layout.dart';
 import '../settings/settings_page.dart';
 
 /// `ext.nipaplay.nextui`: a VM-service-only driver for experiments and
-/// screenshots of the Next interface. Registered only in Debug builds with a
-/// lab profile (see [NextUiDev.enabled]); it is not a harness Action and the
-/// agent cannot reach it.
+/// screenshots of the Next interface. Debug keeps the existing lab/simulator
+/// opt-in; `--dart-define=NIPAPLAY_NEXT_DEV=1` also enables Profile devices.
+/// Release never registers it. This is not a harness Action.
 ///
 /// Ops (`op=`):
+/// - `idle` `seconds=1..300`: frame count, build/raster p50/p95/max (ms),
+///   and event/compatibility refresh counters. Does not request frames.
+/// - `thermal`: iOS ProcessInfo thermalState, in development builds only.
 /// - `status`
 /// - `key` `key=up|down|left|right|enter|select|menu|playPause|escape`:
 ///   remote input through the keyboard/navigation pipeline, then focus facts.
@@ -178,6 +182,10 @@ abstract final class NextUiDebug {
   static const simulatorPreference = 'dev_next_debug_extension';
 
   static void attach(NextShellController shell, BuildContext context) {
+    if (kReleaseMode) return;
+    if (const String.fromEnvironment('NIPAPLAY_NEXT_DEV') == '1') {
+      return _install(shell, context);
+    }
     if (NextUiDev.enabled) return _install(shell, context);
     if (kDebugMode && !kIsWeb && Platform.isIOS) {
       unawaited(SharedPreferences.getInstance().then((preferences) {
@@ -226,6 +234,19 @@ abstract final class NextUiDebug {
     }
     // These also work from Classic, once Next has been shown.
     switch (p['op']) {
+      case 'idle':
+        final seconds = int.tryParse(p['seconds'] ?? '10');
+        if (seconds == null || seconds < 1 || seconds > 300) {
+          throw ArgumentError('seconds must be an integer between 1 and 300');
+        }
+        return measureNextIdle(Duration(seconds: seconds));
+      case 'thermal':
+        if (kReleaseMode || kIsWeb || !Platform.isIOS) {
+          return {'available': false, 'reason': 'iOS development build required'};
+        }
+        final result = await const MethodChannel('nipaplay/next_dev')
+            .invokeMapMethod<String, Object?>('thermal');
+        return result ?? {'available': false};
       case 'interface':
         await _preference!.setEnabled(p['next'] != 'false');
         await _settle();

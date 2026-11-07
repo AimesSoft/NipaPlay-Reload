@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import '../system/credential_changes.dart';
+import '../../security/credential_vault.dart';
 
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -543,14 +545,17 @@ abstract final class SettingsAccess {
 
   static Future<bool> persist(
       String storageKey, Future<bool> Function() perform,
-      {bool migration = false}) {
+      {bool migration = false}) async {
     final current = registry;
-    if (current == null) return perform();
-    return current.persist(
+    final saved = current == null ? await perform() : await current.persist(
         storageKey,
         perform,
         Zone.current[invocationKey] as Invocation? ??
             Invocation(origin: migration ? 'migration' : 'gui'),
         Zone.current[reasonKey] as String?);
+    if (saved) {
+      CredentialChanges.committed(CredentialRef('preferences', storageKey));
+    }
+    return saved;
   }
 }

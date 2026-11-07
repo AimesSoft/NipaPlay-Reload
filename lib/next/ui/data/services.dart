@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/providers/service_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:nipaplay/services/auto_sync_service.dart';
 
 import '../../body/next_body.dart';
 import '../../mesh/nipa_peers.dart';
@@ -113,6 +115,23 @@ final class NextUiServices {
     final runtime = context.read<NextRuntime>();
     final logins = LoginRequests();
     final data = coreUiData(core);
+    final changes = Stream<void>.multi((listener) {
+      final subscriptions = <StreamSubscription>[];
+      final sync = AutoSyncService.instance;
+      void changed() => listener.add(null);
+      var cancelled = false;
+      listener.onCancel = () {
+        cancelled = true;
+        sync.removeListener(changed);
+        for (final sub in subscriptions) { unawaited(sub.cancel()); }
+      };
+      unawaited(core.ready.then((_) {
+        if (cancelled) return;
+        subscriptions.add(core.uiData.changes.listen((_) => changed()));
+        subscriptions.add(core.followups.inboxChanges.listen((_) => changed()));
+        sync.addListener(changed);
+      }, onError: listener.addError));
+    }, isBroadcast: true);
     final library = CoreLibrary(core);
     final settings =
         CoreSettingsData(core, runtime, logins, host: runtime.hostSettings);
@@ -140,7 +159,7 @@ final class NextUiServices {
       settings: settings,
       logins: logins,
       manage: CoreWorkManage(() => runtime.harnessReady, data),
-      calls: GuiCalls(() => runtime.harnessReady),
+      calls: GuiCalls(() => runtime.harnessReady, changes: changes),
       onDispose: () {
         detach();
         settings.dispose();

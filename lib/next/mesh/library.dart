@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../ui_data/service.dart';
 import '../ui_data/ui_data.dart';
@@ -23,6 +24,9 @@ import '../ui_data/library_search.dart';
 import '../media/metadata_provider.dart';
 import 'files.dart';
 import '../system/operation_observations.dart';
+import '../db/notifications.dart';
+import '../system/foreground.dart';
+import 'catalogue_updates.dart';
 
 String _hash(Object value) =>
     sha256.convert(utf8.encode(jsonEncode(value))).toString();
@@ -43,6 +47,25 @@ final class MeshLibrary {
     ui.media.searchWorkIds = searchWorkIds;
     mesh.hostConfigurationChanged = _hostConfigurationChanged;
     _libraryChanges = ui.changes.listen((_) => invalidateIndex());
+    _catalogueChanges = CatalogueChanges.forPath(ui.db.path).listen((_) {
+      invalidateIndex();
+      _announce();
+    });
+    _progressChanges = ui.sources.changes.listen((_) {
+      invalidateIndex();
+      _announce();
+    });
+    _inboxChanges = InboxChanges.forPath(ui.db.path).listen((_) => _announce());
+    _taskChanges = ui.engine.changes.listen((_) => _announce());
+    _updates = CatalogueUpdates((peers) async {
+      while (_sync != null) { await _sync; }
+      if (!_closed && _watching && NextForeground.active) {
+        await (_sync = _refresh(peers: peers)
+            .whenComplete(() => _sync = null));
+      }
+    }, onError: (error, stack) {
+      lastError = error is Failure ? error.message : error.runtimeType.toString();
+    });
   }
   late final MeshFiles files;
   late final LibraryWorker worker;
@@ -91,7 +114,7 @@ final class MeshLibrary {
         'scope': 'cached_observations',
         'observedAt': DateTime.now().toUtc().toIso8601String(),
         'refreshInProgress': _sync != null,
-        'polling': _timer != null,
+        'polling': _updates.polling,
         'closed': _closed,
         'peers': [
           for (final id in {
@@ -143,7 +166,15 @@ final class MeshLibrary {
   int _peersRevision = 0, _progressRevision = 0, _onlineRevision = 0;
   String _changeStamp() => jsonEncode(
       [_builtStamp, _peersRevision, _onlineRevision, _progressRevision]);
-  Timer? _timer;
+  late final CatalogueUpdates _updates;
+  StreamSubscription<void>? _catalogueChanges, _progressChanges, _hostChanges;
+  StreamSubscription<void>? _inboxChanges;
+  StreamSubscription<Job>? _taskChanges;
+  final _subscribers = <String>{};
+  final _peerWatches = <String, String>{};
+  final _watchId = const Uuid().v4();
+  String? _hostStamp;
+  bool _announcing = false, _announceAgain = false, _watching = false;
   HttpServer? _http;
   Future<void>? _httpBinding;
   int _requestedPort = 0;
@@ -174,20 +205,51 @@ final class MeshLibrary {
     _progressRevision++;
   }
 
-  /// Starts catalogue refresh ticks after the first complete publication.
-  /// Starting the timer while the initial index is still running overlaps two
-  /// prepares and puts their result deliveries into the same startup turn.
+  /// Kept as the host's startup entry point; freshness is now event-driven.
   void startPolling() {
-    if (_closed || _timer != null) return;
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _background());
+    if (_closed || _watching) return;
+    _watching = true;
+    _updates.start();
+    _hostChanges = mesh.hostChanges.listen((_) {
+      final stamp = jsonEncode([mesh.status,
+        for (final peer in mesh.cachedDevices)
+          [peer['deviceId'], peer['revoked'], peer['online']],
+        for (final peer in mesh.cachedDevices)
+          mesh.presence.of(peer['deviceId'] as String)?.toJson()]);
+      if (_hostStamp == stamp) return;
+      _hostStamp = stamp;
+      _background();
+      _announce();
+    });
+    _background();
   }
 
   void _background() {
-    if (_closed) return;
-    unawaited(refresh().then<void>((_) {}, onError: (Object e, StackTrace s) {
-      lastError = e is Failure ? e.message : e.runtimeType.toString();
-      Zone.current.handleUncaughtError(e, s);
-    }));
+    if (!_closed && _watching) _updates.changed();
+  }
+
+  void _announce() {
+    if (_closed || !_watching || _subscribers.isEmpty) return;
+    _announceAgain = true;
+    if (_announcing) return;
+    _announcing = true;
+    unawaited(() async {
+      try {
+        while (!_closed && _announceAgain) {
+          _announceAgain = false;
+          for (final peer in [..._subscribers]) {
+            if (_closed) break;
+            try {
+              await mesh.rpc(peer, 'mesh/library/changed', const {});
+            } catch (_) {
+              // Retain the subscription: a reconnect re-announces missed facts.
+            }
+          }
+        }
+      } finally {
+        _announcing = false;
+      }
+    }());
   }
 
   Future<void> _save(String id, Object payload) async {
@@ -246,7 +308,7 @@ final class MeshLibrary {
 
   Future<void> refresh() =>
       _sync ??= _refresh().whenComplete(() => _sync = null);
-  Future<void> _refresh() async {
+  Future<void> _refresh({Set<String>? peers}) async {
     final before = _changeStamp();
     await _build();
     if (mesh.accountId != null) {
@@ -254,6 +316,8 @@ final class MeshLibrary {
           in mesh.cachedDevices.where((d) => d['deviceId'] != own)) {
         if (_closed) break;
         final id = peer['deviceId'] as String;
+        if (!NextForeground.active) break;
+        if (peers != null && !peers.contains(id)) continue;
         if (peer['revoked'] == true) {
           _setOnline(id, false);
           heardTasks(id, null, null);
@@ -271,8 +335,11 @@ final class MeshLibrary {
             'encoding': librarySnapshotEncoding,
             'progressSeparately': true,
             'tasks': true,
+            'subscribe': true,
+            'watchId': _watchId,
             if (old?['version'] != null) 'known': old!['version']
           });
+          _updates.peer(id, push: first['push'] == true);
           heardTasks(id, peer['name'] as String? ?? '另一台设备', first['tasks']);
           if (first['progress'] is Map) {
             await _mergeProgress((first['progress'] as Map).map((key, value) =>
@@ -323,6 +390,7 @@ final class MeshLibrary {
             'lastSuccessAt': DateTime.now().toUtc().toIso8601String()
           };
         } on Failure catch (error) {
+          _updates.failed(id);
           await _catalogueFailed(id, error);
         } on FormatException catch (error) {
           await _catalogueFailed(
@@ -332,6 +400,9 @@ final class MeshLibrary {
         }
       }
       final devices = {for (final d in mesh.cachedDevices) d['deviceId']};
+      _updates.retain(devices.cast<String>());
+      _subscribers.retainAll(devices.cast<String>());
+      _peerWatches.removeWhere((id, _) => !devices.contains(id));
       for (final id in [..._peerTasks.keys]) {
         if (!devices.contains(id)) heardTasks(id, null, null);
       }
@@ -344,7 +415,7 @@ final class MeshLibrary {
       }
     }
     await prepareIndex();
-    if (before != _changeStamp()) ui.notifyLibraryChanged();
+    if (before != _changeStamp() || peers != null) ui.notifyLibraryChanged();
   }
 
   Future<void> _catalogueFailed(String id, Failure error) async {
@@ -677,7 +748,20 @@ final class MeshLibrary {
       return files.request(method.split('/').last, input, peer);
     }
     switch (method) {
+      case 'mesh/library/changed':
+        ui.notifyLibraryChanged();
+        _updates.changed(peers: {peer});
+        return {'accepted': true};
       case 'mesh/library/snapshot':
+        if (input['subscribe'] == true) {
+          final fresh = _subscribers.add(peer);
+          final watch = input['watchId'] as String?;
+          final reconnected = watch != null && _peerWatches[peer] != watch;
+          if (watch != null) _peerWatches[peer] = watch;
+          if (_watching && (fresh || reconnected)) {
+            _updates.changed(peers: {peer});
+          }
+        }
         await _build();
         final snapshot = await worker.call(
                 'snapshot', ({...input, '_peerId': peer}, _progressRevision))
@@ -685,8 +769,8 @@ final class MeshLibrary {
         // What this device runs goes with the first page to a device that
         // shows it.
         return input['tasks'] == true && (input['offset'] ?? 0) == 0
-            ? {...snapshot, 'tasks': await ui.meshTasks()}
-            : snapshot;
+            ? {...snapshot, 'push': true, 'tasks': await ui.meshTasks()}
+            : {...snapshot, 'push': true};
       case 'mesh/library/file':
         final path = await _source(input);
         final stat = await File(path).stat();
@@ -1307,8 +1391,10 @@ final class MeshLibrary {
   /// Next's interface is closed: the merged library is not refreshed until
   /// [start] again.
   Future<void> pause() async {
-    _timer?.cancel();
-    _timer = null;
+    _watching = false;
+    await _updates.stop();
+    await _hostChanges?.cancel();
+    _hostChanges = null;
     await _sync;
     await _building;
     await _preparing;
@@ -1317,7 +1403,12 @@ final class MeshLibrary {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    _timer?.cancel();
+    await _updates.close();
+    await _catalogueChanges?.cancel();
+    await _progressChanges?.cancel();
+    await _inboxChanges?.cancel();
+    await _taskChanges?.cancel();
+    await _hostChanges?.cancel();
     for (final stream in _streams) {
       stream.destroy();
     }

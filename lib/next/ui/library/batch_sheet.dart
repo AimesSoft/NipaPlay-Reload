@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../widgets/visible_updates.dart';
 
 import 'package:flutter/material.dart' show TextField, InputDecoration;
 import 'package:flutter/widgets.dart';
@@ -82,13 +83,13 @@ class RefreshSheet extends StatefulWidget {
 }
 
 class _RefreshSheetState extends State<RefreshSheet>
+    with VisibleUpdates<RefreshSheet>
     implements BatchSheetDebug {
   List<UiBatchWork>? _works;
   Object? _error;
   bool _starting = false, _started = false, _checking = false;
   final _jobs = <String, List<UiBatchJob>>{};
   final _states = <String, UiJobState>{};
-  Timer? _poll;
 
   @override
   void initState() {
@@ -101,9 +102,9 @@ class _RefreshSheetState extends State<RefreshSheet>
   }
 
   @override
-  void dispose() {
-    _poll?.cancel();
-    super.dispose();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    watchUpdates(widget.batch.calls.changes, _check, enabled: _started);
   }
 
   List<UiBatchWork> get _matched => [
@@ -130,8 +131,7 @@ class _RefreshSheetState extends State<RefreshSheet>
           }
         }
       });
-      _poll =
-          Timer.periodic(const Duration(milliseconds: 1500), (_) => _check());
+      watchUpdates(widget.batch.calls.changes, _check);
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
@@ -147,7 +147,6 @@ class _RefreshSheetState extends State<RefreshSheet>
         if (_states[e.key]!.step == UiJobStep.waiting) e
     ];
     if (waiting.isEmpty) {
-      _poll?.cancel();
       return;
     }
     _checking = true;
@@ -164,7 +163,6 @@ class _RefreshSheetState extends State<RefreshSheet>
                 : const UiJobState(UiJobStep.waiting)));
       }
     } catch (e) {
-      _poll?.cancel();
       if (mounted) setState(() => _error = e);
     } finally {
       _checking = false;

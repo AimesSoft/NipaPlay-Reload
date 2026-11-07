@@ -16,7 +16,7 @@ X56 搜索经 `media.library.search_merged` 读取同一合并目录投影，返
 标题、原名、各设备已有别名/替代标题与年份写在 `next_library_index.facts`，
 剧集标题与身份键也随 compose 维护。内存 Unicode 1–3 字符倒排索引只对文字变化
 更新 posting，进度/在线事实更新不重建文字 posting；搜索仅交集候选并返回有界结果。
-首次读会准备目录，后续随五秒目录刷新；不从 UI 的 library.merged 全量视图筛选。
+首次读会准备目录，后续随目录变化推送刷新；不从 UI 的 library.merged 全量视图筛选。
 详细接线说明在 `docs/next/archive/X56_REPORT.md`。
 
 入口是 `core.libraryData`（实现 `NextLibraryData`）和 `core.libraryActions`
@@ -84,7 +84,7 @@ TMDB 身份，不按标题猜测。来源作品按接受的身份进入条件，
 来源的保留布局）；`library.catalogue` 提供本机条件投影中的 sourceIds/deviceIds/
 types/watch/genres/year/rating/ratingSource/addedAt。两者不联网、不建立身份或分类。
 条件投影是 SQLite v17 新增的 `next_library_index`，由 X47 本机/认证 Mesh 快照及
-进度重建。初次条件读取建立投影，随后每五秒/显式刷新更新，新作品不需要 Nipa
+进度重建。初次条件读取建立投影，随后由变化推送或显式刷新更新，新作品不需要 Nipa
 在线。分页读取只返回当前页作品，SQL 同时计算总数。X47 快照同步仍有全目录
 重建成本；这次没有把其底层同步改为增量。
 
@@ -146,7 +146,8 @@ TMDB tv 身份（`IdentityStore.workIsFilm`，合并作品按合并后的身份�
 作品添加时间取已有最早绑定时间，无该事实时用首次观察时间，并持久保留。
 没有原始入库时间的旧目录只能按首次观察排序。
 
-每 5 秒刷新经过认证的目录并检查本机文件，显式 `media.library.refresh` 可立即刷新；
+目录持有方提交变化后经认证 RPC 推送通知；旧端仅在前台每 60 秒兼容刷新，
+上线、重连及回前台补读，显式 `media.library.refresh` 可立即刷新；
 新版本、进度、连通状态改变会触发本机 `changes`。每个节点只存自己的 `next.db`；
 其他节点的目录投影（不是数据库）、ID 别名、进度存在 `ui_cache`，图片和小型播放
 附件存在 `mesh-artwork` / `mesh-assets`。远端 `UiArtwork` 和 still 均转换成本机文件路径。
@@ -291,6 +292,6 @@ TMDB 的图片 URL、语言选择、评分、类型、集数、制作公司和�
 
 SQLite v12 增加 `media_file_aliases`，事务合并历史的通用 remote 文件和唯一来源范围下的同 URL 文件；保留旧 ID、观察、回执与合并前的行存档。运行时登记也执行相同合并，重复执行不再改变结果。不同服务器范围继续独立。
 
-SQLite v11 只追加 `ui_presentations / ui_shelves / ui_cache`。任务提交后即时通知 changes；其余变化由两个整数告知：数据库的 change_epochs 计数（片库与界面所依据的表上的触发器，任何连接的写入都会推动它，每 250ms 读一次），和 Classic 历史/日历的 StateSources.changed 推送（0 点另有一个定时器）；变动后通知。通知可能合并同一观察窗口或因缓存落盘多一次，不承诺每条领域事件一条通知。后台任务变化与轻量缓存投影无网络请求；首次作品/剧集读取可能等待图片下载。
+SQLite v11 只追加 `ui_presentations / ui_shelves / ui_cache`。任务变化通过 TaskEngine.changes 推送；目录由数据库适配器在相关写入提交后检查触发器维护的 change_epochs，再通知 changes，不按时间查询。事务内多行只在提交后通知一次，回滚和 mesh 派生缓存不通知。目录 worker 的第二连接使用独立句柄，将提交消息发回主 isolate。Classic 历史/日历仍由 StateSources.changed 推送；进入后台抑制前台通知，回前台补读一次。前台使用下一个本地午夜的单次定时器推进“今天”，后台取消，恢复后重新计算下一个午夜。通知可能因缓存落盘多一次，不承诺每条领域事件一条通知。首次作品/剧集读取可能等待图片下载。
 
 Debug 且临时 profile 才注册 `ext.nipaplay.uiData`，供实验读同一界面接口、采样流、模拟会话边界、触发真实 hook 和通过正常保险库写入固定测试文件。该入口不在 Agent 能力目录，不在生产启用。

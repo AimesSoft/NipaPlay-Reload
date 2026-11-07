@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import '../platform/lab_profile.dart';
+import '../system/device_work_policy.dart';
+import '../system/foreground.dart';
+import '../system/foreground_broadcast.dart';
 
 final class BonjourPeerAnnouncement {
   const BonjourPeerAnnouncement({
@@ -42,7 +45,9 @@ final class MeshBonjour {
     this.mdnsPort = defaultMdnsPort,
     InternetAddress? multicastAddress,
     this.allowInLabProfile = false,
-  }) : multicastAddress = multicastAddress ?? InternetAddress(defaultMdnsGroup);
+    bool? foregroundOnly,
+  }) : foregroundOnly = foregroundOnly ?? DeviceWorkPolicy.foregroundDiscovery,
+       multicastAddress = multicastAddress ?? InternetAddress(defaultMdnsGroup);
 
   static const String serviceType = '_nipaplay-mesh._tcp';
   static const String serviceDomain = '_nipaplay-mesh._tcp.local';
@@ -66,6 +71,8 @@ final class MeshBonjour {
   final int mdnsPort;
   final InternetAddress multicastAddress;
   final bool allowInLabProfile;
+  final bool foregroundOnly;
+  bool get _canBroadcast => !foregroundOnly || NextForeground.active;
 
   RawDatagramSocket? _socket;
 
@@ -75,7 +82,7 @@ final class MeshBonjour {
   /// on: there each multicast datagram is sent once per joined interface.
   List<InternetAddress> _groupInterfaces = const [];
   StreamSubscription<RawSocketEvent>? _subscription;
-  Timer? _timer;
+  ForegroundBroadcast? _announcements;
   DateTime _lastMulticastAnswer = DateTime.fromMillisecondsSinceEpoch(0);
   bool _closed = false;
 
@@ -118,11 +125,11 @@ final class MeshBonjour {
       await _joinGroup(socket);
     }
     _subscription = socket.listen(_onSocketEvent);
-    await announce();
+    if (_canBroadcast) await announce();
     sendQuery();
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      unawaited(announce());
-    });
+    // 初次 announce 已完成；桌面仍按原频率，移动设备恢复时立即 announce。
+    _announcements = ForegroundBroadcast(() => unawaited(announce()),
+        foregroundOnly: foregroundOnly, sendInitially: false)..start();
   }
 
   /// Joins the group on every non-virtual interface that has an IPv4 address,
@@ -231,7 +238,7 @@ final class MeshBonjour {
 
   void sendQuery({InternetAddress? targetAddress, int? targetPort}) {
     final socket = _socket;
-    if (socket == null || _closed) return;
+    if (socket == null || _closed || !_canBroadcast) return;
     final packet = encodeQuery();
     try {
       _send(
@@ -251,8 +258,9 @@ final class MeshBonjour {
     int? targetPort,
   }) async {
     final socket = _socket;
-    if (socket == null || _closed) return;
+    if (socket == null || _closed || !_canBroadcast) return;
     final addresses = await localAddresses();
+    if (_closed || !_canBroadcast) return;
     // A network that came up since the last time gets the group too.
     if (Platform.isWindows && !_closed) await _joinGroup(socket);
     final packet = encodeAnnouncement(
@@ -276,9 +284,9 @@ final class MeshBonjour {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    _timer?.cancel();
-    _timer = null;
-    if (_socket != null) {
+    await _announcements?.close();
+    _announcements = null;
+    if (_socket != null && _canBroadcast) {
       try {
         final packet = encodeAnnouncement(
           deviceId: deviceId,

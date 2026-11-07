@@ -37,6 +37,7 @@ import '../ui_data/service.dart';
 import '../ui_data/ui_data.dart';
 import '../ui_data/recently_played.dart';
 import '../sqlite_library.dart';
+import '../db/notifications.dart';
 import 'library_codec.dart';
 import 'library_projection.dart';
 
@@ -153,8 +154,8 @@ final class LibraryWorker {
   Future<void> _tail = Future<void>.value();
   bool _closed = false;
 
-  /// A mesh library may be closed before its owning UI service. Stamp polling
-  /// then falls back to the UI connection instead of surfacing an async error.
+  /// A mesh library may be closed before its owning UI service. On-demand stamp
+  /// reads then use the UI connection instead of surfacing an async error.
   bool get isClosed => _closed;
 
   String? _runtimeBuiltStamp;
@@ -295,6 +296,9 @@ final class LibraryWorker {
 
   Future<Object?> _hostRequest(String method, Object? input) async {
     switch (method) {
+      case 'catalogueChanged':
+        CatalogueChanges.committed(ui.db.path);
+        return null;
       case 'artwork':
         final response = await ui.artwork.fetchImage(Uri.parse(input as String));
         return (response.bodyBytes, response.statusCode, response.headers);
@@ -814,13 +818,16 @@ Future<void> _serve(
   // connection. Core owns the schema and creates it before the worker starts.
   sqfliteFfiInit();
   ensureSqliteLibrary();
-  final db = await databaseFactoryFfiNoIsolate.openDatabase(databasePath,
+  final notifications = NotifyingDatabaseFactory(databaseFactoryFfiNoIsolate,
+      () => unawaited(_request(host, 'catalogueChanged', null)));
+  final db = await notifications.factory.openDatabase(databasePath,
       options: OpenDatabaseOptions(
           singleInstance: false,
           onConfigure: (db) async {
             await db.execute('PRAGMA foreign_keys = ON');
             await db.execute('PRAGMA busy_timeout = 5000');
           }));
+  await notifications.observe(db);
   final sources = StateSources();
   var roots = <String>[];
   final media = MediaService(

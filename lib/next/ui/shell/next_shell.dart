@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart'
     show
         ColorScheme,
@@ -8,7 +9,6 @@ import 'package:flutter/material.dart'
         TextSelectionThemeData,
         Theme,
         ThemeData;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -38,6 +38,7 @@ import 'phone_dock.dart';
 import 'shell_controller.dart';
 import 'agent_inbox.dart';
 import 'top_bar.dart';
+import '../../system/foreground.dart';
 
 /// The Next application shell: top bar, sections, pushed pages (detail,
 /// next stage), popovers, search, ⌘K / ⌘F / Esc, grain over everything.
@@ -89,8 +90,10 @@ class _NextShellState extends State<NextShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    NextForeground.setActive(lifecycle == null || lifecycle == AppLifecycleState.resumed);
     _shown = this;
-    if (kDebugMode) NextUiDebug.attach(_shell, context);
+    NextUiDebug.attach(_shell, context);
     if (globals.isTvOS) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -116,7 +119,8 @@ class _NextShellState extends State<NextShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     if (identical(_shown, this)) _shown = null;
     WorkDetailBridge.detach(this);
-    if (kDebugMode) NextUiDebug.detach(_shell);
+    NextUiDebug.detach(_shell);
+    NextForeground.setActive(false);
     _shell.dispose();
     _services.dispose();
     _focus.dispose();
@@ -125,6 +129,11 @@ class _NextShellState extends State<NextShell> with WidgetsBindingObserver {
 
   /// HarmonyOS has a system Back gesture, unlike iOS. Consume it in the
   /// player or Next's nested pages before the embedder exits the ability.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    NextForeground.setActive(state == AppLifecycleState.resumed);
+  }
+
   @override
   Future<bool> didPopRoute() async {
     if (!(NextShell.debugSystemBack ?? globals.isHarmonyOS) || !mounted) {

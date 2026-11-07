@@ -554,6 +554,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.aimessoft.nipaplay.profile;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) NIPAPLAY_NEXT_PROFILE";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
