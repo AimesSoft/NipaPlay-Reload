@@ -1,8 +1,8 @@
 # NipaPlay Next · Developer Preview
 
-这是 NipaPlay Next 的第四个开发者预览（Alpha 4）。Next 重新组织了媒体库、播放器和个人助手之间的关系：你通过对话表达想做的事，梨花查询信息、选择工具并执行，结果呈现在书架、作品资料、播放器和弹幕里。
+这是 NipaPlay Next 的第五个开发者预览（Alpha 5）。Next 重新组织了媒体库、播放器和个人助手之间的关系：你通过对话表达想做的事，梨花查询信息、选择工具并执行，结果呈现在书架、作品资料、播放器和弹幕里。
 
-Alpha 4 升级 Erika 0.3.5，修复 Windows 播放控件被视频遮挡、部分外挂字幕导致播放失败的问题，并改善 Windows 超分加速兼容性。下面介绍本次更新与 Next 的主要能力。
+Alpha 5 为手机重新设计界面和播放器，新增 Apple TV 版本，语音输入可以使用自配的云端识别服务；鸿蒙设备的 Next 适配也已合入。下面介绍本次更新与 Next 的主要能力。
 
 本次预览由 **AimesSoft** 发布，面向开发者、Agent 系统爱好者，以及愿意一起探索这种使用方式的用户。
 
@@ -24,21 +24,39 @@ Alpha 4 升级 Erika 0.3.5，修复 Windows 播放控件被视频遮挡、部分
 > **如果你无法独立处理系统故障、检查 Agent 操作或恢复重要数据，请勿启用本次 Alpha 实验。**
 
 
-## Alpha 4 更新了什么
+## Alpha 5 更新了什么
 
-### 播放与字幕
+### 手机界面
 
-- **升级 Erika 0.3.5**：Windows 原生视频画面恢复到透明 Flutter 控件下方，播放控件和菜单可以正常显示、点击，同时保留 HDR 输出。
-- **修复部分外挂字幕无法识别**：自动处理 ASS 等文本字幕开头重复的 UTF-8 BOM，保留字幕正文与时间轴。
-- **字幕失败不再中断视频**：Next 将外挂字幕挂载与视频打开分开处理；字幕加载出错会报告原因，视频仍可继续播放，也可以重新选择字幕。
-- **改善 Windows 超分兼容性**：Erika 的 cooperative matrix 后端按绝对路径加载系统 Vulkan 运行库，避免应用目录中的旧加载器干扰扩展识别；加速不可用时使用标量后端。安装包继续保留 mpv 所需的 Vulkan 依赖。
-- Classic 与 Next 同步使用 Erika 0.3.5，播放诊断显示对应的内核版本。
+- **液态玻璃底栏**：底栏上一行是梨花的入口，显示她正在做的事，点击打开对话，点麦克风直接开始听写；下一行是首页、发现、媒体库、动态和搜索。顶栏只保留后台任务和菜单。
+- **首页与作品详情**：背景图铺满上半屏，主按钮占满一行；剧集改为竖排列表，显示剧照、观看进度和弹幕热度。媒体库一行三张海报。
+- **横竖屏播放**：视频随手机旋转。竖屏时，底部玻璃胶囊放置播放、时间、带弹幕热度的进度条和全屏，弹幕、字幕、剧集、更多排在胶囊上方；横屏时这些控件并入胶囊，菜单从右侧弹出。
+- 对话标题显示运行梨花的设备，打开对话时查询该设备是否可用。
+- 发现页「新番日历」「排行榜」的标签在手机上可横向滚动。
 
-### 组网与平台
+### Apple TV
 
-- Mesh 协调服务将地址查询和地址上报的限额分开，避免频繁查询耗尽设备地址更新额度；此项已在服务端部署。
-- 同步主分支的平台修复，包括 macOS 应用分类，以及按发行渠道显示赞助入口。
-- **组网恢复与手动刷新**：拆开设备地址查询与本机上报的失败状态，修复旧地址缓存阻碍恢复的问题。设备页新增「刷新组网」，梨花可通过 `mesh.refresh` 使用同一入口；无需重启应用。普通离线设备继续低频处理，并发查询合并，刷新遵守服务器限流。关联：[#1101](https://github.com/AimesSoft/NipaPlay-Reload/issues/1101)。
+- **新增 Apple TV 版 Next**：电视运行 Next 界面、播放器和组网，对话由同账号其他设备上的梨花处理。梨花可以在电视上播放、调整设置和截取画面。
+- **十英尺界面**：电视上的页面整体放大 1.6 倍，文字、卡片和控件比例不变。同一时间只有一个焦点：按钮聚焦时翻为纸色，卡片和提问栏聚焦时放大并带光环。首页主视觉占满首屏。
+- **遥控器播放**：观看时左右键快退、快进 10 秒，确认键播放或暂停，下键唤出控件；Menu 键先收起控件，再按离开视频。
+- 附件提供需自行签名侧载的 tvOS IPA。TestFlight 测试构建与 iPhone 版同属一个 App，开放测试的方式以发行页公告为准。
+
+### 鸿蒙
+
+- 鸿蒙设备可以开启 Next，运行界面、播放器和组网，使用其他设备上的梨花；内置 SQLite，并迁移原有数据库位置。播放时切换横屏，系统返回手势先退出播放。适配由 [@aozaoz112233](https://github.com/aozaoz112233) 贡献（[#1104](https://github.com/AimesSoft/NipaPlay-Reload/pull/1104)）。
+- 本次发行不提供鸿蒙安装包，鸿蒙 Next 目前为开发和测试构建。
+
+### 语音输入
+
+- **自配云端识别**：在「设置 → 实验室 → 语音识别服务」选择 Azure 或百炼，填写自己的地址和 API Key。云端模式将录音直接发送给所选服务商，可能产生费用；本机离线模型继续可用。详见[梨花](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/use/nipa.md#语音输入实验室)。
+- macOS 听写改用普通麦克风输入，避开系统语音处理在仅录音时出现的失败。
+
+### 播放、启动与组网
+
+- 播放器「播放信息」显示 Erika 实际运行的超分和解码器状态。
+- 目录、字幕和弹幕索引或观看记录初始化失败时，梨花仍可启动和对话；首页提供「重试目录」，梨花可通过 `diagnostics.startup` 查询失败位置。
+- 无法读取的媒体文件不再阻塞梨花启动（[#1100](https://github.com/AimesSoft/NipaPlay-Reload/pull/1100)，[@aozaoz112233](https://github.com/aozaoz112233)）。
+- 组网监听遇到临时错误后继续接受连接；后台目录加载图片时使用应用的代理和证书设置；macOS 提高应用的文件描述符上限。
 
 ## 我们希望探索什么
 
@@ -96,7 +114,7 @@ Alpha 4 升级 Erika 0.3.5，修复 Windows 播放控件被视频遮挡、部分
 - 同账号设备可以加入 Mesh，发现彼此、同步媒体目录，并通过直连传输媒体。视频可以留在工作站上，由另一台设备播放。
 - 支持跨设备调用开放的应用能力，也可以将任务交给另一台设备上正在运行的梨花。
 - 每台设备保有自己的数据库、个人仓库和记忆；操作在实际持有数据或能力的设备上执行。
-- iPhone/iPad 提供 Next 界面、播放器和 Mesh，通过桌面或其他宿主上的梨花完成对话与操作。Linux headless 提供适合服务器使用的无界面宿主。
+- iPhone、iPad 和 Apple TV 提供 Next 界面、播放器和 Mesh，通过桌面或其他宿主上的梨花完成对话与操作。Linux headless 提供适合服务器使用的无界面宿主。
 
 ### 面向开发者的能力与诊断
 
@@ -118,16 +136,17 @@ Release 附件提供以下版本：
 - **Linux**：amd64 和 arm64 的 DEB、RPM 与 tar.gz；amd64 另提供 AppImage。
 - **Linux headless**：amd64、arm64 的无界面宿主包，见 [Headless 指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/advanced/headless.md)。
 - **iPhone / iPad**：当前附件为需自行签名侧载的 IPA；TestFlight 测试构建另行上传，开放测试的方式以发行页公告为准。
+- **Apple TV**：需自行签名侧载的 tvOS IPA；TestFlight 测试构建与 iPhone 版同属一个 App。
 
-本次发行不包含 Android、tvOS 和 HarmonyOS。
+本次发行不包含 Android 和 HarmonyOS。
 
-安装后，在 Classic 的「设置 → 实验室」开启 NipaPlay Next，阅读风险提示并选择「我了解风险，开启」，即可直接进入 Next。桌面用户进入「设置 → 梨花」配置运行环境和模型服务，保存并测试连接后即可开始对话。iPhone/iPad 用户先在另一台设备上运行梨花，让两台设备同账号加入 Mesh，再选择远端梨花。
+安装后，在 Classic 的「设置 → 实验室」开启 NipaPlay Next，阅读风险提示并选择「我了解风险，开启」，即可直接进入 Next。桌面用户进入「设置 → 梨花」配置运行环境和模型服务，保存并测试连接后即可开始对话。iPhone、iPad 和 Apple TV 用户先在另一台设备上运行梨花，让两台设备同账号加入 Mesh，再选择远端梨花。
 
 完整步骤见[下载与开启 Next](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/install.md)和[配置梨花](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/setup-nipa.md)。模型服务由用户自行配置，API 使用费用按所选服务商计费。
 
 ## 当前范围与已知问题
 
-Next 目前仍以桌面体验和设备直连为重点。Mesh 需要双方地址可达，目前不提供 NAT 穿透或中继；移动端使用远端梨花，本机不运行 Agent。完整的 Next 产品内备份恢复仍在开发，试用前请按[数据与恢复指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/advanced/data-and-recovery.md)保留应用数据和个人 harness 的副本。
+Next 目前仍以桌面体验和设备直连为重点。Mesh 需要双方地址可达，目前不提供 NAT 穿透或中继；手机、平板和电视使用远端梨花，本机不运行 Agent。完整的 Next 产品内备份恢复仍在开发，试用前请按[数据与恢复指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/advanced/data-and-recovery.md)保留应用数据和个人 harness 的副本。
 
 持续更新的使用限制见[已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/known-issues.md)。欢迎提交 [Bug 报告](https://github.com/AimesSoft/NipaPlay-Reload/issues/new?template=bug_report.yml)，附版本、系统、复现步骤和关于页的诊断信息。Mesh 问题请附两端信息；公开内容请移除密钥、令牌及其他个人信息。
 

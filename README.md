@@ -187,9 +187,9 @@ Next 还引入个人 Git Harness、跨设备 Mesh、
 
 ### 参与开发者预览
 
-当前版本为 **2.0.0-alpha.4 · Developer Preview**。Alpha 4 升级 Erika 0.3.5，修复 Windows 播放控件遮挡和部分外挂字幕导致播放失败的问题，改善超分加速兼容性，并补充 Mesh 恢复与手动刷新。
+当前版本为 **2.0.0-alpha.5 · Developer Preview**。Alpha 5 为手机重新设计界面和横竖屏播放器，新增 Apple TV 版本，语音输入可以使用自配的云端识别服务，并合入鸿蒙设备的 Next 适配。
 
-- [Alpha 4 下载与发行说明](https://github.com/AimesSoft/NipaPlay-Reload/releases/tag/v2.0.0-alpha.4)
+- [Alpha 5 下载与发行说明](https://github.com/AimesSoft/NipaPlay-Reload/releases/tag/v2.0.0-alpha.5)
 - [Next 使用文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md)：从安装、配置梨花到第一次使用，以及日常使用、进阶和排障
 - [下载与开启 Next](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/install.md) · [配置梨花](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/setup-nipa.md)
 - [常见问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/faq.md) · [已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/known-issues.md)

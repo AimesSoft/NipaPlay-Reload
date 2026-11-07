@@ -14,8 +14,9 @@ Next 与 Classic 同属一个 NipaPlay 安装包，在 Classic 的实验室中�
 | Linux | `NipaPlay-…-Linux-amd64.deb` 等 | amd64、arm64 的 DEB、RPM、tar.gz；amd64 另有 AppImage |
 | Linux 无界面版 | `NipaPlay-Headless_…_Linux_amd64.tar.gz` | arm64 版本；见 [Linux 无界面版](../advanced/headless.md) |
 | iPhone、iPad | `NipaPlay_…_iOS_arm64.ipa` | 未签名，需自行签名侧载；TestFlight 以发行页说明为准 |
+| Apple TV | `NipaPlay-…-tvOS-arm64-sideload.ipa` | 未签名，需自行签名侧载；TestFlight 与 iPhone 版同属一个 App |
 
-本次预览不包含 Android、tvOS 和 HarmonyOS。macOS 的 App Sandbox 版本不提供 Next 开关，需使用 GitHub 发行的完整版。
+本次预览不包含 Android 和 HarmonyOS。macOS 的 App Sandbox 版本不提供 Next 开关，需使用 GitHub 发行的完整版。
 
 ## 风险
 
@@ -36,11 +37,13 @@ NipaPlay 对删除磁盘文件要求本机确认；梨花通过命令行或脚�
 2. 打开「开启 NipaPlay Next（开发者预览）」。
 3. 阅读风险说明和免责声明，选择「我了解风险，开启」。界面切换到 Next。
 
-iPhone 和 iPad 本机不运行梨花，开启时的说明针对其他设备上的梨花操作本机的情形；删除文件和账号登录在本机确认。
+iPhone、iPad 和 Apple TV 本机不运行梨花，开启时的说明针对其他设备上的梨花操作本机的情形；删除文件和账号登录在本机确认。
 
 ## 界面
 
 顶栏依次为「首页」「媒体库」「发现」「动态」、搜索、「设置」和梨花的对话入口。尚未配置模型时，对话入口显示为「设置梨花」。
+
+手机上，各页面和搜索位于底栏，底栏上方一行是梨花的对话入口，点麦克风直接开始听写；顶栏右侧的菜单中有「设置」和「回到经典界面」。电视上用遥控器在顶栏和页面之间移动焦点。
 
 | 页面 | 内容 |
 |---|---|

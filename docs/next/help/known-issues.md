@@ -24,8 +24,9 @@
 | 项目 | 版本 | 说明 |
 |---|---|---|
 | 连接方式 | Alpha 1 | 仅支持设备直连，不提供 NAT 穿透和中继；切换网络、睡眠唤醒、长时间播放的表现取决于设备和网络环境 |
-| 移动设备 | Alpha 1 | iPhone、iPad 本机不运行梨花，使用其他设备上的梨花，见[多台设备](../use/devices.md#在-ipadiphone-和鸿蒙设备上使用梨花) |
-| 鸿蒙 Next | 开发／测试构建 | 本机提供界面、播放器和组网，对话使用所选宿主上的梨花，见[多台设备](../use/devices.md#在-ipadiphone-和鸿蒙设备上使用梨花) |
+| 移动设备 | Alpha 1 | iPhone、iPad 本机不运行梨花，使用其他设备上的梨花，见[多台设备](../use/devices.md#在手机平板和电视上使用梨花) |
+| Apple TV | Alpha 5 | 本机不运行梨花，不提供本机下载和文件选择；视频来自组网中的其他设备，见[多台设备](../use/devices.md#在手机平板和电视上使用梨花) |
+| 鸿蒙 Next | 开发／测试构建 | 本机提供界面、播放器和组网，对话使用所选宿主上的梨花，见[多台设备](../use/devices.md#在手机平板和电视上使用梨花) |
 
 ### 梨花
 
@@ -37,15 +38,21 @@
 ### 平台
 
 - macOS 和 Windows 为主要验证平台，Linux 构建为实验性质。
-- iPhone、iPad：TestFlight 以[发行页](https://github.com/AimesSoft/NipaPlay-Reload/releases)说明为准；GitHub 上的 IPA 未签名，需自行签名侧载。
-- 不分发 Android、tvOS 和 HarmonyOS 版本。
+- iPhone、iPad、Apple TV：TestFlight 以[发行页](https://github.com/AimesSoft/NipaPlay-Reload/releases)说明为准；GitHub 上的 IPA 未签名，需自行签名侧载。
+- Apple TV 版和新的手机界面在模拟器上验证，Alpha 5 的 TestFlight 构建是首次在真机上运行。
+- 不分发 Android 和 HarmonyOS 版本。
 
 ## 已修复
+
+### Alpha 5
+
+- macOS 听写改用普通麦克风输入，避开系统语音处理在仅录音时出现的失败。
+- 目录或观看记录初始化失败、媒体文件无法读取时，梨花仍可启动和对话。
+- 组网监听遇到临时错误后继续接受连接。
 
 ### Alpha 4
 
 - 设备地址查询失败不再阻塞本机上报或长期锁住旧地址；设备页可手动「刷新组网」，梨花可调用 `mesh.refresh`。正常离线仍保留低频退避，限流等待不会被刷新绕过。
-
 - Windows 的 Erika 视频画面不再遮住播放控件和菜单。
 - 处理外挂字幕开头重复的 UTF-8 BOM；字幕加载失败不再让已打开的视频进入致命错误状态。
 - Erika 超分加速使用系统 Vulkan 加载器，减少旧加载器对扩展识别的干扰。
