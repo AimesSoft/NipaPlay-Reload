@@ -786,6 +786,28 @@ void main() {
     expect(saved['value'], 'erikaArtCnnC4F32');
   });
 
+  test('native output and decode settings follow the current kernel', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final previousKernel = ApplicationSettings.currentKernel;
+    addTearDown(() => ApplicationSettings.currentKernel = previousKernel);
+    const keys = [
+      'player.macosNativeVideoEnabled',
+      'player.hwdecMode',
+      'player.softDecodePixelFormat',
+    ];
+    for (final kernel in ['erika', 'mediaKit']) {
+      ApplicationSettings.currentKernel = () => kernel;
+      final described = await call('settings.describe', {
+        'keys': keys,
+        'fields': ['key', 'appliesNow'],
+      });
+      for (final row in described['settings'] as List) {
+        expect(row['appliesNow'], kernel == 'mediaKit', reason: row['key']);
+      }
+    }
+  });
+
   test('Erika upscaling is not offered on Android', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);

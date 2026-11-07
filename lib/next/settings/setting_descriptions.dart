@@ -52,7 +52,7 @@ const applicationSettingDescriptions = <String, String>{
       '视频就绪后跳过“识别加载”界面，立即开始播放，再在后台识别番剧、加载弹幕。Classic 设置页名称：快速开始播放。默认关闭。',
   'player.customUserAgent': '播放器请求视频时使用的 User-Agent；空字符串使用内核默认值，下次打开视频生效。',
   'player.macosNativeVideoEnabled':
-      '实验性 HDR 原生视频输出：开启后 macOS 使用原生视频层，关闭则回退到 Flutter 纹理路径。只在 macOS 提供（Classic 在 Media Kit 内核下的 macOS 与 Windows 显示），默认关闭。',
+      'Media Kit（libmpv）的实验性 HDR 原生视频输出：开启后 macOS 使用原生视频层，关闭则回退到 Flutter 纹理路径。Next 只在 macOS 的 Media Kit 内核下提供，默认关闭。Erika 使用自己的原生视频输出，不受此开关控制。',
   'player.androidAudioOutput':
       'Android 的音频后端：opensles（OpenSL ES，默认，兼容性较好）或 audiotrack（AudioTrack，可支持部分机型的杜比全景声等系统音效，实验性）。只在 Android 提供，Classic 在 Media Kit 内核下显示。',
   'player.erikaAndroidOutputMode':
