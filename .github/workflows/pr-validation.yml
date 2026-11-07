@@ -59,7 +59,8 @@ jobs:
 
       - name: Run flutter test
         if: steps.detect_tests.outputs.has_tests == 'true'
-        run: flutter test --no-pub --reporter expanded
+        # Full native runtimes and machine-specific CPU budgets run separately; see test/README.md.
+        run: flutter test --no-pub --reporter expanded --exclude-tags 'native_integration || codex_integration || performance'
 
       - name: Verify enabled Linux Erika kernel policy
         run: flutter test --no-pub --dart-define=NIPAPLAY_LINUX_ERIKA=true test/linux_erika_kernel_policy_test.dart

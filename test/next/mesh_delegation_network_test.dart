@@ -1,3 +1,4 @@
+@Tags(['native_integration'])
 @Timeout(Duration(minutes: 4))
 library;
 

@@ -407,7 +407,7 @@ void main() {
 
     final catalog = await rpc('tools/list', {});
     expect((catalog['tools'] as List).map((tool) => (tool as JsonMap)['name']),
-        ['task_cancel', 'task_get', 'task_list', 'task_wait']);
+        ['task_cancel', 'task_get', 'task_list', 'task_reconcile', 'task_wait']);
     final result = await rpc('tools/call', {
       'name': 'task_wait',
       'arguments': {'jobId': job.jobId, 'timeoutMs': 0}

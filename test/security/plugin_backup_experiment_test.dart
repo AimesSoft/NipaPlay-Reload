@@ -1,3 +1,6 @@
+@Tags(['native_integration'])
+library;
+
 // ignore_for_file: avoid_print
 import 'dart:convert';
 import 'dart:io';

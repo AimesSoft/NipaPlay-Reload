@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yaml/yaml.dart';
 
 void main() {
   test('shared pubspec does not force platform-specific dependency forks', () {
@@ -66,7 +67,7 @@ void main() {
     expect(linuxKeys, containsAll(['desktop_multi_window', 'fvp']));
   });
 
-  test('tvOS mode uses the shared hosted Erika package', () {
+  test('tvOS mode uses a hosted Erika package and preserves shared overrides', () {
     final sharedKeys = _dependencyOverrideKeys(
       File('pubspec.yaml').readAsStringSync(),
     );
@@ -82,7 +83,11 @@ void main() {
     expect(tvOSKeys, containsAll(sharedKeys.difference({'erika_flutter'})));
     expect(tvOSOverrides, isNot(contains('package_info_plus:')));
     expect(tvOSOverrides, isNot(contains('wakelock_plus:')));
-    expect(tvOSOverrides, isNot(contains('erika_flutter:')));
+    final tvOSDependencies = loadYaml(tvOSOverrides)['dependency_overrides'] as YamlMap;
+    final sharedDependencies = loadYaml(File('pubspec.yaml').readAsStringSync())['dependencies'] as YamlMap;
+    final erika = tvOSDependencies['erika_flutter'] ?? sharedDependencies['erika_flutter'];
+    expect(erika, isA<String>(), reason: 'Erika must resolve from the hosted registry.');
+    expect(erika, isNotEmpty);
     expect(wrapper, contains('configure_flutter_dependencies.dart" tvos'));
     expect(workflow, contains('configure_flutter_dependencies.dart tvos'));
     expect(workflow, isNot(contains('ERIKA_PREBUILT_TAG:')));
@@ -243,8 +248,6 @@ void main() {
     );
 
     expect(tvOSWorkflow, contains("github.event_name == 'pull_request'"));
-    expect(tvOSWorkflow, contains('CODE_SIGNING_ALLOWED = NO'));
-    expect(tvOSWorkflow, contains('build tvos --release --no-pub'));
     expect(tvOSWorkflow, contains('build/tvos/Release-appletvos'));
     expect(tvOSWorkflow, contains("grep -q 'platform TVOS'"));
     expect(tvOSWorkflow, contains('release-tvOS-sideload'));

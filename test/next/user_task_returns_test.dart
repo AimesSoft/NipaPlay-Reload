@@ -426,7 +426,8 @@ void main() {
       final result = await other.login({
         'provider': 'dandanplay',
         'username': _account,
-        'password': _secret
+        'password': _secret,
+        'userAuthorization': 'Use the supplied credentials to log in to Dandanplay.'
       }, chat);
       final job = await lone.get(result['jobId'] as String);
       expect(job.input.containsKey('returnTo'), isFalse);

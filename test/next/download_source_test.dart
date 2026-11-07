@@ -8,7 +8,9 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/downloads/download_source.dart';
 
 void main() {
-  const info = 'd6:lengthi4e4:name11:episode.mkve';
+  // One four-byte file, one piece and its 20-byte SHA-1 digest.
+  final info = 'd6:lengthi4e4:name11:episode.mkv12:piece lengthi4e'
+      '6:pieces20:${'x' * 20}e';
   final torrent = Uint8List.fromList(ascii.encode('d4:info${info}e'));
   final hash = sha1.convert(ascii.encode(info)).toString();
   test('magnet hex and base32 normalize to the same stable content identity',

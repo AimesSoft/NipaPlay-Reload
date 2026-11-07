@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'security/memory_vault.dart';
 
 // #1024：新番的弹幕缓存只有 2 小时新鲜期。过期后不能马上删除，
 // 联网失败（离线）时要能回退使用，看过的集离线重播仍有弹幕。
@@ -16,6 +19,9 @@ void main() {
 
   test('过了新鲜期的缓存保留下来，联网失败时回退使用', () async {
     SharedPreferences.setMockInitialValues({});
+    final previousCredentials = CredentialStore.instance;
+    CredentialStore.instance = CredentialStore(MemoryVault(), desktop: true);
+    addTearDown(() => CredentialStore.instance = previousCredentials);
     final root = await Directory.systemTemp.createTemp('danmaku-offline-');
     StorageService.debugAppStorageDirectoryOverride = root;
     addTearDown(() async {
