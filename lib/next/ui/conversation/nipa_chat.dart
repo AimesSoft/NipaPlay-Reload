@@ -106,7 +106,6 @@ class NipaChat extends ChangeNotifier {
 
   bool menuOpen = false;
 
-  Timer? _bootTimer;
   bool _booted = false;
 
   /// Waits for the host, learns the main session and opens it.
@@ -114,23 +113,51 @@ class NipaChat extends ChangeNotifier {
     Future<void> attempt() async {
       if (_disposed || _booted || !port.available) return;
       _booted = true;
-      _bootTimer?.cancel();
-      _bootTimer = null;
       await refreshSessions();
       if (thread == null && !fresh && turns.isEmpty && main != null) {
         await _open(main!);
       }
     }
 
-    _bootTimer = Timer.periodic(const Duration(seconds: 1), (_) => attempt());
     unawaited(attempt());
   }
 
-  Future<void> refreshSessions() async {
+  Future<void>? _refreshingSessions;
+  bool _sessionsAgain = false;
+
+  Future<void> refreshSessions() {
+    if (_refreshingSessions case final pending?) {
+      _sessionsAgain = true;
+      return pending;
+    }
+    return _refreshingSessions = () async {
+      do {
+        _sessionsAgain = false;
+        await _readSessions();
+      } while (_sessionsAgain && !_disposed);
+    }()
+        .whenComplete(() => _refreshingSessions = null);
+  }
+
+  Future<void> _readSessions() async {
     if (!port.available) return;
     try {
       final result = await port.listThreads();
-      final list = (result['data'] as List? ?? const []).whereType<Map>();
+      final list =
+          (result['data'] as List? ?? const []).whereType<Map>().toList();
+      var cursor = result['nextCursor'] as String?;
+      final seen = <String>{};
+      while (cursor != null && seen.add(cursor)) {
+        final page = await port.listThreads(cursor: cursor);
+        list.addAll((page['data'] as List? ?? const []).whereType<Map>());
+        cursor = page['nextCursor'] as String?;
+      }
+      if (_disposed) return;
+      for (final item in list) {
+        if (item['busy'] == true && item['id'] != thread) {
+          _snapshotActivity(item['id'] as String, item);
+        }
+      }
       if (result['mainThreadId'] case final String id) main = id;
       int rank(ChatSession s) => s.id == main ? 0 : 1;
       sessions = [
@@ -148,6 +175,12 @@ class NipaChat extends ChangeNotifier {
   }
 
   String _title(Object? preview, [Object? name]) {
+    if (name is String &&
+        name.trim().isNotEmpty &&
+        !const {'NipaPlay 主会话', 'NipaPlay 对话'}.contains(name) &&
+        ChatContext.guestNamed(name) == null) {
+      return Words.firstSentence(name.trim());
+    }
     final text = preview is String ? preview.trim() : '';
     if (ChatContext.isFollowup(text)) return '梨花后来说的';
     final said = ChatContext.strip(text);
@@ -213,8 +246,7 @@ class NipaChat extends ChangeNotifier {
 
   Future<String?>? _creating;
 
-  /// The session to say something on, created if needed. Null while the
-  /// host runs another turn and cannot open one.
+  /// The session to say something on, created if needed.
   Future<String?> _target() async {
     if (thread case final id?) return id;
     if (!fresh && main != null) return thread = main;
@@ -273,6 +305,13 @@ class NipaChat extends ChangeNotifier {
   final _buffer = <ChatEvent>[];
 
   void _show(String? id) {
+    _wakeWaiter();
+    if (live case final turn? when thread != null && turn.id != null) {
+      turn.threadId = thread;
+      _elsewhere[turn.id] = turn;
+    }
+    _pending = null;
+    _pendingInput = null;
     _generation++;
     thread = id;
     turns = [];
@@ -306,6 +345,7 @@ class NipaChat extends ChangeNotifier {
       _earlierHistory = raw.sublist(0, start);
       _followingSaid = recent.isEmpty ? null : _saidIn(recent.first);
       turns = parsed;
+      _elsewhere.removeWhere((_, turn) => turn.threadId == id);
     } catch (error) {
       debugPrint('[NextUi] thread did not open: $error');
       if (generation != _generation) return;
@@ -554,7 +594,7 @@ class NipaChat extends ChangeNotifier {
       return;
     }
     final turn = ChatTurn()
-      ..status = port.busy ? 'queued' : 'inProgress'
+      ..status = 'inProgress'
       ..parts.add(said);
     turns = [...turns, turn];
     _pending = turn;
@@ -578,16 +618,18 @@ class NipaChat extends ChangeNotifier {
       return;
     }
     final generation = _generation;
+    final input = _pendingInput ?? '';
     _cancelQueued = false;
     try {
       while (!_disposed && generation == _generation && !_cancelQueued) {
         final target = await _target();
-        if (target == null || port.busy) {
+        if (_disposed || generation != _generation || _cancelQueued) return;
+        if (target == null) {
           if (turn.status != 'queued') {
             turn.status = 'queued';
             _notify();
           }
-          await _waitUntilFree();
+          await _waitUntilFree(null);
           continue;
         }
         if (turn.status == 'queued') {
@@ -595,8 +637,20 @@ class NipaChat extends ChangeNotifier {
           turn.startedAt = DateTime.now();
           _notify();
         }
-        final response = await port.startTurn(target, _pendingInput ?? '');
-        if (response == null) continue;
+        final response = port.busyOn(target)
+            ? null
+            : await port.startTurn(target, _pendingInput ?? input);
+        if (response == null) {
+          // Another device began a turn here meanwhile. This sentence steers it.
+          await port.steer(_pendingInput ?? input, threadId: target);
+          final history = await port.readThread(target);
+          final active = (history['turns'] as List? ?? const [])
+              .whereType<Map>()
+              .where((t) => t['status'] == 'inProgress')
+              .lastOrNull;
+          if (active?['id'] case final String id) _rememberTurnId(turn, id);
+          break;
+        }
         final id = turnIdOf(response);
         if (id != null) _rememberTurnId(turn, id);
         break;
@@ -626,9 +680,31 @@ class NipaChat extends ChangeNotifier {
     _notify();
   }
 
-  Future<void> _waitUntilFree() async {
-    while (!_disposed && port.busy && !_cancelQueued) {
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+  Completer<void>? _wakePending;
+
+  void _wakeWaiter() {
+    final wake = _wakePending;
+    _wakePending = null;
+    if (wake != null && !wake.isCompleted) wake.complete();
+  }
+
+  Future<void> _waitUntilFree(String? target) async {
+    final wake = _wakePending = Completer<void>();
+    final subscription = port.display.listen((event) {
+      if (target == null || !port.busyOn(target) || !port.available) {
+        if (!wake.isCompleted) wake.complete();
+      }
+    });
+    try {
+      if (_disposed ||
+          _cancelQueued ||
+          (target != null && !port.busyOn(target))) {
+        return;
+      }
+      await wake.future;
+    } finally {
+      await subscription.cancel();
+      if (identical(_wakePending, wake)) _wakePending = null;
     }
   }
 
@@ -641,6 +717,7 @@ class NipaChat extends ChangeNotifier {
     if (turn == null) return;
     if (turn.queued) {
       _cancelQueued = true;
+      _wakeWaiter();
       turn
         ..status = 'interrupted'
         ..endedAt = DateTime.now();
@@ -700,10 +777,11 @@ class NipaChat extends ChangeNotifier {
     if (said == null) return;
     quiet = false;
     await stop();
-    final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while ((thread != null && port.busyOn(thread!)) &&
-        DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (thread case final id? when port.busyOn(id)) {
+      await _waitUntilFree(id).timeout(const Duration(seconds: 10),
+          onTimeout: () {
+        _wakeWaiter();
+      });
     }
     // Shown once: the stopped attempt goes, the same words go out again.
     turns = [
@@ -790,6 +868,25 @@ class NipaChat extends ChangeNotifier {
   /// Turns running in sessions not shown, by turn.
   final _elsewhere = <String?, ChatTurn>{};
 
+  void _snapshotActivity(String id, Map snapshot) {
+    final busy = snapshot['busy'] == true ||
+        const {'starting', 'inProgress'}.contains(snapshot['status']);
+    if (!busy) {
+      _elsewhere.removeWhere((_, turn) => turn.threadId == id);
+      return;
+    }
+    if (_helpers.containsKey(id)) return;
+    final turnId = snapshot['turnId'] as String? ??
+        _elsewhere.values.where((t) => t.threadId == id).lastOrNull?.id ??
+        'starting:$id';
+    _elsewhere.removeWhere((key, turn) => turn.threadId == id && key != turnId);
+    _elsewhere.putIfAbsent(
+        turnId,
+        () => ChatTurn(id: turnId)
+          ..threadId = id
+          ..status = 'inProgress');
+  }
+
   static String? _turnOf(Map params) =>
       params['turnId'] as String? ??
       (params['turn'] is Map ? params['turn']['id'] as String? : null);
@@ -798,15 +895,45 @@ class NipaChat extends ChangeNotifier {
     final method = event['method'] as String? ?? '';
     final params = event['params'] as Map? ?? const {};
     final about = params['threadId'] as String?;
+    if (method == 'item/completed' &&
+        (params['item'] as Map?)?['type'] == 'userMessage') {
+      unawaited(refreshSessions());
+    }
     switch (method) {
+      case 'host/available':
+        if (_booted) {
+          unawaited(refreshSessions());
+          if (thread case final id? when !loading) unawaited(_open(id));
+        }
+        _boot();
+        return;
+      case 'thread/started':
+      case 'thread/name/updated':
+      case 'host/threadsChanged':
+        unawaited(refreshSessions());
+        return;
+      case 'host/questionAnswered':
+        _questions.remove(about);
+        if (about == thread) live?.endWait();
+        _notify();
+        return;
       case 'host/liveness':
+        if (about != null && about != thread) {
+          _snapshotActivity(about, params);
+          _notify();
+        }
         if (about != null && about != thread) return;
         return _liveness(params);
       case 'host/resync':
+        _elsewhere.clear();
+        _questions.clear();
+        unawaited(refreshSessions());
         // What happened meanwhile was not kept: read the session again.
         if (thread case final id? when !loading) unawaited(_open(id));
         return;
       case 'host/error':
+        _elsewhere.clear();
+        _questions.clear();
         if (live case final turn? when !turn.queued) {
           _fail(turn, '梨花现在不在，过一会儿再试试。');
         }
@@ -913,6 +1040,7 @@ class NipaChat extends ChangeNotifier {
           unawaited(_refreshCards(turn));
         }
       case 'turn/completed':
+        _questions.remove(thread);
         quiet = false;
         _stopTimer?.cancel();
         // You were reading its steps: they stay where they are.
@@ -959,15 +1087,20 @@ class NipaChat extends ChangeNotifier {
     if (id == null) return;
     var turn = _elsewhere[id];
     if (turn == null) {
+      if (method == 'turn/completed') {
+        _elsewhere.removeWhere((_, turn) => turn.threadId == threadId);
+        _questions.remove(threadId);
+        unawaited(refreshSessions());
+        _notify();
+        return;
+      }
       if (method != 'turn/started') return;
       turn = _elsewhere[id] = ChatTurn(id: id)..threadId = threadId;
-      while (_elsewhere.length > 8) {
-        _elsewhere.remove(_elsewhere.keys.first);
-      }
     }
     final changed = turn.apply(method, params);
     if (method == 'turn/completed') {
-      _elsewhere.remove(id);
+      _elsewhere.removeWhere((_, turn) => turn.threadId == threadId);
+      _questions.remove(threadId);
       final words = turn.lastWords;
       if (words.isNotEmpty) {
         latestLine = Words.firstSentence(words);
@@ -991,8 +1124,14 @@ class NipaChat extends ChangeNotifier {
     return _elsewhere.values.where((t) => t.running).lastOrNull;
   }
 
+  int get _workingCount => {
+        if (live case final turn? when !turn.queued) thread ?? '',
+        for (final turn in _elsewhere.values)
+          if (turn.running) turn.threadId,
+      }.length;
+
   NipaMood get mood {
-    if (asking) return NipaMood.waiting;
+    if (asking && _workingCount <= _questions.length) return NipaMood.waiting;
     final turn = _working;
     if (turn == null) return NipaMood.idle;
     return turn.doing != null || _preparing != null
@@ -1002,13 +1141,14 @@ class NipaChat extends ChangeNotifier {
 
   /// What Nipa is doing now, in a few words; null when it is not.
   String? get doing {
+    if (_workingCount > 1) return '正在进行 $_workingCount 段对话';
     final turn = _working;
     if (turn == null) return null;
     if (_preparing case final step?) {
       return step.startsWith('在') || step.startsWith('正在') ? step : '在$step';
     }
     if (turn.doing case final phrase?) return '在$phrase';
-    return 'Thinking';
+    return '正在思考';
   }
 
   /// What the avatar says on hover.
@@ -1146,7 +1286,7 @@ class NipaChat extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _bootTimer?.cancel();
+    _wakeWaiter();
     _cardsTimer?.cancel();
     _stopTimer?.cancel();
     for (final sub in _subs) {

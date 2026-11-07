@@ -615,6 +615,7 @@ export function apply(ctx, config = {}) {
     'thread/list': listThreads,
     'thread/name/set': async (params) => {
       meta.update(String(params.threadId), { name: String(params.name ?? '') });
+      notify('thread/name/updated', { threadId: String(params.threadId), threadName: String(params.name ?? '') });
       return {};
     },
     'thread/compact/start': compactThread,

@@ -56,6 +56,7 @@ final class MeshChatPort implements ChatPort {
   int _sequence = 0;
   int _generation = 0;
   bool _looping = false;
+  bool _sharedThreads = false;
   Timer? _again;
   Future<void>? _probing;
 
@@ -82,7 +83,7 @@ final class MeshChatPort implements ChatPort {
 
   @override
   Future<String?> unavailableReason() async {
-    await _probe();
+    if (!available) await _probe();
     return available ? null : _why ?? _missing();
   }
 
@@ -100,6 +101,8 @@ final class MeshChatPort implements ChatPort {
     _asked = false;
     _servedBy = null;
     _busy.clear();
+    _epoch = null;
+    _sequence = 0;
     _noteChanged();
     unawaited(_probe());
   }
@@ -129,6 +132,7 @@ final class MeshChatPort implements ChatPort {
       if (_disposed || peer != _peer) return;
       _epoch = state['epoch'] as String?;
       _sequence = (state['sequence'] as int?) ?? 0;
+      _sharedThreads = state['sharedThreads'] == true;
       _up = true;
       _servedBy = peer;
       _why = null;
@@ -136,6 +140,7 @@ final class MeshChatPort implements ChatPort {
       _again?.cancel();
       _again = null;
       _noteChanged();
+      _display.add({'method': 'host/available', 'params': const {}});
       unawaited(peers.refresh());
       _startListening();
     } on Failure catch (failure) {
@@ -147,6 +152,10 @@ final class MeshChatPort implements ChatPort {
   /// The device cannot be spoken with: [failure] says why.
   void _gone(Failure failure) {
     _up = false;
+    _busy.clear();
+    if (!_disposed) {
+      _display.add({'method': 'host/error', 'params': const {}});
+    }
     _asked = true;
     _why = _reasonOf(failure);
     _noteChanged();
@@ -238,6 +247,7 @@ final class MeshChatPort implements ChatPort {
       }
     } finally {
       _looping = false;
+      if (!_disposed && _up && generation != _generation) _startListening();
       // The device went away while it was said to be there: ask again later.
       if (!_disposed && generation == _generation && !_up) {
         _again ??= Timer(retry, () => unawaited(_probe()));
@@ -255,6 +265,12 @@ final class MeshChatPort implements ChatPort {
         _busy.add(thread);
       case 'turn/completed':
         _busy.remove(thread);
+      case 'host/liveness':
+        if (const {'starting', 'inProgress'}.contains(params['status'])) {
+          _busy.add(thread);
+        } else {
+          _busy.remove(thread);
+        }
     }
   }
 
@@ -281,8 +297,20 @@ final class MeshChatPort implements ChatPort {
       (await _call('mesh/chat/open', {'new': true}))['threadId'] as String;
 
   @override
-  Future<ChatEvent> listThreads({String? cursor}) =>
-      _call('mesh/chat/threads', {});
+  Future<ChatEvent> listThreads({String? cursor}) async {
+    final listed = await _call('mesh/chat/threads', {
+      if (_sharedThreads && cursor != null) 'cursor': cursor,
+    });
+    for (final item in (listed['data'] as List? ?? const []).whereType<Map>()) {
+      if (item['busy'] is! bool || item['id'] is! String) continue;
+      if (item['busy'] == true) {
+        _busy.add(item['id'] as String);
+      } else {
+        _busy.remove(item['id']);
+      }
+    }
+    return listed;
+  }
 
   @override
   Future<String?> switchThread(String threadId) async => threadId;
@@ -304,7 +332,7 @@ final class MeshChatPort implements ChatPort {
       });
       return started;
     } on Failure catch (failure) {
-      // A turn is running there: this one waits for it.
+      // This conversation acquired a turn before our request reached it.
       if (failure.code == FailureCode.conflict) return null;
       rethrow;
     }
@@ -313,7 +341,14 @@ final class MeshChatPort implements ChatPort {
   @override
   Future<void> steer(String text, {String? threadId}) async {
     if (threadId == null) return;
-    await _call('mesh/chat/steer', {'threadId': threadId, 'text': text});
+    await _call('mesh/chat/steer', {
+      'threadId': threadId,
+      'text': text,
+      'context': {
+        if (page?.call() case final page?) 'page': page,
+        ...?playback?.call(),
+      },
+    });
   }
 
   @override
@@ -323,6 +358,9 @@ final class MeshChatPort implements ChatPort {
       _busy.add(threadId);
     } else {
       _busy.remove(threadId);
+    }
+    for (final question in answer['questions'] as List? ?? const []) {
+      _questions.add(Map<String, dynamic>.from(question as Map));
     }
     return Map<String, dynamic>.from(answer['thread'] as Map);
   }

@@ -743,6 +743,11 @@ final class Followups {
             reason: 'Waiting for an idle chat host.');
       }
       final host = _host;
+      bool targetBusy() {
+        final targetThread = row['threadId'] as String? ??
+            host?.mainThreadId ?? host?.threadId;
+        return host != null && targetThread != null && host.busyFor(targetThread);
+      }
       if (row['state'] == 'ready') {
         if (row['automatic'] == 'folderRequest' &&
             await inboxPreference('library.organizeAddedFolders', true) != true) {
@@ -804,7 +809,7 @@ final class Followups {
             ? host?.liveness.latestError ?? _unavailable
             : host.repository.path != row['repository']
                 ? 'The registered harness is not active.'
-                : host.busy
+                : targetBusy()
                     ? 'Chat host has an active turn; waiting until idle.'
                     : null;
         if (reason != null) {
@@ -812,7 +817,7 @@ final class Followups {
           // making them wait for its end.
           if (host != null &&
               host.available &&
-              host.busy &&
+              targetBusy() &&
               host.repository.path == row['repository'] &&
               await _steerIntoTurn(row, host)) {
             continue;
@@ -873,7 +878,7 @@ final class Followups {
       if ((row['state'] == 'dispatching' || row['state'] == 'started') &&
           host != null &&
           host.available &&
-          !host.busy &&
+          !targetBusy() &&
           host.repository.path == row['repository']) {
         try {
           final thread = await host.readThread(row['threadId'] as String,

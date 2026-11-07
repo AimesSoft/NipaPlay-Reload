@@ -49,8 +49,7 @@ const chatEventsKept = 4000;
 /// after at most [chatEventsWaitLimit] seconds, and the guest asks again from
 /// where it was. Nothing is read from a database to find out.
 ///
-/// Only devices of this account reach here; a guest speaks only in the
-/// conversations it opened.
+/// Only devices of this account reach here; they share every conversation.
 final class ChatGuests {
   ChatGuests(
       {required this.root,
@@ -85,8 +84,9 @@ final class ChatGuests {
   final _log = <_Entry>[];
   var _sequence = 0;
   final _waiters = <Completer<void>>[];
-  // A question the guest's thread asks, by request id, until answered.
+  // Questions in shared conversations, by request id, until answered.
   final _questions = <Object, String>{};
+  final _pendingQuestions = <Object, Map<String, dynamic>>{};
 
   Future<T> _exclusive<T>(Future<T> Function() operation) {
     final result = _serial.then((_) => operation());
@@ -121,15 +121,6 @@ final class ChatGuests {
           .map((t) => Map<String, Object?>.from(t as Map))
           .toList();
 
-  String? _ownerOf(String threadId) {
-    for (final entry in _peers!.entries) {
-      for (final thread in entry.value['threads'] as List? ?? const []) {
-        if ((thread as Map)['threadId'] == threadId) return entry.key;
-      }
-    }
-    return null;
-  }
-
   /// The conversation host came, went or was replaced.
   Future<void> attach(GuestChat? host) => _exclusive(() async {
         await _load();
@@ -140,6 +131,7 @@ final class ChatGuests {
           _subscriptions.clear();
           _listening = null;
           _questions.clear();
+          _pendingQuestions.clear();
           _wake();
           return;
         }
@@ -147,13 +139,13 @@ final class ChatGuests {
       });
 
   void _use(GuestChat host) {
+    if (identical(_listening, host)) return;
     for (final entry in _peers!.entries) {
       for (final thread in entry.value['threads'] as List? ?? const []) {
         host.threadOrigins[(thread as Map)['threadId'] as String] =
             'harness_cli:chat:delegate-${thread['token']}';
       }
     }
-    if (identical(_listening, host)) return;
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -167,13 +159,28 @@ final class ChatGuests {
   void _observe(Map<String, dynamic> message, {required bool question}) {
     final params = message['params'];
     final threadId = params is Map ? params['threadId'] : null;
-    if (threadId is! String || _peers == null) return;
-    final owner = _ownerOf(threadId);
-    if (owner == null) return;
-    if (question && message['id'] != null) {
-      _questions[message['id'] as Object] = threadId;
+    if (_peers == null) return;
+    if (threadId is! String &&
+        !const {'thread/started', 'host/error', 'host/threadsChanged'}
+            .contains(message['method'])) {
+      return;
     }
-    _log.add(_Entry(++_sequence, owner, threadId, question, message));
+    if (question && message['id'] != null) {
+      if (threadId is String) _questions[message['id'] as Object] = threadId;
+      _pendingQuestions[message['id'] as Object] = message;
+    }
+    if (message['method'] == 'host/questionAnswered') {
+      _questions.remove(params['requestId']);
+      _pendingQuestions.remove(params['requestId']);
+    }
+    if (message['method'] == 'turn/completed') {
+      _pendingQuestions.removeWhere((id, question) {
+        if (_questions[id] != threadId) return false;
+        _questions.remove(id);
+        return true;
+      });
+    }
+    _log.add(_Entry(++_sequence, question, message));
     if (_log.length > chatEventsKept) {
       _log.removeRange(0, _log.length - chatEventsKept);
     }
@@ -209,11 +216,11 @@ final class ChatGuests {
     final host = _running();
     return switch (method) {
       'mesh/chat/state' => _state(host),
-      'mesh/chat/threads' => _threads(host, peer),
+      'mesh/chat/threads' => _threads(host, params, peer),
       'mesh/chat/open' => _open(host, params, peer, name),
       'mesh/chat/read' => _read(host, params, peer),
       'mesh/chat/turn' => _turn(host, params, peer, name),
-      'mesh/chat/steer' => _steer(host, params, peer),
+      'mesh/chat/steer' => _steer(host, params, peer, name),
       'mesh/chat/interrupt' => _interrupt(host, params, peer),
       'mesh/chat/answer' => _answer(host, params, peer),
       _ => throw const Failure(FailureCode.invalidInput, 'Unknown method.'),
@@ -236,6 +243,7 @@ final class ChatGuests {
         'model': host.model,
         'epoch': epoch,
         'sequence': _sequence,
+        'sharedThreads': true,
       };
 
   String _thread(JsonMap params, String peer) {
@@ -243,28 +251,26 @@ final class ChatGuests {
     if (id is! String || !_threadIdPattern.hasMatch(id)) {
       throw const Failure(FailureCode.invalidInput, 'threadId is not valid.');
     }
-    if (_ownerOf(id) != peer) {
-      throw const Failure(
-          FailureCode.notFound, 'This conversation is not this device\'s.');
-    }
     return id;
   }
 
-  Future<JsonMap> _threads(GuestChat host, String peer) async {
-    final mine = {for (final t in _threadsOf(peer)) t['threadId'] as String};
-    final listed = await host.listSessions(limit: 100);
-    final main = _peers![peer]?['main'] as String?;
+  Future<JsonMap> _threads(GuestChat host, JsonMap params, String peer) async {
+    final cursor = params['cursor'] as String?;
+    final listed = await host.listSessions(cursor: cursor, limit: 100);
     return {
+      ...listed,
       'epoch': epoch,
-      'mainThreadId': main,
+      'sharedThreads': true,
+      'mainThreadId': listed['mainThreadId'] ?? _peers![peer]?['main'],
       'data': [
         for (final item in (listed['data'] as List? ?? const []))
-          if (item is Map && mine.contains(item['id']))
+          if (item is Map)
             {
-              'id': item['id'],
-              if (item['preview'] != null) 'preview': item['preview'],
-              if (item['updatedAt'] != null) 'updatedAt': item['updatedAt'],
-              if (item['createdAt'] != null) 'createdAt': item['createdAt'],
+              ...item,
+              'busy': host.busyFor(item['id'] as String),
+              ...host
+                  .livenessFor(item['id'] as String)
+                  .snapshot(DateTime.now()),
             }
       ],
     };
@@ -294,10 +300,11 @@ final class ChatGuests {
         host.threadOrigins[id] = 'harness_cli:chat:delegate-$token';
         final threads = _threadsOf(peer)
           ..add({'threadId': id, 'token': token, 'deviceName': name});
-        if (threads.length > 50) threads.removeRange(0, threads.length - 50);
         record['threads'] = threads;
         if (!fresh || main == null) record['main'] = id;
         await _save();
+        _observe({'method': 'host/threadsChanged', 'params': const {}},
+            question: false);
         final write = this.record;
         if (write != null) {
           unawaited(write(peer, '$name 开了一段对话', {
@@ -332,6 +339,10 @@ final class ChatGuests {
       'epoch': epoch,
       'sequence': _sequence,
       'busy': host.busyFor(id),
+      'questions': [
+        for (final question in _pendingQuestions.values)
+          if ((question['params'] as Map)['threadId'] == id) question,
+      ],
     };
   }
 
@@ -393,7 +404,8 @@ final class ChatGuests {
     }
   }
 
-  Future<JsonMap> _steer(GuestChat host, JsonMap params, String peer) async {
+  Future<JsonMap> _steer(
+      GuestChat host, JsonMap params, String peer, String name) async {
     final id = _thread(params, peer);
     final text = params['text'];
     if (text is! String || text.trim().isEmpty || text.length > 200000) {
@@ -405,7 +417,8 @@ final class ChatGuests {
           FailureCode.conflict, 'No turn is running in this conversation.');
     }
     try {
-      await host.steer(text, onThread: id);
+      await host.steer(sentence(text, name, peer, params['context']),
+          onThread: id);
     } catch (error) {
       throw Failure(FailureCode.unavailable,
           'Nipa could not take it: ${redactHarnessText('$error')}');
@@ -424,10 +437,7 @@ final class ChatGuests {
     final request = params['requestId'];
     final answers = params['answers'];
     final thread = request == null ? null : _questions[request];
-    if (request == null ||
-        thread == null ||
-        _ownerOf(thread) != peer ||
-        answers is! Map) {
+    if (request == null || thread == null || answers is! Map) {
       throw const Failure(FailureCode.notFound, 'No such question.');
     }
     await host.answerUserInput(request, {
@@ -435,10 +445,15 @@ final class ChatGuests {
         '${entry.key}': [for (final a in entry.value as List) '$a'],
     });
     _questions.remove(request);
+    _pendingQuestions.remove(request);
+    _observe({
+      'method': 'host/questionAnswered',
+      'params': {'threadId': thread, 'requestId': request},
+    }, question: false);
     return {'accepted': true};
   }
 
-  /// What happened in the guest's conversations after [after], waiting up to
+  /// What happened in the shared conversations after `after`, waiting up to
   /// `waitSeconds` for something when nothing has yet. `reset` says the
   /// events the guest has not seen are gone (this host started again, or too
   /// much happened): it reads its conversation again.
@@ -465,10 +480,6 @@ final class ChatGuests {
       final events = <JsonMap>[];
       for (final entry in _log) {
         if (entry.sequence <= after) continue;
-        if (entry.owner != peer) {
-          last = entry.sequence;
-          continue;
-        }
         final wire = {
           'seq': entry.sequence,
           'question': entry.question,
@@ -480,8 +491,7 @@ final class ChatGuests {
         events.add(wire);
         last = entry.sequence;
       }
-      // Entries for other guests are passed over, so the guest does not meet
-      // them again.
+      // The cursor advances across the same shared log on every device.
       final more = last < _sequence;
       return {
         'epoch': epoch,
@@ -506,9 +516,8 @@ final class ChatGuests {
 }
 
 final class _Entry {
-  _Entry(this.sequence, this.owner, this.threadId, this.question, this.message);
+  _Entry(this.sequence, this.question, this.message);
   final int sequence;
-  final String owner, threadId;
   final bool question;
   final Map<String, dynamic> message;
 }
