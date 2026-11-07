@@ -10,7 +10,8 @@ use rustls::{
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
-    io::Cursor,
+    future::Future,
+    io::{self, Cursor},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex, RwLock,
@@ -28,6 +29,35 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 pub const MAX_FRAME: usize = 1024 * 1024;
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(10);
 const CALL_TIMEOUT: Duration = Duration::from_secs(3600);
+
+async fn accept_with_retry<T, F, A>(mut accept: A) -> T
+where
+    A: FnMut() -> F,
+    F: Future<Output = io::Result<T>>,
+{
+    let mut delay = Duration::from_millis(100);
+    let mut failed = false;
+    loop {
+        match accept().await {
+            Ok(connection) => {
+                if failed {
+                    eprintln!("mesh listener recovered after accept failure");
+                }
+                return connection;
+            }
+            Err(error) => {
+                // EMFILE/ENFILE are temporary resource pressure. Dropping the
+                // listener here would leave the running app unreachable forever.
+                if !failed {
+                    eprintln!("mesh accept failed; keeping listener and retrying: {error}");
+                    failed = true;
+                }
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(Duration::from_secs(2));
+            }
+        }
+    }
+}
 
 pub fn generate_key() -> Result<Vec<u8>, String> {
     Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
@@ -267,7 +297,8 @@ impl Node {
         let acceptor = TlsAcceptor::from(Arc::new(server));
         let slots = Arc::new(Semaphore::new(64));
         let task = tokio::spawn(async move {
-            while let Ok((tcp, _)) = listener.accept().await {
+            loop {
+                let (tcp, _) = accept_with_retry(|| listener.accept()).await;
                 let Ok(permit) = slots.clone().try_acquire_owned() else {
                     continue;
                 };
@@ -532,6 +563,42 @@ async fn write_frame<S: AsyncWrite + Unpin>(socket: &mut S, body: &str) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn accept_recovers_after_descriptor_exhaustion_and_interruption() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let attempts = std::sync::atomic::AtomicUsize::new(0);
+        let accepting = accept_with_retry(|| {
+            let listener = &listener;
+            let attempt = attempts.fetch_add(1, Ordering::SeqCst);
+            async move {
+                match attempt {
+                    0 => Err(io::Error::from_raw_os_error(24)),
+                    1 => Err(io::Error::from_raw_os_error(23)),
+                    2 => Err(io::Error::from(io::ErrorKind::Interrupted)),
+                    _ => listener.accept().await,
+                }
+            }
+        });
+        let connecting = async {
+            let mut client = TcpStream::connect(address).await.unwrap();
+            client.write_all(b"mesh stays reachable").await.unwrap();
+        };
+        let (_, accepted) = tokio::join!(connecting, timeout(Duration::from_secs(3), accepting));
+        let (mut connection, _) = accepted.expect("listener must recover");
+        let mut bytes = [0; 20];
+        connection.read_exact(&mut bytes).await.unwrap();
+        assert_eq!(&bytes, b"mesh stays reachable");
+        assert_eq!(attempts.load(Ordering::SeqCst), 4);
+        // The same listener also remains usable for later connections.
+        let (client, accepted) = tokio::join!(
+            TcpStream::connect(address),
+            timeout(Duration::from_secs(1), accept_with_retry(|| listener.accept())),
+        );
+        assert!(client.is_ok());
+        assert!(accepted.is_ok());
+    }
     async fn pair() -> (Arc<Node>, Arc<Node>) {
         use rcgen::{BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose,
             IsCa, Issuer, KeyPair, KeyUsagePurpose, SanType};
