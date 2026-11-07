@@ -1,7 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart'
-    show Material, MaterialType, TextSelectionThemeData, Theme, ThemeData;
+    show
+        ColorScheme,
+        Material,
+        MaterialType,
+        TextSelectionThemeData,
+        Theme,
+        ThemeData;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -173,6 +179,14 @@ class _NextShellState extends State<NextShell> {
             fontFamily: NextFonts.sans,
             fontFamilyFallback: NextFonts.sansFallback,
             scaffoldBackgroundColor: NextColors.ink,
+            // Material's own accents (a remote's text field outline, a
+            // spinner) in Next's paper, not the default violet.
+            colorScheme: const ColorScheme.dark(
+              primary: NextColors.paper,
+              onPrimary: Color(0xFF111111),
+              secondary: NextColors.accent,
+              surface: NextColors.ink,
+            ),
             textSelectionTheme: const TextSelectionThemeData(
               cursorColor: NextColors.accent,
               selectionColor: Color(0x59FF2E55),
