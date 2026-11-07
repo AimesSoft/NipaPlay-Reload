@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/platform_identity.dart' as platform;
 import 'package:screen_brightness/screen_brightness.dart';
 
 import '../theme/tokens.dart';
@@ -201,6 +202,10 @@ class _PlayerTouchSurfaceState extends State<PlayerTouchSurface> {
 /// for the pages. The pages are upright; while a video is open the phone
 /// may turn either way.
 abstract final class PhoneOrientation {
+  @visibleForTesting
+  static bool Function() harmonyOS = () => platform.isHarmonyOS;
+
+  static Future<void> _requests = Future.value();
   static const _upright = [DeviceOrientation.portraitUp];
   static const _sideways = [
     DeviceOrientation.landscapeLeft,
@@ -213,7 +218,12 @@ abstract final class PhoneOrientation {
   ];
 
   static Future<void> pages() => _set(_upright, SystemUiMode.edgeToEdge);
-  static Future<void> video() => _set(_any, SystemUiMode.edgeToEdge);
+  // HarmonyOS follows the system's portrait lock for AUTO_ROTATION, even
+  // when landscape is included. Explicitly request the player's landscape
+  // orientation; pages() restores the phone's upright application shell.
+  static Future<void> video() => harmonyOS()
+      ? fullScreen(true)
+      : _set(_any, SystemUiMode.edgeToEdge);
 
   /// Full screen: sideways, the system's bars away; and back.
   static Future<void> fullScreen(bool on) => on
@@ -221,12 +231,26 @@ abstract final class PhoneOrientation {
       : _set(_upright, SystemUiMode.edgeToEdge);
 
   static Future<void> _set(
-      List<DeviceOrientation> orientations, SystemUiMode mode) async {
+      List<DeviceOrientation> orientations, SystemUiMode mode) =>
+      _requests = _requests.then((_) async {
+        // A slow exit must finish before a subsequent player's request, so
+        // its portrait restoration cannot overwrite the new landscape mode.
+        try {
+          await _platformCall(SystemChrome.setPreferredOrientations(orientations));
+          await _platformCall(SystemChrome.setEnabledSystemUIMode(mode));
+        } catch (e) {
+          debugPrint('[NextPlayer] orientation: $e');
+        }
+      });
+
+  static Future<void> _platformCall(Future<void> operation) async {
+    if (!harmonyOS()) return operation;
     try {
-      await SystemChrome.setPreferredOrientations(orientations);
-      await SystemChrome.setEnabledSystemUIMode(mode);
-    } catch (e) {
-      debugPrint('[NextPlayer] orientation: $e');
+      // Like ScreenOrientationManager, do not hold later transitions behind
+      // a system-bar change that the OHOS embedder applies without replying.
+      await operation.timeout(const Duration(milliseconds: 300));
+    } on TimeoutException {
+      debugPrint('[NextPlayer] HarmonyOS display call timed out; continuing.');
     }
   }
 }
