@@ -602,7 +602,9 @@ class _Status extends StatelessWidget {
   }
 }
 
-/// Text with light passing over it, while something is under way.
+/// Text with light passing over it, while something is under way: a few
+/// passes when the text appears or changes (a new step), then still, for a
+/// turn can go on for minutes.
 class Shimmer extends StatefulWidget {
   const Shimmer(
       {super.key, required this.text, required this.style, this.still = false});
@@ -617,7 +619,13 @@ class Shimmer extends StatefulWidget {
 class _ShimmerState extends State<Shimmer> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1800))
-    ..repeat();
+    ..repeat(count: 4);
+
+  @override
+  void didUpdateWidget(Shimmer old) {
+    super.didUpdateWidget(old);
+    if (old.text != widget.text) _c.repeat(count: 4);
+  }
 
   @override
   void dispose() {

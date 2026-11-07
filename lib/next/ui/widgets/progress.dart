@@ -110,7 +110,9 @@ class ThinBar extends StatelessWidget {
   }
 }
 
-/// A crimson dot with an expanding halo (concept `.pulse`).
+/// A crimson dot with an expanding halo (concept `.pulse`). It pulses a
+/// few times when it appears, then stays lit: what it marks (a download, a
+/// step under way) can last for hours.
 class PulseDot extends StatefulWidget {
   const PulseDot({super.key, this.size = 7});
   final double size;
@@ -123,7 +125,7 @@ class _PulseDotState extends State<PulseDot>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1800))
-    ..repeat();
+    ..repeat(count: 3);
 
   @override
   void dispose() {
