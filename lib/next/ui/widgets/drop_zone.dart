@@ -1,5 +1,6 @@
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 /// Where files can be dropped for Nipa: the side panel and the home's input
 /// bar. Classic's window-wide drop (which plays a video) leaves the drops
@@ -44,7 +45,6 @@ class _NextDropZoneState extends State<NextDropZone> {
     super.dispose();
   }
 
-
   /// Hidden sections and Next behind Classic's player do not take drops.
   bool _live = false;
 
@@ -61,6 +61,7 @@ class _NextDropZoneState extends State<NextDropZone> {
 
   @override
   Widget build(BuildContext context) {
+    if (globals.isTvOS) return widget.builder(context, false);
     _live = widget.enabled && TickerMode.of(context);
     return DropTarget(
         enable: _live,

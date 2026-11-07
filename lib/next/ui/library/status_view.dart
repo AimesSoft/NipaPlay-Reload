@@ -159,7 +159,8 @@ class _StatusViewState extends State<StatusView> {
       sliver: SliverLayoutBuilder(builder: (context, constraints) {
         const gap = CategoryGrid.gap;
         final width = constraints.crossAxisExtent;
-        final columns = ((width + gap) / (CategoryGrid.maxTile + gap)).ceil();
+        final columns =
+            ((width + gap) / (CategoryGrid.tileLimit + gap)).ceil();
         final tile = (width - gap * (columns - 1)) / columns;
         return SliverGrid.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(

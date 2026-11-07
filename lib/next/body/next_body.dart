@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/utils/platform_identity.dart' as platform;
 
 /// A device that can show Next's interface but cannot host Nipa: an iPad.
 /// It starts only the body (the capability layer, the player, the Mesh) and
@@ -10,12 +11,14 @@ final class NextBody {
   /// Tests set this to run the body-only paths on any host.
   static bool? debugBodyOnly;
 
-  static bool get bodyOnly => debugBodyOnly ?? Platform.isIOS;
+  static bool get bodyOnly =>
+      debugBodyOnly ?? (Platform.isIOS || platform.isTvOS);
 
   /// What an iPad does not have: no process can be started, nothing runs
   /// programs or conversations, and an iOS application is not quit or
   /// restarted by a program.
   static bool excludes(String id) =>
+      (platform.isTvOS && excludesOnTelevision(id)) ||
       const [
         'window.',
         'program.',
@@ -25,11 +28,20 @@ final class NextBody {
       ].any(id.startsWith) ||
       const {'app.quit', 'app.restart'}.contains(id);
 
+  /// A television streams media; it cannot download files or scan folders.
+  static bool excludesOnTelevision(String id) =>
+      id.startsWith('download.') ||
+      id.startsWith('media.scan') ||
+      id.startsWith('media.folders.') ||
+      id.startsWith('media.roots.') ||
+      id.startsWith('media.library.roots.') ||
+      id == 'media.library.scan_classic' ||
+      id == 'playback.open_file';
+
   /// The capabilities this device really has.
-  static List<Capability> filter(Iterable<Capability> capabilities) =>
-      bodyOnly
-          ? [for (final capability in capabilities) _Filtered(capability)]
-          : capabilities.toList();
+  static List<Capability> filter(Iterable<Capability> capabilities) => bodyOnly
+      ? [for (final capability in capabilities) _Filtered(capability)]
+      : capabilities.toList();
 }
 
 final class _Filtered implements Capability {

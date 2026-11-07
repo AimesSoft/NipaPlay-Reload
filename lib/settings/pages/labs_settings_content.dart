@@ -20,6 +20,9 @@ class LabsSettingsContent extends StatelessWidget {
 
   final VoidCallback onOpenWebDavQuickSettings;
 
+  @visibleForTesting
+  static bool Function() television = () => globals.isTvOS;
+
   /// Which kind of device this is for NipaPlay Next: a desktop runs Nipa, an
   /// iPad or an iPhone only hosts Next's interface and body. Android has no
   /// Next. Tests set it.
@@ -82,7 +85,7 @@ class LabsSettingsContent extends StatelessWidget {
             // endpoint and her settings live in Next's own interface and run
             // only while it is open (D1). An iPad gets Next's interface and
             // body; so does an iPhone. Nipa runs on the user's other devices.
-            if (device().desktop || device().iPad || device().iPhone)
+            if (device().desktop || device().iPad || device().iPhone || television())
               AdaptiveSettingsSection(
                 children: [
                   AdaptiveSettingsTile.toggle(
@@ -154,12 +157,18 @@ class LabsSettingsContent extends StatelessWidget {
 
   /// Mobile hosts Next and Mesh; Nipa runs on another authenticated device.
   String _mobileConsent(BuildContext context, {required bool phone}) {
-    final name = phone ? 'iPhone' : 'iPad';
+    final name = television()
+        ? _text(context, '电视', '電視', 'television')
+        : phone ? 'iPhone' : 'iPad';
+    final simplifiedDevice = television() ? '这台电视' : '这台 $name';
+    final traditionalDevice = television() ? '這台電視' : '這台 $name';
+    final simplifiedTarget = television() ? '这台电视上的' : '这台 $name 上的';
+    final traditionalTarget = television() ? '這台電視上的' : '這台 $name 上的';
     return _text(
           context,
-          '这台 $name 运行 Next 界面、播放器和 Mesh，梨花在你同一账号下的其他设备上运行。其他设备上的 AI Agent 可以通过 Mesh 操作这台 $name 上的 NipaPlay：播放、改设置、读片库和观看记录、截取 NipaPlay 的画面。访问范围受这台设备开放的能力与系统权限限制。\n\n'
+          '$simplifiedDevice 运行 Next 界面、播放器和 Mesh，梨花在你同一账号下的其他设备上运行。其他设备上的 AI Agent 可以通过 Mesh 操作$simplifiedTarget NipaPlay：播放、改设置、读片库和观看记录、截取 NipaPlay 的画面。访问范围受这台设备开放的能力与系统权限限制。\n\n'
               '运行梨花的电脑可在其当前用户权限范围内读写和删除文件、运行程序、联网及使用可访问的登录状态。Mesh 将风险延伸到已连接设备；同一局域网和设备认证不能防止受信任的 Agent 出错。不要假定所有操作都会再次弹窗确认。\n\n',
-          '這台 $name 執行 Next 介面、播放器和 Mesh，梨花在你同一帳號下的其他裝置上執行。其他裝置上的 AI Agent 可以透過 Mesh 操作這台 $name 上的 NipaPlay：播放、改設定、讀片庫和觀看紀錄、擷取 NipaPlay 的畫面。存取範圍受這台裝置開放的能力與系統權限限制。\n\n'
+          '$traditionalDevice 執行 Next 介面、播放器和 Mesh，梨花在你同一帳號下的其他裝置上執行。其他裝置上的 AI Agent 可以透過 Mesh 操作$traditionalTarget NipaPlay：播放、改設定、讀片庫和觀看紀錄、擷取 NipaPlay 的畫面。存取範圍受這台裝置開放的能力與系統權限限制。\n\n'
               '執行梨花的電腦可在其目前使用者權限範圍內讀寫和刪除檔案、執行程式、連網及使用可存取的登入狀態。Mesh 將風險延伸到已連接裝置；同一區域網路和裝置驗證不能防止受信任的 Agent 出錯。不要假定所有操作都會再次彈窗確認。\n\n',
           'This $name runs the Next interface, player, and Mesh. Nipa runs on your other devices signed in to the same account. The AI Agent on those devices can operate NipaPlay on this $name through Mesh: play, change settings, read the library and watch history, and capture NipaPlay\'s screen. Access is limited by the capabilities enabled here and this device\'s system permissions.\n\n'
               'The computer running Nipa can read, write, and delete files, run programs, access the network, and use accessible signed-in sessions within its current user permissions. Mesh extends these risks to connected devices. A local network and device authentication do not prevent a trusted Agent from making mistakes. Do not assume every operation will ask for confirmation again.\n\n',
@@ -178,7 +187,7 @@ class LabsSettingsContent extends StatelessWidget {
               'Enable NipaPlay Next (Developer Preview)')),
           content: SingleChildScrollView(
             child: Text(
-              device().iPad || device().iPhone
+              device().iPad || device().iPhone || television()
                   ? _mobileConsent(context, phone: device().iPhone)
                   : _text(
                         context,

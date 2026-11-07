@@ -1259,8 +1259,13 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                           ),
                 // Temporary compatibility renderer. A dedicated television
                 // shell can replace this entry without changing page data.
-                AppDisplaySurface.television: () =>
-                    MainPage(launchFilePath: widget.launchFilePath),
+                AppDisplaySurface.television: () => globals.isTvOS
+                    ? NextUiGate(
+                        launchFilePath: widget.launchFilePath,
+                        classicBuilder: (launchPath) =>
+                            MainPage(launchFilePath: launchPath),
+                      )
+                    : MainPage(launchFilePath: widget.launchFilePath),
               },
             );
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../../ui_data/ui_data.dart';
 import '../detail/episodes.dart' show HeatPainter;
@@ -149,8 +150,8 @@ class SubtitleMenuState extends State<SubtitleMenu> {
               label: '字幕列表',
               onTap: () => setState(() => _page = _SubtitlePage.lines)),
         ],
-        const PlayerMenuDivider(),
-        MenuItem(
+        if (!globals.isTvOS) const PlayerMenuDivider(),
+        if (!globals.isTvOS) MenuItem(
           label: _failed ? '这个文件用不了' : '添加字幕文件…',
           onTap: () => unawaited(_add()),
         ),

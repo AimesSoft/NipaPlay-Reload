@@ -1,0 +1,17 @@
+[package]
+name = "nipaplay-tvos-native"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+nipaplay-mesh = { path = "../mesh" }
+base64 = "0.22"
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[profile.release]
+opt-level = 2
+debug = false

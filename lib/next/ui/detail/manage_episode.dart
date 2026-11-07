@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' show TextField, InputDecoration;
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../../ui_data/ui_data.dart';
 import '../data/work_manage.dart';
@@ -427,7 +428,7 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
             label: '添加弹幕',
             onTap: () => setState(() => _adding = !_adding)),
         const SizedBox(width: 8),
-        if (data.device == null)
+        if (data.device == null && !globals.isTvOS)
           PillButton(label: '导入文件', onTap: busy ? null : _importDanmaku),
         const Spacer(),
         LinkText('屏蔽词', onTap: widget.onBlockWords),
@@ -546,7 +547,7 @@ class EpisodeManageSheetState extends State<EpisodeManageSheet>
             ),
           ]),
         ],
-        if (data.device == null) ...[
+        if (data.device == null && !globals.isTvOS) ...[
           const SizedBox(height: 14),
           Row(children: [
             PillButton(

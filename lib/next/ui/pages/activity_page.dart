@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../../ui_data/ui_data.dart';
 import '../cards/card_views.dart';
@@ -38,8 +39,7 @@ class ActivityPage extends StatefulWidget {
   State<ActivityPage> createState() => _ActivityPageState();
 }
 
-class _ActivityPageState extends State<ActivityPage>
-    implements ActivityDebug {
+class _ActivityPageState extends State<ActivityPage> implements ActivityDebug {
   ActivityTab _tab = ActivityTab.now;
   bool _capacity = false;
   String? _said;
@@ -111,14 +111,15 @@ class _ActivityPageState extends State<ActivityPage>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: EdgeInsets.fromLTRB(
-              NextLayout.gutter(context), NextLayout.underBar(context) + 40, NextLayout.end(context), 26),
+          padding: EdgeInsets.fromLTRB(NextLayout.gutter(context),
+              NextLayout.underBar(context) + 40, NextLayout.end(context), 26),
           child: ValueListenableBuilder(
             valueListenable: shell.tasks,
             builder: (context, _, __) => Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                for (final tab in ActivityTab.values) ...[
+                for (final tab in ActivityTab.values.where((tab) =>
+                    !globals.isTvOS || tab != ActivityTab.downloads)) ...[
                   _Tab(
                     label: _titles[tab]!,
                     count: tab == ActivityTab.now
@@ -159,8 +160,8 @@ class _ActivityPageState extends State<ActivityPage>
           ];
           final c = shell.chat;
           final line = c.doing ?? c.latestLine;
-          void control(UiTask t, String command) => unawaited(
-              controlTasks(shell.services, [t], command));
+          void control(UiTask t, String command) =>
+              unawaited(controlTasks(shell.services, [t], command));
           final callbacks = CardCallbacks(
             onPauseTask: (t) => control(t, 'pause'),
             onResumeTask: (t) => control(t, 'resume'),
@@ -168,7 +169,8 @@ class _ActivityPageState extends State<ActivityPage>
           );
           return ListView(
             key: const PageStorageKey('activity/now'),
-            padding: EdgeInsets.fromLTRB(NextLayout.gutter(context), 0, NextLayout.end(context), 64 + NextLayout.foot(context)),
+            padding: EdgeInsets.fromLTRB(NextLayout.gutter(context), 0,
+                NextLayout.end(context), 64 + NextLayout.foot(context)),
             children: [
               if (line != null) ...[
                 Row(children: [
@@ -194,41 +196,42 @@ class _ActivityPageState extends State<ActivityPage>
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (mine.isNotEmpty)
-                          Row(children: [
-                            if (mine.any((t) => t.state == UiTaskState.running))
-                              PillButton(
-                                  label: '全部暂停',
-                                  onTap: () => _all(
-                                      mine
-                                          .where((t) =>
-                                              t.state == UiTaskState.running)
-                                          .toList(),
-                                      'pause')),
-                            if (mine.any((t) => t.state == UiTaskState.paused))
-                              ...[
+                            Row(children: [
+                              if (mine
+                                  .any((t) => t.state == UiTaskState.running))
+                                PillButton(
+                                    label: '全部暂停',
+                                    onTap: () => _all(
+                                        mine
+                                            .where((t) =>
+                                                t.state == UiTaskState.running)
+                                            .toList(),
+                                        'pause')),
+                              if (mine.any(
+                                  (t) => t.state == UiTaskState.paused)) ...[
+                                const SizedBox(width: 8),
+                                PillButton(
+                                    label: '全部继续',
+                                    onTap: () => _all(
+                                        mine
+                                            .where((t) =>
+                                                t.state == UiTaskState.paused)
+                                            .toList(),
+                                        'resume')),
+                              ],
                               const SizedBox(width: 8),
                               PillButton(
-                                  label: '全部继续',
-                                  onTap: () => _all(
-                                      mine
-                                          .where((t) =>
-                                              t.state == UiTaskState.paused)
-                                          .toList(),
-                                      'resume')),
-                            ],
-                            const SizedBox(width: 8),
-                            PillButton(
-                                label: '全部停止',
-                                danger: true,
-                                onTap: () => _all(mine, 'cancel')),
-                            const SizedBox(width: 14),
-                            if (_said != null)
-                              Flexible(
-                                child: Text(_said!,
-                                    style: NextText.sans(12.5,
-                                        color: NextColors.accent2)),
-                              ),
-                          ]),
+                                  label: '全部停止',
+                                  danger: true,
+                                  onTap: () => _all(mine, 'cancel')),
+                              const SizedBox(width: 14),
+                              if (_said != null)
+                                Flexible(
+                                  child: Text(_said!,
+                                      style: NextText.sans(12.5,
+                                          color: NextColors.accent2)),
+                                ),
+                            ]),
                           const SizedBox(height: 16),
                           for (final (i, task) in background.indexed) ...[
                             if (i > 0) const SizedBox(height: 10),
@@ -465,9 +468,7 @@ class _CapacityFoldState extends State<_CapacityFold> {
                       padding: const EdgeInsets.only(top: 14),
                       child: Column(children: [
                         for (final pool in pools ?? const <UiPool>[])
-                          _PoolRow(
-                              pool: pool,
-                              onSet: (v) => _set(pool, v)),
+                          _PoolRow(pool: pool, onSet: (v) => _set(pool, v)),
                         _LimitsRow(
                             onTap: () => openLimits(
                                 NextShellScope.of(context).services)),
@@ -508,8 +509,9 @@ class _PoolRow extends StatelessWidget {
                   margin: const EdgeInsets.only(right: 5),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color:
-                        i < pool.active ? NextColors.mint : const Color(0x00000000),
+                    color: i < pool.active
+                        ? NextColors.mint
+                        : const Color(0x00000000),
                     border: Border.all(
                         color:
                             i < pool.active ? NextColors.mint : NextColors.p4),
@@ -522,9 +524,10 @@ class _PoolRow extends StatelessWidget {
               ],
             ]),
           ),
-          _Step(label: '减少', minus: true, onTap: pool.capacity > 1
-              ? () => onSet(pool.capacity - 1)
-              : null),
+          _Step(
+              label: '减少',
+              minus: true,
+              onTap: pool.capacity > 1 ? () => onSet(pool.capacity - 1) : null),
           SizedBox(
             width: 34,
             child: Text('${pool.capacity}',

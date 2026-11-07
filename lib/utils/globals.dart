@@ -205,7 +205,7 @@ bool get isTelevision => isAndroidTv || isTvOS;
 /// different Flutter/plugin graph while Android TV uses Android runtimes.
 bool get supportsRustNativeBridge => !isTvOS;
 bool get supportsMediaKitNativeRuntime => !isHarmonyOS && !isTvOS;
-bool get supportsGamepadInput => !isHarmonyOS;
+bool get supportsGamepadInput => !isHarmonyOS && !isTvOS;
 
 bool get isIPad {
   if (kIsWeb) {

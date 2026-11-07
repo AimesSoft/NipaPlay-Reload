@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' show TextField, InputDecoration;
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../../ui_data/ui_data.dart';
 import '../data/work_manage.dart';
@@ -916,7 +917,7 @@ class WorkManageSheetState extends State<WorkManageSheet>
           shape: shape,
           tint: tint,
           hovered: _hoverArt == kind,
-          onReplace: data.here ? () => _replaceArt(kind) : null,
+          onReplace: data.here && !globals.isTvOS ? () => _replaceArt(kind) : null,
           onRestore: () =>
               run(() => widget.manage.clearArt(data, kind), done: '已恢复'),
         );
@@ -990,7 +991,7 @@ class WorkManageSheetState extends State<WorkManageSheet>
         ]),
       const SizedBox(height: 16),
       Row(children: [
-        if (local && data.here)
+        if (local && data.here && !globals.isTvOS)
           PillButton(label: '添加文件', onTap: busy ? null : _addFile),
         const Spacer(),
         if (titled)

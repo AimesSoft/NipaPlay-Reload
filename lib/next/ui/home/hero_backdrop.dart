@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
+import '../widgets/television_focus.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/artwork.dart';
 
@@ -41,8 +42,10 @@ class HeroBackdrop extends StatefulWidget {
   /// How long a new backdrop takes to cross-fade in.
   final Duration fade;
 
-  /// Height of state A's hero: the first shelf starts 24 px below it.
-  static double heroHeight(double viewportHeight) => viewportHeight - 240;
+  /// Height of state A's hero: the first shelf starts 24 px below it. On a
+  /// television the hero is the whole first screen; the shelves wait below.
+  static double heroHeight(double viewportHeight) =>
+      TelevisionFocusable.television ? viewportHeight : viewportHeight - 240;
 
   @override
   State<HeroBackdrop> createState() => _HeroBackdropState();
@@ -196,7 +199,11 @@ class _HeroBackdropState extends State<HeroBackdrop>
           final offset = Offset.lerp(tA, Offset.zero, t)!;
           final push = 1 + 0.05 * Curves.easeInOut.transform(_push.value);
           final visibleH = hA + (view.height - hA) * t;
-          final focus = Offset(view.width / 2, visibleH * 0.45);
+          // On a television the hero is the whole screen: the push-in grows
+          // from its foot, so nothing of it shows under the hero once the
+          // page scrolls.
+          final focus = Offset(view.width / 2,
+              TelevisionFocusable.television ? visibleH : visibleH * 0.45);
           final matrix = Matrix4.identity()
             ..translateByDouble(0, -scroll, 0, 1)
             ..translateByDouble(focus.dx, focus.dy, 0, 1)

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../data/gui_calls.dart';
 import '../data/settings_data.dart';
@@ -419,7 +420,7 @@ class SourcesSectionState extends State<SourcesSection> {
               : null,
         ),
       ]),
-      _Folders(key: _folders, folders: widget.folders),
+      if (!globals.isTvOS) _Folders(key: _folders, folders: widget.folders),
     ]);
   }
 }
@@ -822,7 +823,8 @@ class _SourceRowState extends State<_SourceRow> {
   @override
   void initState() {
     super.initState();
-    if (widget.open && widget.source.type != 'dandanplay_remote') _loadLibraries();
+    if (widget.open && widget.source.type != 'dandanplay_remote')
+      _loadLibraries();
   }
 
   Future<void> _loadLibraries() async {
@@ -1086,6 +1088,7 @@ class _SourceEditorState extends State<_SourceEditor> {
                 Text(label, style: NextText.sans(12.5, color: NextColors.p3)),
           ),
           LiveTextField(
+              label: label,
               value: value,
               onChanged: (v) => setState(() => set(v)),
               hint: hint,

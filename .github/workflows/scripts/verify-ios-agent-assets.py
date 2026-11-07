@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject desktop Agent assets in an iOS app/IPA before upload or signing."""
+"""Reject desktop Agent assets in an iOS/tvOS app or IPA before packaging."""
 import argparse
 from pathlib import Path
 import zipfile
@@ -11,6 +11,8 @@ def verify(path: Path) -> None:
     else:
         with zipfile.ZipFile(path) as archive:
             names = archive.namelist()
+    # tvOS places flutter_assets at the app root; iOS nests it in a framework.
+    names = ['/' + name.lstrip('/') for name in names]
     if not any(name.endswith('/flutter_assets/AssetManifest.bin') for name in names):
         raise ValueError('No Flutter asset manifest found; expected an iOS app or IPA.')
     forbidden = [name for name in names if any(

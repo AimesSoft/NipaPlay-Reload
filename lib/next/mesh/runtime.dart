@@ -7,6 +7,7 @@ import 'package:nipa_harness/mcp.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import '../body/next_body.dart';
+import '../body/television_storage.dart';
 import '../state/change_history.dart';
 import '../system/operation_observations.dart';
 import '../platform/lab_profile.dart';
@@ -622,6 +623,7 @@ final class MeshRuntime implements MeshDeviceSource {
   /// R1 starts from these two files, so a crash while writing must leave the
   /// previous copy intact rather than a truncated one.
   Future<void> _writeAtomic(String name, String content) async {
+    await TelevisionStorage.save(name, content, vault);
     final tmp = File('${root.path}/$name.tmp');
     await tmp.writeAsString(content, flush: true);
     await tmp.rename('${root.path}/$name');
@@ -956,6 +958,14 @@ final class MeshRuntime implements MeshDeviceSource {
     await _writeAtomic('mesh-certificate.json', jsonEncode(registration));
   }
 
+  Future<String?> _installationId() async {
+    if (!NextBody.bodyOnly) return null;
+    final id = await meshInstallId(root);
+    // Commit the stable vault name before generating its private key.
+    await TelevisionStorage.save('mesh-install-id', id, vault);
+    return id;
+  }
+
   Future<void> join({
     required String ca,
     required MeshCoordinator coordinator,
@@ -973,7 +983,7 @@ final class MeshRuntime implements MeshDeviceSource {
         // A device that is only a body names its key by a random installation
         // number, not by where it is installed, and starts a new identity when
         // the vault has lost the key (a restored backup) instead of refusing.
-        installId: NextBody.bodyOnly ? await meshInstallId(root) : null);
+        installId: await _installationId());
     final own = identity!;
     await _loadRoutes();
     if (!_replayLoaded) {
@@ -1473,6 +1483,7 @@ final class MeshRuntime implements MeshDeviceSource {
     }
     final config = jsonDecode(await file.readAsString()) as JsonMap;
     config['addresses'] = _manual;
+    await TelevisionStorage.save('mesh.json', jsonEncode(config), vault);
     await file.writeAsString(jsonEncode(config), flush: true);
     // The network watcher coalesces changed hints into a bounded update.
   }

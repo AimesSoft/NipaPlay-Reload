@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../ui_data/ui_data.dart';
@@ -512,7 +513,7 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         if ((e.progress ?? 0) < 1) e
     ];
     return [
-      if (_missing) ('下载全部', _downloadAll),
+      if (_missing && !globals.isTvOS) ('下载全部', _downloadAll),
       if (next != null && next.playable && (next.progress ?? 0) < 1)
         (
           '${film ? '' : Words.episode(next.number) ?? ''}看过了',
@@ -1032,10 +1033,11 @@ class _WorkDetailPageState extends State<WorkDetailPage>
     final compact = NextLayout.compact(context);
     final lead = <Widget>[
       if (_found) ...[
-        NextButton(label: '让梨花准备', onTap: _prepare),
+        NextButton(label: '让梨花准备', onTap: _prepare, autofocus: true),
         const SizedBox(width: 12),
       ] else if (next != null && next.playable) ...[
         PlayButton(
+          autofocus: true,
           label: !started
               ? '播放'
               : switch (Words.episode(next.number)) {

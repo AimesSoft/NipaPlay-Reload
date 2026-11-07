@@ -197,15 +197,23 @@ class _PlayerTouchSurfaceState extends State<PlayerTouchSurface> {
       );
 }
 
-/// A phone turns sideways for a video, full screen, and stands up again
-/// for the pages.
+/// A phone turns sideways for a video's full screen and stands up again
+/// for the pages. The pages are upright; while a video is open the phone
+/// may turn either way.
 abstract final class PhoneOrientation {
   static const _upright = [DeviceOrientation.portraitUp];
   static const _sideways = [
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ];
+  static const _any = [
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ];
+
   static Future<void> pages() => _set(_upright, SystemUiMode.edgeToEdge);
+  static Future<void> video() => _set(_any, SystemUiMode.edgeToEdge);
 
   /// Full screen: sideways, the system's bars away; and back.
   static Future<void> fullScreen(bool on) => on

@@ -14,7 +14,8 @@ final class HeadlessNative {
     final path = library;
     final request = jsonEncode({'operation': operation, ...input});
     return Isolate.run(() {
-      final lib = DynamicLibrary.open(path);
+      final lib =
+          path.isEmpty ? DynamicLibrary.process() : DynamicLibrary.open(path);
       final call = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>),
           Pointer<Utf8> Function(Pointer<Utf8>)>('nipaplay_headless_call');
       final free = lib.lookupFunction<Void Function(Pointer<Utf8>),
@@ -34,10 +35,15 @@ final class HeadlessNative {
       }
     });
   }
+
   static String defaultLibrary() {
-    final filename = Platform.isWindows ? 'nipaplay_headless_native.dll'
-        : Platform.isMacOS ? 'libnipaplay_headless_native.dylib'
-        : 'libnipaplay_headless_native.so';
+    // tvOS links the small Mesh-only static library into its application.
+    if (Platform.operatingSystem == 'tvos') return '';
+    final filename = Platform.isWindows
+        ? 'nipaplay_headless_native.dll'
+        : Platform.isMacOS
+            ? 'libnipaplay_headless_native.dylib'
+            : 'libnipaplay_headless_native.so';
     return '${File(Platform.resolvedExecutable).parent.path}/$filename';
   }
 }

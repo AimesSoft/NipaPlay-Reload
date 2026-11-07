@@ -78,6 +78,8 @@ class AppDelegate: FlutterAppDelegate {
                 alert.textFields?.first?.becomeFirstResponder()
             }
         }
+        NipaKeychain.register(with: flutterViewController.binaryMessenger)
+        NipaMeshBonjour.register(with: flutterViewController.binaryMessenger)
 
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }

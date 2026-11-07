@@ -98,6 +98,10 @@ class NextShellController extends ChangeNotifier {
   /// Content scrolled under the top bar: show its scrim.
   final scrolled = ValueNotifier<bool>(false);
 
+  /// The player's own step back, asked before the video is left (on a
+  /// television: out of its controls to the picture).
+  bool Function()? playerEscape;
+
   /// Whether Nipa has a model yet (the rest of Next works either way).
   late final nipaSetup = NipaSetup(services.settings.host,
       peers: services.peers,
@@ -424,6 +428,8 @@ class NextShellController extends ChangeNotifier {
       closePopover();
       return true;
     }
+    // The player steps back first (a remote's Menu out of its controls).
+    if (_playing && (playerEscape?.call() ?? false)) return true;
     // The pages under the video stay as they were left.
     if (_playing) return false;
     final nav = navigatorKey.currentState;

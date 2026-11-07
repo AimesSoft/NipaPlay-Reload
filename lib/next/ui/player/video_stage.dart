@@ -7,6 +7,7 @@ import 'playback.dart';
 import '../../player/danmaku/layer.dart';
 import '../../player/ports/session_playback.dart';
 import 'subtitle_layer.dart';
+import '../widgets/television_focus.dart';
 import 'package:nipaplay/utils/video_aspect_geometry.dart';
 import '../../player/features/capture.dart';
 import '../../player/kernel/driver.dart' show PlatformVideoSurface, WidgetSurface;
@@ -28,15 +29,20 @@ class NextVideoStage extends StatefulWidget {
 }
 
 class _NextVideoStageState extends State<NextVideoStage> {
+  // A keyboard's keys (space, ←/→, ↑/↓ for the volume). A television's
+  // remote sends arrows too, but there they move the focus or seek through
+  // the player's own remote handling, and the volume is the television's.
+  final bool _keyboard = !TelevisionFocusable.television;
+
   @override
   void initState() {
     super.initState();
-    HardwareKeyboard.instance.addHandler(_key);
+    if (_keyboard) HardwareKeyboard.instance.addHandler(_key);
   }
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_key);
+    if (_keyboard) HardwareKeyboard.instance.removeHandler(_key);
     super.dispose();
   }
 

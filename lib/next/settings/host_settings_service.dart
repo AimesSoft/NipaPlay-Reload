@@ -21,6 +21,7 @@ import '../ui_data/host_settings.dart';
 import 'dsh_config_store.dart';
 import 'reasoning_effort.dart';
 import 'responses_probe.dart';
+import '../body/television_storage.dart';
 
 final class HostSettingsService
     implements
@@ -266,6 +267,7 @@ final class HostSettingsService
   }
 
   Future<void> _save(String name, JsonMap value) async {
+    await TelevisionStorage.save(name, jsonEncode(value), vault);
     await root.create(recursive: true);
     final file = File('${root.path}/$name.pending');
     await file.writeAsString(jsonEncode(value), flush: true);

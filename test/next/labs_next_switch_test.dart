@@ -19,7 +19,11 @@ import 'player_test_support.dart';
 /// no switch.
 void main() {
   final original = LabsSettingsContent.device;
-  tearDown(() => LabsSettingsContent.device = original);
+  final originalTelevision = LabsSettingsContent.television;
+  tearDown(() {
+    LabsSettingsContent.device = original;
+    LabsSettingsContent.television = originalTelevision;
+  });
 
   Future<(LabsSettingsProvider, NextUiPreference)> pumpLabs(WidgetTester tester,
       {required bool desktop,
@@ -134,6 +138,22 @@ void main() {
   testWidgets('an Android phone has no switch', (tester) async {
     await pumpLabs(tester, desktop: false, iPad: false);
     expect(find.text('NipaPlay Next'), findsNothing);
+  });
+
+  testWidgets('a television has the body consent and the Next switch',
+      (tester) async {
+    LabsSettingsContent.television = () => true;
+    await pumpLabs(tester, desktop: false, iPad: false);
+    await tester.tap(find.text('NipaPlay Next'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('这台电视上的 NipaPlay'), findsOneWidget);
+    expect(find.textContaining('其他设备上的 AI Agent'), findsOneWidget);
+    expect(find.textContaining('使用这台电脑'), findsNothing);
+    await tester.tap(find.text('我了解风险，开启'));
+    await tester.pumpAndSettle();
+    final saved = await SharedPreferences.getInstance();
+    expect(saved.getBool(SettingsKeys.labsEnableAgentEndpoint), isTrue);
+    expect(saved.getBool(NextUiPreference.key), isTrue);
   });
 
   testWidgets('confirmation enables both preferences and exposes Next home',

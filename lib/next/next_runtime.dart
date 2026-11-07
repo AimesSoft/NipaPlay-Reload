@@ -865,6 +865,11 @@ final class NextRuntime extends ChangeNotifier {
 
   Future<void> _updateEndpoint(bool enabled) async {
     if (_disposed) return;
+    // A television has no local agent endpoint. Still measure its event loop
+    // while Next is open, including startup and playback in Release builds.
+    if (globals.isTvOS) {
+      enabled ? _loopLag.start() : _loopLag.stop();
+    }
     if (_endpointStatus case AgentEndpointRunning(:final repository)) {
       if (enabled && repository.path == repositoryPath) return;
     }
@@ -905,7 +910,9 @@ final class NextRuntime extends ChangeNotifier {
     if (_disposed || _endpointStatus == status) return;
     _endpointStatus = status;
     unawaited(BackgroundActivity.set(status is AgentEndpointRunning));
-    status is AgentEndpointRunning ? _loopLag.start() : _loopLag.stop();
+    if (!globals.isTvOS) {
+      status is AgentEndpointRunning ? _loopLag.start() : _loopLag.stop();
+    }
     _hostSettings?.notify();
     notifyListeners();
   }

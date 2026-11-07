@@ -10,7 +10,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/widgets.dart';
-import 'package:nipa_harness/nipa_harness.dart' show Failure;
+import 'package:nipa_harness/nipa_harness.dart' show Failure, Invocation;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
@@ -66,6 +66,11 @@ import '../settings/settings_page.dart';
 ///
 /// Ops (`op=`):
 /// - `status`
+/// - `key` `key=up|down|left|right|enter|select|menu|playPause|escape`:
+///   remote input through the keyboard/navigation pipeline, then focus facts.
+/// - `focus`: current control type, label and rectangle in logical pixels.
+/// - `playback` `action=playback.…` [`input=<json>`]: the real playback
+///   capability, even when the interface uses scripted data.
 /// - `home` `state=A|B|C` [`text=`]: A folds the conversation away; B says
 ///   [text] (default “来点轻松的”) and expands it; C folds it and wakes
 ///   Nipa (scripted chat only).
@@ -215,6 +220,12 @@ abstract final class NextUiDebug {
   }
 
   static Future<Map<String, Object?>> _run(Map<String, String> p) async {
+    if (const {'key', 'focus', 'playback'}.contains(p['op']) &&
+        (await SharedPreferences.getInstance())
+                .getBool(simulatorPreference) !=
+            true) {
+      throw StateError('Enable dev_next_debug_extension for remote debugging');
+    }
     // These also work from Classic, once Next has been shown.
     switch (p['op']) {
       case 'interface':
@@ -579,7 +590,32 @@ abstract final class NextUiDebug {
         } on Failure catch (failure) {
           return {'failure': failure.toJson()};
         }
+      case 'playback':
+        final action = p['action'] ?? 'playback.state';
+        if (!action.startsWith('playback.')) {
+          throw ArgumentError('action must be a playback capability');
+        }
+        final outcome = await _context!.read<NextRuntime>().harness.invokeJson(
+            action,
+            Map<String, Object?>.from(jsonDecode(p['input'] ?? '{}') as Map),
+            Invocation(origin: 'gui'));
+        return outcome.toEnvelope();
+      case 'focus':
+        await _settle();
+        return _focusFacts();
       case 'key':
+        if (p['key'] == 'menu') {
+          // Siri Remote Menu emits this platform message, rather than Escape.
+          final done = Completer<void>();
+          ui.channelBuffers.push(
+              'flutter/navigation',
+              const JSONMethodCodec()
+                  .encodeMethodCall(const MethodCall('popRoute')),
+              (_) => done.complete());
+          await done.future;
+          await _settle();
+          return {..._focusFacts(), ..._status(shell)};
+        }
         // A key pressed and let go, as the keyboard would.
         final (physical, logical) = switch (p['key']) {
           'space' => (PhysicalKeyboardKey.space, LogicalKeyboardKey.space),
@@ -591,17 +627,45 @@ abstract final class NextUiDebug {
               PhysicalKeyboardKey.arrowRight,
               LogicalKeyboardKey.arrowRight
             ),
+          'up' => (PhysicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowUp),
+          'down' => (
+              PhysicalKeyboardKey.arrowDown,
+              LogicalKeyboardKey.arrowDown
+            ),
+          'enter' => (PhysicalKeyboardKey.enter, LogicalKeyboardKey.enter),
+          'select' => (PhysicalKeyboardKey.select, LogicalKeyboardKey.select),
+          'playPause' => (
+              PhysicalKeyboardKey.mediaPlayPause,
+              LogicalKeyboardKey.mediaPlayPause
+            ),
+          'tab' => (PhysicalKeyboardKey.tab, LogicalKeyboardKey.tab),
           'escape' => (PhysicalKeyboardKey.escape, LogicalKeyboardKey.escape),
-          _ => throw ArgumentError('key: space, left, right or escape'),
+          _ => throw ArgumentError('Unknown navigation key'),
         };
         final stamp =
             Duration(milliseconds: DateTime.now().millisecondsSinceEpoch);
-        final handled = HardwareKeyboard.instance.handleKeyEvent(KeyDownEvent(
-            physicalKey: physical, logicalKey: logical, timeStamp: stamp));
-        HardwareKeyboard.instance.handleKeyEvent(KeyUpEvent(
-            physicalKey: physical, logicalKey: logical, timeStamp: stamp));
+        final down = KeyDownEvent(
+            physicalKey: physical, logicalKey: logical, timeStamp: stamp);
+        final up = KeyUpEvent(
+            physicalKey: physical, logicalKey: logical, timeStamp: stamp);
+        var handled = HardwareKeyboard.instance.handleKeyEvent(down);
+        // The television fork still dispatches focus through KeyMessage.
+        // A direct HardwareKeyboard event only reaches global player handlers.
+        if (Platform.operatingSystem == 'tvos') {
+          final dispatch =
+              // ignore: deprecated_member_use
+              ServicesBinding.instance.keyEventManager.keyMessageHandler;
+          handled =
+              // ignore: deprecated_member_use
+              (dispatch?.call(KeyMessage([down], null)) ?? false) || handled;
+          HardwareKeyboard.instance.handleKeyEvent(up);
+          // ignore: deprecated_member_use
+          dispatch?.call(KeyMessage([up], null));
+        } else {
+          HardwareKeyboard.instance.handleKeyEvent(up);
+        }
         await _settle();
-        return {'handled': handled, ..._status(shell)};
+        return {'handled': handled, ..._focusFacts(), ..._status(shell)};
       case 'click':
         // A click at x,y (logical pixels of the window); two with double.
         final [x, y] = p['at']!.split(',').map(int.parse).toList();
@@ -934,6 +998,39 @@ abstract final class NextUiDebug {
   }
 
   static Future<void> _settle() => WidgetsBinding.instance.endOfFrame;
+
+  static Map<String, Object?> _focusFacts() {
+    final focus = FocusManager.instance.primaryFocus;
+    String? label;
+    String? type;
+    focus?.context?.visitAncestorElements((element) {
+      final widget = element.widget;
+      label = switch (widget) {
+        Pressable(:final semanticLabel) => semanticLabel,
+        PosterCard(:final title) => title,
+        WideCard(:final title, :final caption, :final label) =>
+          title ?? caption ?? (label is Text ? label.data : null),
+        WorkRowCard(:final work) => work.title,
+        CategoryCard(:final title) => title,
+        FolderTile(:final title) => title,
+        Semantics(:final properties) => properties.label,
+        _ => null,
+      };
+      if (label == null || label!.isEmpty) return true;
+      type = widget.runtimeType.toString();
+      return false;
+    });
+    final render = focus?.context?.findRenderObject();
+    final rect = render is RenderBox && render.attached && render.hasSize
+        ? focus!.rect
+        : null;
+    return {
+      'focus': label ?? focus?.debugLabel,
+      'focusType': type ?? focus?.context?.widget.runtimeType.toString(),
+      'focusRect':
+          rect == null ? null : [rect.left, rect.top, rect.width, rect.height],
+    };
+  }
 
   /// Scrolls [position] to `top`, `end` or a pixel offset over [ms]
   /// (400 by default) and sums up the frames drawn meanwhile.

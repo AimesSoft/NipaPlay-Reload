@@ -13,6 +13,19 @@ ASSETS = 'Frameworks/App.framework/flutter_assets/'
 
 
 class IosAssetVerificationTest(unittest.TestCase):
+    def test_television_root_assets_accept_body_and_reject_local_agent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory) / 'Runner.app'
+            assets = app / 'flutter_assets'
+            assets.mkdir(parents=True)
+            (assets / 'AssetManifest.bin').write_bytes(b'manifest')
+            verifier.verify(app)
+            forbidden = assets / 'assets/next/agent/dsh/runtime.mjs'
+            forbidden.parent.mkdir(parents=True)
+            forbidden.write_text('local agent')
+            with self.assertRaisesRegex(ValueError, 'must not bundle'):
+                verifier.verify(app)
+
     def test_body_app_accepts_regular_assets(self):
         with tempfile.TemporaryDirectory() as directory:
             app = Path(directory) / 'Runner.app'

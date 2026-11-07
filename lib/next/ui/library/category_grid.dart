@@ -9,6 +9,7 @@ import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/cards.dart';
 import '../widgets/devices.dart';
+import '../widgets/television_focus.dart';
 import '../widgets/icons.dart';
 import '../widgets/words.dart';
 import 'fan_cover.dart';
@@ -320,6 +321,11 @@ class CategoryGrid extends StatelessWidget {
 
   static const maxTile = 196.0, gap = 20.0;
 
+  /// The widest a poster gets here: smaller on a television, where the
+  /// page is drawn larger and a row should still hold six.
+  static double get tileLimit =>
+      TelevisionFocusable.television ? 150.0 : maxTile;
+
   @override
   Widget build(BuildContext context) => SliverLayoutBuilder(
         builder: (context, constraints) {
@@ -327,7 +333,7 @@ class CategoryGrid extends StatelessWidget {
           // A phone shows three posters a row, close together.
           final phone = NextLayout.compact(context);
           final gap = phone ? 12.0 : CategoryGrid.gap;
-          final max = phone ? 120.0 : maxTile;
+          final max = phone ? 120.0 : tileLimit;
           final columns = ((width + gap) / (max + gap)).ceil();
           final tile = (width - gap * (columns - 1)) / columns;
           return ListenableBuilder(

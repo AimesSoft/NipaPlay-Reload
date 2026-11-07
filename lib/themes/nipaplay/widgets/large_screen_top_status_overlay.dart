@@ -5,6 +5,7 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/services/dandanplay_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_bottom_hint_overlay.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/large_screen_network_status.dart';
@@ -26,7 +27,7 @@ class NipaplayLargeScreenTopStatusOverlay extends StatefulWidget {
 class _NipaplayLargeScreenTopStatusOverlayState
     extends State<NipaplayLargeScreenTopStatusOverlay> {
   static bool get _supportsBatteryPlugin =>
-      !kIsWeb && defaultTargetPlatform.name != 'ohos';
+      !kIsWeb && !globals.isTvOS && defaultTargetPlatform.name != 'ohos';
 
   final Battery _battery = Battery();
   Timer? _timer;

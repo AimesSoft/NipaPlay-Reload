@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 import '../library/library_controls.dart';
 import '../theme/tokens.dart';
@@ -556,6 +557,7 @@ class LiveTextField extends StatefulWidget {
     required this.value,
     required this.onChanged,
     this.hint,
+    this.label,
     this.width = 320,
     this.obscure = false,
     this.lines = 1,
@@ -564,6 +566,7 @@ class LiveTextField extends StatefulWidget {
   final String value;
   final ValueChanged<String> onChanged;
   final String? hint;
+  final String? label;
   final double? width;
   final bool obscure;
   final int lines;
@@ -614,7 +617,10 @@ class _LiveTextFieldState extends State<LiveTextField> {
         border: Border.all(
             color: focused ? const Color(0x59FF2E55) : NextColors.line),
       ),
-      child: TextField(
+      child: TvOSRemoteTextInputControl(
+        title: widget.label ?? widget.hint ?? '输入',
+        obscureText: widget.obscure,
+        child: TextField(
         controller: _text,
         focusNode: _focus,
         obscureText: widget.obscure,
@@ -630,7 +636,7 @@ class _LiveTextFieldState extends State<LiveTextField> {
           hintText: widget.hint,
           hintStyle: NextText.sans(13, color: NextColors.p4),
         ),
-      ),
+      )),
     );
   }
 }
@@ -658,39 +664,46 @@ class PillButton extends StatelessWidget {
         child: Pressable(
           onTap: busy ? null : onTap,
           semanticLabel: label,
-          builder: (context, hovered) => AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: primary
-                  ? (hovered ? const Color(0xFFFFFFFF) : NextColors.paper)
-                  : danger && hovered
-                      ? const Color(0x24FF2E55)
-                      : hovered
-                          ? const Color(0x1FFFFFFF)
-                          : const Color(0x0FFFFFFF),
-              borderRadius: BorderRadius.circular(15),
-              border: primary ? null : Border.all(color: NextColors.line2),
-            ),
-            // As wide as its label, unless its place sets the width.
-            child: Center(
-              widthFactor: 1,
-              child: busy
-                  ? BusyDots(
-                      color: primary
-                          ? const Color(0xFF111111)
-                          : NextColors.paper)
-                  : Text(label,
-                      style: NextText.sans(12.5,
-                          weight: FontWeight.w500,
-                          color: primary
-                              ? const Color(0xFF111111)
-                              : danger
-                                  ? NextColors.accent2
-                                  : NextColors.paper)),
-            ),
-          ),
+          focusRing: false,
+          builder: (context, hovered) {
+            // On a television only the focused pill is paper.
+            final paper = Pressable.television ? hovered : primary;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: paper
+                    ? (hovered && !Pressable.television
+                        ? const Color(0xFFFFFFFF)
+                        : NextColors.paper)
+                    : danger && hovered
+                        ? const Color(0x24FF2E55)
+                        : hovered || primary
+                            ? const Color(0x1FFFFFFF)
+                            : const Color(0x0FFFFFFF),
+                borderRadius: BorderRadius.circular(15),
+                border: paper ? null : Border.all(color: NextColors.line2),
+              ),
+              // As wide as its label, unless its place sets the width.
+              child: Center(
+                widthFactor: 1,
+                child: busy
+                    ? BusyDots(
+                        color: paper
+                            ? const Color(0xFF111111)
+                            : NextColors.paper)
+                    : Text(label,
+                        style: NextText.sans(12.5,
+                            weight: FontWeight.w500,
+                            color: paper
+                                ? const Color(0xFF111111)
+                                : danger
+                                    ? NextColors.accent2
+                                    : NextColors.paper)),
+              ),
+            );
+          },
         ),
       );
 }
