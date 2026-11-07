@@ -43,10 +43,17 @@ final class FakeChat implements GuestChat {
   Future<Map<String, dynamic>> listSessions(
           {String? cursor, int limit = 30}) async =>
       {
+        'mainThreadId': mainThreadId,
+        'nextCursor': (int.parse(cursor ?? '0') + limit < threads.length)
+            ? '${int.parse(cursor ?? '0') + limit}'
+            : null,
         'data': [
-          for (final id in threads.keys)
+          for (final id
+              in threads.keys.skip(int.parse(cursor ?? '0')).take(limit))
             {
               'id': id,
+              'name': titles[id],
+              'isMain': id == mainThreadId,
               'preview': (threads[id]!.firstOrNull?['items'] as List?)
                   ?.map((i) => ((i['content'] as List).first as Map)['text'])
                   .firstOrNull,
@@ -62,6 +69,7 @@ final class FakeChat implements GuestChat {
       });
 
   final busy = <String>{};
+  String? mainThreadId;
   final threads = <String, List<Map<String, dynamic>>>{};
   final titles = <String, String>{};
   final started = <(String, String)>[];
@@ -84,6 +92,16 @@ final class FakeChat implements GuestChat {
     threadOrigins[id] = 'harness_cli:chat:delegate-$token';
     return id;
   }
+
+  void rename(String thread, String title) {
+    titles[thread] = title;
+    _events.add({
+      'method': 'thread/name/updated',
+      'params': {'threadId': thread, 'threadName': title}
+    });
+  }
+
+  void publish(Map<String, dynamic> event) => _events.add(event);
 
   @override
   Future<Map<String, dynamic>> startThreadTurn(String id, String text) async {
@@ -176,4 +194,3 @@ Future<void> until(Future<bool> Function() test, String what) async {
   }
   fail('Not reached: $what');
 }
-

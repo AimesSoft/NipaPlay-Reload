@@ -200,8 +200,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   @override
   bool get available => _process != null && !_closing && !_transportClosed;
   int? get processId => _process?.pid;
-  bool get busy =>
-      liveness.status == 'inProgress' || liveness.status == 'starting';
+  bool get busy => threadLiveness.keys.any(busyFor);
 
   Future<T> _control<T>(Future<T> Function() operation) {
     final result = _controls.then((_) => operation());
@@ -809,6 +808,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       'turn/started',
       'turn/completed',
       'thread/started',
+      'thread/name/updated',
       'error',
       'item/agentMessage/delta',
       'item/commandExecution/outputDelta',
@@ -1083,9 +1083,6 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   Future<ChatMessage> resumeThread(String id) =>
       _control(() => _select('thread/resume', {..._common, 'threadId': id}));
   Future<ChatMessage> _select(String method, ChatMessage params) async {
-    if (liveness.status == 'inProgress' || liveness.status == 'starting') {
-      throw StateError('Interrupt the current turn before switching threads');
-    }
     final selectedId = params['threadId'] as String?;
     final origin = selectedId == null ? null : threadOrigins[selectedId];
     final response = await _request(method, {
@@ -1192,13 +1189,13 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
         'cwds': [repository.path]
       });
 
-  /// Serialize with UI selection/start. Wait while the host has an active turn.
+  /// Serialize selection/start commands, never the lifetime of another turn.
   Future<String?> prepareFollowup(String? id) => _control(() async {
-        if (busy) return null;
         if (id == null) {
           await _mainSession();
           return threadId;
         }
+        if (busyFor(id)) return null;
         final history = await readThread(id, withProcess: false);
         if ((history['turns'] as List)
             .cast<Map>()
@@ -1210,17 +1207,14 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
 
   Future<ChatMessage?> startFollowup(String id, String text) =>
       _control(() async {
-        if (busy) return null;
+        if (busyFor(id)) return null;
         final history = await readThread(id, withProcess: false);
         if ((history['turns'] as List)
             .cast<Map>()
             .any((turn) => turn['status'] == 'inProgress')) {
           return null;
         }
-        if (threadId != id) {
-          await _select('thread/resume', {..._common, 'threadId': id});
-        }
-        return _startTurn(text);
+        return _startThreadTurn(id, text);
       });
 
   /// Puts a followup's text into the turn that is running on [id] (the main
@@ -1270,7 +1264,14 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
         }
       }
     });
-    _inputRequests.remove(id);
+    final request = _inputRequests.remove(id)!;
+    _display.add({
+      'method': 'host/questionAnswered',
+      'params': {
+        'threadId': request['params']['threadId'],
+        'requestId': id,
+      }
+    });
   }
 
   Map<String, Object?> get header => {

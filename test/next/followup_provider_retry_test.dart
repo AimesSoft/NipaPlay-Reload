@@ -182,6 +182,24 @@ void main() {
     return row;
   }
 
+  test('a followup starts in another conversation while the first remains active', () async {
+    responseStatus = 200;
+    responseGate = Completer<void>();
+    final first = threadId;
+    await host.startTurn('Hold the first conversation');
+    await requestStarted.future.timeout(const Duration(seconds: 15));
+    threadId = (await host.newConversation())['thread']['id'] as String;
+    await registerReady();
+    await followups.attach(host);
+    final delivery = await state('started');
+    expect(delivery['threadId'], threadId);
+    expect(host.busyFor(first), true);
+    expect(host.busyFor(threadId), true);
+    responseGate!.complete();
+    await state('completed');
+    expect(successfulRequests, 2);
+  });
+
   test('real Codex accepts an inbox answer into the original active turn', () async {
     responseStatus = 200;
     responseGate = Completer<void>();

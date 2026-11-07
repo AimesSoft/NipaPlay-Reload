@@ -25,8 +25,7 @@ abstract interface class ChatPort {
   /// conversation; null when there is nothing more specific to say.
   Future<String?> unavailableReason();
 
-  /// The host's current session has a turn running (ours or a
-  /// follow-up's); a turn on another session waits for it.
+  /// At least one conversation has a turn running; for global status only.
   bool get busy;
 
   /// A turn runs on [threadId] (helpers run beside the current session).
@@ -38,10 +37,10 @@ abstract interface class ChatPort {
   /// `item/tool/requestUserInput` requests.
   Stream<ChatEvent> get questions;
 
-  /// Gets the durable main thread. Null while another turn is running.
+  /// Gets the durable main thread.
   Future<String?> mainThread();
 
-  /// Explicitly opens a fresh conversation. Null while another turn is running.
+  /// Explicitly opens a fresh conversation.
   Future<String?> newThread();
 
   /// Codex's threads for this harness, most recent first, the main one
@@ -49,11 +48,11 @@ abstract interface class ChatPort {
   /// mainThreadId, currentThreadId, nextCursor}`.
   Future<ChatEvent> listThreads({String? cursor});
 
-  /// Makes [threadId] the host's current session. Null while a turn runs.
+  /// Makes [threadId] the host's current session.
   Future<String?> switchThread(String threadId);
 
   /// Starts a turn on [threadId]. Returns the server's response, or null
-  /// while another turn is running.
+  /// while this conversation already has a turn running.
   Future<ChatEvent?> startTurn(String threadId, String text);
 
   /// Adds input to the turn running on [threadId] (default: the current
@@ -71,34 +70,45 @@ abstract interface class ChatPort {
 final class ChatHostPort implements ChatPort {
   ChatHostPort(this.runtime) {
     runtime.addListener(_attach);
-    // The host is created before it finishes starting and the runtime does
-    // not always notify again; re-check cheaply.
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _attach());
     _attach();
   }
 
   final NextRuntime runtime;
-  late final Timer _poll;
   ChatHost? _host;
+  bool _wasAvailable = false;
   StreamSubscription<ChatEvent>? _displaySub, _questionSub;
   final _display = StreamController<ChatEvent>.broadcast();
   final _questions = StreamController<ChatEvent>.broadcast();
 
   void _attach() {
     final host = runtime.chat;
-    if (identical(host, _host)) return;
+    if (identical(host, _host)) {
+      final available = host?.available ?? false;
+      if (available == _wasAvailable) return;
+      _wasAvailable = available;
+      _display.add({
+        'method': available ? 'host/available' : 'host/error',
+        'params': const {},
+      });
+      return;
+    }
     _displaySub?.cancel();
     _questionSub?.cancel();
     _host = host;
+    _wasAvailable = host?.available ?? false;
     if (host != null) {
       // Every session's events; the host's own ones name their thread.
       _displaySub = host.threadDisplay.listen(_display.add);
       _questionSub = host.userInputRequests.listen(_questions.add);
     }
+    _display.add({
+      'method': _wasAvailable ? 'host/available' : 'host/error',
+      'params': const {},
+    });
   }
 
   ChatHost? get _current {
-    _attach();
+    if (!identical(runtime.chat, _host)) _attach();
     return _host;
   }
 
@@ -138,7 +148,6 @@ final class ChatHostPort implements ChatPort {
   Future<String?> newThread() async {
     final host = _current;
     if (host == null) throw StateError('chat host unavailable');
-    if (host.busy) return null;
     return (await host.newConversation())['thread']['id'] as String;
   }
 
@@ -146,14 +155,24 @@ final class ChatHostPort implements ChatPort {
   Future<ChatEvent> listThreads({String? cursor}) async {
     final host = _current;
     if (host == null) throw StateError('chat host unavailable');
-    return host.listSessions(cursor: cursor);
+    final listed = await host.listSessions(cursor: cursor);
+    return {
+      ...listed,
+      'data': [
+        for (final item in listed['data'] as List)
+          {
+            ...item as Map,
+            'busy': host.busyFor(item['id'] as String),
+            ...host.livenessFor(item['id'] as String).snapshot(DateTime.now()),
+          }
+      ]
+    };
   }
 
   @override
   Future<String?> switchThread(String threadId) async {
     final host = _current;
     if (host == null) throw StateError('chat host unavailable');
-    if (host.busy) return null;
     return (await host.switchSession(threadId))['thread']['id'] as String;
   }
 
@@ -193,7 +212,6 @@ final class ChatHostPort implements ChatPort {
 
   @override
   void dispose() {
-    _poll.cancel();
     runtime.removeListener(_attach);
     _displaySub?.cancel();
     _questionSub?.cancel();

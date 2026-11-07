@@ -585,7 +585,7 @@ class _Status extends StatelessWidget {
   Widget build(BuildContext context) {
     final waiting = asking || turn.waiting;
     final label = turn.queued
-        ? 'Queued'
+        ? '等待中'
         : waiting
             ? 'Waiting for you'
             : (turn.doing != null ? 'Working' : 'Thinking');

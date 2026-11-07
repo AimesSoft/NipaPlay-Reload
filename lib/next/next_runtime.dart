@@ -1009,6 +1009,7 @@ final class NextRuntime extends ChangeNotifier {
       await ServiceProvider.nextCore.followups.attach(null, reason: chatError);
     }
     _hostSettings!.notify();
+    if (!_disposed) notifyListeners();
   }
 
   /// The runtime was switched: the running host goes, the other one starts.

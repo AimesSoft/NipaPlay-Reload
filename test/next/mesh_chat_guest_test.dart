@@ -2,13 +2,15 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipa_harness/nipa_harness.dart' hide Invocation;
 import 'package:nipaplay/next/mesh/chat_guest_host.dart';
 import 'package:nipaplay/next/mesh/nipa_peers.dart';
 import 'package:nipaplay/next/mesh/runtime.dart';
-import 'package:nipaplay/next/ui/conversation/chat_context.dart';
 import 'package:nipaplay/next/ui/conversation/chat_port.dart';
 import 'package:nipaplay/next/ui/conversation/mesh_chat_port.dart';
+import 'package:nipaplay/next/ui/conversation/nipa_chat.dart';
+import 'package:nipaplay/next/ui/widgets/nipa_avatar.dart';
+import 'package:nipaplay/next/ui_data/ui_data.dart';
 
 import 'mesh_delegation_support.dart';
 
@@ -102,29 +104,40 @@ void main() {
           throwsA(isA<Failure>()
               .having((f) => f.code, 'code', FailureCode.conflict)));
       await call('mesh/chat/steer', {'threadId': thread, 'text': 'and this'});
-      expect(chat.steered.single, (thread, 'and this'));
+      expect(chat.steered.single.$1, thread);
+      expect(chat.steered.single.$2, startsWith('and this\n\n[NipaPlay 界面]'));
+      expect(ChatContext.guestOf(chat.steered.single.$2), 'iPad');
       await call('mesh/chat/interrupt', {'threadId': thread});
       expect(chat.interrupted, [thread]);
     });
 
     test(
-        'a guest speaks only in its own conversations, and only an account device may',
+        'account devices share host and guest conversations; strangers cannot read or act',
         () async {
       final mine = (await call('mesh/chat/open'))['threadId'] as String;
       await call('mesh/chat/open', {}, 'phone');
-      await expectLater(
-          call('mesh/chat/read', {'threadId': mine}, 'phone'),
-          throwsA(isA<Failure>()
-              .having((f) => f.code, 'code', FailureCode.notFound)));
-      await expectLater(
-          call('mesh/chat/turn', {'threadId': mine, 'text': 'x'}, 'phone'),
-          throwsA(isA<Failure>()));
+      chat.threads['host-main'] = [];
+      chat.mainThreadId = 'host-main';
+      expect(
+          (await call('mesh/chat/read', {'threadId': mine}, 'phone'))['thread'],
+          isNotNull);
+      await call(
+          'mesh/chat/turn', {'threadId': 'host-main', 'text': 'x'}, 'phone');
+      expect(chat.started.single.$1, 'host-main');
+      expect(ChatContext.guestOf(chat.started.single.$2), 'Phone');
       await expectLater(
           call('mesh/chat/open', {}, 'stranger'),
           throwsA(isA<Failure>()
               .having((f) => f.code, 'code', FailureCode.unavailable)));
       expect(((await call('mesh/chat/threads', {}, 'phone'))['data'] as List),
-          hasLength(1));
+          hasLength(3));
+      final listed = await call('mesh/chat/threads');
+      expect(listed['mainThreadId'], 'host-main');
+      expect((listed['data'] as List).last['busy'], true);
+      for (final method in chatGuestMethods) {
+        await expectLater(
+            call(method, {}, 'stranger'), throwsA(isA<Failure>()));
+      }
     });
 
     test('says why when Nipa is not running here', () async {
@@ -133,6 +146,29 @@ void main() {
           call('mesh/chat/open'),
           throwsA(isA<Failure>().having(
               (f) => f.message, 'message', 'Next chat host is disabled.')));
+    });
+
+    test(
+        'shared lists preserve pagination and conversations beyond the old fifty limit',
+        () async {
+      for (var i = 0; i < 105; i++) {
+        chat.threads['local-$i-thread'] = [];
+      }
+      final first = await call('mesh/chat/threads');
+      expect(first['data'], hasLength(100));
+      final second =
+          await call('mesh/chat/threads', {'cursor': first['nextCursor']});
+      expect(second['data'], hasLength(5));
+      expect(second['nextCursor'], isNull);
+      final oldest = (await call('mesh/chat/open'))['threadId'] as String;
+      for (var i = 0; i < 51; i++) {
+        await call('mesh/chat/open', {'new': true});
+      }
+      expect((await call('mesh/chat/read', {'threadId': oldest}))['thread'],
+          isNotNull);
+      final saved =
+          await File('${dir.path}/host/mesh-chat-guests.json').readAsString();
+      expect(saved, contains(oldest));
     });
 
     test('reads the conversation back with its turns', () async {
@@ -164,7 +200,6 @@ void main() {
       final thread = (await call('mesh/chat/open'))['threadId'] as String;
       await call('mesh/chat/turn', {'threadId': thread, 'text': 'hello'});
       final first = await call('mesh/chat/events', {});
-      expect(first['events'], isEmpty);
       final sequence = first['sequence'] as int;
       final waiting = call('mesh/chat/events',
           {'after': sequence, 'epoch': first['epoch'], 'waitSeconds': 30});
@@ -186,7 +221,8 @@ void main() {
       expect(empty['events'], isEmpty);
     });
 
-    test('belongs to the guest it happened for', () async {
+    test('host and other guests receive the same live conversation events',
+        () async {
       final mine = (await call('mesh/chat/open'))['threadId'] as String;
       await call('mesh/chat/open', {}, 'phone');
       await call('mesh/chat/turn', {'threadId': mine, 'text': 'hello'});
@@ -194,10 +230,10 @@ void main() {
       chat.say(mine, 'for the iPad');
       final phone = await call('mesh/chat/events',
           {'after': base['sequence'], 'epoch': base['epoch']}, 'phone');
-      expect(phone['events'], isEmpty);
+      expect(phone['events'], hasLength(1));
       final ipad =
           await call('mesh/chat/events', {'after': 0, 'epoch': guests.epoch});
-      expect((ipad['events'] as List), hasLength(1));
+      expect((ipad['events'] as List).last, (phone['events'] as List).single);
     });
 
     test(
@@ -217,34 +253,34 @@ void main() {
       expect(other['reset'], true);
     });
 
-    test('a question is answered by the guest it was asked in', () async {
+    test('any account device can read a pending question and answer it',
+        () async {
       final thread = (await call('mesh/chat/open'))['threadId'] as String;
       await call('mesh/chat/open', {}, 'phone');
       chat.ask(thread, 7);
       await pumpEventQueue();
-      await expectLater(
-          call(
-              'mesh/chat/answer',
-              {
-                'requestId': 7,
-                'answers': {
-                  'q': ['yes']
-                }
-              },
-              'phone'),
-          throwsA(isA<Failure>()));
-      await call('mesh/chat/answer', {
-        'requestId': 7,
-        'answers': {
-          'q': ['yes']
-        }
-      });
+      final read = await call('mesh/chat/read', {'threadId': thread}, 'phone');
+      expect(read['questions'], hasLength(1));
+      await call(
+          'mesh/chat/answer',
+          {
+            'requestId': 7,
+            'answers': {
+              'q': ['yes']
+            }
+          },
+          'phone');
       expect(chat.answered.single.$2, {
         'q': ['yes']
       });
       final events =
           await call('mesh/chat/events', {'after': 0, 'epoch': guests.epoch});
-      expect((events['events'] as List).single['question'], true);
+      expect(
+          (events['events'] as List).any((e) => e['question'] == true), true);
+      expect((events['events'] as List).last['message']['method'],
+          'host/questionAnswered');
+      expect((await call('mesh/chat/read', {'threadId': thread}))['questions'],
+          isEmpty);
     });
   });
 
@@ -367,8 +403,10 @@ void main() {
       expect(port.available, true);
       final thread = (await port.mainThread())!;
       final seen = <String>[];
-      final sub = port.display.listen((e) =>
-          seen.add('${e['method']}:${(e['params'] as Map)['threadId']}'));
+      final sub = port.display
+          .where((e) => e['method'] == 'item/completed')
+          .listen((e) =>
+              seen.add('${e['method']}:${(e['params'] as Map)['threadId']}'));
       final started = await port.startTurn(thread, '关掉弹幕');
       expect(started!['turn'], isNotNull);
       expect(chat.started.single.$2, contains('页面：播放'));
@@ -396,6 +434,124 @@ void main() {
       expect(port.note, isNull);
     });
 
+    test('two conversations start immediately and the same conversation steers',
+        () async {
+      await peers.refresh();
+      await peers.choose('mac');
+      await port.unavailableReason();
+      final ui = NipaChat(port: port, data: _ChatData());
+      addTearDown(ui.dispose);
+      await ui.refreshSessions();
+      await ui.say('第一段');
+      final first = ui.thread!;
+      expect(port.busyOn(first), true);
+      ui.startNew();
+      await ui.say('第二段');
+      final second = ui.thread!;
+      expect(second, isNot(first));
+      expect(chat.started, hasLength(2));
+      expect(port.busyOn(first), true);
+      expect(port.busyOn(second), true);
+      expect(ui.live!.queued, false);
+      expect(ui.doing, '正在进行 2 段对话');
+      await ui.say('补充');
+      expect(chat.started, hasLength(2));
+      expect(chat.steered.single.$1, second);
+      expect(chat.steered.single.$2, contains('页面：播放'));
+      await ui.stop();
+      await until(() async => !port.busyOn(second), 'second stopped');
+      expect(port.busy, true);
+      expect(ui.mood, isNot(NipaMood.idle));
+      chat.finish(first);
+      await until(() async => !port.busy, 'all finished');
+      expect(ui.mood, NipaMood.idle);
+    });
+
+    test(
+        'the session menu receives additions, names and host replies by long wait',
+        () async {
+      chat.mainThreadId = 'host-main';
+      chat.threads['host-main'] = [];
+      await peers.refresh();
+      await peers.choose('mac');
+      await port.unavailableReason();
+      final ui = NipaChat(port: port, data: _ChatData());
+      addTearDown(ui.dispose);
+      await ui.refreshSessions();
+      await ui.select('host-main');
+      await chat.startThreadTurn('host-main', '宿主说的');
+      chat.publish({
+        'method': 'turn/started',
+        'params': {
+          'threadId': 'host-main',
+          'turn': {
+            'id': chat.threads['host-main']!.single['id'],
+            'status': 'inProgress'
+          }
+        }
+      });
+      chat.say('host-main', '实时回复');
+      await until(() async => ui.turns.any((t) => t.lastWords == '实时回复'),
+          'reply is pushed');
+      await ui.say('手机接着说');
+      expect(chat.steered.last.$1, 'host-main');
+      final opened = await call('mesh/chat/open', {'new': true}, 'phone');
+      final added = opened['threadId'] as String;
+      await until(() async => ui.sessions.any((s) => s.id == added),
+          'list addition is pushed');
+      chat.rename(added, '周末看片');
+      await until(
+          () async =>
+              ui.sessions.any((s) => s.id == added && s.title == '周末看片'),
+          'name is pushed');
+    });
+
+    test(
+        'new guests fall back to the old protocol without extra RPCs or fields',
+        () async {
+      final methods = <String>[];
+      final owned = <String>{};
+      chat.threads['host-only-thread'] = [];
+      rpc = (peer, method, params) async {
+        methods.add(method);
+        if (method == 'mesh/chat/state') {
+          final state = await guests.handle(method, params, 'ipad');
+          return {...state}..remove('sharedThreads');
+        }
+        if (method == 'mesh/chat/open') {
+          final opened = await guests.handle(method, params, 'ipad');
+          owned.add(opened['threadId'] as String);
+          return opened;
+        }
+        if (method == 'mesh/chat/threads') {
+          expect(params, isEmpty);
+          final listed = await guests.handle(method, params, 'ipad');
+          return {
+            ...listed,
+            'data': (listed['data'] as List)
+                .where((t) => owned.contains(t['id']))
+                .toList()
+          }
+            ..remove('sharedThreads')
+            ..remove('nextCursor');
+        }
+        if (method == 'mesh/chat/read') {
+          final result = await guests.handle(method, params, 'ipad');
+          return {...result}..remove('questions');
+        }
+        return guests.handle(method, params, 'ipad');
+      };
+      await peers.refresh();
+      await peers.choose('mac');
+      expect(await port.unavailableReason(), isNull);
+      final thread = (await port.mainThread())!;
+      await port.startTurn(thread, '旧协议');
+      await port.readThread(thread);
+      final listed = await port.listThreads(cursor: 'ignored-by-old-host');
+      expect((listed['data'] as List).map((t) => t['id']), [thread]);
+      expect(methods.toSet().difference(chatGuestMethods), isEmpty);
+    });
+
     test('Nipa not running there says so, not that the device is away',
         () async {
       await peers.refresh();
@@ -404,4 +560,17 @@ void main() {
       expect(await port.unavailableReason(), 'MacBook 上的梨花现在不能用。');
     });
   });
+}
+
+final class _ChatData implements NextUiData {
+  @override
+  Stream<void> get changes => const Stream.empty();
+  @override
+  Stream<List<UiTask>> tasks() => const Stream.empty();
+  @override
+  Future<List<UiCard>> cards(
+          {required String threadId, String? turnId}) async =>
+      [];
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
