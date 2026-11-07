@@ -24,10 +24,25 @@ void main() {
     NextShell.debugServices = null;
     NextPlayerLayer.debugTouch = null;
     NextPlayerLayer.debugPhone = null;
+    NextShell.debugSystemBack = null;
   });
 
   Finder button(String label) => find.byWidgetPredicate(
       (w) => w is Pressable && w.semanticLabel == label);
+
+  testWidgets('HarmonyOS system Back closes playback inside Next', (tester) async {
+    NextShell.debugSystemBack = true;
+    NextPlayerLayer.debugPhone = true;
+    final rig = await pumpPlayer(tester,
+        status: PlayerStatus.playing, size: const Size(932, 430));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.binding.handlePopRoute();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(rig.playback.left, 1);
+    expect(rig.state.status, PlayerStatus.idle);
+    expect(find.byType(NextShell), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('a phone has its sections at its foot; a window on its bar',
       (tester) async {

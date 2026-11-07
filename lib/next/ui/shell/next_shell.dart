@@ -58,6 +58,9 @@ class NextShell extends StatefulWidget {
   @visibleForTesting
   static NextUiServices Function(BuildContext context)? debugServices;
 
+  @visibleForTesting
+  static bool? debugSystemBack;
+
   /// The app menu's “偏好设置…” (⌘,): Next's settings while the shell is
   /// on screen; false when it is not and Classic should open its own.
   static bool openSettings() {
@@ -71,7 +74,7 @@ class NextShell extends StatefulWidget {
   State<NextShell> createState() => _NextShellState();
 }
 
-class _NextShellState extends State<NextShell> {
+class _NextShellState extends State<NextShell> with WidgetsBindingObserver {
   late final NextUiServices _services =
       (NextShell.debugServices ?? NextUiServices.resolve)(context);
   late final NextShellController _shell =
@@ -85,6 +88,7 @@ class _NextShellState extends State<NextShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _shown = this;
     if (kDebugMode) NextUiDebug.attach(_shell, context);
     if (globals.isTvOS) {
@@ -109,6 +113,7 @@ class _NextShellState extends State<NextShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (identical(_shown, this)) _shown = null;
     WorkDetailBridge.detach(this);
     if (kDebugMode) NextUiDebug.detach(_shell);
@@ -116,6 +121,21 @@ class _NextShellState extends State<NextShell> {
     _services.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  /// HarmonyOS has a system Back gesture, unlike iOS. Consume it in the
+  /// player or Next's nested pages before the embedder exits the ability.
+  @override
+  Future<bool> didPopRoute() async {
+    if (!(NextShell.debugSystemBack ?? globals.isHarmonyOS) || !mounted) {
+      return false;
+    }
+    if (_shell.escape()) return true;
+    if (widget.playing) {
+      await NextPlaybackScope.of(context).leave();
+      return true;
+    }
+    return false;
   }
 
   Route<void> _route(RouteSettings settings) {
