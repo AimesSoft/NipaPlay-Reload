@@ -333,6 +333,9 @@ class _Input extends StatelessWidget {
             child: TvOSRemoteTextInputControl(
                 title: '搜索',
                 focusNode: search.focus,
+                // The search is always typing here; the chosen row shows
+                // where the remote is.
+                highlight: false,
                 child: TextField(
                   controller: search.text,
                   focusNode:
