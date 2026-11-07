@@ -39,13 +39,16 @@
 
 - macOS 和 Windows 为主要验证平台，Linux 构建为实验性质。
 - iPhone、iPad、Apple TV：TestFlight 以[发行页](https://github.com/AimesSoft/NipaPlay-Reload/releases)说明为准；GitHub 上的 IPA 未签名，需自行签名侧载。
-- Apple TV 版和新的手机界面在模拟器上验证，Alpha 5 的 TestFlight 构建是首次在真机上运行。
+- Apple TV 版只在模拟器上验证，TestFlight 构建是首次在真机上运行；手机界面在模拟器和 iPad 真机上验证。
 - 不分发 Android 和 HarmonyOS 版本。
 
 ## 已修复
 
 ### Alpha 5
 
+- 一段对话进行时，其他对话不再显示排队；使用其他设备上梨花的手机能看到该设备上的全部对话。
+- 页面静止时不再持续绘制，手机打开 Next 时的发热和耗电明显降低。
+- 手机对话面板的底部不再露出下面的页面。
 - macOS 听写改用普通麦克风输入，避开系统语音处理在仅录音时出现的失败。
 - 目录或观看记录初始化失败、媒体文件无法读取时，梨花仍可启动和对话。
 - 组网监听遇到临时错误后继续接受连接。
