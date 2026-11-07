@@ -23,6 +23,7 @@ import 'media/presentation_store.dart';
 import 'subtitles/migration.dart';
 import 'player/skip/migration.dart';
 import 'db/migration.dart';
+import 'db/harmony_migration.dart';
 import 'db/epochs.dart';
 import 'state/activity_invocations.dart';
 
@@ -62,23 +63,34 @@ Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
   }
 }
 
-final DatabaseFactory _linuxFactory =
+final DatabaseFactory _customSqliteFactory =
     createDatabaseFactoryFfi(ffiInit: ensureSqliteLibrary);
 
 Future<Database> openNextDatabase(Directory root,
     {DatabaseFactory? factory}) async {
   await root.create(recursive: true);
+  final databasePath = '${root.path}/next.db';
   if (factory == null) {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    if (Platform.operatingSystem == 'ohos' &&
+        !await File(databasePath).exists()) {
+      final legacyDirectory = await databaseFactory.getDatabasesPath();
+      await migrateHarmonyNextDatabase(
+          databasePath: databasePath,
+          legacyPath: harmonyLegacyDatabasePath(databasePath, legacyDirectory),
+          factory: _customSqliteFactory);
+    }
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS ||
+        Platform.operatingSystem == 'ohos') {
       sqfliteFfiInit();
-      // On Linux the factory's own isolate also needs the runtime-only SQLite
-      // library name (a server without the development package).
-      factory = Platform.isLinux ? _linuxFactory : databaseFactoryFfi;
+      // Each factory isolate must register the Linux runtime library name or
+      // the bundled HarmonyOS library before sqlite3 first opens a connection.
+      factory = Platform.isLinux || Platform.operatingSystem == 'ohos'
+          ? _customSqliteFactory : databaseFactoryFfi;
     } else {
       factory = databaseFactory;
     }
   }
-  final db = await factory.openDatabase('${root.path}/next.db',
+  final db = await factory.openDatabase(databasePath,
       options: OpenDatabaseOptions(
         version: _migrations.length,
         onConfigure: (db) async {
@@ -87,12 +99,8 @@ Future<Database> openNextDatabase(Directory root,
           // In WAL a reader never makes a commit fail, and a busy moment is
           // waited out: a failed COMMIT left the connection inside its
           // transaction and every later write locked out (E2E-35).
-          // HarmonyOS RDB manages WAL itself. Its querySql API rejects
-          // assignment PRAGMAs, preventing the shared core from starting.
-          if (Platform.operatingSystem != 'ohos') {
-            await db.rawQuery('PRAGMA journal_mode = WAL');
-            await db.rawQuery('PRAGMA busy_timeout = 5000');
-          }
+          await db.rawQuery('PRAGMA journal_mode = WAL');
+          await db.rawQuery('PRAGMA busy_timeout = 5000');
         },
         onCreate: (db, version) => _migrate(db, 0, version),
         onUpgrade: _migrate,

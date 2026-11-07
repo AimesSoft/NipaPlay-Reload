@@ -1,5 +1,23 @@
 cmake_minimum_required(VERSION 3.17)
-project(nipaplay_ohos_native LANGUAGES CXX)
+project(nipaplay_ohos_native LANGUAGES C CXX)
+
+# Next's main database and background library worker both use SQLite FFI.
+# Ship our own library instead of depending on private HarmonyOS RDB symbols.
+include(FetchContent)
+FetchContent_Declare(
+  nipaplay_sqlite_source
+  URL https://www.sqlite.org/2026/sqlite-amalgamation-3540100.zip
+  URL_HASH SHA256=0a9c8e34352dad46006aa82836d5383bff9dc6bc9ce5a60553c05aa30e6ad1f9
+)
+FetchContent_MakeAvailable(nipaplay_sqlite_source)
+add_library(nipaplay_sqlite3 SHARED "${nipaplay_sqlite_source_SOURCE_DIR}/sqlite3.c")
+target_compile_definitions(nipaplay_sqlite3 PRIVATE
+  SQLITE_THREADSAFE=1
+  SQLITE_ENABLE_COLUMN_METADATA
+  SQLITE_ENABLE_FTS5
+  SQLITE_ENABLE_RTREE
+)
+target_link_libraries(nipaplay_sqlite3 PRIVATE m)
 
 # Build the shared C++ core directly into the entry module so Hvigor packages
 # libnipaplay_native.so under the arm64 native library directory in the HAP.
