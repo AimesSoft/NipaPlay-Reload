@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:async';
 
 import 'package:flutter/services.dart';
@@ -121,13 +122,19 @@ class _NextVideoStageState extends State<NextVideoStage> {
           PlaybackCaptureLayer(
               capture: session.capture,
               danmaku: false,
-              child: RepaintBoundary(
-                  child:
-                      NextSubtitleLayer(overlay: widget.host.subtitleOverlay))),
+              child: _OverPicture(
+                  host: widget.host,
+                  session: session,
+                  child: RepaintBoundary(
+                      child: NextSubtitleLayer(
+                          overlay: widget.host.subtitleOverlay)))),
           PlaybackCaptureLayer(
               capture: session.capture,
               danmaku: true,
-              child: NextDanmakuLayer(playback: session)),
+              child: _OverPicture(
+                  host: widget.host,
+                  session: session,
+                  child: NextDanmakuLayer(playback: session))),
           ...widget.overlays,
         ]);
   }
@@ -155,6 +162,48 @@ class _NextVideoStageState extends State<NextVideoStage> {
       }),
     );
   }
+}
+
+/// [child] over the picture as it is laid out. Upright, a phone's picture
+/// is a band across the middle of the screen: subtitles and danmaku stay on
+/// it, not over the bars above and below. Sideways nothing changes.
+class _OverPicture extends StatelessWidget {
+  const _OverPicture(
+      {required this.host, required this.session, required this.child});
+  final VideoStageHost host;
+  final SessionPlayback session;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<VideoSurface?>(
+        valueListenable: host.surface,
+        builder: (context, surface, _) {
+          final (aspect, size) = switch (surface) {
+            WidgetSurface(:final aspect, :final width, :final height) ||
+            TextureSurface(:final aspect, :final width, :final height) =>
+              (aspect, Size(width.toDouble(), height.toDouble())),
+            _ => (null, Size.zero),
+          };
+          if (aspect == null) return child;
+          return ValueListenableBuilder<VideoAspectMode>(
+            valueListenable: session.aspectMode,
+            builder: (context, mode, _) => LayoutBuilder(builder: (context, c) {
+              final view = c.biggest;
+              if (view.width >= view.height) return child;
+              final rect = VideoAspectGeometry.displayRect(
+                  mode: mode,
+                  viewport: view,
+                  sourceAspect: aspect,
+                  naturalSize: size);
+              final band = Rect.fromLTRB(0, math.max(0, rect.top), view.width,
+                  math.min(view.height, rect.bottom));
+              return Stack(children: [
+                Positioned.fromRect(rect: band, child: ClipRect(child: child)),
+              ]);
+            }),
+          );
+        },
+      );
 }
 
 final class _NativeVideoHole extends CustomPainter {

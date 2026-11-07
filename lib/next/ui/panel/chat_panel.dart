@@ -44,6 +44,7 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
     ..addListener(_publish);
   NextShellController? _shell;
   ValueNotifier<double>? _stage;
+  ValueNotifier<double>? _rise;
   bool _reduced = false;
   bool _docked = false;
 
@@ -52,6 +53,7 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
     super.didChangeDependencies();
     _reduced = NextMotion.reduced(context);
     _stage = NextStage.maybeOf(context)?.slide;
+    _rise = NextStage.maybeOf(context)?.rise;
     final shell = NextShellScope.of(context);
     if (identical(shell, _shell)) return;
     _shell?.panelOpen.removeListener(_sync);
@@ -87,11 +89,13 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
 
   /// The picture follows the panel, from the controller's tick (before the
   /// frame lays out), never from a build.
-  void _publish() =>
-      _stage?.value = _c.isDismissed || _compact ? 0 : _slide;
+  void _publish() {
+    _stage?.value = _c.isDismissed || _compact ? 0 : _slide;
+    _rise?.value = _c.isDismissed || !_compact || !_docked ? 0 : _slide;
+  }
 
   /// A phone: the conversation rises from the foot as a sheet, over the
-  /// page or under the video, which keeps its place.
+  /// page or under the video, which moves up above it (upright).
   bool _compact = false;
 
   @override
@@ -100,6 +104,7 @@ class _ChatPanelLayerState extends State<ChatPanelLayer>
     _shell?.removeListener(_playingChanged);
     // The picture has the window again.
     _stage?.value = 0;
+    _rise?.value = 0;
     _c.dispose();
     super.dispose();
   }
@@ -256,7 +261,11 @@ class _Sheet extends StatelessWidget {
         Positioned.fill(
           child: Glass(
             blur: 40,
-            color: const Color(0xBD121218), // rgba(18,18,24,.74)
+            // A phone's sheet covers the page it rose over: the page only
+            // tints it, the conversation reads as on a surface of its own.
+            color: phone
+                ? const Color(0xE6121218)
+                : const Color(0xBD121218), // rgba(18,18,24,.74)
             borderColor: const Color(0x1AFFFFFF),
             radius: radius,
             highlight: false,

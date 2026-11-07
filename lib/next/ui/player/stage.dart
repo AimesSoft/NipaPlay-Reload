@@ -20,11 +20,16 @@ class NextStage extends InheritedWidget {
   const NextStage({
     super.key,
     required this.slide,
+    this.rise,
     this.stepped = false,
     required super.child,
   });
 
   final ValueNotifier<double> slide;
+
+  /// On an upright phone, how far the conversation's sheet has risen under
+  /// the video (0 away, 1 up): the picture moves up into the band above it.
+  final ValueNotifier<double>? rise;
   final bool stepped;
 
   static NextStage? maybeOf(BuildContext context) =>
@@ -32,7 +37,14 @@ class NextStage extends InheritedWidget {
 
   @override
   bool updateShouldNotify(NextStage old) =>
-      !identical(old.slide, slide) || old.stepped != stepped;
+      !identical(old.slide, slide) ||
+      !identical(old.rise, rise) ||
+      old.stepped != stepped;
+
+  /// An upright phone's picture with the sheet up: the width, 16:9, under
+  /// the bar at [top]. The sheet starts a gap below it.
+  static Rect band(Size window, double top) =>
+      Rect.fromLTWH(0, top, window.width, window.width * 9 / 16);
 
   /// Around the panel, and between it and the picture.
   static const margin = 12.0;
@@ -75,6 +87,8 @@ class NextStageRoom extends SingleChildRenderObjectWidget {
   const NextStageRoom({
     super.key,
     required this.slide,
+    this.rise,
+    this.bandTop = 0,
     this.docked = true,
     this.fit = false,
     this.stepped = false,
@@ -83,6 +97,11 @@ class NextStageRoom extends SingleChildRenderObjectWidget {
   });
 
   final ValueListenable<double> slide;
+
+  /// See [NextStage.rise]; with it the room moves to [NextStage.band] at
+  /// [bandTop], laid out there (an upright picture fills the band's width).
+  final ValueListenable<double>? rise;
+  final double bandTop;
   final bool docked;
   final bool fit;
   final bool stepped;
@@ -91,6 +110,8 @@ class NextStageRoom extends SingleChildRenderObjectWidget {
   @override
   RenderObject createRenderObject(BuildContext context) => RenderNextStageRoom(
       slide: slide,
+      rise: rise,
+      bandTop: bandTop,
       docked: docked,
       fit: fit,
       stepped: stepped,
@@ -101,6 +122,8 @@ class NextStageRoom extends SingleChildRenderObjectWidget {
           BuildContext context, RenderNextStageRoom renderObject) =>
       renderObject
         ..slide = slide
+        ..rise = rise
+        ..bandTop = bandTop
         ..docked = docked
         ..fit = fit
         ..stepped = stepped
@@ -110,11 +133,15 @@ class NextStageRoom extends SingleChildRenderObjectWidget {
 class RenderNextStageRoom extends RenderProxyBox {
   RenderNextStageRoom({
     required ValueListenable<double> slide,
+    ValueListenable<double>? rise,
+    double bandTop = 0,
     required bool docked,
     required bool fit,
     required bool stepped,
     required bool backdrop,
   })  : _slide = slide,
+        _rise = rise,
+        _bandTop = bandTop,
         _docked = docked,
         _fit = fit,
         _stepped = stepped,
@@ -126,6 +153,22 @@ class RenderNextStageRoom extends RenderProxyBox {
     if (attached) _slide.removeListener(markNeedsLayout);
     _slide = value;
     if (attached) _slide.addListener(markNeedsLayout);
+    markNeedsLayout();
+  }
+
+  ValueListenable<double>? _rise;
+  set rise(ValueListenable<double>? value) {
+    if (identical(value, _rise)) return;
+    if (attached) _rise?.removeListener(markNeedsLayout);
+    _rise = value;
+    if (attached) _rise?.addListener(markNeedsLayout);
+    markNeedsLayout();
+  }
+
+  double _bandTop;
+  set bandTop(double value) {
+    if (value == _bandTop) return;
+    _bandTop = value;
     markNeedsLayout();
   }
 
@@ -162,11 +205,13 @@ class RenderNextStageRoom extends RenderProxyBox {
   void attach(PipelineOwner owner) {
     super.attach(owner);
     _slide.addListener(markNeedsLayout);
+    _rise?.addListener(markNeedsLayout);
   }
 
   @override
   void detach() {
     _slide.removeListener(markNeedsLayout);
+    _rise?.removeListener(markNeedsLayout);
     super.detach();
   }
 
@@ -176,6 +221,15 @@ class RenderNextStageRoom extends RenderProxyBox {
   @override
   void performLayout() {
     size = constraints.biggest;
+    final rise = _docked ? (_rise?.value ?? 0) : 0.0;
+    if (rise > 0 && size.height > size.width) {
+      final room = Rect.lerp(Offset.zero & size,
+          NextStage.band(size, _bandTop), rise.clamp(0.0, 1.0))!;
+      child?.layout(BoxConstraints.tight(room.size));
+      _frame = room;
+      _transform = Matrix4.translationValues(room.left, room.top, 0);
+      return;
+    }
     final slide = _slide.value;
     final cover = !_docked
         ? 0.0

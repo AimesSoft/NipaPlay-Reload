@@ -4,7 +4,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:window_manager/window_manager.dart';
 
@@ -16,7 +15,7 @@ import '../../ui_data/ui_data.dart'
 import '../conversation/nipa_chat.dart';
 import '../data/login_requests.dart';
 import '../shell/nipa_setup.dart';
-import '../shell/phone_dock.dart' show PhoneGlassCircle, phoneGlass;
+import '../shell/phone_dock.dart' show PhoneGlass, PhoneGlassCircle;
 import '../shell/shell_controller.dart';
 import '../shell/window_buttons.dart';
 import '../shell/window_chrome.dart';
@@ -1186,13 +1185,7 @@ class _PhoneBar extends StatelessWidget {
       child: Stack(clipBehavior: Clip.none, children: [
         // The glass is drawn under the row, so the time over the timeline
         // and its preview may rise out of it.
-        const Positioned.fill(
-          child: GlassContainer(
-            shape: LiquidRoundedSuperellipse(borderRadius: height / 2),
-            settings: phoneGlass,
-            quality: GlassQuality.standard,
-          ),
-        ),
+        const Positioned.fill(child: PhoneGlass(height: height)),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 0, 10, 0),
           child: Row(children: [

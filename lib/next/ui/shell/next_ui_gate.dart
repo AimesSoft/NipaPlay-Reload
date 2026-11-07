@@ -13,6 +13,7 @@ import '../../player/ports/session_playback.dart';
 import 'next_shell.dart';
 import 'file_open_host.dart';
 import 'next_ui_preference.dart';
+import '../theme/layout.dart';
 import 'television_scale.dart';
 import 'window_chrome.dart';
 
@@ -58,11 +59,13 @@ class _NextUiGateState extends State<NextUiGate> {
 
   /// How far the conversation is in beside the video; the panel moves it.
   final _stage = ValueNotifier<double>(0);
+  final _rise = ValueNotifier<double>(0);
 
   @override
   void dispose() {
     _unbindMode?.call();
     _stage.dispose();
+    _rise.dispose();
     super.dispose();
   }
 
@@ -130,6 +133,8 @@ class _NextUiGateState extends State<NextUiGate> {
               children: [
                 NextStageRoom(
                   slide: _stage,
+                  rise: _rise,
+                  bandTop: NextLayout.barTop(context),
                   docked: playing,
                   fit: !systemDrawn,
                   stepped: systemDrawn,
@@ -143,6 +148,7 @@ class _NextUiGateState extends State<NextUiGate> {
                 // traffic lights keep their place on the player's bar too.
                 NextStage(
                   slide: _stage,
+                  rise: _rise,
                   stepped: systemDrawn,
                   child: NextWindowChromeScope(
                     active: true,

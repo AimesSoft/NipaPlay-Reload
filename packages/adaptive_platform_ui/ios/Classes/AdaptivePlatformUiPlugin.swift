@@ -89,5 +89,11 @@ public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
             ios26BlurViewFactory,
             withId: "adaptive_platform_ui/ios26_blur_view"
         )
+
+        // Bare Liquid Glass surfaces for content Flutter draws on top.
+        registrar.register(
+            iOS26GlassViewFactory(messenger: registrar.messenger()),
+            withId: "adaptive_platform_ui/ios26_glass"
+        )
     }
 }

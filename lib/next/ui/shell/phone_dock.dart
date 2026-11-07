@@ -1,3 +1,5 @@
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart'
+    show AdaptiveNavigationDestination, IOS26Glass, IOS26NativeTabBar;
 import 'package:flutter/widgets.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
@@ -8,7 +10,8 @@ import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
 import 'shell_controller.dart';
 
-/// Glass on the black of Next: the same material Classic's phone bar uses.
+/// Glass on the black of Next where the system has none of its own: the
+/// same material Classic's phone bar uses there.
 const phoneGlass = LiquidGlassSettings(
   thickness: 30,
   blur: 6,
@@ -28,15 +31,16 @@ class PhoneDock extends StatelessWidget {
   const PhoneDock({super.key});
 
   static const _sections = [
-    (NextSection.home, '首页', NextGlyph.home),
-    (NextSection.discover, '发现', NextGlyph.discover),
-    (NextSection.library, '媒体库', NextGlyph.library),
-    (NextSection.activity, '动态', NextGlyph.activity),
+    (NextSection.home, '首页', NextGlyph.home, 'house.fill'),
+    (NextSection.discover, '发现', NextGlyph.discover, 'safari.fill'),
+    (NextSection.library, '媒体库', NextGlyph.library, 'rectangle.stack.fill'),
+    (NextSection.activity, '动态', NextGlyph.activity, 'waveform.path.ecg'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
+    if (IOS26Glass.supported) return _system(shell);
     final bottom = MediaQuery.paddingOf(context).bottom;
     return Padding(
       padding: EdgeInsets.only(
@@ -53,7 +57,7 @@ class PhoneDock extends StatelessWidget {
                 _sections.indexWhere((s) => s.$1 == shell.section);
             return GlassTabBar.bottom(
               tabs: [
-                for (final (_, label, glyph) in _sections)
+                for (final (_, label, glyph, _) in _sections)
                   GlassTab(
                     icon: NextIcon(glyph,
                         size: 24, color: NextColors.paper, stroke: 1.7),
@@ -86,6 +90,93 @@ class PhoneDock extends StatelessWidget {
       ]),
     );
   }
+
+  /// iOS 26: the system's tab bar (its search apart, as in the system's
+  /// apps), under the line to Nipa on the system's glass.
+  Widget _system(NextShellController shell) => Builder(
+        builder: (context) => Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: NextLayout.dockSide),
+            child: _NipaLine(shell: shell),
+          ),
+          const SizedBox(height: NextLayout.dockGap - 4),
+          ListenableBuilder(
+            listenable: shell,
+            builder: (context, _) {
+              final index = _sections.indexWhere((s) => s.$1 == shell.section);
+              return MediaQuery(
+                // Next is dark whatever the system's appearance.
+                data: MediaQuery.of(context)
+                    .copyWith(platformBrightness: Brightness.dark),
+                child: IOS26NativeTabBar(
+                  destinations: [
+                    for (final (_, label, _, symbol) in _sections)
+                      AdaptiveNavigationDestination(icon: symbol, label: label),
+                    const AdaptiveNavigationDestination(
+                        icon: 'magnifyingglass', label: '搜索', isSearch: true),
+                  ],
+                  selectedIndex: index < 0 ? 0 : index,
+                  tint: NextColors.accent,
+                  unselectedItemTint: NextColors.paper,
+                  onTap: (i) => i < _sections.length
+                      ? shell.go(_sections[i].$1)
+                      : shell.openSearch(),
+                ),
+              );
+            },
+          ),
+        ]),
+      );
+}
+
+/// A phone's glass: the system's own Liquid Glass on iOS 26 (UIKit draws
+/// it under what Flutter draws), the shader glass elsewhere. A capsule (a
+/// circle when square) unless [radius] is given.
+class PhoneGlass extends StatelessWidget {
+  const PhoneGlass(
+      {super.key,
+      this.width,
+      this.height,
+      this.radius,
+      this.alignment,
+      this.padding,
+      this.child});
+  final double? width;
+  final double? height;
+  final double? radius;
+  final AlignmentGeometry? alignment;
+  final EdgeInsetsGeometry? padding;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget? content = child;
+    if (content != null && padding != null) {
+      content = Padding(padding: padding!, child: content);
+    }
+    if (content != null && alignment != null) {
+      content = Align(alignment: alignment!, child: content);
+    }
+    if (IOS26Glass.supported) {
+      return SizedBox(
+        width: width,
+        height: height,
+        child: IOS26Glass(cornerRadius: radius, dark: true, child: content),
+      );
+    }
+    final square = width != null && width == height && radius == null;
+    return GlassContainer(
+      width: width,
+      height: height,
+      shape: square
+          ? const LiquidOval()
+          : LiquidRoundedSuperellipse(
+              borderRadius: radius ?? (height ?? NextLayout.dockLine) / 2),
+      settings: phoneGlass,
+      quality: GlassQuality.standard,
+      child: content,
+    );
+  }
 }
 
 /// The line to Nipa: her face, what she is doing (or the question the
@@ -106,12 +197,8 @@ class _NipaLine extends StatelessWidget {
             onTap: shell.openChat,
             semanticLabel: '和梨花说话',
             pressScale: 0.98,
-            builder: (context, _) => GlassContainer(
+            builder: (context, _) => PhoneGlass(
               height: NextLayout.dockLine,
-              shape: const LiquidRoundedSuperellipse(
-                  borderRadius: NextLayout.dockLine / 2),
-              settings: phoneGlass,
-              quality: GlassQuality.standard,
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: Row(children: [
                 NipaAvatar(size: 38, mood: c.mood, hasNews: c.unseen),
@@ -169,12 +256,9 @@ class PhoneGlassCircle extends StatelessWidget {
         onTap: onTap,
         semanticLabel: label,
         pressScale: 0.92,
-        builder: (context, _) => GlassContainer(
+        builder: (context, _) => PhoneGlass(
           width: size,
           height: size,
-          shape: const LiquidOval(),
-          settings: phoneGlass,
-          quality: GlassQuality.standard,
           alignment: Alignment.center,
           child: child,
         ),
