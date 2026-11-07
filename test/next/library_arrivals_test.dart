@@ -16,7 +16,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../packages/nipa_harness/test/task_support.dart';
 import 'media_test_support.dart';
 
-JsonMap _file(String name, {String? id, JsonMap? cause, String via = 'local_scan'}) => {
+JsonMap _file(String name,
+        {String? id, JsonMap? cause, String via = 'local_scan'}) =>
+    {
       'path': '/library/$name.mkv',
       if (id != null) 'fileId': id,
       'via': via,
@@ -32,50 +34,21 @@ void main() {
   late HarnessLocation location;
   late FakeExecutor download, helper;
   late Completer<void> release;
-  final running = <String, JobContext>{};
-  final dispatched = <JsonMap>[];
-  Failure? unavailable;
   var enabled = true;
-
-  void wire(Followups value) {
-    value.libraryEnabled = () => enabled;
-    value.backgroundDispatch =
-        ({required jobId, required title, required instruction}) async {
-      if (unavailable != null) throw unavailable!;
-      try {
-        await engine.submit(jobId: jobId, type: 'agent.helper', title: title, input: {
-          'instruction': instruction,
-          'background': true,
-          'repository': root.path,
-          'origin': 'application',
-          'invocationId': jobId
-        }, details: {
-          'source': 'host',
-          'background': true
-        });
-      } on Failure catch (error) {
-        if (error.code == FailureCode.conflict) return jobId;
-        rethrow;
-      }
-      dispatched.add({'jobId': jobId, 'title': title, 'instruction': instruction});
-      return jobId;
-    };
-  }
 
   Future<void> open() async {
     store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
     download = FakeExecutor(type: 'download');
-    helper = FakeExecutor(type: 'agent.helper', onExecute: (context) async {
-      running[context.job.jobId] = context;
-      await release.future;
-    });
+    helper = FakeExecutor(
+        type: 'agent.helper',
+        onExecute: (context) async {
+          await release.future;
+        });
     engine = TaskEngine(
-        store: store,
-        ownerDeviceId: 'fixture',
-        executors: [download, helper]);
+        store: store, ownerDeviceId: 'fixture', executors: [download, helper]);
     await engine.start();
     followups = Followups(store.database, engine, location);
-    wire(followups);
+    followups.libraryEnabled = () => enabled;
   }
 
   setUp(() async {
@@ -85,9 +58,6 @@ void main() {
         {HarnessLocation.storageKey: root.path});
     location = HarnessLocation();
     release = Completer<void>();
-    running.clear();
-    dispatched.clear();
-    unavailable = null;
     enabled = true;
     await open();
   });
@@ -109,127 +79,62 @@ void main() {
       rows.where((r) => r['automatic'] == 'library').toList();
   List<JsonMap> factsOf(JsonMap row) =>
       ((row['trigger'] as Map)['facts'] as List).cast<JsonMap>();
-  Set<String> pathsOf(JsonMap row) =>
-      {for (final fact in factsOf(row)) (fact['data'] as Map)['path'] as String};
-  Future<JobContext> entered(String id) async {
-    for (var i = 0; i < 100 && running[id] == null; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
-    }
-    return running[id]!;
+  Set<String> pathsOf(JsonMap row) => {
+        for (final fact in factsOf(row)) (fact['data'] as Map)['path'] as String
+      };
+  Future<Job> askingHelper() =>
+      engine.submit(type: 'agent.helper', title: 'asked', input: {
+        'parentThreadId': 'original',
+        'repository': root.path,
+        'instruction': 'add the folder'
+      });
+
+  Future<JsonMap> causeForHelper() async => {
+        'origin': 'harness_cli:helper:${(await askingHelper()).jobId}',
+        'invocationId': 'roots-add',
+      };
+
+  Future<void> addForConversation(List<JsonMap> files) async {
+    final cause = await causeForHelper();
+    await add([
+      for (final file in files) {...file, 'cause': cause}
+    ]);
   }
 
-  group('files the user or the app brought in', () {
-    test('one scan is one background dispatch and nothing for a conversation',
-        () async {
+  group('未由对话引入的文件', () {
+    test('用户、应用及无法定位对话的调用不登记回访或启动助手', () async {
       await add([
-        _file('a', id: 'file-a'),
-        _file('b', id: 'file-b', via: 'classic_history'),
-        _file('c', id: 'file-c', cause: {'origin': 'gui', 'invocationId': 'ui'}),
+        _file('scan', id: 'scan'),
+        _file('history', id: 'history', via: 'classic_history'),
+        _file('server', id: 'server', via: 'media_source'),
+        _file('gui', cause: {'origin': 'gui', 'invocationId': 'ui'}),
+        _file('unknown', cause: {
+          'origin': 'harness_cli:chat:missing',
+          'invocationId': 'call'
+        }),
       ]);
-      await followups.sweep();
-      // Files are still arriving as far as NipaPlay can tell: one batch, waiting.
-      var rows = libraryRows(await followups.list());
-      expect(rows, hasLength(1));
-      expect(rows.single['state'], 'ready');
-      expect(rows.single['threadId'], isNull);
-      expect(factsOf(rows.single), hasLength(3));
-      expect(dispatched, isEmpty);
-
-      // The scan ends: the batch goes now.
       await followups.libraryBatchEnded();
       await followups.sweep();
-      expect(dispatched, hasLength(1));
-      expect(dispatched.single['title'], contains('3'));
-      final instruction = dispatched.single['instruction'] as String;
-      for (final name in ['a', 'b', 'c']) {
-        expect(instruction, contains('/library/$name.mkv'));
-      }
-      expect(instruction, contains('classic_history'));
-      expect(instruction, contains('下一步由你决定'));
-      rows = libraryRows(await followups.list());
-      expect(rows, hasLength(1), reason: 'no second row, no conversation row');
-      expect(rows.single['state'], 'completed');
-      expect(rows.single['threadId'], isNull);
-      expect(rows.single['helperJobId'], dispatched.single['jobId']);
-      // Delivering again changes nothing.
-      await followups.sweep();
-      expect(dispatched, hasLength(1));
+      expect(await followups.list(), isEmpty);
+      expect(await engine.list(type: 'agent.helper'), isEmpty);
     });
 
-    test('files stop arriving, then the batch goes by itself', () async {
-      // Wide margins: under the full suite a sweep can take hundreds of ms.
-      followups.libraryQuiet = const Duration(milliseconds: 2000);
-      await add([_file('a', id: 'file-a')]);
-      await followups.sweep();
-      expect(dispatched, isEmpty);
-      await Future<void>.delayed(const Duration(milliseconds: 1200));
-      await add([_file('b', id: 'file-b')]);
-      await followups.sweep();
-      expect(dispatched, isEmpty, reason: 'a new file restarts the quiet time');
-      await Future<void>.delayed(const Duration(milliseconds: 1200));
-      await followups.sweep();
-      expect(dispatched, isEmpty, reason: 'counted from b, not from a');
-      await Future<void>.delayed(const Duration(milliseconds: 1200));
-      await followups.sweep();
-      expect(dispatched, hasLength(1));
-      expect(dispatched.single['title'], contains('2'));
-    });
-
-    test('a long trickle is cut off at the cap counted from its first file', () async {
-      followups.libraryQuiet = const Duration(hours: 1);
-      followups.libraryMaxWait = Duration.zero;
-      await add([_file('a', id: 'file-a')]);
-      await followups.sweep();
-      expect(dispatched, hasLength(1), reason: 'the cap since the first file');
-    });
-
-    test('a batch over the limit continues in the next one, nothing dropped',
-        () async {
-      followups.libraryBatchLimit = 2;
-      await add([for (var i = 0; i < 5; i++) _file('f$i', id: 'file-$i')]);
-      await followups.libraryBatchEnded();
-      final rows = libraryRows(await followups.list());
-      expect(rows.map((r) => factsOf(r).length), [2, 2, 1]);
-      // One helper at a time: each batch waits for the one before.
-      for (var i = 0; i < 3; i++) {
-        await followups.sweep();
-        expect(dispatched, hasLength(i + 1));
-        await (await entered(dispatched.last['jobId'] as String))
-            .succeed(verified(details: {'summary': 'done'}));
-        await untilState(engine, dispatched.last['jobId'] as String,
-            JobState.succeeded);
-      }
-      final all = dispatched.map((d) => d['instruction'] as String).join();
-      for (var i = 0; i < 5; i++) {
-        expect(RegExp('/library/f$i.mkv').allMatches(all), hasLength(1));
-      }
-    });
-
-    test('the end of the helper is a task entry, with no return to a conversation',
-        () async {
-      await add([_file('a', id: 'file-a')]);
+    test('旧版本留下的后台批次取消，重启后也不派发', () async {
+      await addForConversation([_file('old', id: 'old')]);
+      final row = libraryRows(await followups.list()).single;
+      row['batchKey'] = 'background';
+      row['threadId'] = null;
+      await store.database.update('followups', {'snapshot': jsonEncode(row)},
+          where: 'id=?', whereArgs: [row['id']]);
+      await followups.close();
+      await engine.close();
+      await open();
       await followups.libraryBatchEnded();
       await followups.sweep();
-      final id = dispatched.single['jobId'] as String;
-      await (await entered(id))
-          .succeed(verified(details: {'summary': '已补上 TMDB 身份'}));
-      await untilState(engine, id, JobState.succeeded);
-      await followups.sweep();
-
-      // What 动态 reads: the task's own events, with who started it.
-      final events = await store.database
-          .query('job_events', where: 'job_id=?', whereArgs: [id]);
-      final last = jsonDecode(events.last['snapshot'] as String) as Map;
-      expect(last['state'], 'succeeded');
-      expect((last['receipt'] as Map)['details'], containsPair('summary', '已补上 TMDB 身份'));
-      final origin = (await store.database
-              .query('task_origins', where: 'job_id=?', whereArgs: [id]))
-          .single;
-      expect(origin['origin'], 'application');
-      // And nothing was queued for any conversation.
-      final rows = await followups.list();
-      expect(rows.where((r) => r['threadId'] != null), isEmpty);
-      expect(rows.where((r) => r['automatic'] != 'library'), isEmpty);
+      final cancelled = libraryRows(await followups.list()).single;
+      expect(cancelled['state'], 'cancelled');
+      expect(cancelled['reason'], contains('no conversation'));
+      expect(await engine.list(type: 'agent.helper'), hasLength(1));
     });
 
     test('a background helper registers no return, an ordinary one does',
@@ -241,6 +146,7 @@ void main() {
       await expectLater(
           helpers.dispatchBackground(jobId: 'x', title: 't', instruction: 'i'),
           throwsA(isA<Failure>()));
+      await followups.close();
       await engine.close();
       store = await SqliteJobStore.open(root, factory: databaseFactoryFfi);
       engine = TaskEngine(
@@ -270,16 +176,76 @@ void main() {
     });
   });
 
-  group('files Nipa brought in', () {
-    Future<Job> askingHelper() => engine.submit(
-            type: 'agent.helper',
-            title: 'asked',
-            input: {
-              'parentThreadId': 'original',
-              'repository': root.path,
-              'instruction': 'add the folder'
-            });
+  group('对话文件的批次', () {
+    test('新文件延后静默期限，到期才冻结事实', () async {
+      followups.libraryQuiet = const Duration(milliseconds: 200);
+      await addForConversation([_file('a', id: 'file-a')]);
+      await followups.sweep();
+      var row = libraryRows(await followups.list()).single;
+      expect(row['frozen'], isNot(true));
+      final firstDue = DateTime.parse(row['deliverAfter'] as String);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await addForConversation([_file('b', id: 'file-b')]);
+      await followups.sweep();
+      row = libraryRows(await followups.list()).single;
+      final due = DateTime.parse(row['deliverAfter'] as String);
+      expect(due.isAfter(firstDue), true);
+      expect(row['frozen'], isNot(true));
+      final remaining = due.difference(DateTime.now().toUtc());
+      if (!remaining.isNegative)
+        await Future<void>.delayed(
+            remaining + const Duration(milliseconds: 20));
+      await followups.sweep();
+      row = libraryRows(await followups.list()).single;
+      expect(row['frozen'], true);
+      expect(pathsOf(row), {'/library/a.mkv', '/library/b.mkv'});
+    });
 
+    test('持续到来的文件仍受首个文件的最长等待限制', () async {
+      followups.libraryQuiet = const Duration(hours: 1);
+      followups.libraryMaxWait = Duration.zero;
+      await addForConversation([_file('a', id: 'file-a')]);
+      await followups.sweep();
+      expect(libraryRows(await followups.list()).single['frozen'], true);
+    });
+
+    test('超出上限分批，路径与文件身份重复均不再次登记', () async {
+      followups.libraryBatchLimit = 2;
+      await addForConversation([
+        for (var i = 0; i < 5; i++) _file('f$i', id: 'file-$i'),
+        _file('renamed', id: 'file-0'),
+        _file('f1', id: 'another-id'),
+      ]);
+      await followups.libraryBatchEnded();
+      await followups.sweep();
+      final rows = libraryRows(await followups.list());
+      expect(rows.map((r) => factsOf(r).length), [2, 2, 1]);
+      expect(rows.map((r) => r['frozen']), everyElement(true));
+      expect(rows.expand(pathsOf).toSet(),
+          {for (var i = 0; i < 5; i++) '/library/f$i.mkv'});
+    });
+
+    test('待发批次重启后保留，再次通告不重复登记', () async {
+      await addForConversation(
+          [_file('a', id: 'file-a'), _file('b', id: 'file-b')]);
+      final id = libraryRows(await followups.list()).single['id'];
+      await followups.close();
+      await engine.close();
+      await open();
+      await addForConversation(
+          [_file('renamed', id: 'file-b'), _file('a', id: 'file-a')]);
+      await followups.libraryBatchEnded();
+      await followups.sweep();
+      await followups.sweep();
+      final row = libraryRows(await followups.list()).single;
+      expect(row['id'], id);
+      expect(row['state'], 'ready');
+      expect(row['frozen'], true);
+      expect(pathsOf(row), {'/library/a.mkv', '/library/b.mkv'});
+    });
+  });
+
+  group('files Nipa brought in', () {
     test('they go back to the conversation that caused them, with no dispatch',
         () async {
       final asking = await askingHelper();
@@ -296,7 +262,7 @@ void main() {
       await followups.sweep();
 
       final rows = libraryRows(await followups.list());
-      expect(rows, hasLength(2));
+      expect(rows, hasLength(1));
       final ours = rows.singleWhere((r) => r['threadId'] == 'original');
       expect(ours['origin'], cause['origin']);
       expect(ours['repository'], root.path);
@@ -305,10 +271,7 @@ void main() {
       expect(ours['state'], 'ready');
       expect(ours['frozen'], true);
       expect(ours['instruction'], contains('你发起的操作'));
-      // The user's file is the background kind; Nipa's own never dispatched.
-      expect(dispatched, hasLength(1));
-      expect(dispatched.single['instruction'], contains('/library/user.mkv'));
-      expect(dispatched.single['instruction'], isNot(contains('/library/a.mkv')));
+      expect(await engine.list(type: 'agent.helper'), hasLength(1));
     });
 
     test('a conversation that is busy keeps its batch queued, in order',
@@ -336,7 +299,8 @@ void main() {
       ]);
     });
 
-    test('a file a download already returned to that conversation is not sent again',
+    test(
+        'a file a download already returned to that conversation is not sent again',
         () async {
       final job = await engine.submit(type: 'download', title: 'CC0', input: {
         'infoHash': 'fixture',
@@ -382,7 +346,6 @@ void main() {
       final ours = rows.single;
       expect(ours['threadId'], 'original');
       expect(pathsOf(ours), {'/library/other.mkv'});
-      expect(dispatched, isEmpty);
     });
 
     test('a download return to some other conversation does not cover this one',
@@ -453,16 +416,17 @@ void main() {
         ]
       });
       await followups.sweep();
-      await add([_file('dl0', id: 'file-dl0', via: 'download_import')]);
+      await addForConversation(
+          [_file('dl0', id: 'file-dl0', via: 'download_import')]);
       await followups.libraryBatchEnded();
       await followups.sweep();
       final row = libraryRows(await followups.list()).single;
       expect(row['state'], 'cancelled');
       expect(row['reason'], contains('download return'));
-      expect(dispatched, isEmpty);
     });
 
-    test('a download file completed but not yet returned still counts', () async {
+    test('a download file completed but not yet returned still counts',
+        () async {
       final job = await engine.submit(type: 'download', title: 'CC0', input: {
         'infoHash': 'fixture',
         'returnTo': {
@@ -487,142 +451,33 @@ void main() {
           }
         ]
       });
-      await add([_file('dl', id: 'file-dl', via: 'download_import'), _file('x', id: 'file-x')]);
+      await addForConversation([
+        _file('dl', id: 'file-dl', via: 'download_import'),
+        _file('x', id: 'file-x')
+      ]);
       await followups.libraryBatchEnded();
       await followups.sweep();
-      expect(dispatched, hasLength(1));
-      expect(dispatched.single['instruction'], contains('/library/x.mkv'));
-      expect(dispatched.single['instruction'], isNot(contains('file-dl')));
-    });
-  });
-
-  group('while a helper is working', () {
-    test('new files wait as the next batch, then go once, never twice', () async {
-      await add([_file('a', id: 'file-a')]);
-      await followups.libraryBatchEnded();
-      await followups.sweep();
-      final first = dispatched.single['jobId'] as String;
-      final firstContext = await entered(first);
-
-      await add([_file('b', id: 'file-b')]);
-      await followups.libraryBatchEnded();
-      await followups.sweep();
-      expect(dispatched, hasLength(1));
-      var next = libraryRows(await followups.list())
-          .singleWhere((r) => r['state'] == 'ready');
-      expect(next['reason'], contains('still handling'));
-      // More files join the waiting batch rather than starting a helper.
-      await add([_file('c', id: 'file-c'), _file('a', id: 'file-a')]);
-      await followups.sweep();
-      next = libraryRows(await followups.list())
-          .singleWhere((r) => r['state'] == 'ready');
-      expect(pathsOf(next), {'/library/b.mkv', '/library/c.mkv'});
-
-      await firstContext.succeed(verified(details: {'summary': 'ok'}));
-      await untilState(engine, first, JobState.succeeded);
-      // New files restarted the quiet time of the waiting batch.
-      await followups.libraryBatchEnded();
-      await followups.sweep();
-      expect(dispatched, hasLength(2));
-      final instruction = dispatched.last['instruction'] as String;
-      expect(instruction, contains('/library/b.mkv'));
-      expect(instruction, contains('/library/c.mkv'));
-      expect(instruction, isNot(contains('/library/a.mkv')));
-      await followups.sweep();
-      expect(dispatched, hasLength(2));
-    });
-
-    test('with no helper available the files wait and are not lost', () async {
-      unavailable = const Failure(FailureCode.unavailable, 'Chat host is not running.');
-      await add([_file('a', id: 'file-a')]);
-      await followups.libraryBatchEnded();
-      await followups.sweep();
-      var row = libraryRows(await followups.list()).single;
-      expect(row['state'], 'ready');
-      expect(row['reason'], 'Chat host is not running.');
-      unavailable = null;
-      await followups.sweep();
-      expect(dispatched, hasLength(1));
-      row = libraryRows(await followups.list()).single;
-      expect(row['state'], 'completed');
+      expect(pathsOf(libraryRows(await followups.list()).single),
+          {'/library/x.mkv'});
     });
   });
 
   group('the setting', () {
     test('off: nothing is sent and nothing is kept', () async {
       enabled = false;
-      await add([_file('a', id: 'file-a')]);
+      await addForConversation([_file('a', id: 'file-a')]);
       await followups.libraryBatchEnded();
       await followups.sweep();
       expect(await followups.list(), isEmpty);
-      expect(dispatched, isEmpty);
     });
 
     test('turned off while a batch waits: that batch is not sent', () async {
-      await add([_file('a', id: 'file-a')]);
+      await addForConversation([_file('a', id: 'file-a')]);
       enabled = false;
       await followups.libraryBatchEnded();
       await followups.sweep();
       final row = libraryRows(await followups.list()).single;
       expect(row['state'], 'cancelled');
-      expect(dispatched, isEmpty);
-    });
-  });
-
-  group('restart', () {
-    test('a waiting batch survives and is dispatched exactly once', () async {
-      await add([_file('a', id: 'file-a'), _file('b', id: 'file-b')]);
-      await followups.close();
-      await engine.close();
-      await open();
-      await followups.libraryBatchEnded();
-      await followups.sweep();
-      await followups.sweep();
-      expect(dispatched, hasLength(1));
-      expect(dispatched.single['instruction'], contains('/library/a.mkv'));
-      expect(dispatched.single['instruction'], contains('/library/b.mkv'));
-    });
-
-    test('files already reported are not reported again, even if announced again',
-        () async {
-      await add([_file('a', id: 'file-a'), _file('b', id: 'file-b')]);
-      await followups.libraryBatchEnded();
-      await followups.sweep();
-      expect(dispatched, hasLength(1));
-      await followups.close();
-      await engine.close();
-      await open();
-      await add([
-        _file('a', id: 'file-a'),
-        _file('renamed', id: 'file-b'),
-        _file('b', id: 'file-b')
-      ]);
-      await followups.libraryBatchEnded();
-      await followups.sweep();
-      expect(libraryRows(await followups.list()), hasLength(1));
-      expect(dispatched, hasLength(1));
-    });
-
-    test('a dispatch whose record was lost does not start a second helper',
-        () async {
-      await add([_file('a', id: 'file-a')]);
-      await followups.libraryBatchEnded();
-      await followups.sweep();
-      final id = dispatched.single['jobId'] as String;
-      // The row is put back as if the process died before saving "completed".
-      final row = libraryRows(await followups.list()).single;
-      await store.database.update(
-          'followups',
-          {
-            'state': 'ready',
-            'snapshot': jsonEncode({...row, 'state': 'ready'}..remove('helperJobId'))
-          },
-          where: 'id=?',
-          whereArgs: [row['id']]);
-      await followups.sweep();
-      expect(dispatched, hasLength(1));
-      expect((await engine.list(type: 'agent.helper')).map((j) => j.jobId), [id]);
-      expect(libraryRows(await followups.list()).single['state'], 'completed');
     });
   });
 
@@ -634,7 +489,8 @@ void main() {
     });
     tearDown(() async => fx.close());
 
-    test('episodes, where each link came from, TMDB, and the door it came in by',
+    test(
+        'episodes, where each link came from, TMDB, and the door it came in by',
         () async {
       final added = <JsonMap>[];
       final sub = fx.identities.fileChanges.listen(added.add);
@@ -661,7 +517,11 @@ void main() {
       });
       final facts = await describeLibraryArrivals(fx.identities, [
         for (final file in added) {...file, 'enteredAt': 'now'},
-        {'path': 'jellyfin://item-1', 'via': 'media_source', 'enteredAt': 'now'},
+        {
+          'path': 'jellyfin://item-1',
+          'via': 'media_source',
+          'enteredAt': 'now'
+        },
       ]);
       JsonMap byId(String id) => facts.singleWhere((f) => f['fileId'] == id);
 
@@ -669,9 +529,8 @@ void main() {
       expect(tmdbFile['via'], 'local_scan');
       expect((tmdbFile['works'] as List).single['identities'], {'tmdb': true});
       final episode = (tmdbFile['episodes'] as List).single as Map;
-      expect(episode['identitySources'], [
-        containsPair('source', 'explicit_binding')
-      ]);
+      expect(episode['identitySources'],
+          [containsPair('source', 'explicit_binding')]);
 
       final dandan = byId(withoutTmdb);
       expect((dandan['works'] as List).single['identities'], {'tmdb': false});
@@ -685,13 +544,17 @@ void main() {
       final source = byId(remote);
       expect(source['path'], 'jellyfin://item-1');
       expect(source['via'], 'media_source');
-      expect(source['source'], containsPair('mediaSource', containsPair('itemId', 'item-1')));
-      expect(source['source'], containsPair('mediaSource', containsPair('sourceId', 'jf')));
+      expect(source['source'],
+          containsPair('mediaSource', containsPair('itemId', 'item-1')));
+      expect(source['source'],
+          containsPair('mediaSource', containsPair('sourceId', 'jf')));
     });
 
-    test('a media source entry, and whoever caused it, reach the followup', () async {
-      final sub = fx.identities.fileChanges.listen(
-          (file) => followups.libraryFileAdded(file));
+    test('只回访可定位到对话的调用，媒体源同步和普通扫描不唤起',
+        () async {
+      final cause = await causeForHelper();
+      final sub = fx.identities.fileChanges
+          .listen((file) => followups.libraryFileAdded(file));
       followups.describeLibraryFiles =
           (entries) => describeLibraryArrivals(fx.identities, entries);
       final tmdbFile = await fx.file('scan.mkv');
@@ -700,36 +563,29 @@ void main() {
         'entries': [tmdbBinding(tmdbFile)]
       });
       // A listing a media source synced, caused by nobody's conversation.
-      await fx.identities.ensureRemoteFile('smb://nas/show/01.mkv', 'nas', {
-        'type': 'smb',
-        'itemId': 'show/01.mkv',
-        'name': '01.mkv'
-      });
+      await fx.identities.ensureRemoteFile('smb://nas/show/01.mkv', 'nas',
+          {'type': 'smb', 'itemId': 'show/01.mkv', 'name': '01.mkv'});
       // Something Nipa did from a conversation.
-      await runZoned(
-          () => fx.identities.ensureFile('/elsewhere/nipa.mkv'),
+      await runZoned(() => fx.identities.ensureFile('/elsewhere/nipa.mkv'),
           zoneValues: {
-            BodyChanges.invocationKey: Invocation(
-                origin: 'harness_cli:chat:fixture', id: 'her-call')
+            BodyChanges.invocationKey:
+                Invocation(origin: cause['origin'] as String, id: 'her-call')
           });
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await sub.cancel();
       await followups.libraryBatchEnded();
       await followups.sweep();
 
-      expect(dispatched, hasLength(1));
-      final instruction = dispatched.single['instruction'] as String;
-      expect(instruction, contains('smb://nas/show/01.mkv'));
-      expect(instruction, contains('media_source'));
-      expect(instruction, contains('scan.mkv'));
-      expect(instruction, contains('"tmdb":true'));
-      expect(instruction, contains('identitySources'));
-      // With no chat host to name a thread, her own call falls to the
-      // background kind rather than being lost.
-      expect(instruction, contains('/elsewhere/nipa.mkv'));
+      final row = libraryRows(await followups.list()).single;
+      expect(row['threadId'], 'original');
+      expect(pathsOf(row), {'/elsewhere/nipa.mkv'});
+      final described = factsOf(row).single['data'] as Map;
+      expect(described['via'], 'path');
+      expect(row['invocationId'], 'her-call');
     });
 
-    test('the invocation or task origin that was running is recorded as the cause',
+    test(
+        'the invocation or task origin that was running is recorded as the cause',
         () async {
       final added = <JsonMap>[];
       final sub = fx.identities.fileChanges.listen(added.add);
