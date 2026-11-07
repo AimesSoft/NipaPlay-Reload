@@ -6,8 +6,8 @@ import '../theme/tokens.dart';
 
 /// A few short comments viewers left on the hero's work, drifting across
 /// the sky in its upper right (concept `.danmaku`): faint, few, slow, at
-/// most one per lane. Each crosses once; when all have, the sky is still
-/// until another work takes the hero. Nothing when there are none, and
+/// most one per lane. Each lane's comment drifts off once; then the sky is
+/// still until another work takes the hero. Nothing when there are none, and
 /// nothing under reduced motion (they would only stand there).
 class HeroDanmaku extends StatefulWidget {
   const HeroDanmaku({super.key, required this.lines});
@@ -81,13 +81,11 @@ class _HeroDanmakuState extends State<HeroDanmaku>
     });
   }
 
-  /// When the last lane's last line has left the band.
+  /// When the last lane's comment has left the band.
   static Duration _endOf(List<String> lines) {
-    final count = _lanes.take(lines.length).length;
     var end = Duration.zero;
-    for (final (i, lane) in _lanes.take(count).indexed) {
-      final laps = ((lines.length - i) / count).ceil();
-      final last = lane.crossing * (laps - lane.start);
+    for (final lane in _lanes.take(lines.length)) {
+      final last = lane.crossing * (1 - lane.start);
       if (last > end) end = last;
     }
     return end;
@@ -151,7 +149,7 @@ class _HeroDanmakuState extends State<HeroDanmaku>
                 clipBehavior: Clip.hardEdge,
                 children: [
                   for (final (i, lane) in lanes.indexed)
-                    _comment(lane, i, lanes.length, lines, now, width),
+                    _comment(lane, i, lines, now, width),
                 ],
               ),
             );
@@ -161,16 +159,15 @@ class _HeroDanmakuState extends State<HeroDanmaku>
     );
   }
 
-  /// Lane [i]'s comment now: each crossing takes its next line; the lanes
-  /// share the lines out, so two never show the same one.
-  Widget _comment(_Lane lane, int i, int count, List<String> lines,
-      Duration now, double width) {
+  /// Lane [i]'s comment now, line [i] (so two lanes never show the same
+  /// one), until it has drifted off.
+  Widget _comment(
+      _Lane lane, int i, List<String> lines, Duration now, double width) {
     final t = now.inMicroseconds / lane.crossing.inMicroseconds + lane.start;
     final lap = t.floor();
     final through = t - lap;
-    final index = i + lap * count;
-    if (index >= lines.length) return const SizedBox.shrink();
-    final line = lines[index];
+    if (lap > 0) return const SizedBox.shrink();
+    final line = lines[i];
     return Positioned(
       top: lane.top,
       left: width - through * (width + _beyond),

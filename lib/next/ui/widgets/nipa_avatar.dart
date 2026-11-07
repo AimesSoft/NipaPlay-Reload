@@ -187,22 +187,32 @@ class _HaloState extends State<_Halo> with SingleTickerProviderStateMixin {
     if (old.mood != widget.mood || old.reduced != widget.reduced) _sync();
   }
 
+  /// A new mood moves for a few beats, then holds still: Nipa may think,
+  /// act or wait for minutes, and a halo that never stops would keep every
+  /// page drawing (her face is on all of them).
   void _sync() {
     _c.stop();
-    switch (widget.mood) {
+    final mood = widget.mood;
+    void rest(double value) => _c
+        .animateTo(value, duration: const Duration(milliseconds: 500))
+        .orCancel
+        .ignore();
+    switch (mood) {
       case NipaMood.thinking:
         _c.duration = const Duration(milliseconds: 2400);
-        _c.repeat(reverse: true);
+        _c.repeat(reverse: true, count: 6).then((_) => rest(0.5));
       case NipaMood.acting:
         _c.duration = const Duration(milliseconds: 1400);
         if (widget.reduced) {
           _c.value = 0.12;
         } else {
-          _c.repeat();
+          _c.repeat(count: 4);
         }
       case NipaMood.waiting:
         _c.duration = const Duration(milliseconds: 1000);
-        _c.repeat(reverse: true);
+        _c.repeat(reverse: true, count: 6).then((_) {
+          if (widget.reduced) rest(1);
+        });
       case NipaMood.idle:
         break;
     }

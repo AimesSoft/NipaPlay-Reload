@@ -51,8 +51,10 @@ class _RingPainter extends CustomPainter {
       old.value != value || old.thickness != thickness;
 }
 
-/// `.live .bar` / `.prog`: a thin bar, crimson with a moving sheen while work
-/// is running, or plain paper for watch progress.
+/// `.live .bar` / `.prog`: a thin bar, crimson while work is running, or
+/// plain paper for watch progress. A running bar steps to each new value
+/// (one frame an update): work can run for hours, and nothing on it should
+/// keep the screen drawing in between.
 class ThinBar extends StatelessWidget {
   const ThinBar({
     super.key,
@@ -74,7 +76,6 @@ class ThinBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reduced = NextMotion.reduced(context);
     // The track spans the available width even under loose constraints.
     return SizedBox(
       width: width ?? double.infinity,
@@ -85,7 +86,7 @@ class ThinBar extends StatelessWidget {
           decoration: BoxDecoration(color: track),
           child: TweenAnimationBuilder<double>(
             tween: Tween(end: progress.clamp(0, 1)),
-            duration: const Duration(milliseconds: 600),
+            duration: live ? Duration.zero : const Duration(milliseconds: 600),
             curve: NextMotion.ease,
             builder: (context, value, child) => FractionallySizedBox(
               alignment: Alignment.centerLeft,
@@ -101,52 +102,12 @@ class ThinBar extends StatelessWidget {
                         colors: [NextColors.accent, NextColors.accent2])
                     : null,
               ),
-              child: live && !reduced ? const _Sheen() : null,
             ),
           ),
         ),
       ),
     );
   }
-}
-
-class _Sheen extends StatefulWidget {
-  const _Sheen();
-
-  @override
-  State<_Sheen> createState() => _SheenState();
-}
-
-class _SheenState extends State<_Sheen> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1800))
-    ..repeat();
-  late final Animation<Offset> _offset =
-      Tween(begin: const Offset(-1, 0), end: const Offset(1, 0)).animate(_c);
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => RepaintBoundary(
-          child: ClipRect(
-        child: SlideTransition(
-          position: _offset,
-          child: const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [
-                Color(0x00FFFFFF),
-                Color(0xB3FFFFFF),
-                Color(0x00FFFFFF)
-              ]),
-            ),
-            child: SizedBox.expand(),
-          ),
-        ),
-      ));
 }
 
 /// A crimson dot with an expanding halo (concept `.pulse`).

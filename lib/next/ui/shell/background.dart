@@ -42,7 +42,7 @@ class BackgroundEntry extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.only(left: 10, right: 14),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const _WorkGlyph(),
+              _WorkGlyph(count: active.length),
               const SizedBox(width: 8),
               Text('${active.length}',
                   style: NextText.num(12, color: NextColors.p2)),
@@ -54,9 +54,12 @@ class BackgroundEntry extends StatelessWidget {
   }
 }
 
-/// A short list whose points light up one after another: work going on.
+/// A short list, its points lit: work going on. When the number of things
+/// going on changes, the light runs down the points once; otherwise the
+/// glyph is still (work can go on for hours).
 class _WorkGlyph extends StatefulWidget {
-  const _WorkGlyph();
+  const _WorkGlyph({required this.count});
+  final int count;
 
   @override
   State<_WorkGlyph> createState() => _WorkGlyphState();
@@ -66,7 +69,13 @@ class _WorkGlyphState extends State<_WorkGlyph>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1800))
-    ..repeat();
+    ..forward();
+
+  @override
+  void didUpdateWidget(_WorkGlyph old) {
+    super.didUpdateWidget(old);
+    if (old.count != widget.count) _c.forward(from: 0);
+  }
 
   @override
   void dispose() {
@@ -79,7 +88,9 @@ class _WorkGlyphState extends State<_WorkGlyph>
         animation: _c,
         builder: (context, _) => CustomPaint(
           size: const Size.square(16),
-          painter: _WorkPainter(NextMotion.reduced(context) ? null : _c.value),
+          painter: _WorkPainter(NextMotion.reduced(context) || !_c.isAnimating
+              ? null
+              : _c.value),
         ),
       );
 }
