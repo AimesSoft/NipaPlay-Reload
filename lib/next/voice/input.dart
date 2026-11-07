@@ -24,6 +24,8 @@ class VoiceInput extends ChangeNotifier {
   Future<void>? _starting, _stopping;
   Future<void> _tail = Future.value();
   int _queued = 0;
+  int _receivedBytes = 0;
+  String _transcript = '';
   Timer? _limit;
   final _store = VoiceModelStore.instance;
 
@@ -36,6 +38,8 @@ class VoiceInput extends ChangeNotifier {
     busy = true;
     error = null;
     _queued = 0;
+    _receivedBytes = 0;
+    _transcript = '';
     _tail = Future.value();
     _cancelled = false;
     _discard = false;
@@ -66,25 +70,29 @@ class VoiceInput extends ChangeNotifier {
         _iosSession = true;
         if (_cancelled) return;
       }
-      final audio = await recorder.startStream(const RecordConfig(
+      final audio = await recorder.startStream(RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: 16000,
         numChannels: 1,
-        iosConfig: IosRecordConfig(categoryOptions: [
+        iosConfig: const IosRecordConfig(categoryOptions: [
           IosAudioCategoryOption.mixWithOthers,
           IosAudioCategoryOption.defaultToSpeaker,
           IosAudioCategoryOption.allowBluetooth,
           IosAudioCategoryOption.allowBluetoothA2DP,
         ]),
         streamBufferSize: 6400,
-        echoCancel: true,
-        noiseSuppress: true,
+        // On macOS this enables a duplex VoiceProcessingIO graph. Dictation
+        // only captures input; the unused output can fail with invalid sample
+        // timestamps. Use plain microphone PCM instead.
+        echoCancel: !Platform.isMacOS,
+        noiseSuppress: !Platform.isMacOS,
       ));
       if (_cancelled) return;
       active = true;
       _store.recording = true;
       _audio = audio.listen((bytes) {
         if (_cancelled) return;
+        _receivedBytes += bytes.length;
         _queued += bytes.length;
         if (_queued > 16000 * 2 * 5) {
           error = '本机识别速度跟不上录音，请改用中文轻量模型。';
@@ -95,7 +103,10 @@ class VoiceInput extends ChangeNotifier {
           try {
             if (_discard) return;
             final text = await _decoder!.accept(bytes);
-            if (!_discard) onText(text);
+            if (!_discard) {
+              _transcript = text;
+              onText(text);
+            }
           } catch (e) {
             error = e.toString();
             unawaited(cancel());
@@ -141,7 +152,15 @@ class VoiceInput extends ChangeNotifier {
       await _tail;
       if (!_discard && _decoder != null) {
         final text = await _decoder!.finish();
-        if (!_discard) onText(text);
+        if (!_discard) {
+          if (text.isNotEmpty) _transcript = text;
+          onText(_transcript);
+          if (_transcript.isEmpty) {
+            error = _receivedBytes == 0
+                ? '未收到麦克风音频，请检查系统声音设置中的输入设备后重试。'
+                : '未识别到语音，请检查麦克风输入音量后重试。';
+          }
+        }
       }
     } catch (e) {
       error = e.toString();
