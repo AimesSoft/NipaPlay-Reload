@@ -25,6 +25,7 @@ import '../theme/tokens.dart';
 import '../widgets/art_origin.dart';
 import '../widgets/grain.dart';
 import '../widgets/sheet.dart';
+import 'phone_dock.dart';
 import 'shell_controller.dart';
 import 'agent_inbox.dart';
 import 'top_bar.dart';
@@ -203,7 +204,11 @@ class _NextShellState extends State<NextShell> {
                                 valueListenable: _shell.scrolled,
                                 builder: (context, scrolled, _) =>
                                     AnimatedOpacity(
-                                  opacity: scrolled ? 1 : 0,
+                                  // A phone keeps a little of it: the status
+                                  // bar sits on the picture.
+                                  opacity: scrolled
+                                      ? 1
+                                      : (NextLayout.compact(context) ? 0.55 : 0),
                                   duration: const Duration(milliseconds: 240),
                                   child: const DecoratedBox(
                                     decoration: BoxDecoration(
@@ -370,6 +375,6 @@ class _SectionsState extends State<_Sections>
         // A phone's sections are at its foot, over the pages; a page pushed
         // over them (a work, settings) covers them.
         if (NextLayout.compact(context))
-          const Positioned(left: 0, right: 0, bottom: 0, child: NextTabBar()),
+          const Positioned(left: 0, right: 0, bottom: 0, child: PhoneDock()),
       ]);
 }

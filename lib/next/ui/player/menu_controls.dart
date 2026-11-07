@@ -11,13 +11,19 @@ import 'playback.dart';
 /// Under a finger the player's menus rise from the foot as sheets, as wide
 /// as the screen allows, instead of hanging over their buttons.
 class PlayerMenuSheet extends InheritedWidget {
-  const PlayerMenuSheet({super.key, required super.child});
+  const PlayerMenuSheet({super.key, this.width, required super.child});
 
-  static bool of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<PlayerMenuSheet>() != null;
+  /// A phone turned sideways: a narrower sheet at the side, scrolling in
+  /// the little height there is.
+  final double? width;
+
+  static bool of(BuildContext context) => maybeOf(context) != null;
+
+  static PlayerMenuSheet? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PlayerMenuSheet>();
 
   @override
-  bool updateShouldNotify(PlayerMenuSheet old) => false;
+  bool updateShouldNotify(PlayerMenuSheet old) => old.width != width;
 }
 
 /// The frosted surface the player's menus sit on, as the shell's popovers.
@@ -29,22 +35,26 @@ class PlayerMenuSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sheet = PlayerMenuSheet.of(context);
+    final found = PlayerMenuSheet.maybeOf(context);
+    final sheet = found != null;
     final room = MediaQuery.sizeOf(context).width - 16;
     return Glass(
-        blur: 30,
-        color: const Color(0xD1121218),
-        borderColor: const Color(0x1AFFFFFF),
-        radius: BorderRadius.circular(sheet ? 22 : 16),
-        shadows: const [
-          BoxShadow(
-              color: Color(0x66000000), blurRadius: 40, offset: Offset(0, 12))
-        ],
-        padding: EdgeInsets.all(sheet ? 10 : 6),
-        child: SizedBox(
-            width: sheet ? (room < 520 ? room - 20 : 500) : width,
-            child: child),
-      );
+      blur: 30,
+      color: const Color(0xD1121218),
+      borderColor: const Color(0x1AFFFFFF),
+      radius: BorderRadius.circular(sheet ? 22 : 16),
+      shadows: const [
+        BoxShadow(
+            color: Color(0x66000000), blurRadius: 40, offset: Offset(0, 12))
+      ],
+      padding: EdgeInsets.all(sheet ? 10 : 6),
+      child: SizedBox(
+          width:
+              found?.width ?? (sheet ? (room < 520 ? room - 20 : 500) : width),
+          child: found?.width == null
+              ? child
+              : SingleChildScrollView(child: child)),
+    );
   }
 }
 

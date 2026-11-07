@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import '../cards/card_views.dart';
 import '../chat/chat_frame.dart';
 import '../player/stage.dart';
+import '../shell/phone_dock.dart';
 import '../shell/shell_controller.dart';
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
@@ -159,7 +160,7 @@ extension on _ChatPanelLayerState {
     // Over a video the picture stays in sight above the sheet.
     final top = docked
         ? size.width * 9 / 16 + NextLayout.barTop(context) + 24
-        : NextLayout.barTop(context) + 8;
+        : NextLayout.barTop(context) + 10;
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) {
@@ -174,8 +175,8 @@ extension on _ChatPanelLayerState {
             ),
           ),
           Positioned(
-            left: 6,
-            right: 6,
+            left: 0,
+            right: 0,
             top: top,
             bottom: 0,
             child: Opacity(
@@ -236,6 +237,9 @@ class _Sheet extends StatelessWidget {
   final bool docked;
 
   static final _radius = BorderRadius.circular(24);
+
+  /// A phone's sheet rises from the foot: only its top is rounded.
+  static const _phoneRadius = BorderRadius.vertical(top: Radius.circular(34));
   static const _shadow = [
     BoxShadow(color: Color(0x80000000), blurRadius: 80, offset: Offset(-30, 0)),
   ];
@@ -244,6 +248,8 @@ class _Sheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
     final actions = shell.services.actions;
+    final phone = NextLayout.compact(context);
+    final radius = phone ? _phoneRadius : _radius;
     return NextDropZone(
       onDrop: shell.chat.attach,
       builder: (context, over) => Stack(children: [
@@ -252,7 +258,7 @@ class _Sheet extends StatelessWidget {
             blur: 40,
             color: const Color(0xBD121218), // rgba(18,18,24,.74)
             borderColor: const Color(0x1AFFFFFF),
-            radius: _radius,
+            radius: radius,
             highlight: false,
             shadows: docked ? const [] : _shadow,
             child: ChatFrame(
@@ -272,14 +278,21 @@ class _Sheet extends StatelessWidget {
                 onCancelTask: (t) => actions.cancelTask(t.taskId),
                 onChoose: (answer) => unawaited(shell.chat.say(answer)),
               ),
-              trailing: FrameButton(
-                  glyph: NextGlyph.close,
-                  label: '关闭',
-                  onTap: shell.closePanel),
+              trailing: phone
+                  ? PhoneGlassCircle(
+                      label: '关闭',
+                      size: 36,
+                      onTap: shell.closePanel,
+                      child: const NextIcon(NextGlyph.close,
+                          size: 15, color: NextColors.paper))
+                  : FrameButton(
+                      glyph: NextGlyph.close,
+                      label: '关闭',
+                      onTap: shell.closePanel),
             ),
           ),
         ),
-        Positioned.fill(child: DropGlow(over: over, radius: _radius)),
+        Positioned.fill(child: DropGlow(over: over, radius: radius)),
       ]),
     );
   }

@@ -1,9 +1,13 @@
 import 'package:flutter/widgets.dart';
 
+import '../../mesh/nipa_peers.dart';
+
 import '../cards/card_views.dart';
 import '../conversation/nipa_chat.dart';
 import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
+import '../widgets/nipa_avatar.dart';
+import '../theme/layout.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/words.dart';
@@ -48,6 +52,27 @@ class ChatFrame extends StatelessWidget {
     return ListenableBuilder(
       listenable: Listenable.merge([chat, shell.services.logins]),
       builder: (context, _) => Column(children: [
+        if (NextLayout.compact(context)) ...[
+          // A sheet's grabber, and who is talking: her face and the
+          // device she runs on.
+          Container(
+            width: 38,
+            height: 5,
+            margin: const EdgeInsets.only(top: 8),
+            decoration: BoxDecoration(
+                color: const Color(0x4DFFFFFF),
+                borderRadius: BorderRadius.circular(3)),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(sidePadding - 4, 12, sidePadding - 8, 4),
+            child: Row(children: [
+              NipaAvatar(size: 40, mood: chat.mood),
+              const SizedBox(width: 12),
+              Expanded(child: _PhoneTitle(chat: chat, peers: shell.services.peers)),
+              trailing,
+            ]),
+          ),
+        ] else
         Padding(
           padding: EdgeInsets.fromLTRB(sidePadding, 14, sidePadding - 6, 6),
           child: column(Row(children: [
@@ -113,6 +138,67 @@ class ChatFrame extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// A phone's title: her name in the work titles' face, the device she
+/// runs on under it (its dot lit while she can be reached there); it opens
+/// the sessions.
+class _PhoneTitle extends StatelessWidget {
+  const _PhoneTitle({required this.chat, this.peers});
+  final NipaChat chat;
+  final NipaPeers? peers;
+
+  /// 在工作站上, 在 MacBook Pro 上: a space only beside Latin letters.
+  static String _on(String device) {
+    final latin = RegExp(r'[A-Za-z0-9]');
+    final before = latin.hasMatch(device[0]) ? ' ' : '';
+    final after = latin.hasMatch(device[device.length - 1]) ? ' ' : '';
+    return '在$before$device$after上';
+  }
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: chat.toggleMenu,
+        semanticLabel: '对话',
+        pressScale: 0.98,
+        builder: (context, _) => StreamBuilder<void>(
+          stream: peers?.changes,
+          builder: (context, _) {
+            final device = peers?.chosenName;
+            final live = peers?.chosenPeer?.usable ?? false;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(chat.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NextText.serif(20)),
+                if (device != null && device.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Row(children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                            color: live ? NextColors.mint : NextColors.p4,
+                            shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(_on(device),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: NextText.sans(12, color: NextColors.p3)),
+                      ),
+                    ]),
+                  ),
+              ],
+            );
+          },
+        ),
+      );
 }
 
 /// The session's title; it opens the sessions.

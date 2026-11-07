@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/widgets.dart';
 
 import '../data/settings_data.dart';
+import '../shell/phone_dock.dart' show PhoneGlassCircle;
 import '../shell/shell_controller.dart';
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
@@ -413,17 +414,20 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
       child: Padding(
         padding: EdgeInsets.only(top: NextLayout.barTop(context)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          // Back on the bar's row (its right holds the shell's own).
+          // Back on glass on the bar's row (its right holds the shell's
+          // own).
           SizedBox(
             height: NextMetrics.topBar,
             child: Padding(
-              padding: const EdgeInsets.only(left: gutter - 9),
+              padding: const EdgeInsets.only(left: gutter),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: NextIconButton(
-                    glyph: NextGlyph.chevronLeft,
-                    label: '返回',
-                    onTap: () => Navigator.of(context).maybePop()),
+                child: PhoneGlassCircle(
+                  label: '返回',
+                  onTap: () => Navigator.of(context).maybePop(),
+                  child: const NextIcon(NextGlyph.chevronLeft,
+                      size: 22, color: NextColors.paper, stroke: 2),
+                ),
               ),
             ),
           ),

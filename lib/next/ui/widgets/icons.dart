@@ -54,7 +54,14 @@ enum NextGlyph {
   /// One frame back or forward, and the picture in picture.
   frameBack,
   frameForward,
-  pictureInPicture
+  pictureInPicture,
+
+  /// A phone's sections at its foot, and its microphone.
+  home,
+  discover,
+  library,
+  activity,
+  mic
 }
 
 class NextIcon extends StatelessWidget {
@@ -192,6 +199,57 @@ class _GlyphPainter extends CustomPainter {
               ..lineTo(18.5, 15.5)
               ..lineTo(15.5, 15.5),
             line);
+      case NextGlyph.home:
+        canvas.drawPath(
+            Path()
+              ..moveTo(4, 10.5)
+              ..lineTo(12, 4)
+              ..lineTo(20, 10.5)
+              ..lineTo(20, 19)
+              ..quadraticBezierTo(20, 20, 19, 20)
+              ..lineTo(14.5, 20)
+              ..lineTo(14.5, 14.5)
+              ..lineTo(9.5, 14.5)
+              ..lineTo(9.5, 20)
+              ..lineTo(5, 20)
+              ..quadraticBezierTo(4, 20, 4, 19)
+              ..close(),
+            line);
+      case NextGlyph.discover:
+        canvas.drawCircle(const Offset(12, 12), 8.5, line);
+        canvas.drawPath(
+            Path()
+              ..moveTo(15.5, 8.5)
+              ..lineTo(13.5, 13.5)
+              ..lineTo(8.5, 15.5)
+              ..lineTo(10.5, 10.5)
+              ..close(),
+            line);
+      case NextGlyph.library:
+        for (final r in const [
+          Rect.fromLTWH(4, 4, 6.5, 9),
+          Rect.fromLTWH(13.5, 4, 6.5, 9),
+          Rect.fromLTWH(4, 15.5, 16, 4.5),
+        ]) {
+          canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(1.6)), line);
+        }
+      case NextGlyph.activity:
+        canvas.drawPath(
+            Path()
+              ..moveTo(3.5, 12)
+              ..lineTo(7.5, 12)
+              ..lineTo(10, 6)
+              ..lineTo(14, 18)
+              ..lineTo(16.5, 12)
+              ..lineTo(20.5, 12),
+            line);
+      case NextGlyph.mic:
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                const Rect.fromLTWH(9, 3.5, 6, 11), const Radius.circular(3)),
+            line);
+        canvas.drawArc(const Rect.fromLTWH(5.5, 5, 13, 13), 0, math.pi, false, line);
+        canvas.drawLine(const Offset(12, 18), const Offset(12, 21), line);
       case NextGlyph.more:
         for (final x in const [5.0, 12.0, 19.0]) {
           canvas.drawCircle(Offset(x, 12), 1.9, fill);

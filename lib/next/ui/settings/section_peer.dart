@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import '../../mesh/nipa_peers.dart';
 import '../theme/tokens.dart';
@@ -39,6 +40,18 @@ class _NipaPeerSectionState extends State<NipaPeerSection> {
     super.dispose();
   }
 
+  /// 为这台 iPhone 服务: what the choice is for, by this device's name.
+  static String get _title {
+    final self = globals.isTelevision
+        ? '电视'
+        : globals.isIPad
+            ? ' iPad '
+            : globals.isPhone
+                ? ' iPhone '
+                : '设备';
+    return '为这台$self服务';
+  }
+
   String _state(NipaPeer peer) {
     if (!peer.online) return '不在线';
     if (!peer.runs) return '没有运行梨花';
@@ -50,13 +63,13 @@ class _NipaPeerSectionState extends State<NipaPeerSection> {
     final peers = widget.peers;
     final list = peers.peers;
     if (list.isEmpty) {
-      return SettingsCard(children: [
+      return SettingsCard(title: _title, children: [
         SettingsRow(
           title: _asked ? '没有设备在运行梨花' : '正在查找',
         ),
       ]);
     }
-    return SettingsCard(children: [
+    return SettingsCard(title: _title, children: [
       for (final peer in list)
         SettingsRow(
           key: ValueKey(peer.id),
@@ -68,7 +81,7 @@ class _NipaPeerSectionState extends State<NipaPeerSection> {
               unawaited(peers.choose(peers.chosen == peer.id ? null : peer.id)),
           trailing: peers.chosen == peer.id
               ? const NextIcon(NextGlyph.check,
-                  size: 18, color: NextColors.mint)
+                  size: 18, color: NextColors.accent, stroke: 2.2)
               : null,
         ),
     ]);

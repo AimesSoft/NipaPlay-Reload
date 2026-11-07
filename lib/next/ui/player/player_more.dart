@@ -249,13 +249,21 @@ class MoreMenuState extends State<MoreMenu> {
               MenuItem(label: '画中画', onTap: widget.onPictureInPicture),
             if (_session case final next?) ...[
               PlayerMenuLink(label: '章节', onTap: () => _open(_Page.chapters)),
-              MenuItem(label: '逐帧后退（,）', onTap: () => _set(() async {
-                await next.inspection.inspect('playback.navigate', {'frameDelta': -1});
-              })),
-              MenuItem(label: '逐帧前进（.）', onTap: () => _set(() async {
-                await next.inspection.inspect('playback.navigate', {'frameDelta': 1});
-              })),
-              MenuItem(label: '截取 GIF', onTap: () => _set(() => showNextGifDialog(context, next))),
+              MenuItem(
+                  label: PlayerMenuSheet.of(context) ? '逐帧后退' : '逐帧后退（,）',
+                  onTap: () => _set(() async {
+                        await next.inspection
+                            .inspect('playback.navigate', {'frameDelta': -1});
+                      })),
+              MenuItem(
+                  label: PlayerMenuSheet.of(context) ? '逐帧前进' : '逐帧前进（.）',
+                  onTap: () => _set(() async {
+                        await next.inspection
+                            .inspect('playback.navigate', {'frameDelta': 1});
+                      })),
+              MenuItem(
+                  label: '截取 GIF',
+                  onTap: () => _set(() => showNextGifDialog(context, next))),
               if (next.canPictureInPicture)
                 MenuItem(label: next.windows.detached ? '返回主窗口' : '分离窗口',
                     onTap: () => _set(next.windows.detached ? next.windows.returnToMain : next.detach)),

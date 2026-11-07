@@ -11,6 +11,7 @@ import '../../ui_data/work_more.dart' show buildWorkMore;
 import '../data/discover.dart';
 import '../data/work_manage.dart';
 import '../settings/settings_layout.dart' show SettingsSection;
+import '../shell/phone_dock.dart' show PhoneGlassCircle;
 import '../shell/shell_controller.dart';
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
@@ -640,9 +641,9 @@ class _WorkDetailPageState extends State<WorkDetailPage>
         return Stack(fit: StackFit.expand, children: [
           RepaintBoundary(
             child: DetailBackdrop(
-              image: compact
-                  ? _work.artwork.poster ?? _work.artwork.backdrop
-                  : _work.artwork.backdrop ?? _work.artwork.poster,
+              // A poster's own lettering would fight the logo: a phone
+              // crops the backdrop too.
+              image: _work.artwork.backdrop ?? _work.artwork.poster,
               soft: !compact && _work.artwork.backdrop == null,
               compact: compact,
               tint: _work.artwork.tint,
@@ -741,21 +742,38 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                 _removed != null ? const AlwaysStoppedAnimation(0.35) : content,
             child: IgnorePointer(child: _bar(size, column, titleTop, reduced)),
           ),
-          Positioned(
-            left: NextLayout.gutter(context) - 9,
-            // On a phone, in the bar's row (its left is free).
-            top: compact
-                ? NextLayout.barTop(context) + 10
-                : NextLayout.underBar(context) + 8,
-            child: FadeTransition(
-              opacity: content,
-              child: NextIconButton(
-                glyph: NextGlyph.chevronLeft,
-                label: '返回',
-                onTap: () => Navigator.of(context).maybePop(),
+          if (compact)
+            // On a phone, a glass circle in the bar's row, across from the
+            // bar's own on the right.
+            Positioned(
+              left: NextLayout.compactGutter,
+              top: NextLayout.barTop(context),
+              height: NextMetrics.topBar,
+              child: Center(
+                child: FadeTransition(
+                  opacity: content,
+                  child: PhoneGlassCircle(
+                    label: '返回',
+                    onTap: () => Navigator.of(context).maybePop(),
+                    child: const NextIcon(NextGlyph.chevronLeft,
+                        size: 22, color: NextColors.paper, stroke: 2),
+                  ),
+                ),
+              ),
+            )
+          else
+            Positioned(
+              left: NextLayout.gutter(context) - 9,
+              top: NextLayout.underBar(context) + 8,
+              child: FadeTransition(
+                opacity: content,
+                child: NextIconButton(
+                  glyph: NextGlyph.chevronLeft,
+                  label: '返回',
+                  onTap: () => Navigator.of(context).maybePop(),
+                ),
               ),
             ),
-          ),
           if (_menuOpen)
             ..._popover(_menuLink, _menu(), () => _menuOpen = false),
           if (_seasonsOpen)
@@ -1057,7 +1075,26 @@ class _WorkDetailPageState extends State<WorkDetailPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               if (lead.isNotEmpty) ...[
-                Row(mainAxisSize: MainAxisSize.min, children: lead),
+                // The main action fills the phone's width, under the thumb.
+                SizedBox(
+                  width: MediaQuery.sizeOf(context).width -
+                      NextLayout.gutter(context) -
+                      NextLayout.end(context),
+                  child: Row(children: [
+                    for (final w in lead)
+                      if (w is PlayButton)
+                        Expanded(
+                            child: PlayButton(
+                                label: w.label, onTap: w.onTap, expand: true))
+                      else if (w is NextButton)
+                        Expanded(
+                            child: NextButton(
+                                label: w.label,
+                                onTap: w.onTap,
+                                leading: w.leading,
+                                expand: true))
+                  ]),
+                ),
                 const SizedBox(height: 12),
               ],
               SingleChildScrollView(
