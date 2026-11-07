@@ -304,7 +304,11 @@ class _NextShellState extends State<NextShell> with WidgetsBindingObserver {
                                   right: 0,
                                   top: 0,
                                   child: NextTopBar()),
-                              const Positioned.fill(child: Grain()),
+                              // Not on a phone: on its dense screen the grain
+                              // hardly shows, and over the system's glass it
+                              // would be blended against nothing.
+                              if (!NextLayout.compact(context))
+                                const Positioned.fill(child: Grain()),
                               const Positioned.fill(child: NextPopovers()),
                             ]),
                           ),

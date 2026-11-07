@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 import '../library/library_controls.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
@@ -117,8 +118,10 @@ class SettingsRow extends StatelessWidget {
                       children: [
                         Row(children: [
                           Flexible(
+                            // A phone's narrow row lets the title wrap
+                            // rather than cut it short.
                             child: Text(title,
-                                maxLines: 1,
+                                maxLines: NextLayout.compact(context) ? 2 : 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: NextText.sans(14,
                                     color: dim
@@ -513,7 +516,10 @@ class _FieldControlState extends State<FieldControl> {
   @override
   Widget build(BuildContext context) => AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        width: widget.width,
+        // On a phone a field leaves its row's title room to be read.
+        width: NextLayout.compact(context)
+            ? math.min(widget.width, MediaQuery.sizeOf(context).width * 0.44)
+            : widget.width,
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         alignment: Alignment.centerLeft,
