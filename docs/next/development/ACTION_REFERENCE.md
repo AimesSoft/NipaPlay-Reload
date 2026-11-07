@@ -4,7 +4,7 @@
 
 列中的 read / write / destructive 是 ActionSpec 的 effect，表示接口分类，不等于纯函数、可撤销或自动确认。read 可能联网或准备缓存；write 可能产生任务、修改文件、发网络请求；destructive 也不保证弹出确认。领域预览、回执、幂等与撤回规则以具体 describe 为准。尤其 `media.mesh_files.confirm` 由调用方在用户同意后执行，宿主不会替它弹窗；`danmaku.send` 发布在线评论；SQL 提交未知先查原键回执。`danmaku.align` 是退役兼容入口，不可用于新对齐。
 
-**宿主列**是源码组合位置的导航：Core 为桌面 Core 注册，Runtime 为 GUI 宿主额外注册，Headless 为专用实现，通用为共享领域实现或多个宿主；不等于该平台一定注册或实际可用。Headless 过滤 `download.delete` 和 `media.library.import_history`，其根目录实现与 GUI 不同。iOS body-only 过滤 `window.*`、`program.*`、`chat.*`、`agent.*`、`memory.*`、`app.quit`、`app.restart`。Mesh 列“允许”仅表示 `meshActionAllowed` 静态白名单允许对应名称，目标还须注册、可达、认证并满足授权；“本地”是白名单不允许直接远程调用（`mesh.delegate` 在发起方执行）。设备、来源、参数和用户在场约束仍以目标自省为准。完整盘点方法与已知缺口见 [覆盖说明](ACTION_COVERAGE.md)。
+**宿主列**是源码组合位置的导航：Core 为桌面 Core 注册，Runtime 为 GUI 宿主额外注册，Headless 为专用实现，通用为共享领域实现或多个宿主；不等于该平台一定注册或实际可用。Headless 过滤 `download.delete` 和 `media.library.import_history`，其根目录实现与 GUI 不同。iOS、HarmonyOS 和 tvOS 的 body-only 角色过滤 `window.*`、`program.*`、`chat.*`、`agent.*`、`memory.*`、`app.quit`、`app.restart`，不启动本地 Agent 端点或对话宿主；tvOS 还过滤下载、文件扫描、媒体根目录和文件选择器操作。Mesh 列“允许”仅表示 `meshActionAllowed` 静态白名单允许对应名称，目标还须注册、可达、认证并满足授权；“本地”是白名单不允许直接远程调用（`mesh.delegate` 在发起方执行）。设备、来源、参数和用户在场约束仍以目标自省为准。完整盘点方法与已知缺口见 [覆盖说明](ACTION_COVERAGE.md)。
 
 | Action | Effect | 用途或限制 | 宿主代码 | Mesh | 定义 |
 | --- | --- | --- | --- | --- | --- |
