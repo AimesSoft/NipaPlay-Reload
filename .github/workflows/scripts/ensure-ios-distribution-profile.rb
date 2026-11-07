@@ -7,6 +7,10 @@ require "digest"
 require "fileutils"
 require "open3"
 
+platform = ARGV.fetch(0, "ios")
+abort "usage: ensure-ios-distribution-profile.rb [ios|tvos]" unless %w[ios tvos].include?(platform)
+profile_type = platform == "tvos" ? "TVOS_APP_STORE" : "IOS_APP_STORE"
+
 Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
   key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
   issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
@@ -28,9 +32,9 @@ abort "NipaPlay bundle ID is missing from the Apple developer account." unless b
 
 # Xcode-managed Team Store profiles cannot be used for a manual archive.
 # Keep a reusable CI-owned profile bound to the existing certificate instead.
-profile_name = "NipaPlay CI App Store #{certificate.id}"
+profile_name = platform == "tvos" ? "NipaPlay CI tvOS App Store #{certificate.id}" : "NipaPlay CI App Store #{certificate.id}"
 profiles = Spaceship::ConnectAPI::Profile.all(
-  filter: { profileType: "IOS_APP_STORE" }, includes: "bundleId,certificates"
+  filter: { profileType: profile_type }, includes: "bundleId,certificates"
 )
 profile = profiles.select do |item|
   item.name.start_with?(profile_name) && item.valid? &&
@@ -41,7 +45,7 @@ unless profile
   # Retain expired/invalid profiles; a replacement never revokes other builds.
   name = profiles.any? { |item| item.name == profile_name } ? "#{profile_name} #{Time.now.utc.strftime('%Y%m%d%H%M%S')}" : profile_name
   profile = Spaceship::ConnectAPI::Profile.create(
-    name: name, profile_type: "IOS_APP_STORE", bundle_id_id: bundle.id,
+    name: name, profile_type: profile_type, bundle_id_id: bundle.id,
     certificate_ids: [certificate.id]
   )
 end

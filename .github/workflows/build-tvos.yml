@@ -2,9 +2,44 @@ name: Build tvOS
 
 on:
   workflow_dispatch:
+    inputs:
+      upload-to-app-store:
+        description: '构建签名 tvOS IPA，供 TestFlight 上传使用'
+        required: false
+        default: false
+        type: boolean
   workflow_call:
+    inputs:
+      testflight-only:
+        description: '将 TestFlight 重建与完整发布的并发组分开'
+        required: false
+        default: false
+        type: boolean
+      upload-to-app-store:
+        description: '构建签名 tvOS IPA，供 TestFlight 上传使用'
+        required: false
+        default: false
+        type: boolean
     secrets:
       NIPAPLAY_TMDB_TOKEN:
+        required: false
+      IOS_DISTRIBUTION_CERTIFICATE_BASE64:
+        description: '包含 Apple Distribution 证书与私钥的 P12（Base64，与 iOS 共用）'
+        required: false
+      IOS_DISTRIBUTION_CERTIFICATE_PASSWORD:
+        description: 'iOS Distribution P12 密码'
+        required: false
+      APPLE_TEAM_ID:
+        description: 'Apple Developer Team ID'
+        required: false
+      APP_STORE_CONNECT_API_PRIVATE_KEY:
+        description: 'App Store Connect API 私钥（AuthKey_*.p8 完整内容）'
+        required: false
+      APP_STORE_CONNECT_API_KEY_ID:
+        description: 'App Store Connect API Key ID'
+        required: false
+      APP_STORE_CONNECT_ISSUER_ID:
+        description: 'App Store Connect API Issuer ID'
         required: false
     outputs:
       version:
@@ -13,10 +48,21 @@ on:
       artifact-name:
         description: Uploaded tvOS build artifact
         value: ${{ jobs.build.outputs.artifact-name }}
+      app-store-artifact-name:
+        description: 签名 tvOS IPA 的 Actions artifact 名称
+        value: ${{ jobs.build.outputs.app-store-artifact-name }}
+      app-store-build-number:
+        description: Apple 构建号
+        value: ${{ jobs.build.outputs.app-store-build-number }}
+      app-store-version:
+        description: Apple 数字版本号
+        value: ${{ jobs.build.outputs.app-store-version }}
   pull_request:
     paths:
       - '.flutter-version-tvos'
       - '.github/workflows/build-tvos.yml'
+      - '.github/workflows/scripts/configure-ios-distribution.py'
+      - '.github/workflows/scripts/ensure-ios-distribution-profile.rb'
       - 'lib/**'
       - 'packages/**'
       - 'pubspec.yaml'
@@ -34,7 +80,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-tvos-${{ github.workflow }}-${{ github.ref }}
+  # 主工作流的 TestFlight 重建不能取消另一轮完整发布的电视构建。
+  group: build-tvos-${{ github.workflow }}-${{ github.ref }}${{ inputs.testflight-only && '-testflight-only' || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -48,6 +95,9 @@ jobs:
     outputs:
       version: ${{ steps.project.outputs.version }}
       artifact-name: ${{ steps.artifact.outputs.name }}
+      app-store-artifact-name: app-store-tvOS
+      app-store-build-number: ${{ steps.app_store_build.outputs.build-number }}
+      app-store-version: ${{ steps.app_store_build.outputs.version }}
     steps:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -57,6 +107,37 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
+
+      - name: Validate App Store Connect configuration
+        if: inputs.upload-to-app-store
+        shell: bash
+        env:
+          IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for variable_name in \
+            IOS_DISTRIBUTION_CERTIFICATE_BASE64 \
+            IOS_DISTRIBUTION_CERTIFICATE_PASSWORD \
+            APPLE_TEAM_ID \
+            APP_STORE_CONNECT_API_KEY_ID \
+            APP_STORE_CONNECT_ISSUER_ID \
+            APP_STORE_CONNECT_API_PRIVATE_KEY; do
+            if [ -z "${!variable_name:-}" ]; then
+              missing+=("$variable_name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "缺少 App Store Connect 发布配置：${missing[*]}" >&2
+            exit 1
+          fi
 
       - name: Read project versions
         id: project
@@ -244,3 +325,134 @@ jobs:
             dist/SHA256SUMS-tvOS
           if-no-files-found: error
           retention-days: 14
+
+      - name: Import Apple distribution certificate
+        if: inputs.upload-to-app-store
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+
+      - name: Setup Ruby for provisioning
+        if: inputs.upload-to-app-store
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Install fastlane for provisioning
+        if: inputs.upload-to-app-store
+        run: gem install fastlane --version 2.237.0 --no-document
+
+      - name: Ensure App Store profile for the existing certificate
+        if: inputs.upload-to-app-store
+        id: provisioning
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: ruby .github/workflows/scripts/ensure-ios-distribution-profile.rb tvos
+
+      - name: Build App Store signed IPA
+        if: inputs.upload-to-app-store
+        id: app_store_build
+        shell: bash
+        env:
+          APP_VERSION: ${{ steps.project.outputs.version }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TVOS_DISTRIBUTION_PROFILE: ${{ steps.provisioning.outputs.profile-path }}
+        run: |
+          set -euo pipefail
+
+          archive_path="$RUNNER_TEMP/NipaPlay-tvOS.xcarchive"
+          export_path="$RUNNER_TEMP/NipaPlay-tvOS-AppStore"
+          export_options="$RUNNER_TEMP/ExportOptions-AppStore.plist"
+          # Apple accepts numeric marketing versions, not SemVer prerelease labels.
+          marketing_version="${APP_VERSION%%[-+]*}"
+          if [[ ! "$marketing_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid Apple marketing version: $marketing_version" >&2
+            exit 1
+          fi
+          build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+
+          rm -rf "$archive_path" "$export_path" "$export_options"
+          mkdir -p "$export_path"
+
+          # flutter-tvos 已在未签名步骤生成 AOT；归档直接复用它。
+          # 内嵌框架同样必须使用 Apple 数字版本，不能残留 alpha 等标签。
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $marketing_version" \
+            tvos/Flutter/App.framework/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" \
+            tvos/Flutter/App.framework/Info.plist
+          rm -f tvos/Flutter/flutter_assets/kernel_blob.bin \
+            tvos/Flutter/flutter_assets/vm_snapshot_data \
+            tvos/Flutter/flutter_assets/isolate_snapshot_data
+
+          # Archive with the imported distribution identity. Automatic archive
+          # signing creates a new development certificate on each fresh runner.
+          python3 .github/workflows/scripts/configure-ios-distribution.py tvos
+
+          echo "构建 App Store 归档：版本 ${marketing_version}，构建号 ${build_number}"
+          xcodebuild \
+            -workspace tvos/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -destination 'generic/platform=tvOS' \
+            -archivePath "$archive_path" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            FLUTTER_BUILD_NAME="$marketing_version" \
+            FLUTTER_BUILD_NUMBER="$build_number" \
+            CURRENT_PROJECT_VERSION="$build_number" \
+            archive \
+            -quiet
+
+          app_path="$archive_path/Products/Applications/Runner.app"
+          test -s "$app_path/Frameworks/App.framework/App"
+          test ! -f "$app_path/flutter_assets/kernel_blob.bin"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app_path/Info.plist")" = com.aimessoft.nipaplay
+          python3 .github/workflows/scripts/verify-ios-agent-assets.py "$app_path"
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$archive_path" \
+            -exportPath "$export_path" \
+            -exportOptionsPlist "$export_options" \
+            -quiet
+
+          signed_ipa="$(find "$export_path" -maxdepth 1 -type f -name '*.ipa' -print -quit)"
+          if [ -z "$signed_ipa" ]; then
+            echo "Xcode 导出完成，但未找到签名 IPA。" >&2
+            find "$export_path" -maxdepth 2 -print >&2 || true
+            exit 1
+          fi
+
+          python3 .github/workflows/scripts/verify-ios-agent-assets.py "$signed_ipa"
+          codesign --verify --deep --strict "$app_path"
+          actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Info.plist")"
+          actual_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Info.plist")"
+          if [[ "$actual_version" != "$marketing_version" || "$actual_build" != "$build_number" ]]; then
+            echo "Archived Apple version/build does not match the requested values." >&2
+            exit 1
+          fi
+          echo "ipa-path=$signed_ipa" >> "$GITHUB_OUTPUT"
+          echo "build-number=$build_number" >> "$GITHUB_OUTPUT"
+          echo "version=$marketing_version" >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed tvOS IPA for TestFlight
+        if: inputs.upload-to-app-store
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-tvOS
+          path: ${{ steps.app_store_build.outputs.ipa-path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+      - name: Clean App Store signing files
+        if: always() && inputs.upload-to-app-store
+        shell: bash
+        run: |
+          rm -rf \
+            "$RUNNER_TEMP/app-store-connect-private-keys" \
+            "$RUNNER_TEMP/NipaPlay-tvOS.xcarchive" \
+            "$RUNNER_TEMP/NipaPlay-tvOS-AppStore" \
+            "$RUNNER_TEMP/ExportOptions-AppStore.plist"

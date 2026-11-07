@@ -10,7 +10,8 @@ HarmonyOS Flutter toolchains.
 - flutter-tvos: `v3.44.8-tvos.1.4.3`
 - bundled Flutter: `3.44.8`
 - deployment target: tvOS 13.0
-- application identifier: `com.aimessoft.nipaplay.tvos`
+- Release / Profile application identifier: `com.aimessoft.nipaplay`（与 iOS 通用购买）
+- Debug application identifier: `com.aimessoft.nipaplay.tvos`（供本机调试工具使用）
 
 The exact fork tag is stored in `.flutter-version-tvos`. Do not replace the
 mainline `.fvmrc` with this version. HarmonyOS keeps its Flutter 3.35-compatible
@@ -93,7 +94,43 @@ PR 流水线构建不需要开发者证书的模拟器 Release/AOT 应用；手�
 
 Next 预览与 iOS 一起产出未签名 tvOS IPA。流水线安装带 `rust-src` 的
 nightly Rust 来构建 Mesh，传递与 iOS 相同的内置 TMDB 凭据，并在编译后的
-Dart 二进制中核验。不导入签名身份，也不上传 App Store Connect。
+Dart 二进制中核验。
+
+## TestFlight 与通用购买
+
+Release / Profile 并入现有 iOS App 的 `com.aimessoft.nipaplay`，Debug 仍用
+`.tvos` 包名。旧 `.tvos` 侧载版与新 Release 是两个 App，不迁移其数据。
+Info.plist 从构建配置取得包名；电视目标没有单独的 entitlement、钥匙串
+访问组或 App Group 配置，不需要迁移额外的标识符。
+
+用户先在 **App Store Connect > 我的 App（Apps）> NipaPlay > 侧栏：添加平台
+（Add Platform）> tvOS > 添加（Add）** 添加电视平台。
+使用现有 App，保留 iOS 的 Bundle ID；不要新建 `.tvos` App。
+入口以 [Apple 官方添加平台说明](https://developer.apple.com/help/app-store-connect/create-an-app-record/add-platforms/)
+为准，需要账户持有人、管理员或 App 管理员角色。
+
+合并到 `next` 后，在 **GitHub > Actions > Build & Release (Modular) >
+Run workflow** 选择 `next`，填写 `release_title`（`YYYY.MMDD`），勾选
+`upload_tvos_testflight`。只重建 TestFlight 时再勾 `testflight_only`；同时上传
+手机和平板时勾 `upload_ios_testflight`，仅上传电视时保持它关闭。
+`testflight_only` 至少要求一个上传项。`publish_ios_from_run_id` 保持空白，
+`submit_ios_for_review` 可关闭；Next 的 TestFlight 路径不会提交审核。
+
+tvOS 复用 iOS 已配置的 Apple Distribution P12 与 App Store Connect API secrets。
+CI 只查找已导入证书，复用或创建属于 CI 的 `TVOS_APP_STORE` 描述文件，
+不创建、吊销证书，也不删除任何描述文件。未签名侧载 artifact 保留为
+`release-tvOS-sideload`；额外签名、归档、导出的 IPA 存为 `app-store-tvOS`。
+Apple 数字版本从 `pubspec.yaml` 去掉预发布和构建后缀，构建号使用
+`GITHUB_RUN_NUMBER.GITHUB_RUN_ATTEMPT`，与同次运行的 iOS 一致。
+
+`Publish-tvOS-TestFlight` 使用 `fastlane pilot upload --app_platform appletvos`
+上传，并按 tvOS 平台检查处理结果为 `VALID`；已存在的同版本、同构建号会等待
+处理并复用，不会误用 iOS 构建。此路径不提交审核、不对外分发、不通知外部测试员。
+完成后，用户可在 **App Store Connect > 我的 App > NipaPlay > TestFlight >
+tvOS > 构建版本** 查看；测试组与测试员分配由用户单独完成。
+
+单独运行 **Build tvOS** 的 `upload-to-app-store` 仅生成签名 artifact，
+不执行上传；需要上传时使用上述主工作流。
 
 启用 tvOS 依赖配置并解析依赖后，本地可使用同一个未签名 Release 构建入口：
 

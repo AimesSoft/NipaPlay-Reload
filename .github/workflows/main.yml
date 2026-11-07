@@ -17,8 +17,13 @@ on:
         required: true
         default: false
         type: boolean
+      upload_tvos_testflight:
+        description: '上传 Next 电视版到 TestFlight（不提交审核或对外分发）'
+        required: true
+        default: false
+        type: boolean
       testflight_only:
-        description: 'Rebuild and upload only Next iPhone/iPad; leave desktop releases running'
+        description: '只重建并上传所选 Apple 平台的 TestFlight 构建，保留正在运行的桌面发布'
         required: true
         default: false
         type: boolean
@@ -32,7 +37,7 @@ permissions:
   contents: write
   pull-requests: read
 
-# An iOS-only repair has its own concurrency group and leaves the release running.
+# Apple TestFlight 单独重建使用独立并发组，保留正在运行的桌面发布。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}${{ inputs.testflight_only && '-testflight-only' || '' }}
   cancel-in-progress: true
@@ -40,7 +45,7 @@ concurrency:
 jobs:
   Gatekeeper:
     name: Check Release Input
-    if: inputs.publish_ios_from_run_id == ''
+    if: inputs.publish_ios_from_run_id == '' || inputs.testflight_only
     runs-on: ubuntu-latest
     outputs:
       triggered: ${{ steps.check.outputs.triggered }}
@@ -61,11 +66,17 @@ jobs:
           RELEASE_TITLE: ${{ inputs.release_title }}
           REF_NAME: ${{ github.ref_name }}
           TESTFLIGHT_ONLY: ${{ inputs.testflight_only }}
-          UPLOAD_TESTFLIGHT: ${{ inputs.upload_ios_testflight }}
+          UPLOAD_IOS_TESTFLIGHT: ${{ inputs.upload_ios_testflight }}
+          UPLOAD_TVOS_TESTFLIGHT: ${{ inputs.upload_tvos_testflight }}
+          PUBLISH_IOS_FROM_RUN_ID: ${{ inputs.publish_ios_from_run_id }}
         run: |
           set -euo pipefail
-          if [[ "$TESTFLIGHT_ONLY" == "true" && ( "$REF_NAME" != "next" || "$UPLOAD_TESTFLIGHT" != "true" ) ]]; then
-            echo "testflight_only requires branch next and upload_ios_testflight=true." >&2
+          if [[ "$TESTFLIGHT_ONLY" == "true" && -n "$PUBLISH_IOS_FROM_RUN_ID" ]]; then
+            echo "testflight_only 不能与 publish_ios_from_run_id 同时使用。" >&2
+            exit 1
+          fi
+          if [[ "$TESTFLIGHT_ONLY" == "true" && ( "$REF_NAME" != "next" || ( "$UPLOAD_IOS_TESTFLIGHT" != "true" && "$UPLOAD_TVOS_TESTFLIGHT" != "true" ) ) ]]; then
+            echo "testflight_only 要求选择 next 分支，并至少勾选一个 Apple 平台上传项。" >&2
             exit 1
           fi
           version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml)"
@@ -110,7 +121,7 @@ jobs:
   Build-iOS:
     name: Build iOS
     needs: Gatekeeper
-    if: needs.Gatekeeper.outputs.triggered == 'true'
+    if: ${{ needs.Gatekeeper.outputs.triggered == 'true' && (!inputs.testflight_only || inputs.upload_ios_testflight) }}
     uses: ./.github/workflows/build-ios.yml
     with:
       upload-to-app-store: ${{ needs.Gatekeeper.outputs.prerelease != 'true' || (needs.Gatekeeper.outputs.next_preview == 'true' && inputs.upload_ios_testflight) }}
@@ -182,11 +193,20 @@ jobs:
       OHOS_SIGNING_KEY_PASSWORD: ${{ secrets.OHOS_SIGNING_KEY_PASSWORD }}
 
   Build-tvOS:
-    name: Build Apple TV sideload package
+    name: Build Apple TV packages
     needs: Gatekeeper
-    if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' }}
+    if: ${{ needs.Gatekeeper.outputs.triggered == 'true' && (!inputs.testflight_only || inputs.upload_tvos_testflight) }}
     uses: ./.github/workflows/build-tvos.yml
+    with:
+      testflight-only: ${{ inputs.testflight_only }}
+      upload-to-app-store: ${{ needs.Gatekeeper.outputs.next_preview == 'true' && inputs.upload_tvos_testflight }}
     secrets:
+      IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+      IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
   Publish:
@@ -584,6 +604,91 @@ jobs:
             *) exit "$status" ;;
           esac
           printf 'TestFlight build **%s (%s)** is uploaded and processed. Test group assignment and public invitations are separate.\n' "$APP_VERSION" "$APP_BUILD_NUMBER" >> "$GITHUB_STEP_SUMMARY"
+      - name: Clean TestFlight credentials
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/testflight-api-key.json"
+
+  Publish-tvOS-TestFlight:
+    name: 上传 Next 电视版到 TestFlight
+    needs: [Gatekeeper, Build-tvOS]
+    if: ${{ !cancelled() && needs.Gatekeeper.outputs.next_preview == 'true' && inputs.upload_tvos_testflight && needs.Build-tvOS.result == 'success' }}
+    runs-on: macos-26
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      APP_BUNDLE_ID: com.aimessoft.nipaplay
+      APP_VERSION: ${{ needs.Build-tvOS.outputs.app-store-version }}
+      APP_BUILD_NUMBER: ${{ needs.Build-tvOS.outputs.app-store-build-number }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+      FASTLANE_HIDE_CHANGELOG: "1"
+      FASTLANE_DISABLE_COLORS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download signed tvOS IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.Build-tvOS.outputs.app-store-artifact-name }}
+          path: ${{ runner.temp }}/testflight-ipa
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - name: Install fastlane
+        run: gem install fastlane --version 2.237.0 --no-document
+      - name: Prepare TestFlight upload
+        shell: bash
+        env:
+          APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          for variable_name in APP_VERSION APP_BUILD_NUMBER APP_STORE_CONNECT_API_KEY_ID APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_API_PRIVATE_KEY; do
+            if [ -z "${!variable_name:-}" ]; then
+              echo "Missing TestFlight configuration: $variable_name" >&2
+              exit 1
+            fi
+          done
+          signed_ipa="$(find "$RUNNER_TEMP/testflight-ipa" -maxdepth 2 -type f -name '*.ipa' -print -quit)"
+          test -n "$signed_ipa"
+          umask 077
+          api_key_path="$RUNNER_TEMP/testflight-api-key.json"
+          jq -n \
+            --arg key_id "$APP_STORE_CONNECT_API_KEY_ID" \
+            --arg issuer_id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --arg key "$APP_STORE_CONNECT_API_PRIVATE_KEY" \
+            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' > "$api_key_path"
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$api_key_path" >> "$GITHUB_ENV"
+          echo "SIGNED_IPA=$signed_ipa" >> "$GITHUB_ENV"
+      - name: Upload and verify TestFlight processing
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          ruby .github/workflows/scripts/check-app-store-build.rb \
+            "$APP_STORE_CONNECT_API_KEY_PATH" "$APP_BUNDLE_ID" "$APP_VERSION" "$APP_BUILD_NUMBER" appletvos
+          status=$?
+          set -e
+          case "$status" in
+            0) echo "This TestFlight build is already uploaded and valid." ;;
+            10)
+              fastlane pilot upload \
+                --api_key_path "$APP_STORE_CONNECT_API_KEY_PATH" \
+                --ipa "$SIGNED_IPA" \
+                --app_identifier "$APP_BUNDLE_ID" \
+                --app_platform appletvos \
+                --skip_submission true \
+                --distribute_external false \
+                --notify_external_testers false \
+                --skip_waiting_for_build_processing false \
+                --wait_processing_timeout_duration 3600
+              ruby .github/workflows/scripts/check-app-store-build.rb \
+                "$APP_STORE_CONNECT_API_KEY_PATH" "$APP_BUNDLE_ID" "$APP_VERSION" "$APP_BUILD_NUMBER" appletvos
+              ;;
+            *) exit "$status" ;;
+          esac
+          printf 'tvOS TestFlight 构建 **%s (%s)** 已上传并处理完成。测试组分配与公开邀请由用户单独操作。\n' "$APP_VERSION" "$APP_BUILD_NUMBER" >> "$GITHUB_STEP_SUMMARY"
       - name: Clean TestFlight credentials
         if: always()
         shell: bash

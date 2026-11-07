@@ -8,21 +8,27 @@ import plistlib
 import re
 import shutil
 import subprocess
+import sys
 
 
-def configure(project, export_options, team):
+def configure(project, export_options, team, platform='ios'):
+    if platform not in ('ios', 'tvos'):
+        raise ValueError('platform must be ios or tvos')
+    profile_platform = 'tvOS' if platform == 'tvos' else 'iOS'
+    sdk = 'appletvos' if platform == 'tvos' else 'iphoneos'
     bundle = 'com.aimessoft.nipaplay'
     identities = subprocess.check_output(
         ['security', 'find-identity', '-v', '-p', 'codesigning'], text=True)
     available = set(re.findall(r'([A-Fa-f0-9]{40}) "(?:Apple|iPhone) Distribution:', identities))
     available = {value.upper() for value in available}
     candidates = []
-    for path in [Path(os.environ['IOS_DISTRIBUTION_PROFILE'])]:
+    for path in [Path(os.environ[f'{platform.upper()}_DISTRIBUTION_PROFILE'])]:
         profile = plistlib.loads(subprocess.check_output(['security', 'cms', '-D', '-i', str(path)]))
         entitlements = profile.get('Entitlements', {})
         certificates = {hashlib.sha1(cert).hexdigest().upper() for cert in profile.get('DeveloperCertificates', [])}
         matching = sorted(certificates & available)
         if (profile.get('TeamIdentifier') == [team]
+                and profile_platform in profile.get('Platform', [])
                 and entitlements.get('application-identifier') == f'{team}.{bundle}'
                 and not entitlements.get('get-task-allow')
                 and not profile.get('ProvisionedDevices')
@@ -45,7 +51,7 @@ def configure(project, export_options, team):
     release['buildSettings'].update({
         'CODE_SIGN_STYLE': 'Manual',
         'CODE_SIGN_IDENTITY': identity,
-        'CODE_SIGN_IDENTITY[sdk=iphoneos*]': identity,
+        f'CODE_SIGN_IDENTITY[sdk={sdk}*]': identity,
         'DEVELOPMENT_TEAM': team,
         'PROVISIONING_PROFILE_SPECIFIER': uuid,
     })
@@ -61,6 +67,9 @@ def configure(project, export_options, team):
 
 
 if __name__ == '__main__':
-    configure(Path('ios/Runner.xcodeproj/project.pbxproj'),
+    platform = sys.argv[1] if len(sys.argv) > 1 else 'ios'
+    if platform not in ('ios', 'tvos') or len(sys.argv) > 2:
+        raise SystemExit('usage: configure-ios-distribution.py [ios|tvos]')
+    configure(Path(platform) / 'Runner.xcodeproj/project.pbxproj',
               Path(os.environ['RUNNER_TEMP']) / 'ExportOptions-AppStore.plist',
-              os.environ['APPLE_TEAM_ID'])
+              os.environ['APPLE_TEAM_ID'], platform)

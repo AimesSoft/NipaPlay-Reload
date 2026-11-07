@@ -3,10 +3,16 @@
 require "fastlane_core/build_watcher"
 require "spaceship"
 
-api_key_path, bundle_id, app_version, build_number = ARGV
+api_key_path, bundle_id, app_version, build_number, app_platform = ARGV
+app_platform ||= "ios"
 
 if [api_key_path, bundle_id, app_version, build_number].any? { |value| value.nil? || value.empty? }
-  warn "usage: check-app-store-build.rb API_KEY_JSON BUNDLE_ID APP_VERSION BUILD_NUMBER"
+  warn "usage: check-app-store-build.rb API_KEY_JSON BUNDLE_ID APP_VERSION BUILD_NUMBER [ios|appletvos]"
+  exit 2
+end
+
+unless %w[ios appletvos].include?(app_platform)
+  warn "Unsupported Apple platform: #{app_platform}"
   exit 2
 end
 
@@ -18,7 +24,7 @@ unless app
   exit 2
 end
 
-platform = Spaceship::ConnectAPI::Platform::IOS
+platform = app_platform == "appletvos" ? Spaceship::ConnectAPI::Platform::TV_OS : Spaceship::ConnectAPI::Platform::IOS
 builds = Spaceship::ConnectAPI::Build.all(
   app_id: app.id,
   version: app_version,
