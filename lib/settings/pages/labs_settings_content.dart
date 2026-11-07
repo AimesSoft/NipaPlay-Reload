@@ -23,6 +23,9 @@ class LabsSettingsContent extends StatelessWidget {
   @visibleForTesting
   static bool Function() television = () => globals.isTvOS;
 
+  @visibleForTesting
+  static bool Function() harmonyOS = () => globals.isHarmonyOS;
+
   /// Which kind of device this is for NipaPlay Next: a desktop runs Nipa, an
   /// iPad or an iPhone only hosts Next's interface and body. Android has no
   /// Next. Tests set it.
@@ -85,7 +88,7 @@ class LabsSettingsContent extends StatelessWidget {
             // endpoint and her settings live in Next's own interface and run
             // only while it is open (D1). An iPad gets Next's interface and
             // body; so does an iPhone. Nipa runs on the user's other devices.
-            if (device().desktop || device().iPad || device().iPhone || television())
+            if (device().desktop || device().iPad || device().iPhone || television() || harmonyOS())
               AdaptiveSettingsSection(
                 children: [
                   AdaptiveSettingsTile.toggle(
@@ -159,7 +162,9 @@ class LabsSettingsContent extends StatelessWidget {
   String _mobileConsent(BuildContext context, {required bool phone}) {
     final name = television()
         ? _text(context, '电视', '電視', 'television')
-        : phone ? 'iPhone' : 'iPad';
+        : harmonyOS()
+            ? _text(context, '鸿蒙设备', '鴻蒙裝置', 'HarmonyOS device')
+            : phone ? 'iPhone' : 'iPad';
     final simplifiedDevice = television() ? '这台电视' : '这台 $name';
     final traditionalDevice = television() ? '這台電視' : '這台 $name';
     final simplifiedTarget = television() ? '这台电视上的' : '这台 $name 上的';
@@ -187,7 +192,7 @@ class LabsSettingsContent extends StatelessWidget {
               'Enable NipaPlay Next (Developer Preview)')),
           content: SingleChildScrollView(
             child: Text(
-              device().iPad || device().iPhone || television()
+              device().iPad || device().iPhone || television() || harmonyOS()
                   ? _mobileConsent(context, phone: device().iPhone)
                   : _text(
                         context,

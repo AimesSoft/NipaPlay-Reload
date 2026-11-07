@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/utils/platform_identity.dart' as platform;
 
-/// A device that can show Next's interface but cannot host Nipa: an iPad.
+/// A mobile device that can show Next's interface but cannot host Nipa.
 /// It starts only the body (the capability layer, the player, the Mesh) and
 /// does not start the local agent endpoint or a conversation host.
 final class NextBody {
@@ -12,10 +12,10 @@ final class NextBody {
   static bool? debugBodyOnly;
 
   static bool get bodyOnly =>
-      debugBodyOnly ?? (Platform.isIOS || platform.isTvOS);
+      debugBodyOnly ?? (Platform.isIOS || platform.isTvOS || platform.isHarmonyOS);
 
-  /// What an iPad does not have: no process can be started, nothing runs
-  /// programs or conversations, and an iOS application is not quit or
+  /// What a body-only device does not have: no process can be started, nothing runs
+  /// programs or conversations, and the mobile application is not quit or
   /// restarted by a program.
   static bool excludes(String id) =>
       (platform.isTvOS && excludesOnTelevision(id)) ||
