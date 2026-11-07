@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../sqlite_library.dart';
@@ -41,7 +40,12 @@ Future<void> finishExternalSourcesMigration(Directory root, Database db) async {
   await Isolate.run(() => _retireWorker(databasePath, rootPath));
 }
 
-Future<void> finishExternalSourcesPreferences(Database db) async {
+/// Removes the retired sources' `next.source.<id>.*` preferences through
+/// [keys] and [remove] (the application's preference store; a headless host
+/// has none), then marks the retirement done.
+Future<void> finishExternalSourcesPreferences(Database db,
+    {required Future<Set<String>> Function() keys,
+    required Future<bool> Function(String key) remove}) async {
   final phase = await db.query(_table, where: 'id=?', whereArgs: ['phase']);
   if (phase.single['payload'] == 'done') return;
   final rootPath = File(db.path).parent.path, databasePath = db.path;
@@ -50,13 +54,12 @@ Future<void> finishExternalSourcesPreferences(Database db) async {
       .isNotEmpty) {
     await Isolate.run(() => _retireWorker(databasePath, rootPath));
   }
-  // Preferences belong to the application platform channel. Only remove Next
-  // keys; credentials and Classic source configuration are never read here.
-  final prefs = await SharedPreferences.getInstance();
-  for (final key in prefs.getKeys()) {
+  // Only Next keys are removed; credentials and Classic source configuration
+  // are never read here.
+  for (final key in await keys()) {
     if (key.startsWith('next.source.') &&
         _source(key.substring('next.source.'.length))) {
-      if (!await prefs.remove(key)) {
+      if (!await remove(key)) {
         throw StateError('无法清理已移除来源的 Next 偏好。');
       }
     }

@@ -234,7 +234,9 @@ void main() {
     await store.closeEvents();
     await db.close();
     db = await openNextDatabase(root, factory: databaseFactoryFfi);
-    await finishExternalSourcesPreferences(db);
+    final preferences = await SharedPreferences.getInstance();
+    await finishExternalSourcesPreferences(db,
+        keys: () async => preferences.getKeys(), remove: preferences.remove);
     expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
     expect(await db.query('media_bindings', where: "source='explicit_binding'"),
         userBindings);
@@ -310,7 +312,8 @@ void main() {
     expect((await jobs.get('smb-job'))!.state, JobState.queued);
     final events = await db.query('job_events');
     await retireExternalSources(db, root.path);
-    await finishExternalSourcesPreferences(db);
+    await finishExternalSourcesPreferences(db,
+        keys: () async => preferences.getKeys(), remove: preferences.remove);
     expect(await db.query('job_events'), events,
         reason: 'rerunning never duplicates retirement events');
     expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);

@@ -15,6 +15,7 @@ import '../knowledge/capability.dart';
 import '../app_capabilities.dart';
 import '../events/capability.dart';
 import '../events/signals.dart';
+import '../media/external_sources_migration.dart';
 import '../next_database.dart';
 import '../tasks/device_identity.dart';
 import '../tasks/job_origin.dart';
@@ -162,6 +163,9 @@ final class HeadlessCore {
 
   Future<AgentEndpointRunning> _start() async {
     final database = _database = await openNextDatabase(root);
+    // A headless host keeps no application preferences to retire.
+    await finishExternalSourcesPreferences(database,
+        keys: () async => const <String>{}, remove: (_) async => true);
     history = ChangeHistory(database);
     BodyChanges.attached = history;
     final identity = await loadDeviceIdentity(root);

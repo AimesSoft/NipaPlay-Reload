@@ -286,7 +286,9 @@ final class NextCore {
     }
     phase('device identity');
     final database = await openNextDatabase(root, factory: databaseFactory);
-    await finishExternalSourcesPreferences(database);
+    final preferences = await SharedPreferences.getInstance();
+    await finishExternalSourcesPreferences(database,
+        keys: () async => preferences.getKeys(), remove: preferences.remove);
     phase('database open');
     final jobs = SqliteJobStore.fromDatabase(database);
     changeHistory = ChangeHistory(database);
