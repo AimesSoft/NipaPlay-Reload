@@ -252,6 +252,52 @@ void main() {
     expect(current.workId, isNot(remote.workId));
     expect((await worker.homePlan()).hero?.work.workId, current.workId);
   });
+  test('an unreadable local file does not block the catalogue', () async {
+    final db = jobs.database;
+    for (var i = 1; i <= 2; i++) {
+      final video = File(ppath.join(root.path, 'episode$i.mkv'));
+      await video.writeAsString('video $i');
+      await db.insert('media_entities',
+          {'id': 'f$i', 'kind': 'file', 'attributes': '{}'});
+      await db.insert('media_locations', {
+        'id': 'l$i',
+        'file_id': 'f$i',
+        'source': 'local',
+        'owner_device_id': 'owner',
+        'locator': video.path,
+        'available': 1,
+      });
+      await db.insert('media_file_episodes', {
+        'file_id': 'f$i',
+        'episode_id': 'e$i',
+        'relation': 'exact',
+        'ordinal': 0,
+      });
+    }
+    final blocked = ppath.join(root.path, 'episode1.mkv');
+    expect((await Process.run('chmod', ['000', blocked])).exitCode, 0);
+    expect(await File(blocked).exists(), isTrue);
+    await expectLater(File(blocked).open(), throwsA(isA<FileSystemException>()));
+
+    await worker.build('unreadable-file');
+    final snapshot = await worker.compose({}, {}, null);
+    final episodes = snapshot.episodes.values.single;
+    expect(episodes.singleWhere((e) => e.number == 1).playable, isFalse);
+    expect(episodes.singleWhere((e) => e.number == 2).playable, isTrue);
+    expect((await db.query('media_locations')).map((r) => r['available']),
+        everyElement(1));
+
+    expect((await Process.run('chmod', ['600', blocked])).exitCode, 0);
+    await worker.build('readable-again');
+    final rebuilt = await worker.compose({}, {}, null);
+    expect(
+        rebuilt.episodes.values.single
+            .singleWhere((e) => e.number == 1)
+            .playable,
+        isTrue);
+  },
+      skip: Platform.isWindows ||
+          Process.runSync('id', ['-u']).stdout.trim() == '0');
   test('a work\'s files say what their streams are; an older scan asks to be read',
       () async {
     final db = jobs.database;
