@@ -250,7 +250,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
     const upscaler = this.numberArg(args, 'upscaler', 0);
     const videoAlphaMode = this.numberArg(args, 'videoAlphaMode', 0);
     const generation = this.engineGeneration;
-    const playerId = await erikaNative.nativeCreateAsync(outputMode, headroom, upscaler, videoAlphaMode);
+    const playerId: number = await erikaNative.nativeCreateAsync(outputMode, headroom, upscaler, videoAlphaMode);
     if (generation !== this.engineGeneration || this.binding === null) {
       if (playerId > 0) erikaNative.nativeDestroy(playerId);
       result.error('ERIKA_ERROR', 'Erika plugin detached', null);
@@ -483,7 +483,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       result.success(null);
       return;
     }
-    const status = await erikaNative.nativeDetachSurfaceAsync(playerId);
+    const status: number = await erikaNative.nativeDetachSurfaceAsync(playerId);
     texture.playerId = 0;
     if (!this.completeStatus(status, result, 'detach OpenHarmony surface')) {
       return;
@@ -561,7 +561,7 @@ export default class ErikaFlutterPlugin implements FlutterPlugin, MethodCallHand
       return false;
     }
     const argumentsJson = JSON.stringify(this.mapToObject(args));
-    const raw = await erikaNative.nativeInvokeAsync(playerId, method, argumentsJson);
+    const raw: string = await erikaNative.nativeInvokeAsync(playerId, method, argumentsJson);
     if (!this.players.has(playerId) || this.binding === null) {
       result.error('ERIKA_ERROR', 'Erika player disposed', null);
       return false;
