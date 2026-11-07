@@ -229,6 +229,11 @@ class NextShellController extends ChangeNotifier {
       notifyListeners();
     }
     if (about != null) chat.setAbout(about);
+    // A device without its own Nipa says which device's Nipa answers, and
+    // whether it can be reached now: ask the devices as it opens.
+    if (services.peers case final peers?) {
+      unawaited(peers.refresh().catchError((Object _) {}));
+    }
     if (onHome && !globals.isPhone) {
       homeChatOpen.value = true;
       if (!globals.isPhone) {
