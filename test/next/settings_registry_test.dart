@@ -428,6 +428,7 @@ void main() {
               scope: entry.scope,
               apply: entry.apply,
               validateValue: entry.validateValue,
+              writable: entry.writable,
             )));
     SettingsAccess.registry = registry;
     api = harness.Harness([SettingsCapability(registry)]);
@@ -437,6 +438,8 @@ void main() {
       final initial = await call('settings.get', {'key': entry.key});
       expect(entry.schema.validate(initial['value']), isEmpty,
           reason: entry.key);
+      // Runtime status is readable, but has no setter or reset value.
+      if (!entry.writable) continue;
       if (entry.key == 'danmaku.spoilerAiApiUrl') {
         await video.setSpoilerAiApiUrl('');
       }
@@ -781,9 +784,9 @@ void main() {
 
     final saved = await call('settings.set', {
       'key': 'player.erikaUpscalerMode',
-      'value': 'erikaArtCnnC4F32',
+      'value': 'erikaFsr1',
     });
-    expect(saved['value'], 'erikaArtCnnC4F32');
+    expect(saved['value'], 'erikaFsr1');
   });
 
   test('native output and decode settings follow the current kernel', () async {
@@ -808,24 +811,31 @@ void main() {
     }
   });
 
-  test('Erika upscaling is not offered on Android', () async {
+  test('Android offers FSR but hides neural upscaling and custom models', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     final previousKernel = ApplicationSettings.currentKernel;
     ApplicationSettings.currentKernel = () => PlayerKernelType.erika.name;
     addTearDown(() => ApplicationSettings.currentKernel = previousKernel);
+    // Classic visibility reads the factory, while Next applicability reads
+    // currentKernel. Configure both sides of the shared settings surface.
+    final previousFactoryKernel = PlayerFactory.getKernelType();
+    addTearDown(() => PlayerFactory.saveKernelType(previousFactoryKernel));
+    await PlayerFactory.saveKernelType(PlayerKernelType.erika);
+    expect(PlayerFactory.getKernelType(), PlayerKernelType.erika);
 
     final described = await call('settings.describe', {
       'keys': ['player.erikaUpscalerMode'],
       'fields': ['key', 'appliesTo', 'appliesNow', 'reason'],
     });
     final row = (described['settings'] as List).single as Map;
-    expect(row['appliesNow'], false);
-    expect(row['appliesTo'], {
-      'platforms': ['desktop', 'ios']
-    });
-    expect(row['reason'], contains('超分辨率'));
+    expect(row['appliesNow'], true);
+    expect(row['appliesTo'], {'kernels': ['erika']});
     expect(ApplicationSettings.locallyVisible('player.erikaUpscalerMode'),
+        isTrue);
+    expect(ErikaPlayerAdapter.availableUpscalerModes,
+        [PlayerUpscalerMode.off, PlayerUpscalerMode.erikaFsr1]);
+    expect(ApplicationSettings.locallyVisible('player.erikaUpscalerModelPath'),
         isFalse);
     expect(ErikaPlayerAdapter.supportsNeuralUpscaler, isFalse);
   });

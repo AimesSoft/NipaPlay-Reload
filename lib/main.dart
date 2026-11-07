@@ -1246,17 +1246,14 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
                           launchFilePath: widget.launchFilePath,
                         ),
                       )
-                    // An iPhone can show Next; Android stays Classic alone.
-                    : Platform.isIOS
-                        ? NextUiGate(
-                            launchFilePath: widget.launchFilePath,
-                            classicBuilder: (launchPath) => CupertinoMainPage(
-                              launchFilePath: launchPath,
-                            ),
-                          )
-                        : CupertinoMainPage(
-                            launchFilePath: widget.launchFilePath,
-                          ),
+                    // The gate owns platform availability on phones too;
+                    // HarmonyOS must not bypass it after enabling Next.
+                    : NextUiGate(
+                        launchFilePath: widget.launchFilePath,
+                        classicBuilder: (launchPath) => CupertinoMainPage(
+                          launchFilePath: launchPath,
+                        ),
+                      ),
                 // Temporary compatibility renderer. A dedicated television
                 // shell can replace this entry without changing page data.
                 AppDisplaySurface.television: () => globals.isTvOS

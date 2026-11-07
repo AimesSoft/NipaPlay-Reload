@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:image/image.dart' as image;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/danmaku/service.dart';
 import 'package:nipaplay/next/danmaku/store.dart';
@@ -47,6 +50,7 @@ void main() {
   late SqliteJobStore jobs;
   late UiDataService ui;
   late LibraryWorker worker;
+  late List<Uri> artworkRequests;
   setUp(() async {
     sqfliteFfiInit();
     root = await Directory.systemTemp.createTemp('library-worker-');
@@ -66,8 +70,14 @@ void main() {
             player: NoPlayer()),
         mesh: NoMesh(),
         sources: sources));
+    artworkRequests = [];
     ui = UiDataService(media, TaskEngine(store: jobs, ownerDeviceId: 'owner'),
-        state, sources, root, MemoryVault());
+        state, sources, root, MemoryVault(), artworkClient: MockClient((request) async {
+      artworkRequests.add(request.url);
+      return http.Response.bytes(
+          image.encodePng(image.Image(width: 1, height: 1)), 200,
+          headers: {'content-type': 'image/png'});
+    }));
     worker = LibraryWorker(ui, subtitleProbe: _probeInWorker);
     state.queryWorker = worker.query;
     final db = jobs.database;
@@ -94,6 +104,23 @@ void main() {
     await jobs.database.close();
     await deleteTestDirectory(root);
   });
+  test('worker artwork uses the host HTTP client for work and episode images',
+      () async {
+    const poster = 'https://artwork.invalid/work.png';
+    const still = 'https://artwork.invalid/episode.png';
+    await ui.media.store.overrideField(
+        'w', 'imageUrl', poster, Invocation(origin: 'test'));
+    await ui.media.store.overrideField(
+        'e1', 'imageUrl', still, Invocation(origin: 'test'));
+
+    await worker.build('host-artwork');
+    final snapshot = await worker.compose({}, {}, null);
+    expect(artworkRequests, containsAll([Uri.parse(poster), Uri.parse(still)]));
+    final path = snapshot.works.values.single.artwork.poster;
+    expect(path, isNotNull);
+    expect(await File(path!).exists(), isTrue);
+  });
+
   test('Mesh evidence retains typed metadata for work and episode facts', () async {
     await worker.build('metadata-facts');
     final snapshot = await worker.compose({}, {}, null);

@@ -6,7 +6,7 @@
 
 - **桌面 GUI** 运行 Next 的界面、播放器和本机能力；启用 Next 时接入 Agent 端点与 Mesh。Classic 与 Next 分别拥有界面和播放会话；切换时关闭当前会话并保存进度，不自动接续另一边的播放。
 - **Headless** 是无界面宿主，组合媒体、任务、Mesh 和可配置的对话宿主。没有 GUI 窗口或本地播放器就不能推断桌面操作可用；它对部分能力有独立实现或过滤，根目录配置与桌面也不同。
-- **iOS body-only** 提供界面、播放器、能力层和 Mesh，不启动本地 Agent 端点或会话宿主；可选择其他设备上的 Agent。该角色过滤窗口、程序、对话、Agent 和记忆等一组本机能力。具体设备和动作仍以运行目录为准。
+- **iOS、HarmonyOS 和 tvOS 的 body-only 角色** 提供界面、播放器、能力层和 Mesh，不启动本地 Agent 端点或会话宿主，不读取桌面 Agent 种子；可选择其他设备上的 Agent，对话、记忆和个人 harness 保存在所选宿主。该角色过滤窗口、程序、对话、Agent 和记忆等一组本机能力，tvOS 另有下载与本机文件操作限制。具体设备和动作仍以运行目录为准。
 
 ## 来源和投影
 
@@ -22,4 +22,4 @@ Next 的首页书架和媒体库分类排列属于当前设备的展示数据；
 
 常见误解：**远端列表可见**不等于当前在线；**相同作品标题**不等于同一源设备 ID；**缓存海报存在**不证明源文件可播放；**能远程调用一个 Action**不证明所有动作都可远程调用。
 
-源码：[iOS 角色](../../../../lib/next/body/next_body.dart)、[Headless 组合](../../../../lib/next/headless/core.dart)、[Mesh 路由](../../../../lib/next/mesh/runtime.dart)、[跨设备目录](../../../../lib/next/mesh/library_capability.dart)、[本机媒体库布局](../../../../lib/next/ui_data/library_service.dart)。
+源码：[body-only 角色](../../../../lib/next/body/next_body.dart)、[Headless 组合](../../../../lib/next/headless/core.dart)、[Mesh 路由](../../../../lib/next/mesh/runtime.dart)、[跨设备目录](../../../../lib/next/mesh/library_capability.dart)、[本机媒体库布局](../../../../lib/next/ui_data/library_service.dart)。

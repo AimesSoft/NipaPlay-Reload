@@ -23,7 +23,7 @@
 
 - **桌面 GUI** 提供 Next 自己的首页、媒体库、对话和播放界面，并接入本机媒体、任务与用户在场的操作。Classic 与 Next 不互相隐藏挂载：切换时关闭当前播放会话并保存进度，另一边不自动续播。
 - **Headless** 提供无界面的 Core、端点、Mesh 和可配置的对话宿主，适合持有媒体的设备；没有桌面窗口或本地 GUI 播放器就不能假定这些能力可用。安装、数据目录和 DSH 前置见 [Linux 无界面版](../advanced/headless.md)。
-- **iOS / iPad 的 body-only 角色**：`NextBody.bodyOnly` 在 iOS 为真，提供 Next 界面、能力层、播放器和 Mesh，不启动本地 Agent 端点或对话宿主；对话可选择连接其他设备的 Agent。该角色过滤 `window.*`、`program.*`、`chat.*`、`agent.*`、`memory.*`、`app.quit` 和 `app.restart`，界面不提供本机下载器。具体能力仍以设备的 `app.capabilities` 为准；源码路径不代表所有移动设备已有实机覆盖。
+- **iOS、HarmonyOS 和 tvOS 的 body-only 角色**：提供 Next 界面、能力层、播放器和 Mesh，不启动本地 Agent 端点或对话宿主；对话可选择连接其他设备的 Agent。该角色过滤 `window.*`、`program.*`、`chat.*`、`agent.*`、`memory.*`、`app.quit` 和 `app.restart`，tvOS 还过滤下载和本机文件扫描等操作。初始化跳过桌面 Agent 种子，桌面保留原有种子加载。对话、记忆和个人 harness 属于所选的 Agent 宿主。具体能力仍以设备的 `app.capabilities` 为准；源码路径不代表所有移动设备已有实机覆盖。
 - **会话运行器** 负责模型交互与会话生命周期。代码接入 Codex 和 DeepSeek Harness（DSH）；DSH 使用固定版本和宿主插件，模型、凭据及运行环境需配置。高级配置的生效和恢复边界见 [DSH 高级配置](../advanced/dsh-config.md)。运行器选择不改变 Action 的领域契约，也不保证任意模型或插件组合可用。
 
 默认个人仓库为 `~/nipaplay-harness`，也可配置路径。启动时宿主先预览官方种子合入并保护个人分支、索引和文件；冲突或中断会暴露状态，不强制覆盖。认证凭据位于仓库外。hooks 把事件交给仓库中的程序，输出记入任务回执；中断的 hook 不自动重跑。

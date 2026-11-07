@@ -57,6 +57,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'agent_endpoint.dart';
+import 'harness_seed_flutter.dart';
 import 'capabilities/history_capability.dart';
 import 'capabilities/family_descriptions.dart';
 import 'mesh/playback.dart';
@@ -558,15 +559,7 @@ final class NextRuntime extends ChangeNotifier {
     await _labs.ready;
     await _preference.ready;
     final root = core.root;
-    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-    const prefix = 'assets/next/harness/';
-    final seed = <String, List<int>>{};
-    for (final asset
-        in manifest.listAssets().where((path) => path.startsWith(prefix))) {
-      final data = await rootBundle.load(asset);
-      seed[asset.substring(prefix.length)] =
-          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-    }
+    final seed = await bundledHarnessSeed();
     final packageInfo = await PackageInfo.fromPlatform();
     JsonMap buildSource = {};
     try {

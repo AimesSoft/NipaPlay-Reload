@@ -32,11 +32,11 @@ class NextUiPreference extends ChangeNotifier {
 
   static const key = 'labs_use_next_interface';
 
-  /// Next's interface is what shows: on a desktop, an iPad or an iPhone, with
+  /// Next's interface is what shows: on a desktop or a supported mobile device, with
   /// NipaPlay Next on in Labs ([nextEnabled]) and this [preference] on. Nipa
   /// runs only then; Classic has no Nipa (D1). An iPad or an iPhone starts
   /// only the body: it cannot host Nipa, and another device's Nipa serves it.
-  /// Android has no Next.
+  /// HarmonyOS also runs only the body. Android has no Next.
   static bool interfaceOpen(
           {required bool nextEnabled, required bool preference}) =>
       deviceHasNext() && nextEnabled && preference;
@@ -45,7 +45,7 @@ class NextUiPreference extends ChangeNotifier {
   @visibleForTesting
   static bool Function() deviceHasNext = () =>
       globals.isDesktop ||
-      (!kIsWeb && (Platform.isIOS || globals.isTvOS));
+      (!kIsWeb && (Platform.isIOS || globals.isTvOS || globals.isHarmonyOS));
 
   late final Future<void> ready;
   bool _enabled = false;

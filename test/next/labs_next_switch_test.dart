@@ -20,9 +20,11 @@ import 'player_test_support.dart';
 void main() {
   final original = LabsSettingsContent.device;
   final originalTelevision = LabsSettingsContent.television;
+  final originalHarmonyOS = LabsSettingsContent.harmonyOS;
   tearDown(() {
     LabsSettingsContent.device = original;
     LabsSettingsContent.television = originalTelevision;
+    LabsSettingsContent.harmonyOS = originalHarmonyOS;
   });
 
   Future<(LabsSettingsProvider, NextUiPreference)> pumpLabs(WidgetTester tester,
@@ -138,6 +140,32 @@ void main() {
   testWidgets('an Android phone has no switch', (tester) async {
     await pumpLabs(tester, desktop: false, iPad: false);
     expect(find.text('NipaPlay Next'), findsNothing);
+  });
+
+  testWidgets('HarmonyOS enters Next through Labs with the mobile consent',
+      (tester) async {
+    LabsSettingsContent.harmonyOS = () => true;
+    final (labs, preference) = await pumpLabs(tester,
+        desktop: false, iPad: false, routed: true);
+    await tester.tap(find.text('NipaPlay Next'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('这台 鸿蒙设备 上的 NipaPlay'), findsOneWidget);
+    expect(find.textContaining('其他设备上的 AI Agent'), findsOneWidget);
+    expect(find.textContaining('使用这台电脑'), findsNothing);
+    expect(find.textContaining('iPad'), findsNothing);
+    await tester.tap(find.text('我了解风险，开启'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(labs.enableAgentEndpoint, isTrue);
+    expect(preference.enabled, isTrue);
+    final saved = await SharedPreferences.getInstance();
+    expect(saved.getBool(SettingsKeys.labsEnableAgentEndpoint), isTrue);
+    expect(saved.getBool(NextUiPreference.key), isTrue);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(NextShell), findsOneWidget);
+    expect(find.byType(LabsSettingsContent), findsNothing);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('a television has the body consent and the Next switch',

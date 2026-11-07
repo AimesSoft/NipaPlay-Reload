@@ -209,7 +209,12 @@ void main() {
     expect(await AutoSyncSettings.getSyncOnRecordChange(), true);
     expect(await AutoSyncSettings.getRemotePath(), '/sync');
     expect(jsonEncode(await sync.status()), isNot(contains('sync-private')));
-    expect(SyncCapability(sync).actions.every((a) => !a.spec.input.properties.containsKey('password')), true);
+    final actions = SyncCapability(sync).actions;
+    expect(actions.where((a) => a.spec.input.properties.containsKey('password'))
+        .map((a) => a.spec.id), ['sync.login']);
+    final login = actions.singleWhere((a) => a.spec.id == 'sync.login');
+    expect(login.spec.input.properties['password']!.secret, isTrue);
+    expect(login.spec.input.properties, contains('userAuthorization'));
   });
 
   test(
@@ -577,7 +582,7 @@ void main() {
     expect(vault.values.values.every((secret) => secret.isEmpty), true);
   });
 
-  test('remote facts retain item IDs without creating bindings or query files',
+  test('query is read-only; browse indexes server identities without inferred provider bindings',
       () async {
     final oldHttp = HttpOverrides.current;
     HttpOverrides.global = _DirectHttp();
@@ -664,13 +669,20 @@ void main() {
     expect((queried['provenance'] as Map)['itemId'], 'episode-fact');
     expect(jsonEncode(query), isNot(contains('transport-secret')));
     expect(await jobs.database.query('media_locations'), isEmpty);
+    expect(await jobs.database.query('media_bindings'), isEmpty);
+    expect(await jobs.database.query('media_external_objects'), isEmpty);
     final browsed = await call('media.sources.browse', {'sourceId': id});
     final entry = (browsed['entries'] as List).single as Map;
     expect(entry['metadata'], metadata);
     expect(entry['fileId'], isNotNull);
     expect((await store.entity(entry['fileId'] as String))['revision'], 0);
-    expect(await jobs.database.query('media_bindings'), isEmpty);
-    expect(await jobs.database.query('media_external_objects'), isEmpty);
+    final bindings = await jobs.database.query('media_bindings');
+    expect(bindings, isNotEmpty);
+    expect(bindings.every((b) => b['source'] == 'source_catalog'), isTrue);
+    final objects = await jobs.database.query('media_external_objects');
+    expect(objects, isNotEmpty);
+    expect(objects.every((o) => o['provider'] == 'https://sources.nipaplay.app'),
+        isTrue);
     expect(requests.where((r) => r.path == '/Items').every((r) =>
         r.queryParameters['Fields']!.contains('ProviderIds') &&
         r.queryParameters['Fields']!.contains('MediaStreams')), isTrue);

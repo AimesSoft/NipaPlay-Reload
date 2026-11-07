@@ -44,11 +44,13 @@ class _NipaPeerSectionState extends State<NipaPeerSection> {
   static String get _title {
     final self = globals.isTelevision
         ? '电视'
-        : globals.isIPad
-            ? ' iPad '
-            : globals.isPhone
-                ? ' iPhone '
-                : '设备';
+        : globals.isHarmonyOS
+            ? '鸿蒙设备'
+            : globals.isIPad
+                ? ' iPad '
+                : globals.isPhone
+                    ? ' iPhone '
+                    : '设备';
     return '为这台$self服务';
   }
 

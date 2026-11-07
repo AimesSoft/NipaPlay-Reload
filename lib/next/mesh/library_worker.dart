@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:http/http.dart' as http;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -294,6 +295,9 @@ final class LibraryWorker {
 
   Future<Object?> _hostRequest(String method, Object? input) async {
     switch (method) {
+      case 'artwork':
+        final response = await ui.artwork.fetchImage(Uri.parse(input as String));
+        return (response.bodyBytes, response.statusCode, response.headers);
       case 'vault':
         return ui.artwork.vault.read(input as CredentialRef);
       case 'metadata':
@@ -867,7 +871,8 @@ Future<void> _serve(
       state,
       sources,
       Directory(rootPath),
-      _Vault(host));
+      _Vault(host),
+      artworkClient: _ArtworkClient(host));
   ui.subtitles = _Subtitles(db);
   LibraryDataService(ui).register(state);
   Future<void> releaseResources() async {
@@ -1551,6 +1556,23 @@ Future<UiHome> _homePlan(
     }
   }
   return UiHome(hero: hero, shelves: shelves);
+}
+
+final class _ArtworkClient extends http.BaseClient {
+  _ArtworkClient(this.host);
+  final SendPort host;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.method != 'GET') {
+      throw UnsupportedError('Artwork requests must use GET');
+    }
+    final (bytes, status, headers) = await _request(
+        host, 'artwork', request.url.toString()) as
+        (Uint8List, int, Map<String, String>);
+    return http.StreamedResponse(Stream.value(bytes), status,
+        headers: headers, request: request);
+  }
 }
 
 final class _Transport implements MetadataTransport {

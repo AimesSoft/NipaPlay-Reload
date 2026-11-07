@@ -8,7 +8,7 @@
 | 运行器 | 与模型通信，把模型选择的工具调用交给 NipaPlay，管理对话上下文。默认为 DeepSeek Harness（DSH），可选 Codex |
 | 模型 | 理解请求，决定调用哪些工具。由用户选择的服务商提供，需支持工具调用（function calling） |
 
-梨花运行在桌面设备（macOS、Windows、Linux）和 [Linux 无界面版](../advanced/headless.md)上。iPhone 和 iPad 使用其他设备上的梨花，见[多台设备](../use/devices.md#在-ipadiphone-上使用梨花)。
+梨花运行在桌面设备（macOS、Windows、Linux）和 [Linux 无界面版](../advanced/headless.md)上。iPhone、iPad 和鸿蒙设备使用其他设备上的梨花，见[多台设备](../use/devices.md#在-ipadiphone-和鸿蒙设备上使用梨花)。
 
 ## 推荐配置
 

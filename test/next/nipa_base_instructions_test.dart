@@ -1,3 +1,4 @@
+@Tags(['codex_integration'])
 @Timeout(Duration(minutes: 3))
 library;
 

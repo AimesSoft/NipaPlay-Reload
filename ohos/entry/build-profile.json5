@@ -9,6 +9,7 @@
         "arm64-v8a"
       ],
       "targets": [
+        "nipaplay_sqlite3",
         "nipaplay_native",
         "nipaplay_quickjs_c_bridge",
         "rust_lib_nipaplay"

@@ -103,6 +103,21 @@ void main() {
       expect(overridden, 0);
       expect(firstLoadableLibrary(linuxSqliteNames, opening({}, [])), isNull);
     });
+
+    test('HarmonyOS registers its bundled SQLite even without a platform enum', () {
+      final asked = <String>[];
+      var overridden = 0;
+      ensureSqliteLibrary(
+          linux: false,
+          harmonyOS: true,
+          load: opening({harmonySqliteName}, asked),
+          override: (open) {
+            overridden++;
+            open();
+          });
+      expect(overridden, 1);
+      expect(asked, [harmonySqliteName]);
+    });
   });
 
   group('the data directory', () {
