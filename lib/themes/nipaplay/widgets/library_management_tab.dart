@@ -342,7 +342,11 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
 
   /// 启动阶段的可达性检测有新结果时刷新页面，更新地址行的「可达/不可用」。
   void _onReachabilityUpdated() {
-    if (mounted) setState(() {});
+    if (!mounted || _isRemoteMode) return;
+    setState(() {
+      _webdavConnections = WebDAVService.instance.connections;
+      _smbConnections = SMBService.instance.connections;
+    });
   }
 
   // 提取为单独的方法，方便管理生命周期

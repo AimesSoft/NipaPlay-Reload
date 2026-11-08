@@ -11,11 +11,22 @@ import 'package:nipaplay/services/webdav_service.dart';
 /// - 两个都可达则优先使用内网地址，仅一个可达则使用可达的那个；
 /// - 都不可达则保留内网为默认。
 ///
-/// 具体的双地址探测与优选结果记录由各服务的 `testConnection` 完成。
+/// 使用与管理页手动检测相同的状态更新流程，同时保存连接状态与优选地址。
 /// 每个连接探测结束后会 [notifyListeners]，库管理界面据此刷新地址行
 /// 的连通性状态，避免页面在检测完成前打开时一直停留在「未知」。
 class MediaLibraryReachabilityService extends ChangeNotifier {
-  MediaLibraryReachabilityService._();
+  MediaLibraryReachabilityService._({WebDAVService? webdav, SMBService? smb})
+      : _webdav = webdav ?? WebDAVService.instance,
+        _smb = smb ?? SMBService.instance;
+
+  @visibleForTesting
+  MediaLibraryReachabilityService.forTesting({
+    required WebDAVService webdav,
+    required SMBService smb,
+  }) : this._(webdav: webdav, smb: smb);
+
+  final WebDAVService _webdav;
+  final SMBService _smb;
 
   static final MediaLibraryReachabilityService instance =
       MediaLibraryReachabilityService._();
@@ -28,17 +39,15 @@ class MediaLibraryReachabilityService extends ChangeNotifier {
     if (kIsWeb || _isChecking) return;
     _isChecking = true;
     try {
-      await WebDAVService.instance.initialize();
-      await SMBService.instance.initialize();
+      await _webdav.initialize();
+      await _smb.initialize();
 
       final webdavConnections =
-          List<WebDAVConnection>.from(WebDAVService.instance.connections);
-      final smbConnections =
-          List<SMBConnection>.from(SMBService.instance.connections);
+          List<WebDAVConnection>.from(_webdav.connections);
+      final smbConnections = List<SMBConnection>.from(_smb.connections);
 
       await Future.wait([
-        for (final connection in webdavConnections)
-          _checkWebDav(connection),
+        for (final connection in webdavConnections) _checkWebDav(connection),
         for (final connection in smbConnections) _checkSmb(connection),
       ]);
     } catch (e) {
@@ -51,7 +60,7 @@ class MediaLibraryReachabilityService extends ChangeNotifier {
 
   Future<void> _checkWebDav(WebDAVConnection connection) async {
     try {
-      await WebDAVService.instance.testConnection(connection);
+      await _webdav.updateConnectionStatus(connection.name);
     } catch (e) {
       debugPrint('WebDAV 可达性检测失败 (${connection.name}): $e');
     } finally {
@@ -61,7 +70,7 @@ class MediaLibraryReachabilityService extends ChangeNotifier {
 
   Future<void> _checkSmb(SMBConnection connection) async {
     try {
-      await SMBService.instance.testConnection(connection);
+      await _smb.updateConnectionStatus(connection.name);
     } catch (e) {
       debugPrint('SMB 可达性检测失败 (${connection.name}): $e');
     } finally {

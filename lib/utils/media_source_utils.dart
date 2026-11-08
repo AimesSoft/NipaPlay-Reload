@@ -416,9 +416,15 @@ class MediaSourceUtils {
     return filePath;
   }
 
-  /// 连接配置了用户名或密码时，媒体需要经本地认证代理播放。
-  static bool webDavNeedsAuthProxy(WebDAVConnection connection) =>
-      connection.username.trim().isNotEmpty || connection.password.isNotEmpty;
+  /// 通常有凭证的连接使用认证代理；已检测且两侧均失败时，仍尝试配置直链。
+  /// 自检失败不代表媒体 GET 一定失败，且不能让旧代理地址遮蔽真实服务错误。
+  static bool webDavNeedsAuthProxy(WebDAVConnection connection) {
+    if (WebDAVService.instance.allAddressesUnreachable(connection.id)) {
+      return false;
+    }
+    return connection.username.trim().isNotEmpty ||
+        connection.password.isNotEmpty;
+  }
 
   /// 将新格式 WebDAV 路径解析为可播放的 HTTP URL。
   ///
