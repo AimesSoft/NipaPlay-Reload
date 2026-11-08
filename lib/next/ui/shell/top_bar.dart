@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart'
+    show AdaptivePopupMenuButton, AdaptivePopupMenuItem, IOS26Glass;
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:window_manager/window_manager.dart';
@@ -75,11 +77,7 @@ class NextTopBar extends StatelessWidget {
             // A phone searches and talks from its foot; its top keeps the
             // background work and the menu (settings, back to Classic).
             if (compact)
-              PhoneGlassCircle(
-                  label: '菜单',
-                  onTap: () => shell.togglePopover(NextPopover.nipa),
-                  child: const NextIcon(NextGlyph.more,
-                      size: 20, color: NextColors.paper))
+              const _PhoneMenu()
             else ...[
               NextIconButton(
                   glyph: NextGlyph.settings,
@@ -406,4 +404,50 @@ class _CompactBar extends StatelessWidget {
           ]),
         ),
       );
+}
+
+/// A phone's menu at the top right. On iOS 26 the system's own: a glass
+/// button whose menu opens as the system's glass. Elsewhere Next's popover.
+class _PhoneMenu extends StatelessWidget {
+  const _PhoneMenu();
+
+  @override
+  Widget build(BuildContext context) {
+    final shell = NextShellScope.of(context);
+    if (!IOS26Glass.supported) {
+      return PhoneGlassCircle(
+          label: '菜单',
+          onTap: () => shell.togglePopover(NextPopover.nipa),
+          child: const NextIcon(NextGlyph.more,
+              size: 20, color: NextColors.paper));
+    }
+    return ListenableBuilder(
+      listenable: shell.nipaSetup,
+      builder: (context, _) {
+        final entries = <(String, String, VoidCallback)>[
+          if (shell.nipaSetup.needsModel)
+            ('设置梨花', 'sparkles',
+                () => shell.openSettings(section: SettingsSection.nipa)),
+          ('问梨花', 'bubble.left', shell.openChat),
+          ('设置', 'gearshape', shell.openSettings),
+          ('回到经典界面', 'arrow.uturn.backward', shell.onLeave),
+        ];
+        return MediaQuery(
+          // Next is dark whatever the system's appearance.
+          data: MediaQuery.of(context)
+              .copyWith(platformBrightness: Brightness.dark),
+          child: AdaptivePopupMenuButton.icon<int>(
+            icon: 'ellipsis',
+            size: 40,
+            tint: NextColors.paper,
+            items: [
+              for (final (label, symbol, _) in entries)
+                AdaptivePopupMenuItem<int>(label: label, icon: symbol),
+            ],
+            onSelected: (index, _) => entries[index].$3(),
+          ),
+        );
+      },
+    );
+  }
 }

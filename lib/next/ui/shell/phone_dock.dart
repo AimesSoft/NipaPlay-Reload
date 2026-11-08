@@ -136,9 +136,12 @@ class PhoneDock extends StatelessWidget {
       );
 }
 
-/// A phone's glass: the system's own Liquid Glass on iOS 26 (UIKit draws
-/// it under what Flutter draws), the shader glass elsewhere. A capsule (a
-/// circle when square) unless [radius] is given.
+/// A phone's glass for what Flutter draws on it (the line to Nipa, round
+/// buttons, the player's capsule): a dark tint with a fine light edge and
+/// nothing behind it computed. The system's glass would be a view of its
+/// own, composed again every frame anything under it moves, at 120 Hz; the
+/// shader glass is redrawn as often. Only the tab bar is the system's.
+/// A capsule (a circle when square) unless [radius] is given.
 class PhoneGlass extends StatelessWidget {
   const PhoneGlass(
       {super.key,
@@ -155,48 +158,31 @@ class PhoneGlass extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final Widget? child;
 
+  static const _side = BorderSide(color: Color(0x2EFFFFFF), width: 0.8);
+
   @override
   Widget build(BuildContext context) {
-    Widget? content = child;
-    if (content != null && padding != null) {
-      content = Padding(padding: padding!, child: content);
-    }
-    if (content != null && alignment != null) {
-      content = Align(alignment: alignment!, child: content);
-    }
-    final shell = NextShellScope.maybeOf(context);
-    if (IOS26Glass.supported && shell != null) {
-      return ValueListenableBuilder<bool>(
-        valueListenable: shell.panelOpen,
-        builder: (context, open, _) => open
-            ? _shader(content)
-            : SizedBox(
-                width: width,
-                height: height,
-                child:
-                    IOS26Glass(cornerRadius: radius, dark: true, child: content),
-              ),
-      );
-    }
-    return _shader(content);
-  }
-
-  /// While a phone's conversation is up (its keyboard with it) no system
-  /// view is on screen: Flutter's layers over them do not survive the
-  /// keyboard, and what the conversation draws must. The shader glass
-  /// stands in until it goes.
-  Widget _shader(Widget? content) {
     final square = width != null && width == height && radius == null;
-    return GlassContainer(
+    final ShapeBorder shape = square
+        ? const CircleBorder(side: _side)
+        : radius == null
+            ? const StadiumBorder(side: _side)
+            : RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(radius!), side: _side);
+    return Container(
       width: width,
       height: height,
-      shape: square
-          ? const LiquidOval()
-          : LiquidRoundedSuperellipse(
-              borderRadius: radius ?? (height ?? NextLayout.dockLine) / 2),
-      settings: phoneGlass,
-      quality: GlassQuality.standard,
-      child: content,
+      padding: padding,
+      alignment: alignment,
+      decoration: ShapeDecoration(
+        shape: shape,
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xD12A2A31), Color(0xD11A1A20)],
+        ),
+      ),
+      child: child,
     );
   }
 }
