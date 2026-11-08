@@ -138,6 +138,7 @@ jobs:
             ninja-build \
             pkg-config \
             python3 \
+            python3-venv \
             unzip \
             xz-utils \
             zstd
