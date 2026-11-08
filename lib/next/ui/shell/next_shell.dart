@@ -484,7 +484,7 @@ class _SectionsState extends State<_Sections>
             ),
         // A phone's sections are at its foot, over the pages; a page pushed
         // over them (a work, settings) covers them.
-        if (NextLayout.compact(context))
+        if (NextLayout.docked(context))
           const Positioned(left: 0, right: 0, bottom: 0, child: PhoneDock()),
       ]);
 }

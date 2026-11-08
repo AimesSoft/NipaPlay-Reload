@@ -141,7 +141,7 @@ class NextTopBar extends StatelessWidget {
     final shell = NextShellScope.of(context);
     // A phone: the sections are at its foot ([PhoneDock]); the bar keeps
     // what is always at hand, under the status bar.
-    if (NextLayout.compact(context)) return _CompactBar(shell: shell);
+    if (NextLayout.docked(context)) return _CompactBar(shell: shell);
     final top = NextLayout.barTop(context);
     final bar = SizedBox(
       height: top + NextMetrics.topBar,
@@ -394,8 +394,8 @@ class _CompactBar extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: EdgeInsets.only(
             top: NextLayout.barTop(context),
-            left: NextLayout.compactGutter,
-            right: NextLayout.compactGutter),
+            left: NextLayout.gutter(context),
+            right: NextLayout.gutter(context)),
         child: SizedBox(
           height: NextMetrics.topBar,
           child: Row(children: [

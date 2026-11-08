@@ -37,8 +37,19 @@ class PhoneDock extends StatelessWidget {
     (NextSection.activity, '动态', NextGlyph.activity, 'waveform.path.ecg'),
   ];
 
+  /// On a tablet the dock keeps about a phone's width, in the middle.
+  static const maxWidth = 620.0;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Center(
+        heightFactor: 1,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: maxWidth),
+          child: _dock(context),
+        ),
+      );
+
+  Widget _dock(BuildContext context) {
     final shell = NextShellScope.of(context);
     if (IOS26Glass.supported) {
       // Under the conversation's sheet, out of sight: not on screen at all

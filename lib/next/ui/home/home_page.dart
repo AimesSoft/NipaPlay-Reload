@@ -404,6 +404,7 @@ class _NextHomePageState extends State<NextHomePage> {
     // input bar; a television keeps the first screen for the hero and the
     // bar, the shelf's title just showing below.
     final compact = NextLayout.compact(context);
+    final docked = NextLayout.docked(context);
     final top = ConstrainedBox(
       constraints: BoxConstraints(
           minHeight: compact
@@ -436,13 +437,13 @@ class _NextHomePageState extends State<NextHomePage> {
                             ),
                       child: HeroCopy(
                         work: hero,
-                        line: compact ? null : line,
+                        line: docked ? null : line,
                         leadWithTitle: line != null && line == heroNote,
                         mood: c.mood,
                         moodSentence: c.moodSentence,
                         onPlay: () => shell.play(hero),
                         onDetail: () => shell.openWork(hero),
-                        preparing: active.isEmpty || compact
+                        preparing: active.isEmpty || docked
                             ? null
                             : PreparingLine(
                                 tasks: active,
@@ -454,8 +455,8 @@ class _NextHomePageState extends State<NextHomePage> {
         ),
       ),
     );
-    // A phone talks to Nipa from the line at its foot.
-    if (compact) {
+    // A phone or a tablet talks to Nipa from the line at its foot.
+    if (docked) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

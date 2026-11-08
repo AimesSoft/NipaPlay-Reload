@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:nipaplay/utils/globals.dart' as globals;
 
 import 'tokens.dart';
 
@@ -26,6 +27,13 @@ abstract final class NextLayout {
   static bool compact(BuildContext context) =>
       MediaQuery.sizeOf(context).width < compactWidth;
 
+  /// The sections, search and the line to Nipa are at the foot: on a
+  /// phone, a tablet (as on a phone, whatever its width) and in a narrow
+  /// window. A computer's window and a television keep the top bar's.
+  static bool docked(BuildContext context) =>
+      compact(context) ||
+      (globals.isMobilePlatform && !globals.isTelevision);
+
   /// The content's left edge.
   static double gutter(BuildContext context) =>
       compact(context) ? compactGutter : NextMetrics.gutter;
@@ -46,7 +54,7 @@ abstract final class NextLayout {
   /// Room a page leaves at its foot for the sections' bar and the home
   /// indicator; none in a window.
   static double foot(BuildContext context) {
-    if (!compact(context)) return 0;
+    if (!docked(context)) return 0;
     final bottom = MediaQuery.paddingOf(context).bottom;
     return dockLine + dockGap + tabBar + (bottom > 0 ? bottom - 8 : 12) + 12;
   }

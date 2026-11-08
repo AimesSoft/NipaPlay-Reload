@@ -186,7 +186,7 @@ class NextShellController extends ChangeNotifier {
     if (value) {
       popover = NextPopover.none;
       closeSearch(restoreFocus: false);
-    } else if (panelOpen.value && onHome && !globals.isPhone) {
+    } else if (panelOpen.value && onHome && !globals.isMobilePlatform) {
       _closePanel();
       homeChatOpen.value = true;
     } else if (services.logins.pending.isNotEmpty && !chatShown) {
@@ -212,7 +212,7 @@ class NextShellController extends ChangeNotifier {
   void ask() {
     closeSearch(restoreFocus: false);
     if (panelOpen.value) return panelFocus.requestFocus();
-    if (!onHome) return openChat();
+    if (!onHome || globals.isMobilePlatform) return openChat();
     popover = NextPopover.none;
     notifyListeners();
     WidgetsBinding.instance.addPostFrameCallback((_) =>
@@ -239,7 +239,9 @@ class NextShellController extends ChangeNotifier {
     // A computer's keyboard is there already; a television types with its
     // remote from the field.
     final typeAtOnce = globals.isDesktop || globals.isTvOS;
-    if (onHome && !globals.isPhone) {
+    // A phone or a tablet talks from the line at its foot: the panel. A
+    // computer's home has its own conversation, under the input bar.
+    if (onHome && !globals.isMobilePlatform) {
       homeChatOpen.value = true;
       if (typeAtOnce) {
         WidgetsBinding.instance
