@@ -830,6 +830,7 @@ class _AdaptiveMediaCollectionViewState
     final result = await ThemedAnimeDetail.show(
       context,
       item.animeId!,
+      mediaLibraryScope: widget.source.mediaLibraryScope,
       sharedSummary: summary,
       sharedSourceLabel: _sourceLabel,
       sharedEpisodeLoader: () async => episodes

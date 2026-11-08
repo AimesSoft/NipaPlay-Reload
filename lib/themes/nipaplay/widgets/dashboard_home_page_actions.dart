@@ -78,6 +78,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
           anime: summary,
           episode: episode,
         ),
+        mediaLibraryScope: MediaLibraryScope(MediaLibraryScopeKind.sharedRemote,
+            hostOrigin: resolvedProvider.activeHost?.baseUrl),
         sharedSourceLabel: resolvedProvider.activeHost?.displayName,
       );
     } catch (e) {
@@ -165,6 +167,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
           summary: summary,
           episode: episode,
         ),
+        mediaLibraryScope: MediaLibraryScope(MediaLibraryScopeKind.dandanplay,
+            hostOrigin: resolvedProvider.serverUrl),
         sharedSourceLabel: resolvedProvider.serverUrl ?? '弹弹play',
       );
 

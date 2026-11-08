@@ -1,5 +1,7 @@
 library video_player_state;
 
+import 'package:nipaplay/models/media_library_scope.dart';
+
 export 'video_aspect_geometry.dart' show VideoAspectMode;
 export 'screenshot_encoding.dart' show ScreenshotFormat;
 

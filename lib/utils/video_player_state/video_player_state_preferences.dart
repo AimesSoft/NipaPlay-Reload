@@ -2930,6 +2930,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       await initializePlayer(
         path,
         historyItem: history,
+        mediaLibraryScope: _playbackDetailContext?.mediaLibraryScope,
         resetManualDanmakuOffset: false,
         episodeFileSelectionHandled: true,
       );
@@ -2994,6 +2995,7 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         await initializePlayer(
           path,
           historyItem: history,
+          mediaLibraryScope: _playbackDetailContext?.mediaLibraryScope,
           resetManualDanmakuOffset: false,
           episodeFileSelectionHandled: true,
         );

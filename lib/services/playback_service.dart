@@ -39,6 +39,7 @@ class PlaybackService {
     if (item.actualPlayUrl == null &&
         (item.videoPath.startsWith('https://') ||
             item.videoPath.startsWith('http://'))) {
+      final scope = item.mediaLibraryScope;
       item = await PluginPlaybackService.prepare(
             context,
             item.videoPath,
@@ -46,6 +47,7 @@ class PlaybackService {
             historyItem: item.historyItem,
           ) ??
           item;
+      item = item.withMediaLibraryScope(scope);
       if (!context.mounted) return false;
     }
     final launched = await ExternalPlayerService.play(settings, item);
@@ -112,6 +114,7 @@ class PlaybackService {
       historyItem: item.historyItem,
       actualPlayUrl: item.actualPlayUrl,
       playbackSession: item.playbackSession,
+      mediaLibraryScope: item.mediaLibraryScope,
       playbackDetailContext: detailContext,
       mediaKey: item.mediaKey,
       episodeFileSelectionHandled: true,

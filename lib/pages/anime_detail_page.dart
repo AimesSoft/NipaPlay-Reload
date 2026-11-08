@@ -1,3 +1,4 @@
+import 'package:nipaplay/models/media_library_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/apple_native_media_control.dart';
 import 'dart:async';
 
@@ -84,6 +85,7 @@ enum _ImmersiveMoreAction {
 const double _kFinishedWatchThreshold = 0.95;
 
 class AnimeDetailPage extends StatefulWidget {
+  final MediaLibraryScope? mediaLibraryScope;
   final int animeId;
   final SharedRemoteAnimeSummary? sharedSummary;
   final Future<List<SharedRemoteEpisode>> Function()? sharedEpisodeLoader;
@@ -98,6 +100,7 @@ class AnimeDetailPage extends StatefulWidget {
   const AnimeDetailPage({
     super.key,
     required this.animeId,
+    this.mediaLibraryScope,
     this.sharedSummary,
     this.sharedEpisodeLoader,
     this.sharedEpisodeBuilder,
@@ -122,6 +125,7 @@ class AnimeDetailPage extends StatefulWidget {
   static Future<WatchHistoryItem?> show(
     BuildContext context,
     int animeId, {
+    MediaLibraryScope? mediaLibraryScope,
     SharedRemoteAnimeSummary? sharedSummary,
     Future<List<SharedRemoteEpisode>> Function()? sharedEpisodeLoader,
     PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder,
@@ -138,6 +142,8 @@ class AnimeDetailPage extends StatefulWidget {
           dismissible: false,
           builder: (_) => NipaplayLargeScreenAnimeDetailPage(
             animeId: animeId,
+            mediaLibraryScope:
+                mediaLibraryScope ?? playbackDetailContext?.mediaLibraryScope,
             sharedSummary: sharedSummary,
             sharedEpisodeLoader: sharedEpisodeLoader,
             sharedEpisodeBuilder: sharedEpisodeBuilder,
@@ -172,6 +178,8 @@ class AnimeDetailPage extends StatefulWidget {
           enableAnimation: enableAnimation,
           builder: (_) => AnimeDetailPage(
             animeId: animeId,
+            mediaLibraryScope:
+                mediaLibraryScope ?? playbackDetailContext?.mediaLibraryScope,
             sharedSummary: sharedSummary,
             sharedEpisodeLoader: sharedEpisodeLoader,
             sharedEpisodeBuilder: sharedEpisodeBuilder,
@@ -192,6 +200,8 @@ class AnimeDetailPage extends StatefulWidget {
         heightRatio: 0.96,
         child: AnimeDetailPage(
           animeId: animeId,
+          mediaLibraryScope:
+              mediaLibraryScope ?? playbackDetailContext?.mediaLibraryScope,
           sharedSummary: sharedSummary,
           sharedEpisodeLoader: sharedEpisodeLoader,
           sharedEpisodeBuilder: sharedEpisodeBuilder,
@@ -212,6 +222,8 @@ class AnimeDetailPage extends StatefulWidget {
       enableAnimation: enableAnimation,
       child: AnimeDetailPage(
         animeId: animeId,
+        mediaLibraryScope:
+            mediaLibraryScope ?? playbackDetailContext?.mediaLibraryScope,
         sharedSummary: sharedSummary,
         sharedEpisodeLoader: sharedEpisodeLoader,
         sharedEpisodeBuilder: sharedEpisodeBuilder,
@@ -228,6 +240,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   final BangumiService _bangumiService = BangumiService.instance;
   BangumiAnime? _detailedAnime;
   SharedRemoteAnimeSummary? _sharedSummary;
+  MediaLibraryScope? get _mediaLibraryScope =>
+      widget.mediaLibraryScope ?? _playbackDetailContext?.mediaLibraryScope;
+
   String? _sharedSourceLabel;
   Future<List<SharedRemoteEpisode>> Function()? _sharedEpisodeLoader;
   PlayableItem Function(SharedRemoteEpisode episode)? _sharedEpisodeBuilder;
@@ -438,7 +453,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
             final episodeId = episode.episodeId;
             if (episodeId == null) continue;
             _sharedEpisodeMap[episodeId] = episode;
-            final playableItem = _sharedEpisodeBuilder!.call(episode);
+            final playableItem = _sharedEpisodeBuilder!
+                .call(episode)
+                .withMediaLibraryScope(_mediaLibraryScope);
             _sharedPlayableMap[episodeId] = playableItem;
           }
           _isLoadingSharedEpisodes = false;
@@ -1020,7 +1037,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     required PlayableItem? sourcePlayable,
   }) async {
     if (sourcePlayableAvailable && sourcePlayable != null) {
-      if (await PlaybackService().play(sourcePlayable)) {
+      if (await PlaybackService()
+          .play(sourcePlayable.withMediaLibraryScope(_mediaLibraryScope))) {
         _dismissDetailIfNeeded();
       }
       return;
@@ -1032,6 +1050,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       final filePath = historyItem.filePath;
       // Choose among all matches before checking any single file's availability.
       final playableItem = PlayableItem(
+        mediaLibraryScope: _mediaLibraryScope,
         videoPath: filePath,
         title: anime.nameCn,
         subtitle: episode.title,
@@ -2225,10 +2244,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
                     if (sourceHistory != null) {
                       return Future<WatchHistoryItem?>.value(sourceHistory);
                     }
+                    if (_mediaLibraryScope != null) {
+                      return WatchHistoryManager.getMatchedItemsForEpisode(
+                              anime.id, episode.id)
+                          .then((items) => items
+                              .where(_mediaLibraryScope!.contains)
+                              .firstOrNull);
+                    }
                     return WatchHistoryManager.getHistoryItemByEpisode(
-                      anime.id,
-                      episode.id,
-                    );
+                        anime.id, episode.id);
                   },
                 );
 
@@ -2724,10 +2748,13 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     return _episodeHistoryFutures.putIfAbsent(episode.id, () async {
       final sourceHistory = _playbackEpisodeMap[episode.id]?.historyItem;
       final WatchHistoryItem? result = sourceHistory ??
-          await WatchHistoryManager.getHistoryItemByEpisode(
-            anime.id,
-            episode.id,
-          );
+          (_mediaLibraryScope == null
+              ? await WatchHistoryManager.getHistoryItemByEpisode(
+                  anime.id, episode.id)
+              : (await WatchHistoryManager.getMatchedItemsForEpisode(
+                      anime.id, episode.id))
+                  .where(_mediaLibraryScope!.contains)
+                  .firstOrNull);
       _resolvedEpisodeHistory[episode.id] = result;
       return result;
     });
@@ -3719,7 +3746,9 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       // 过滤掉仅由媒体库扫描/文件匹配生成、没有任何实际播放痕迹的记录，
       // 避免未看过的番剧把“上次观看”错标为某个文件（如最后一话）。
       final watchedItems = historyItems
-          .where((item) => item.lastPosition > 0 || item.watchProgress > 0)
+          .where((item) =>
+              (_mediaLibraryScope?.contains(item) ?? true) &&
+              (item.lastPosition > 0 || item.watchProgress > 0))
           .toList();
       if (watchedItems.isNotEmpty) {
         // 按最后观看时间排序，取最近的一个

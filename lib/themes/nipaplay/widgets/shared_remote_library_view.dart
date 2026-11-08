@@ -1,3 +1,4 @@
+import 'package:nipaplay/models/media_library_scope.dart';
 import 'package:nipaplay/widgets/page_activity_mixin.dart';
 import 'dart:async';
 
@@ -1908,6 +1909,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
           anime: anime,
           episode: episode,
         ),
+        mediaLibraryScope: MediaLibraryScope(MediaLibraryScopeKind.sharedRemote,
+            hostOrigin: provider.activeHost?.baseUrl),
         sharedSourceLabel: provider.activeHost?.displayName,
       );
     } catch (e) {

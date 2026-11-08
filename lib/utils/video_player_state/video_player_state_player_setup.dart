@@ -24,6 +24,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     PlaybackSession? playbackSession,
     EmbyResolvedTrackBundle? embyTrackSelection,
     PlaybackDetailContext? playbackDetailContext,
+    MediaLibraryScope? mediaLibraryScope,
     String? mediaKey,
     bool resetManualDanmakuOffset = true,
     bool preserveEmbyAccountKey = false,
@@ -48,6 +49,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           historyItem: historyItem,
           actualPlayUrl: actualPlayUrl,
           playbackSession: playbackSession,
+          mediaLibraryScope: mediaLibraryScope,
           detailContext: playbackDetailContext,
           mediaKey: mediaKey,
         ),
@@ -65,6 +67,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       actualPlayUrl = selected.actualPlayUrl;
       playbackSession = selected.playbackSession;
       playbackDetailContext = selected.detailContext;
+      mediaLibraryScope = selected.mediaLibraryScope;
       mediaKey = selected.mediaKey;
     }
     if (actualPlayUrl == null &&
@@ -125,6 +128,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       resolvedDetailContext = playbackDetailContext;
     } else {
       final sourceItem = PlayableItem(
+        mediaLibraryScope: mediaLibraryScope,
         videoPath: videoPath,
         title: historyItem?.animeName,
         subtitle: historyItem?.episodeTitle,
@@ -144,7 +148,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     _clearPreviousVideoState(); // 清理旧状态
     _currentEmbyTrackSelection = embyTrackSelection;
     final initializationGeneration = _playbackGeneration;
-    _playbackDetailContext = resolvedDetailContext;
+    _playbackDetailContext = resolvedDetailContext.withMediaLibraryScope(
+      mediaLibraryScope ?? resolvedDetailContext.mediaLibraryScope,
+    );
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
     _isStartupMessageFlowActive = true;
     _initialHistoryItem = historyItem;

@@ -127,6 +127,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         if (historyItem != null) {
           // 从数据库找到的剧集，包含完整的历史信息
           final requested = PlayableItem(
+            mediaLibraryScope: _playbackDetailContext?.mediaLibraryScope,
             videoPath: historyItem.filePath,
             historyItem: historyItem,
             detailContext: _playbackDetailContext,
@@ -156,6 +157,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                mediaLibraryScope: selected.mediaLibraryScope,
                 playbackDetailContext: selected.detailContext,
                 actualPlayUrl: selected.actualPlayUrl,
                 episodeFileSelectionHandled: true,
@@ -185,6 +187,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                mediaLibraryScope: selected.mediaLibraryScope,
                 playbackDetailContext: selected.detailContext,
                 actualPlayUrl: selected.actualPlayUrl,
                 episodeFileSelectionHandled: true,
@@ -199,6 +202,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             await initializePlayer(
               resolvedHistory.filePath,
               historyItem: resolvedHistory,
+              mediaLibraryScope: selected.mediaLibraryScope,
               playbackDetailContext: selected.detailContext,
               actualPlayUrl: selected.actualPlayUrl,
               episodeFileSelectionHandled: true,
@@ -403,9 +407,11 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     final selected = await EpisodeFileSelectionService.select(
       _context!,
       PlayableItem(
+        mediaLibraryScope: _playbackDetailContext?.mediaLibraryScope,
         videoPath: episode.videoPath,
         historyItem: historyItem,
-        animeId: historyItem?.animeId ?? episode.animeId ?? detailContext?.animeId,
+        animeId:
+            historyItem?.animeId ?? episode.animeId ?? detailContext?.animeId,
         episodeId: historyItem?.episodeId ?? episode.episodeId,
         actualPlayUrl: episode.actualPlayUrl,
         playbackSession: episode.playbackSession,
@@ -456,6 +462,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     }
 
     final playableItem = PlayableItem(
+      mediaLibraryScope: _playbackDetailContext?.mediaLibraryScope,
       videoPath: episode.videoPath,
       title: historyItem?.animeName ?? detailContext?.title ?? episode.subtitle,
       subtitle: historyItem?.episodeTitle ?? episode.title,
@@ -578,6 +585,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         if (historyItem != null) {
           // 从数据库找到的剧集，包含完整的历史信息
           final requested = PlayableItem(
+            mediaLibraryScope: _playbackDetailContext?.mediaLibraryScope,
             videoPath: historyItem.filePath,
             historyItem: historyItem,
             detailContext: _playbackDetailContext,
@@ -607,6 +615,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                mediaLibraryScope: selected.mediaLibraryScope,
                 playbackDetailContext: selected.detailContext,
                 actualPlayUrl: selected.actualPlayUrl,
                 episodeFileSelectionHandled: true,
@@ -636,6 +645,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                mediaLibraryScope: selected.mediaLibraryScope,
                 playbackDetailContext: selected.detailContext,
                 actualPlayUrl: selected.actualPlayUrl,
                 episodeFileSelectionHandled: true,
@@ -650,6 +660,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             await initializePlayer(
               resolvedHistory.filePath,
               historyItem: resolvedHistory,
+              mediaLibraryScope: selected.mediaLibraryScope,
               playbackDetailContext: selected.detailContext,
               actualPlayUrl: selected.actualPlayUrl,
               episodeFileSelectionHandled: true,

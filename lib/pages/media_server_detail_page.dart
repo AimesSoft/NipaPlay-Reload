@@ -1,3 +1,4 @@
+import 'package:nipaplay/models/media_library_scope.dart';
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
@@ -1920,6 +1921,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       final selected = await EpisodeFileSelectionService.select(
         context,
         PlayableItem(
+          mediaLibraryScope: MediaLibraryScope(
+              widget.serverType == MediaServerType.jellyfin
+                  ? MediaLibraryScopeKind.jellyfin
+                  : MediaLibraryScopeKind.emby),
           videoPath: playableHistoryItem.filePath,
           historyItem: playableHistoryItem,
           animeId: playableHistoryItem.animeId,
@@ -2017,6 +2022,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         Provider.of<SettingsProvider>(context, listen: false);
     if (settingsProvider.useExternalPlayer) {
       final playableItem = PlayableItem(
+        mediaLibraryScope: MediaLibraryScope(
+            widget.serverType == MediaServerType.jellyfin
+                ? MediaLibraryScopeKind.jellyfin
+                : MediaLibraryScopeKind.emby),
         videoPath: historyItem.filePath,
         title: historyItem.animeName,
         subtitle: historyItem.episodeTitle,
@@ -2056,6 +2065,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         try {
           await videoPlayerState.initializePlayer(
             historyItem.filePath,
+            mediaLibraryScope: MediaLibraryScope(
+                widget.serverType == MediaServerType.jellyfin
+                    ? MediaLibraryScopeKind.jellyfin
+                    : MediaLibraryScopeKind.emby),
             historyItem: historyItem,
             playbackSession: playbackSession,
             episodeFileSelectionHandled: true,
@@ -2075,6 +2088,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         await initializeEmbyPlayerAttempt(
           initialize: () => videoPlayerState.initializePlayer(
             historyItem.filePath,
+            mediaLibraryScope: MediaLibraryScope(
+                widget.serverType == MediaServerType.jellyfin
+                    ? MediaLibraryScopeKind.jellyfin
+                    : MediaLibraryScopeKind.emby),
             historyItem: historyItem,
             playbackSession: playbackSession,
             embyTrackSelection: embyTrackSelection,
