@@ -74,7 +74,7 @@ Alpha 5 为手机重新设计界面和播放器，新增 Apple TV 版本，语�
 ### 鸿蒙
 
 - 鸿蒙设备可以开启 Next，运行界面、播放器和组网，使用其他设备上的梨花；内置 SQLite，并迁移原有数据库位置。播放时切换横屏，系统返回手势先退出播放。适配由 [@aozaoz112233](https://github.com/aozaoz112233) 贡献（[#1104](https://github.com/AimesSoft/NipaPlay-Reload/pull/1104)）。
-- 本次发行不提供鸿蒙安装包，鸿蒙 Next 目前为开发和测试构建。
+- 附件提供已签名的鸿蒙 HAP（arm64）。
 
 ### 语音输入
 
@@ -144,7 +144,7 @@ Alpha 5 为手机重新设计界面和播放器，新增 Apple TV 版本，语�
 - 同账号设备可以加入 Mesh，发现彼此、同步媒体目录，并通过直连传输媒体。视频可以留在工作站上，由另一台设备播放。
 - 支持跨设备调用开放的应用能力，也可以将任务交给另一台设备上正在运行的梨花。
 - 每台设备保有自己的数据库、个人仓库和记忆；操作在实际持有数据或能力的设备上执行。
-- iPhone、iPad 和 Apple TV 提供 Next 界面、播放器和 Mesh，通过桌面或其他宿主上的梨花完成对话与操作。Linux headless 提供适合服务器使用的无界面宿主。
+- iPhone、iPad、Apple TV 和鸿蒙设备提供 Next 界面、播放器和 Mesh，通过桌面或其他宿主上的梨花完成对话与操作。Linux headless 提供适合服务器使用的无界面宿主。
 
 ### 面向开发者的能力与诊断
 
@@ -167,8 +167,9 @@ Release 附件提供以下版本：
 - **Linux headless**：amd64、arm64 的无界面宿主包，见 [Headless 指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/advanced/headless.md)。
 - **iPhone / iPad**：当前附件为需自行签名侧载的 IPA；TestFlight 测试构建另行上传，开放测试的方式以发行页公告为准。
 - **Apple TV**：需自行签名侧载的 tvOS IPA；TestFlight 测试构建与 iPhone 版同属一个 App。
+- **鸿蒙**：已签名的 arm64 HAP。
 
-本次发行不包含 Android 和 HarmonyOS。
+本次发行不包含 Android。
 
 安装后，在 Classic 的「设置 → 实验室」开启 NipaPlay Next，阅读风险提示并选择「我了解风险，开启」，即可直接进入 Next。桌面用户进入「设置 → 梨花」配置运行环境和模型服务，保存并测试连接后即可开始对话。iPhone、iPad 和 Apple TV 用户先在另一台设备上运行梨花，让两台设备同账号加入 Mesh，再选择远端梨花。
 

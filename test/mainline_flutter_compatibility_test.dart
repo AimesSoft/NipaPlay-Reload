@@ -310,6 +310,20 @@ void main() {
     expect(source, isNot(contains('ScrollCacheExtent')));
     expect(source, isNot(contains('scrollCacheExtent:')));
   });
+
+  test('application source avoids TickerMode APIs newer than HarmonyOS Flutter',
+      () {
+    final users = Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .where((file) => file.readAsStringSync().contains('TickerMode.valuesOf'))
+        .map((file) => file.path);
+
+    expect(users, isEmpty,
+        reason: 'HarmonyOS builds on Flutter 3.35, which has no '
+            'TickerMode.valuesOf.');
+  });
 }
 
 Set<String> _dependencyOverrideKeys(String yaml) {

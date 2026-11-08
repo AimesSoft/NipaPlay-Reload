@@ -25,7 +25,9 @@ mixin VisibleUpdates<T extends StatefulWidget> on State<T> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _tickerVisible = TickerMode.valuesOf(context).enabled;
+    // HarmonyOS builds on Flutter 3.35, where this is the only form.
+    // ignore: deprecated_member_use
+    _tickerVisible = TickerMode.of(context);
     _syncUpdates();
   }
 
