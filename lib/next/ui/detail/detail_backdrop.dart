@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter, lerpDouble;
+import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/widgets.dart';
 
@@ -180,16 +180,9 @@ class _Art extends StatelessWidget {
     if (soft) {
       return ClipRect(
         child: Stack(fit: StackFit.expand, children: [
-          ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-            child: Transform.scale(
-                scale: 1.15,
-                child: _Art(file,
-                    decodeWidth: decodeWidth,
-                    tint: tint,
-                    alignment: alignment,
-                    placeholder: placeholder)),
-          ),
+          Transform.scale(
+              scale: 1.15,
+              child: SoftImage(file, width: 24, alignment: alignment, tint: tint)),
           const ColoredBox(color: Color(0x1F000000)),
         ]),
       );

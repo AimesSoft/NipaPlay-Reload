@@ -1,4 +1,3 @@
-import 'dart:ui' show ImageFilter;
 
 import 'dart:io';
 import 'dart:math' as math;
@@ -141,13 +140,48 @@ class SoftArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ClipRect(
         child: Stack(fit: StackFit.expand, children: [
-          ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-            child: Transform.scale(
-                scale: 1.15, child: NextImage(poster, tint: tint)),
-          ),
+          Transform.scale(
+              scale: 1.15, child: SoftImage(poster, width: 20, tint: tint)),
           const ColoredBox(color: Color(0x33000000)),
         ]),
+      );
+}
+
+/// An artwork far out of focus, made without a blur filter: decoded a few
+/// pixels wide and drawn large, smoothed. A blur is drawn again every frame
+/// anything over it moves (Impeller keeps no raster cache); this is drawn
+/// like any picture. [width] is the decode in physical pixels: the smaller,
+/// the softer.
+class SoftImage extends StatelessWidget {
+  const SoftImage(this.path,
+      {super.key,
+      this.width = 24,
+      this.alignment = Alignment.center,
+      this.opacity,
+      this.tint});
+  final String path;
+  final int width;
+  final Alignment alignment;
+  final double? opacity;
+
+  /// ARGB for the colour shown until the picture is read.
+  final int? tint;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(
+            color: tint == null ? null : Color(tint!).withValues(alpha: 0.5)),
+        child: Image(
+          image: ResizeImage(artProvider(path), width: width),
+          fit: BoxFit.cover,
+          alignment: alignment,
+          width: double.infinity,
+          height: double.infinity,
+          filterQuality: FilterQuality.high,
+          opacity: opacity == null ? null : AlwaysStoppedAnimation(opacity!),
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        ),
       );
 }
 

@@ -1,4 +1,3 @@
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/widgets.dart';
 
@@ -58,16 +57,17 @@ class WorkTitle extends StatelessWidget {
             Positioned.fill(
               top: 6,
               bottom: -6,
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                child: ColorFiltered(
-                  colorFilter: const ColorFilter.mode(
-                      Color(0x73000000), BlendMode.srcIn),
-                  child: NextImage(logo,
-                      shape: ArtShape.logo,
-                      fit: BoxFit.contain,
-                      alignment: Alignment.centerLeft),
-                ),
+              // Decoded small and drawn large: soft, without a blur filter
+              // redrawn every frame.
+              child: Image(
+                image: ResizeImage(artProvider(logo), width: 48),
+                fit: BoxFit.contain,
+                alignment: Alignment.centerLeft,
+                color: const Color(0x73000000),
+                colorBlendMode: BlendMode.srcIn,
+                filterQuality: FilterQuality.high,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
               ),
             ),
             Positioned.fill(

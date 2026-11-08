@@ -2,10 +2,14 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 
 /// A frosted panel. Backdrop blur is expensive: use it for a handful of
-/// surfaces only (input bar, task pill, popovers). Cards never blur.
+/// surfaces only (input bar, task pill, popovers). Cards never blur. On a
+/// phone it does not blur at all: the blur is drawn again every frame
+/// anything under it moves, at the screen's 120 Hz, and on that small
+/// screen a deeper tint reads the same.
 class Glass extends StatelessWidget {
   const Glass({
     super.key,
@@ -41,6 +45,8 @@ class Glass extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final phone = NextLayout.compact(context);
+    final fill = phone && color.a < 0.72 ? color.withValues(alpha: 0.72) : color;
     final filter = saturate == 1
         ? ui.ImageFilter.blur(
             sigmaX: blur, sigmaY: blur, tileMode: TileMode.mirror)
@@ -52,11 +58,11 @@ class Glass extends StatelessWidget {
       decoration: BoxDecoration(borderRadius: radius, boxShadow: shadows),
       child: ClipRRect(
         borderRadius: radius,
-        child: BackdropFilter(
-          filter: filter,
+        child: _Frost(
+          filter: phone ? null : filter,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: color,
+              color: fill,
               borderRadius: radius,
               border: borderColor == null
                   ? null
@@ -109,4 +115,15 @@ class Tinted extends StatelessWidget {
         ),
         child: Padding(padding: padding, child: child),
       );
+}
+
+/// The blur behind a [Glass], or none.
+class _Frost extends StatelessWidget {
+  const _Frost({required this.filter, required this.child});
+  final ui.ImageFilter? filter;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      filter == null ? child : BackdropFilter(filter: filter!, child: child);
 }

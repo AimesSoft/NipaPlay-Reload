@@ -11,6 +11,7 @@ import '../cards/card_views.dart';
 import '../conversation/nipa_chat.dart';
 import '../data/login_requests.dart';
 import '../shell/shell_controller.dart';
+import '../theme/layout.dart';
 import '../theme/tokens.dart';
 import '../widgets/attachments.dart';
 import '../widgets/buttons.dart';
@@ -249,14 +250,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
           child: NotificationListener<ScrollNotification>(
             onNotification: _onScrollNotification,
             // Words fade out under the title rather than being cut.
-            child: ShaderMask(
-              blendMode: BlendMode.dstIn,
-              shaderCallback: (rect) => LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: const [Color(0x00000000), Color(0xFF000000)],
-                stops: [0, (18 / rect.height).clamp(0.0, 1.0)],
-              ).createShader(rect),
+            child: _TopFade(
               child: SelectionArea(
                 onSelectionChanged: (selection) {
                   if (selection?.plainText.isNotEmpty ?? false) _hold();
@@ -1220,4 +1214,49 @@ class LoginCard extends StatelessWidget {
           ),
         ]),
       );
+}
+
+/// The transcript's top edge fading out under the title. A phone's sheet is
+/// nearly opaque: a strip of its colour over the words does it without
+/// drawing the whole transcript off screen at every scrolled frame, as a
+/// mask does.
+class _TopFade extends StatelessWidget {
+  const _TopFade({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (NextLayout.compact(context)) {
+      return Stack(children: [
+        Positioned.fill(child: child),
+        const Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          height: 18,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xF0121218), Color(0x00121218)],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]);
+    }
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (rect) => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: const [Color(0x00000000), Color(0xFF000000)],
+        stops: [0, (18 / rect.height).clamp(0.0, 1.0)],
+      ).createShader(rect),
+      child: child,
+    );
+  }
 }

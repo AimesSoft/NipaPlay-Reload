@@ -1,4 +1,3 @@
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -102,13 +101,7 @@ class _PersonPageState extends State<PersonPage> {
           // The portrait, far out of focus, colours the page.
           if (image != null)
             Positioned.fill(
-              child: Opacity(
-                opacity: 0.34,
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 70, sigmaY: 70),
-                  child: NextImage(image, shape: ArtShape.poster),
-                ),
-              ),
+              child: SoftImage(image, width: 10, opacity: 0.34),
             ),
           const Positioned.fill(
             child: DecoratedBox(

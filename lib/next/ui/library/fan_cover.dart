@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/widgets.dart';
 
@@ -217,19 +216,9 @@ class _Blur extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ClipRect(
-        child: ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Transform.scale(
-            scale: 1.3,
-            child: Image(
-              image: ResizeImage(artProvider(path), width: 96),
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              filterQuality: FilterQuality.medium,
-              gaplessPlayback: true,
-            ),
-          ),
+        child: Transform.scale(
+          scale: 1.3,
+          child: SoftImage(path, width: 24),
         ),
       );
 }

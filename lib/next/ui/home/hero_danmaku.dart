@@ -76,7 +76,8 @@ class _HeroDanmakuState extends State<HeroDanmaku>
       _now.value = elapsed;
       if (elapsed >= _end) {
         _ticker.stop();
-        _done = true;
+        // Nothing left in the sky: nothing drawn there either.
+        setState(() => _done = true);
       }
     });
   }
@@ -124,7 +125,7 @@ class _HeroDanmakuState extends State<HeroDanmaku>
   @override
   Widget build(BuildContext context) {
     final lines = widget.lines;
-    if (lines.isEmpty || NextMotion.reduced(context)) {
+    if (lines.isEmpty || _done || NextMotion.reduced(context)) {
       return const SizedBox.shrink();
     }
     final lanes = _lanes.take(lines.length).toList();
