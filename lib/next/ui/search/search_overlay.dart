@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -172,7 +173,13 @@ class _SearchLayerState extends State<SearchLayer>
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
                         maxWidth: (size.width - 48).clamp(320.0, 680.0),
-                        maxHeight: (size.height - top - 48).clamp(120.0, 640.0),
+                        // Above the keyboard while it is up, so every
+                        // result can be scrolled to.
+                        maxHeight: (size.height -
+                                top -
+                                math.max(48.0,
+                                    MediaQuery.viewInsetsOf(context).bottom + 12))
+                            .clamp(120.0, 640.0),
                       ),
                       child: Focus(
                         canRequestFocus: false,
