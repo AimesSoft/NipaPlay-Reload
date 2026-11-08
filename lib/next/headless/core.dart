@@ -25,6 +25,9 @@ import '../system/operation_observations.dart';
 import '../db/capability.dart';
 import '../db/wiring.dart';
 import '../state/query.dart';
+import '../subscriptions/store.dart';
+import '../subscriptions/capability.dart';
+import '../secrets/capability.dart';
 import '../state/views.dart';
 import '../state/activity.dart';
 import '../programs/runtime.dart';
@@ -351,6 +354,7 @@ final class HeadlessCore {
     ]);
     registerSystemViews(state, SystemStatusSources()..hooks = hooks.status);
     uiData = UiDataService(media, engine, state, sources, root, vault);
+    registerSubscriptions(state, SubscriptionStore(database));
     libraryData = LibraryDataService(uiData);
     uiData.libraryData = libraryData;
     libraryData.register(state);
@@ -400,6 +404,8 @@ final class HeadlessCore {
         const OperationObservationsCapability(),
         bodyEvents,
         TaskCapability(engine),
+        SubscriptionCapability(SubscriptionStore(database)),
+        SecretsCapability(database, vault),
         programs.capability,
         programRepository,
         SubtitleCapability(subtitles),

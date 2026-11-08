@@ -129,6 +129,8 @@ const danmakuFamilyDescription =
     'displayTime=sourceTime-offsetMs. Headless exports are under data/exports.';
 
 const familyFacts = <String, String>{
+  'subscription': '订阅属于运行梨花的设备。put/list/get/remove/set_state/report 只存声明和脚本观察，不选择来源、不执行筛选、不绑定身份。state.query 的 subscriptions 视图与 subscription.changed 事件提供事实；ui_data 通过现有 Mesh 推送合并各设备订阅，操作使用来源设备和原始 id。先确认身份、来源、规则并预览，用户明确提出后再建立订阅及 schedules.json。完整替换用 put；暂停不取消下载，删除不删文件或程序。facts 最多 16384 UTF-8 字节，回报最多 32768 字节，保留最近 20 次；同 reportId 同内容可重试。',
+  'secrets': '仅在本机 harness_secrets 保险库命名空间存放脚本密钥。set 的 userAuthorization 记录已有用户明确指令；get 只供脚本在内存使用，不能打印或存进 records、记忆、数据库或 Git；list 只列名字，remove 删除指定密钥。值由 schema 从审计脱敏，错误不返回保险库原文。不开放 Mesh 远程读取；在执行巡查的设备上配置。nipa call secrets.get 是显式秘密管道，不做结果落盘。',
   'capability':
       'Tool interface discovery on the receiving host. describe accepts a family prefix or exact Action ID in family. Returns actual registered contracts and usage; documentation lookup is separately available through knowledge.',
   'activity':

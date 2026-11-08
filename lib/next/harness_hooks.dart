@@ -47,6 +47,7 @@ final class HarnessHooks implements JobExecutor {
     'playback.state_changed',
     'playback.seek_requested',
     'settings.changed',
+    'subscription.changed',
     'media.assets.changed',
     'media.scan.completed',
     'task.state_changed',

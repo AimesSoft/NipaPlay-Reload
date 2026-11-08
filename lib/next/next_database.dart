@@ -28,6 +28,7 @@ import 'db/harmony_migration.dart';
 import 'db/epochs.dart';
 import 'db/notifications.dart';
 import 'state/activity_invocations.dart';
+import 'subscriptions/migration.dart';
 
 // Each position is a released database version. Append new domain migrations.
 const _migrations = [
@@ -58,6 +59,7 @@ const _migrations = [
   migrateWorkMerges,
   migrateMediaPresentation,
   migrateExternalSources,
+  migrateSubscriptions,
 ];
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {

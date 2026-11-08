@@ -336,7 +336,28 @@
 | `window.control` | write | Control a window | Runtime/部分共享 | 允许 | [源码](../../../lib/next/player/features/operation_specs.dart) |
 | `window.state` | read | Read window state | Runtime/部分共享 | 允许 | [源码](../../../lib/next/player/features/operation_specs.dart) |
 
-## 语音输入
+## 订阅与脚本密钥
+
+| Action | Effect | 用途或限制 | 宿主代码 | Mesh | 定义 |
+| --- | --- | --- | --- | --- | --- |
+| `subscription.put` | write | 完整替换声明；facts 最多 16384 字节，每设备最多 500 条 | GUI Core / Headless | 允许 | [源码](../../../lib/next/subscriptions/capability.dart) |
+| `subscription.list` | read | 本设备订阅，state 过滤，offset/limit 分页（默认100，上限500） | GUI Core / Headless | 允许 | [源码](../../../lib/next/subscriptions/capability.dart) |
+| `subscription.get` | read | id 对应声明、最新下载与最近20次回报 | GUI Core / Headless | 允许 | [源码](../../../lib/next/subscriptions/capability.dart) |
+| `subscription.remove` | write | 只删订阅和回报；保留文件、任务、程序、凭据 | GUI Core / Headless | 允许 | [源码](../../../lib/next/subscriptions/capability.dart) |
+| `subscription.set_state` | write | id、state（active/paused/ended）；暂停不取消下载 | GUI Core / Headless | 允许 | [源码](../../../lib/next/subscriptions/capability.dart) |
+| `subscription.report` | write | id/reportId/checkedAt/found/downloads/errors；32768字节，最近20次，同键同内容可重试 | GUI Core / Headless | 允许 | [源码](../../../lib/next/subscriptions/capability.dart) |
+| `secrets.set` | write | name/value/userAuthorization；value最多4096字符，存现有保险库 | GUI Core / Headless | 本地 | [源码](../../../lib/next/secrets/capability.dart) |
+| `secrets.get` | read | name → value；仅给脚本内存使用，审计和回执脱敏 | GUI Core / Headless | 本地 | [源码](../../../lib/next/secrets/capability.dart) |
+| `secrets.list` | read | 只列 names，不读值 | GUI Core / Headless | 本地 | [源码](../../../lib/next/secrets/capability.dart) |
+| `secrets.remove` | write | name；删除该脚本密钥和名字记录 | GUI Core / Headless | 本地 | [源码](../../../lib/next/secrets/capability.dart) |
+
+订阅 put 输入为 id（可省略生成）、title、kind（series/movie）、workId（可空）、state（默认 active）、
+note、program（harness 相对路径）、facts（JSON对象，默认空）、createdBy。
+title/kind/note/program/createdBy 必填；输出另含 createdAt、updatedAt、revision、latestReport、latestDownloads，
+get 及写动作返回 reports。report.found 为 title、可选 key/episode；downloads 为 jobId/title/可选 episode，
+errors 为字符串数组。时间为 ISO-8601。所有判断归巡查脚本，不由宿主执行。
+
+## 语音输入动作
 
 | Action | Effect | 用途 | 宿主 | Mesh | 实现 |
 |---|---|---|---|---|---|

@@ -19,6 +19,8 @@ Windows 使用 `python nipa`；PowerShell 5.1 中带 JSON 的调用可用 UTF-8 
 
 | 用户任务 | 可发现的入口与边界 |
 | --- | --- |
+| 追番、追剧与自动下载 | `subscription.put/list/get/set_state/remove/report` 存声明和最近检查；`state.query subscriptions` 读取本设备事实，`subscription.changed` 推送变化。来源和下载规则由梨花写在 harness，先预览再按用户明确要求建立订阅。跨设备数据流带来源设备，动作在原设备执行。见[订阅](../use/subscriptions.md)。 |
+| 给巡查程序保存密钥 | 本机 `secrets.set/get/list/remove` 使用现有保险库，set 记录 userAuthorization，list 只列名字；值不进入数据库、审计和 Git，get 仅供脚本内存管道使用，不开放 Mesh。 |
 | 找片、检查文件、整理作品 | `media.library.search`、`media.files.list`、`media.hash.match`、`media.metadata.search_batch` 提供事实和候选；`media.identity.bind_batch`、`media.management.bind_batch` 保存明确判断。旧 Classic 身份用 `media.library.import_history` 显式导入。 |
 | 建立或调整目录、资料 | `media.entities.put_batch`、`media.metadata.put`、`media.metadata.override_batch`；合并前用 `media.management.targets` 找拥有者，再用 `media.management.merge_work` 的预览核对映射。撤回入口为 `media.management.undo_merge`；不要按标题或集号猜测对应关系。 |
 | 管理片源 | `media.sources.list`、`media.sources.browse`、`media.sources.search`、`media.sources.sync`；支持 SMB/WebDAV；登录和目录访问取决于来源与配置。 |

@@ -23,7 +23,20 @@ part 'fake_manage.dart';
 /// Development-only data for screenshots and experiments, built from the
 /// concept's TMDB sample set. Never used by production code paths (see
 /// `NextUiDev`).
-final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData {
+final class FakeWorld implements NextUiData, NextUiActions, NextDiscoverData, NextSubscriptionsData {
+  @override
+  Stream<List<UiSubscription>> subscriptions({String? deviceId}) => Stream.value([
+    for (final (key, state, device, name) in [
+      ('frieren', UiSubscriptionState.active, 'fake-local', null),
+      ('dungeon', UiSubscriptionState.paused, 'fake-local', null),
+      ('bocchi', UiSubscriptionState.active, 'fake-server', '家里的电脑'),
+    ]) if (deviceId == null || deviceId == device)
+      UiSubscription(id: 'subscription-$key', title: sample(key).title,
+        state: state, deviceId: device, device: name, workId: sample(key).workId,
+        artwork: sample(key).artwork, note: '简中内嵌，每周日检查',
+        lastCheckedAt: DateTime.now().subtract(const Duration(minutes: 18)),
+        downloads: [UiSubscriptionDownload(jobId: 'fake-download-$key', title: sample(key).title, episode: '13')]),
+  ]);
   FakeWorld._(this.dir, this._meta, this._found,
       {required bool tasks, int? followupAfter}) {
     if (tasks) {

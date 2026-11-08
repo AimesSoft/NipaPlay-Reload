@@ -79,6 +79,26 @@ final class MeshLibrary {
   final _peerErrors = <String, JsonMap>{};
   final _peerState = <String, JsonMap>{};
   final _peerTasks = <String, (String, List<JsonMap>)>{};
+  final _peerSubscriptions = <String, (String, List<JsonMap>)>{};
+
+  Iterable<(String, String, bool, List<JsonMap>)> get peerSubscriptions => [
+    for (final e in _peerSubscriptions.entries)
+      (e.key, e.value.$1, _online[e.key] ?? true, e.value.$2),
+  ];
+
+  void heardSubscriptions(String peer, String? name, Object? rows) {
+    if (name == null || rows is! List) {
+      if (_peerSubscriptions.remove(peer) != null) ui.peerSubscriptionsChanged();
+      return;
+    }
+    _peerSubscriptions[peer] = (name, [
+      for (final row in rows.take(500))
+        if (row is Map && row['id'] is String && row['title'] is String &&
+            const {'active','paused','ended'}.contains(row['state']))
+          Map<String, Object?>.from(row),
+    ]);
+    ui.peerSubscriptionsChanged();
+  }
 
   /// What each other device runs in the background, as it said with its
   /// catalogue: its id, its name and its tasks. A device that cannot be
@@ -321,6 +341,7 @@ final class MeshLibrary {
         if (peer['revoked'] == true) {
           _setOnline(id, false);
           heardTasks(id, null, null);
+          heardSubscriptions(id, null, null);
           continue;
         }
         try {
@@ -335,12 +356,14 @@ final class MeshLibrary {
             'encoding': librarySnapshotEncoding,
             'progressSeparately': true,
             'tasks': true,
+            'subscriptions': true,
             'subscribe': true,
             'watchId': _watchId,
             if (old?['version'] != null) 'known': old!['version']
           });
           _updates.peer(id, push: first['push'] == true);
           heardTasks(id, peer['name'] as String? ?? '另一台设备', first['tasks']);
+          heardSubscriptions(id, peer['name'] as String? ?? '另一台设备', first['subscriptions']);
           if (first['progress'] is Map) {
             await _mergeProgress((first['progress'] as Map).map((key, value) =>
                 MapEntry(
@@ -406,12 +429,18 @@ final class MeshLibrary {
       for (final id in [..._peerTasks.keys]) {
         if (!devices.contains(id)) heardTasks(id, null, null);
       }
+      for (final id in [..._peerSubscriptions.keys]) {
+        if (!devices.contains(id)) heardSubscriptions(id, null, null);
+      }
     } else {
       for (final id in _peers.keys) {
         _setOnline(id, false);
       }
       for (final id in [..._peerTasks.keys]) {
         heardTasks(id, null, null);
+      }
+      for (final id in [..._peerSubscriptions.keys]) {
+        heardSubscriptions(id, null, null);
       }
     }
     await prepareIndex();
@@ -421,6 +450,7 @@ final class MeshLibrary {
   Future<void> _catalogueFailed(String id, Failure error) async {
     // Tasks it said before may have ended since: none are shown for it.
     heardTasks(id, null, null);
+    heardSubscriptions(id, null, null);
     // Catalogue failures do not establish that the file owner is offline.
     // Keep the last complete publication usable when a small authenticated
     // probe still reaches it; a real disconnect continues to disable playback.
@@ -768,9 +798,12 @@ final class MeshLibrary {
             as JsonMap;
         // What this device runs goes with the first page to a device that
         // shows it.
-        return input['tasks'] == true && (input['offset'] ?? 0) == 0
-            ? {...snapshot, 'push': true, 'tasks': await ui.meshTasks()}
-            : {...snapshot, 'push': true};
+        return {...snapshot, 'push': true,
+          if (input['tasks'] == true && (input['offset'] ?? 0) == 0)
+            'tasks': await ui.meshTasks(),
+          if (input['subscriptions'] == true && (input['offset'] ?? 0) == 0)
+            'subscriptions': await ui.meshSubscriptions(),
+        };
       case 'mesh/library/file':
         final path = await _source(input);
         final stat = await File(path).stat();

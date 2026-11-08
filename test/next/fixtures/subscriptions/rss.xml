@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Fixture</title><item>
+<title>Group Show - 03 1080p</title><link>https://fixture.invalid/details/3</link>
+<pubDate>Sun, 08 Nov 2026 12:00:00 GMT</pubDate>
+<enclosure url="https://fixture.invalid/download/3?passkey=fixture-private-key" length="1048576" type="application/x-bittorrent"/>
+</item></channel></rss>

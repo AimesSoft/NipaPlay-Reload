@@ -520,7 +520,12 @@ def main():
             data = client.sync_repository(args.repository, args.ref)
         else:
             data = client.watch(args.task, args.seconds)
-        output_result(redact(data, [client.token]), args.output_full)
+        if args.command == "call" and args.action == "secrets.get":
+            # Explicit secret reads are an in-memory pipe to a script. Never
+            # spill them to records/, even when a vault contains a large value.
+            print(compact(data))
+        else:
+            output_result(redact(data, [client.token]), args.output_full)
         return 1 if data.get("status") == "failed" else 0
     except (OSError, ValueError, KeyError, RuntimeError) as error:
         output_result({"error": redact(str(error), [client.token] if client else [])}, args.output_full)

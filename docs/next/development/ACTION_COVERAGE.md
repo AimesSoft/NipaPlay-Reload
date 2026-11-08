@@ -33,4 +33,10 @@ python3 scripts/next/check_capability_docs.py
 
 `python3 scripts/next/build_knowledge.py --check` 检查精选规范、任务指南、文档 SHA-256 和源码引用与知识包是否同步；发布构建重新写入来源版本。运行时的知识来源检查与静态覆盖检查相互补充，但均不能证明所有说明语义正确；新增或改变能力仍需评审任务流程、权限和恢复说明。
 
-本次来源收敛移除了服务器媒体库、串流选择和附近发现的 Action；候选并集共 329 项，SMB/WebDAV 来源及 WebDAV 同步继续保留。
+订阅线在原有 329 项候选上增加 `subscription.*` 六项和 `secrets.*` 四项，共 339 项。
+本次人工复核了 GUI Core / Headless 的两处注册、body-only 设备保留数据能力的行为、
+Mesh 对 subscription 的允许和对 secrets 的本地限制，以及两个新增 Capability 的全部 schema。
+订阅视图和事件不增加 Action ID。`ui_data.subscriptions()` 复用目录提交推送与 Mesh 首屏事实，
+不新增计时轮询；种子脚本的筛选和完成绑定不属于宿主的策略代码。
+
+指纹基线只更新已复核的注册文件及新增 Capability；不声称覆盖真实索引器、PT 站或设备连通性。

@@ -260,6 +260,8 @@ flutter:
       platforms: [android, linux, macos, web, windows]
     - path: assets/next/harness/hooks/session_start.py
       platforms: [android, linux, macos, web, windows]
+    - path: assets/next/harness/hooks/download.file_completed.py
+      platforms: [linux, macos, windows]
     - path: assets/next/harness/memory/
       platforms: [android, linux, macos, web, windows]
     - path: assets/next/harness/tools/

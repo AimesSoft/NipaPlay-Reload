@@ -1,5 +1,9 @@
 # 事件程序
 
+种子附带可编辑的 `download.file_completed.py`：只处理 `tools/patrol.py` 在 `records/` 登记的任务，
+按预先确认的文件索引和身份绑定，回报结果，并沿用现有整理设置。其他下载不处理。
+没有映射或文件在别的设备时唤醒梨花确认，不按文件名推断。它可以修改或删除；不预装定时订阅。
+
 把同名可执行程序放在这个目录中；不存在的程序不会运行。macOS/Linux 需
 `chmod +x hooks/事件名` 并提供 shebang。Windows 没有 shebang 也没有可执行位，按扩展名运行：
 同名 `.exe`（直接运行）、`.cmd`、`.bat`（经 cmd.exe）或 `.py`（用 PATH 里的 `python` 运行，需已安装），

@@ -39,7 +39,26 @@
 
 DSH 在活动回合可把后续作为下一步输入，Codex 普通后续等待空闲，提醒中的用户回答可作为插话送入；宿主不可用时待交付。用户插话时先回应并结合新意图继续。长任务按回执和可用的后续机制处理，不以一次回复冒充完成。对话历史与压缩由当前运行器管理，Codex 与 DSH 会话不能互相续接。
 
-## 发现能力
+## 订阅与巡查
+
+订阅必须由用户明确提出。用户要求追某部作品时：先确认作品身份，选好来源，写规则，
+预览一次候选给用户看，再建立 `subscription.put` 和 `hooks/schedules.json` 定时项。
+来源、字幕组、清晰度、分集和要不要下载都由你判断，不交给宿主猜。
+`subscription.list/get/set_state/remove/report` 保存声明和观察；跨设备用来源设备及原始 id。
+订阅只在运行你的电脑或无界面设备执行，手机不会替电脑巡查。
+
+`tools/patrol.py` 是可修改、可删除的起点，规则格式和预览见 `tools/README.md` 及应用知识中的订阅文档。
+在 `facts.sources` 里写来源、`facts.rules` 里写明确规则，凭据只写 `credentialName` 名字；
+`facts.bindings` 写已经核实的剧集和文件索引映射。模板只执行你的声明，不从标题替你确认身份。
+命中直接下载，冲突、规则要求询问、结果不明或连续出错再唤醒。`records/` 记录去重和 jobId 映射，
+不要提交或随意删除；同一集已处理的记录不会随规则更新自动清除。完成钩子显式绑定后，沿用
+`library.fileOrganization` 与 `library.fileOrganizationRules`，保持做种及字幕、弹幕、身份和进度关联。
+
+Jackett/Prowlarr API Key、PT RSS passkey 等经用户授权用本机 `secrets.set` 存到保险库，
+`userAuthorization` 如实记录已有用户指令。`secrets.list` 只查名字；`secrets.get` 是给脚本的秘密管道，
+只在内存使用，不能直接回显、写日志、放进 URL 参数文本、记忆或 Git。
+
+## 发现能力入口
 
 `./nipa` 连接本机开启 Next 的宿主，Windows 用 `python nipa`；PowerShell 5.1 的 JSON 用 UTF-8 `@input.json` 或标准输入。能力和可用性以目标设备实时目录为准：
 

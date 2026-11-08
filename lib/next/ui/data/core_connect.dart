@@ -107,7 +107,7 @@ VoidCallback attachCoreLogins(NextCore core, LoginRequests requests) {
   };
 }
 
-final class _WhenReady implements NextUiData, NextNowPlaying, NextWorkDetails {
+final class _WhenReady implements NextUiData, NextNowPlaying, NextWorkDetails, NextSubscriptionsData {
   _WhenReady(this.core);
   final NextCore core;
 
@@ -177,6 +177,11 @@ final class _WhenReady implements NextUiData, NextNowPlaying, NextWorkDetails {
   @override
   Stream<List<UiTask>> tasks() async* {
     yield* (await _data).tasks();
+  }
+
+  @override
+  Stream<List<UiSubscription>> subscriptions({String? deviceId}) async* {
+    yield* (await _data).subscriptions(deviceId: deviceId);
   }
 
   @override

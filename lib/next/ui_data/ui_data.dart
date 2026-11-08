@@ -9,6 +9,7 @@ import 'work_files.dart';
 import 'work_more.dart';
 
 export 'work_files.dart' show UiFileFacts, UiWorkFiles;
+export 'subscriptions.dart';
 
 export 'work_more.dart'
     show

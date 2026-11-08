@@ -690,14 +690,18 @@ final class AgentEndpoint {
       return _response(
           {'error': 'Expected object input and boolean execute.'}, 400);
     }
-    return _response((await _harness.invokeJson(
+    final outcome = await _harness.invokeJson(
             action.spec.id,
             input,
             Invocation(
                 origin: request.headers['x-nipa-hook'] == null
                     ? origin
-                    : 'hook:${request.headers['x-nipa-hook']}')))
-        .toEnvelope());
+                    : 'hook:${request.headers['x-nipa-hook']}'));
+    // Authenticated local scripts explicitly request this one secret. The
+    // Harness observer already uses the secret output schema for its audit;
+    // redacting the transport too would make the secret unusable by scripts.
+    return _response(outcome.toEnvelope(), 200,
+        action.spec.id != 'secrets.get' || outcome is! Completed);
   }
 
   Future<Map<String, JsonMap>> _capabilityFacts() async {

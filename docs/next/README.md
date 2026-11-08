@@ -1,5 +1,7 @@
 # NipaPlay Next
 
+[订阅与自动下载](use/subscriptions.md)：请梨花追番、追剧，配置来源和保险库密钥。
+
 NipaPlay Next 是 NipaPlay 的 Agent 模式。媒体库、播放器、下载器和弹幕由 AI 助手**梨花**操作：用户提出目标，梨花查询实时状态，调用 NipaPlay 的能力完成工作，结果呈现在媒体库、作品详情和播放器中。
 
 Next 处于开发者预览阶段。梨花以当前系统用户的权限运行，可以读写和删除文件、运行程序、访问网络，风险说明见[下载与开启](start/install.md#风险)。

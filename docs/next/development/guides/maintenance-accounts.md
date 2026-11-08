@@ -40,3 +40,9 @@
 Azure 使用 `2025-10-15` fast transcription，停止录音后上传内存中的 16 kHz 单声道 PCM WAV；百炼使用 inference `run-task` / PCM / `finish-task`，按句子 ID 更新中间文字并等到 `task-finished`。Qwen3-ASR-Realtime 和本地 Qwen 0.6B/1.7B 尚未接入。录音只由本机用户手势开始；取消会停止音频流和云端请求，应用不保存录音文件。
 
 `voice.status` / `labs.voiceStatus` 包含 configuration（不含密钥）、ready、recordingPhase、receivedAudioBytes、recordingError。ready 只说明模型已安装或凭据已配置，不代表云端连通测试通过。无文字先区分「未收到音频」「服务报错」「有音频但没有转写」，不要笼统归为模型不支持。配置发生在实际输入设备，Mesh 远端会话宿主不接管麦克风。
+## 脚本密钥
+
+`secrets.set/get/list/remove` 只操作本机保险库中的 harness_secrets 命名空间，
+与其他账号凭据隔离。set 的 userAuthorization 记录用户授权，list 只返回名字；
+get 是脚本进程内的秘密管道，不能回显、落盘或经 Mesh 远程读取。
+配置示例见[订阅](../../use/subscriptions.md)。

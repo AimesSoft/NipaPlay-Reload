@@ -67,6 +67,9 @@ import 'db/capability.dart';
 import 'db/service.dart';
 import 'db/wiring.dart';
 import 'state/query.dart';
+import 'subscriptions/store.dart';
+import 'subscriptions/capability.dart';
+import 'secrets/capability.dart';
 import 'state/views.dart';
 import 'state/system_views.dart';
 import 'state/change_history.dart';
@@ -553,6 +556,7 @@ final class NextCore {
     uiData = UiDataService(
         media.service, engine, state, stateSources, root, credentialVault);
     uiData.subtitles = subtitles;
+    registerSubscriptions(state, SubscriptionStore(database));
     phase('state: ui data');
     await Future<void>.delayed(Duration.zero);
     libraryData = LibraryDataService(uiData,
@@ -611,6 +615,8 @@ final class NextCore {
         profileName: LabProfile.name);
     final rawCapabilities = <Capability>[
       CredentialCapability(credentials),
+      SubscriptionCapability(SubscriptionStore(database)),
+      SecretsCapability(database, credentialVault),
       TaskCapability(engine),
       resources,
       events,

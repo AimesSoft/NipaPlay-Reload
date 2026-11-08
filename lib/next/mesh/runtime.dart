@@ -37,6 +37,7 @@ export 'trust.dart'
 bool meshActionAllowed(String id) =>
     [
       'task.',
+      'subscription.',
       'download.',
       'media.',
       'danmaku.',

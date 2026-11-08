@@ -101,7 +101,7 @@ BASELINE_HASHES = {
  'lib/next/capabilities/download_capability.dart': '18e66aee3ccb0788165ddbea65c842b0b52c8d90aa09db3ed018caaf80e9472c',
  'lib/next/capabilities/download_metadata_capability.dart': '9c55fdf10875cbe97126d4d08e162efbc2fadd9538d32fec4044b35b945ec27a',
  'lib/next/capabilities/download_playback_capability.dart': '56f9b51ac7c8ee83cbc3192f1ff3dd9e27faa3575b55b69c48ec3a650a3eefcf',
- 'lib/next/capabilities/family_descriptions.dart': '6a06996352a7f85709f277e1afebe9e11462238a1bd8cc2b5c52c4e8934c87be',
+ 'lib/next/capabilities/family_descriptions.dart': '66f775d0c401bf3ebe551320a4654030741e9ca26d92e4a2a1313ca8b7238dba',
  'lib/next/capabilities/history_capability.dart': '16c32339022d69d1a86120694938820408a879120a22aae2e2cec1862893619f',
  'lib/next/capabilities/kernel_control.dart': 'f565296087c0709468ea14d526bedaca86af286b75751264d9ae07f13a5eb1d6',
  'lib/next/capabilities/library_capability.dart': '107685542a32791dbc7424b8a6dcf6d49a0d00a6c9d33ae2cfaccbe7e42a19d2',
@@ -119,7 +119,7 @@ BASELINE_HASHES = {
  'lib/next/events/capability.dart': '767a2f960e2504b93b723a033ed6b0200056202cc07895b0321b99642fb4880b',
  'lib/next/followups/capability.dart': 'c78ce3ccc38d9f6167ff10d1bfd7bd08e58d750bb4e5a93b09e050d234187199',
  'lib/next/headless/chat_capability.dart': 'b3512e2ca26b2086f0fc28273331a2b4ad621a65b6e75ee37f08aeb0550b4e80',
- 'lib/next/headless/core.dart': '4eb6e2307da6a357f7db36114d89759e30d6d2235588392354707f19713f393e',
+ 'lib/next/headless/core.dart': '9d7f6e2e33590b69974544fa5c6c3f7a82447fc3b7ef4d363eeca39817bb7c1b',
  'lib/next/headless/downloads.dart': 'f01b25716bb35c7e3dc286987832b8898e83db0f4393d52c152f49ea3908e436',
  'lib/next/headless/library_roots.dart': 'cf11e2a49f6a437e031e0d39f544291dc61fe73f27db4cc2036b3f90ab146c44',
  'lib/next/headless/ports.dart': 'f07f7a3cf4b2071f6b7f1578c0047a1bbeb4af070634c481026836b926208d46',
@@ -136,9 +136,9 @@ BASELINE_HASHES = {
  'lib/next/mesh/delegation.dart': '7083cfde13976088d821b4c66671adc8d0cda91ae5396c13e46cfe1aead4d1e4',
  'lib/next/mesh/files.dart': '88bf2fb55f8d5a6404ca1955e1e430db11e417339dae7335144234992d0bf840',
  'lib/next/mesh/library_capability.dart': 'd9999630399b9aff79bb10f2f14ff2a902b80c572dc6f30edf8ec2f330b37240',
- 'lib/next/mesh/runtime.dart': '36354899dc7b14965e1b576acb98052b1ad8a5f5c9fd5919917d65a5451a36cb',
+ 'lib/next/mesh/runtime.dart': 'a5a6270e7aa97f202f675d8ddaa5bfd7d60980e3ad5dcd8b0c0329c4d60544e2',
  'lib/next/network/capability.dart': '0b12d2f9e1b415cc986e124d016767a5d230d0178a3e19f22fbb8d15481109d8',
- 'lib/next/next_core.dart': 'aaa603836649296f3630b5dcbfd6c044c77b30f72ea88d521609ce0982e324e0',
+ 'lib/next/next_core.dart': '450b51edb8eef7b544806b5b1a9f64359a453a9f9c91b612ee61637f57f615d2',
  'lib/next/next_runtime.dart': 'dda0616a27fe1a9daebce3eaeacbd637c12be36b4b81c71fa311efc1d5b120ed',
  'lib/next/player/features/local_operations.dart': '6e1d4e008ebf23f0f62c11abace5e1c10eb355675607d2ee26929b80f362e5b0',
  'lib/next/player/features/operation_specs.dart': '514a6c5049507ee3513bffeb4532d760d03d8f4154a93f00ee680c8af1e3d35a',
@@ -165,7 +165,9 @@ BASELINE_HASHES = {
  'lib/security/credential_capability.dart': '26bc1852bc98ef1c4c21446b165bfb0764bdb7c763fbd16355079ebbd03f32ac',
  'packages/nipa_harness/lib/src/action.dart': 'b80ccb05cb5eb0143290d6750ec8b4557da08511c222dfff06f929d329efcb55',
  'packages/nipa_harness/lib/src/tasks/actions.dart': 'd2ee746ca0224c55c47601ea7893a4ca0aa40604cc7c59499f9e9c5d9ea55f8b',
- 'packages/nipa_harness/lib/src/tasks/engine.dart': 'b8239c6f89d81ee06380696d6e5a61e8047332c216950f7968efaaa730b11509'}
+ 'packages/nipa_harness/lib/src/tasks/engine.dart': 'b8239c6f89d81ee06380696d6e5a61e8047332c216950f7968efaaa730b11509',
+ 'lib/next/secrets/capability.dart': '2fd54d305cd95bf81dd7627b7e1b5c747717dabc8030689e3fda363d72d3bbed',
+ 'lib/next/subscriptions/capability.dart': '8b7da17a8b14972dd35c618cf62ec24db48d03b84c4b405256878cfe0c229e03'}
 current_files = {str(p.relative_to(root)) for p in paths if '/ui/dev/' not in str(p) and any((t in p.read_text() for t in ('ActionSpec(', 'extends Action<', 'implements Capability')))}
 current_files.update(['lib/next/next_core.dart', 'lib/next/next_runtime.dart', 'lib/next/headless/core.dart', 'lib/next/headless/ports.dart', 'lib/next/body/next_body.dart', 'lib/next/mesh/runtime.dart'])
 drift = []

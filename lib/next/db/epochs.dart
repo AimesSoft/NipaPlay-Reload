@@ -14,6 +14,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 /// test fails for a table that is in neither, so a new table has to say
 /// whether the library is built from it.
 const catalogueTables = [
+  'subscriptions',
+  'subscription_reports',
   // The library: works, releases, episodes, files and what they are known as.
   'media_entities',
   'media_locations',
@@ -39,6 +41,7 @@ const catalogueTables = [
 
 /// Tables the library and the interface are not built from, and why.
 const notCatalogueTables = [
+  'harness_secret_names', // Names and authorization; never secret values.
   // Tasks, followups and hooks: their own changes are pushed (the task
   // engine's stream) or only read on demand.
   'jobs',

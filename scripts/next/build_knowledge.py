@@ -12,7 +12,7 @@ DOCUMENTS = [
     'README.md',
     'start/install.md', 'start/setup-nipa.md', 'start/first-day.md',
     'use/nipa.md', 'use/library.md', 'use/playback.md', 'use/downloads.md',
-    'use/home.md', 'use/devices.md', 'use/examples.md',
+    'use/home.md', 'use/devices.md', 'use/examples.md', 'use/subscriptions.md',
     'advanced/automation.md', 'advanced/dsh-config.md', 'advanced/data-and-recovery.md',
     'advanced/headless.md',
     'help/faq.md', 'help/troubleshooting.md', 'help/known-issues.md',
@@ -41,10 +41,10 @@ for guide, families in {
     'mesh': 'mesh',
     'media-identity': 'media db',
     'subtitles-danmaku': 'subtitle danmaku',
-    'downloads-sources': 'download',
+    'downloads-sources': 'download subscription',
     'library-presentation': 'ui appearance',
     'automation-memory': 'activity agent chat events followup memory program task',
-    'maintenance-accounts': 'voice accounts app backup cache credentials diagnostics discover network notification plugins settings share shortcuts state storage sync webdav_quick',
+    'maintenance-accounts': 'voice accounts app backup cache credentials secrets diagnostics discover network notification plugins settings share shortcuts state storage sync webdav_quick',
 }.items():
     for family in families.split():
         FAMILY_GUIDES[family] = 'development/guides/' + guide + '.md'

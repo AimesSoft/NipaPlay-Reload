@@ -1,0 +1,6 @@
+<rss xmlns:torznab="http://torznab.com/schemas/2015/feed"><channel><item>
+<title>Group Show - 03 1080p</title><link>https://fixture.invalid/torrent/3?apikey=fixture-private-key</link>
+<enclosure url="https://fixture.invalid/torrent/3?apikey=fixture-private-key" length="1048576"/>
+<torznab:attr name="seeders" value="7"/><torznab:attr name="size" value="1048576"/>
+<jackettindexer>Fixture indexer</jackettindexer><pubDate>Sun, 08 Nov 2026 12:00:00 GMT</pubDate>
+</item></channel></rss>

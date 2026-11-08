@@ -32,6 +32,9 @@ import '../util/slicer.dart';
 import '../db/notifications.dart';
 import '../system/foreground.dart';
 import '../system/midnight_refresh.dart';
+import '../subscriptions/store.dart';
+
+part 'subscription_service.dart';
 
 /// The `library.files` rows, found by episode and by file.
 final class LocalFiles {
@@ -55,7 +58,7 @@ final class LocalFiles {
 
 /// Application-owned projections. Stored presentations contain no task state.
 final class UiDataService
-    implements NextUiData, NextNowPlaying, NextWorkDetails {
+    implements NextUiData, NextNowPlaying, NextWorkDetails, NextSubscriptionsData {
   UiDataService(this.media, this.engine, this.state, this.sources,
       Directory root, CredentialVault vault,
       {http.Client? artworkClient})
@@ -135,6 +138,15 @@ final class UiDataService
   bool _closed = false;
   @override
   Stream<void> get changes => _changes.stream;
+
+  @override
+  Stream<List<UiSubscription>> subscriptions({String? deviceId}) =>
+      subscriptionStream(this, deviceId: deviceId);
+
+  /// Safe display facts sent with the Mesh catalogue. Rules stay on the owner.
+  Future<List<JsonMap>> meshSubscriptions() => localSubscriptionFacts(this);
+
+  void peerSubscriptionsChanged() => _changed();
 
   /// What the catalogue and the interface are made from, told by two
   /// integers however much there is: the database's change epoch (moved by
