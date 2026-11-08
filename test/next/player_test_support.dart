@@ -618,7 +618,14 @@ void resetPlayerTestLibrary() {
   playerTestPlays.clear();
 }
 
-final class _Data implements NextUiData, NextNowPlaying {
+/// What Nipa follows, as the shell's data gives it.
+final playerTestSubscriptions = <UiSubscription>[];
+
+final class _Data implements NextUiData, NextNowPlaying, NextSubscriptionsData {
+  @override
+  Stream<List<UiSubscription>> subscriptions({String? deviceId}) =>
+      Stream.value(List.of(playerTestSubscriptions));
+
   @override
   Future<UiNowPlaying?> nowPlaying(String path) async =>
       playerTestLibrary[path];

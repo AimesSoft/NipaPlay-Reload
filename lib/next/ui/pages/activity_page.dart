@@ -20,9 +20,10 @@ import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/sheet.dart';
 import '../widgets/words.dart';
+import 'following_view.dart';
 import 'history_view.dart';
 
-enum ActivityTab { now, downloads, history }
+enum ActivityTab { now, following, downloads, history }
 
 /// What the debug driver may do with 动态.
 abstract interface class ActivityDebug {
@@ -31,8 +32,8 @@ abstract interface class ActivityDebug {
 }
 
 /// 动态: what runs now (all of it can be paused, resumed or stopped
-/// together, and how much runs at once changed), the downloads, and what
-/// was watched.
+/// together, and how much runs at once changed), what Nipa follows, the
+/// downloads, and what was watched.
 class ActivityPage extends StatefulWidget {
   const ActivityPage({super.key});
 
@@ -47,6 +48,7 @@ class _ActivityPageState extends State<ActivityPage> implements ActivityDebug {
 
   static const _titles = {
     ActivityTab.now: '进行中',
+    ActivityTab.following: '在追',
     ActivityTab.downloads: '下载',
     ActivityTab.history: '观看记录',
   };
@@ -116,7 +118,11 @@ class _ActivityPageState extends State<ActivityPage> implements ActivityDebug {
               NextLayout.underBar(context) + 40, NextLayout.end(context), 26),
           child: ValueListenableBuilder(
             valueListenable: shell.tasks,
-            builder: (context, _, __) => Row(
+            // A phone's width scrolls the tabs sideways.
+            builder: (context, _, __) => SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 for (final tab in ActivityTab.values.where((tab) =>
@@ -133,11 +139,13 @@ class _ActivityPageState extends State<ActivityPage> implements ActivityDebug {
                 ],
               ],
             ),
+            ),
           ),
         ),
         Expanded(
           child: switch (_tab) {
             ActivityTab.now => _now(shell),
+            ActivityTab.following => const FollowingView(),
             ActivityTab.downloads => const DownloadList(),
             ActivityTab.history => const HistoryView(),
           },
