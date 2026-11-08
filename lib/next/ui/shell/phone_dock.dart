@@ -40,7 +40,14 @@ class PhoneDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shell = NextShellScope.of(context);
-    if (IOS26Glass.supported) return _system(shell);
+    if (IOS26Glass.supported) {
+      // Under the conversation's sheet, out of sight: not on screen at all
+      // (see [PhoneGlass]).
+      return ValueListenableBuilder<bool>(
+          valueListenable: shell.panelOpen,
+          builder: (context, open, _) =>
+              open ? const SizedBox.shrink() : _system(shell));
+    }
     final bottom = MediaQuery.paddingOf(context).bottom;
     return Padding(
       padding: EdgeInsets.only(
@@ -157,13 +164,28 @@ class PhoneGlass extends StatelessWidget {
     if (content != null && alignment != null) {
       content = Align(alignment: alignment!, child: content);
     }
-    if (IOS26Glass.supported) {
-      return SizedBox(
-        width: width,
-        height: height,
-        child: IOS26Glass(cornerRadius: radius, dark: true, child: content),
+    final shell = NextShellScope.maybeOf(context);
+    if (IOS26Glass.supported && shell != null) {
+      return ValueListenableBuilder<bool>(
+        valueListenable: shell.panelOpen,
+        builder: (context, open, _) => open
+            ? _shader(content)
+            : SizedBox(
+                width: width,
+                height: height,
+                child:
+                    IOS26Glass(cornerRadius: radius, dark: true, child: content),
+              ),
       );
     }
+    return _shader(content);
+  }
+
+  /// While a phone's conversation is up (its keyboard with it) no system
+  /// view is on screen: Flutter's layers over them do not survive the
+  /// keyboard, and what the conversation draws must. The shader glass
+  /// stands in until it goes.
+  Widget _shader(Widget? content) {
     final square = width != null && width == height && radius == null;
     return GlassContainer(
       width: width,

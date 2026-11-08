@@ -488,6 +488,11 @@ class NextShellScope extends InheritedWidget {
   static NextShellController of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<NextShellScope>()!.controller;
 
+  /// The shell's controller, or null outside one (a test, a dialog's own
+  /// route).
+  static NextShellController? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<NextShellScope>()?.controller;
+
   @override
   bool updateShouldNotify(NextShellScope old) => old.controller != controller;
 }

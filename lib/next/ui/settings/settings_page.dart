@@ -407,8 +407,12 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     const gutter = NextLayout.compactGutter;
     return ColoredBox(
       color: NextColors.ink,
+      // The page ends where the keyboard begins, so a field being typed in
+      // scrolls into sight above it.
       child: Padding(
-        padding: EdgeInsets.only(top: NextLayout.barTop(context)),
+        padding: EdgeInsets.only(
+            top: NextLayout.barTop(context),
+            bottom: MediaQuery.viewInsetsOf(context).bottom),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // Back on glass on the bar's row (its right holds the shell's

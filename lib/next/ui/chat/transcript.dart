@@ -264,6 +264,10 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                 child: CustomScrollView(
                   controller: _scroll,
                   center: _historyCenter,
+                  // A finger dragging the conversation puts the keyboard
+                  // away, as in the system's own conversations.
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   physics: _TranscriptPhysics(
                     follow: () => _pinned,
                     parent: ScrollConfiguration.of(context)

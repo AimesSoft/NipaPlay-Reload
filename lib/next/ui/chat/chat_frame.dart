@@ -93,7 +93,12 @@ class ChatFrame extends StatelessWidget {
         Expanded(
           child: Stack(children: [
             Positioned.fill(
-              child: ChatTranscript(
+              // On a phone a tap on the conversation puts the keyboard away
+              // (a card or a link under the finger still takes the tap).
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: phone ? focusNode.unfocus : null,
+                child: ChatTranscript(
                 chat: chat,
                 callbacks: callbacks,
                 logins: shell.services.logins,
@@ -101,6 +106,7 @@ class ChatFrame extends StatelessWidget {
                 textSize: textSize,
                 posterWidth: posterWidth,
                 padding: EdgeInsets.fromLTRB(sidePadding, 12, sidePadding, 72),
+              ),
               ),
             ),
             if (chat.menuOpen)
