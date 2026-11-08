@@ -845,9 +845,8 @@ class _Title extends StatelessWidget {
             ]),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: NextText.sans(15, shadows: const [
-              Shadow(color: Color(0x80000000), blurRadius: 8),
-            ]),
+            style: NextText.sans(15,
+                shadows: NextText.lift(blur: 8, offset: Offset.zero)),
           );
         },
       );

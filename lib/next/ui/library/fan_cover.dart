@@ -414,12 +414,7 @@ class CategoryName extends StatelessWidget {
                   weight: big ? FontWeight.w700 : FontWeight.w600,
                   letterSpacing: big ? 0.4 : 0,
                   shadows: big
-                      ? const [
-                          Shadow(
-                              color: Color(0x80000000),
-                              blurRadius: 12,
-                              offset: Offset(0, 2))
-                        ]
+                      ? NextText.lift(blur: 12, offset: const Offset(0, 2))
                       : null)),
         ),
         if (count != null) ...[

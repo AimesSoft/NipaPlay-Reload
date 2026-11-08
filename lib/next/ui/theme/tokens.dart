@@ -37,6 +37,22 @@ abstract final class NextFonts {
 }
 
 abstract final class NextText {
+  /// The shadow under words laid over pictures. A phone's, a tablet's or a
+  /// television's GPU blurs a text shadow again every frame anything moves
+  /// (Impeller keeps no raster cache): there it is a sharp offset shade,
+  /// which reads the same at these sizes.
+  static List<Shadow> lift(
+          {Color color = const Color(0x80000000),
+          double blur = 6,
+          Offset offset = const Offset(0, 1)}) =>
+      [Shadow(color: color, blurRadius: _sharp ? 0 : blur, offset: offset)];
+
+  static final bool _sharp = switch (defaultTargetPlatform) {
+    TargetPlatform.iOS || TargetPlatform.android || TargetPlatform.fuchsia =>
+      true,
+    _ => false,
+  };
+
   static TextStyle sans(
     double size, {
     FontWeight weight = FontWeight.w400,

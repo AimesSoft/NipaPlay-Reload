@@ -201,12 +201,7 @@ class _WideCardState extends State<WideCard> with _HoverCard {
                                     overflow: TextOverflow.ellipsis,
                                     style: NextText.sans(14.5,
                                         weight: FontWeight.w600,
-                                        shadows: const [
-                                          Shadow(
-                                              color: Color(0x80000000),
-                                              blurRadius: 6,
-                                              offset: Offset(0, 1))
-                                        ])),
+                                        shadows: NextText.lift())),
                               if (widget.caption != null) ...[
                                 const SizedBox(height: 3),
                                 Text(widget.caption!,
