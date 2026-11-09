@@ -1,3 +1,4 @@
+import 'package:nipaplay/models/media_library_scope.dart';
 import 'dart:async';
 import 'package:flutter/cupertino.dart' as cupertino;
 import 'package:flutter/material.dart';
@@ -887,6 +888,8 @@ class _DandanplayRemoteLibraryViewState
           summary: summary,
           episode: episode,
         ),
+        mediaLibraryScope: MediaLibraryScope(MediaLibraryScopeKind.dandanplay,
+            hostOrigin: provider.serverUrl),
         sharedSourceLabel: sourceLabel,
       );
 

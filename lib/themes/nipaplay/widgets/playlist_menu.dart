@@ -685,6 +685,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       final selected = await EpisodeFileSelectionService.select(
         context,
         PlayableItem(
+          mediaLibraryScope:
+              videoState.playbackDetailContext?.mediaLibraryScope,
           videoPath: filePath,
           historyItem: _remoteHistoryCache[filePath],
           detailContext: videoState.playbackDetailContext,
@@ -744,7 +746,11 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (!selectionHandled) {
             final mappedSelection = await EpisodeFileSelectionService.select(
               context,
-              PlayableItem(videoPath: filePath, historyItem: historyItem),
+              PlayableItem(
+                  videoPath: filePath,
+                  historyItem: historyItem,
+                  mediaLibraryScope:
+                      videoState.playbackDetailContext?.mediaLibraryScope),
             );
             if (mappedSelection == null || !mounted) return;
             if (!MediaIdentityResolver.samePath(
@@ -765,6 +771,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           );
 
           final playableItem = PlayableItem(
+            mediaLibraryScope:
+                videoState.playbackDetailContext?.mediaLibraryScope,
             videoPath: filePath,
             mediaKey: MediaIdentityResolver.forPath(filePath),
             title: historyItem.animeName,
@@ -792,6 +800,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             mediaKey: MediaIdentityResolver.forPath(filePath),
             historyItem: historyItem,
             playbackSession: playbackSession,
+            mediaLibraryScope:
+                videoState.playbackDetailContext?.mediaLibraryScope,
             playbackDetailContext: videoState.playbackDetailContext,
             episodeFileSelectionHandled: selectionHandled,
           );
@@ -838,7 +848,11 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (!selectionHandled) {
             final mappedSelection = await EpisodeFileSelectionService.select(
               context,
-              PlayableItem(videoPath: filePath, historyItem: historyItem),
+              PlayableItem(
+                  videoPath: filePath,
+                  historyItem: historyItem,
+                  mediaLibraryScope:
+                      videoState.playbackDetailContext?.mediaLibraryScope),
             );
             if (mappedSelection == null || !mounted) return;
             if (!MediaIdentityResolver.samePath(
@@ -859,6 +873,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           );
 
           final playableItem = PlayableItem(
+            mediaLibraryScope:
+                videoState.playbackDetailContext?.mediaLibraryScope,
             videoPath: filePath,
             mediaKey: MediaIdentityResolver.forPath(filePath),
             title: historyItem.animeName,
@@ -886,6 +902,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             mediaKey: MediaIdentityResolver.forPath(filePath),
             historyItem: historyItem,
             playbackSession: playbackSession,
+            mediaLibraryScope:
+                videoState.playbackDetailContext?.mediaLibraryScope,
             playbackDetailContext: videoState.playbackDetailContext,
             episodeFileSelectionHandled: selectionHandled,
           );
@@ -915,6 +933,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               throw Exception('无法解析远程媒体路径: $filePath');
             }
             final playableItem = PlayableItem(
+              mediaLibraryScope:
+                  videoState.playbackDetailContext?.mediaLibraryScope,
               videoPath: filePath,
               mediaKey: MediaIdentityResolver.forPath(filePath),
               title: cachedHistory?.animeName ?? fallbackTitle,
@@ -942,6 +962,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               mediaKey: MediaIdentityResolver.forPath(filePath),
               historyItem: cachedHistory,
               actualPlayUrl: actualPlayUrl,
+              mediaLibraryScope:
+                  videoState.playbackDetailContext?.mediaLibraryScope,
               playbackDetailContext: videoState.playbackDetailContext,
               episodeFileSelectionHandled: selectionHandled,
             );
@@ -954,6 +976,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             }
 
             final playableItem = PlayableItem(
+              mediaLibraryScope:
+                  videoState.playbackDetailContext?.mediaLibraryScope,
               videoPath: filePath,
               mediaKey: MediaIdentityResolver.forPath(filePath),
             );
@@ -972,6 +996,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             await videoState.initializePlayer(
               filePath,
               mediaKey: MediaIdentityResolver.forPath(filePath),
+              mediaLibraryScope:
+                  videoState.playbackDetailContext?.mediaLibraryScope,
               playbackDetailContext: videoState.playbackDetailContext,
               episodeFileSelectionHandled: selectionHandled,
             );

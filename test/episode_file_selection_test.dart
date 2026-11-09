@@ -7,7 +7,10 @@ import 'package:nipaplay/models/watch_history_model.dart';
 import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class _DetailContext extends Fake implements PlaybackDetailContext {}
+class _DetailContext extends Fake implements PlaybackDetailContext {
+  @override
+  get mediaLibraryScope => null;
+}
 
 WatchHistoryItem _history(String path,
         {int animeId = 10, int episodeId = 100}) =>

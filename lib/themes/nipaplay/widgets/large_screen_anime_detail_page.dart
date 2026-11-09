@@ -1,3 +1,4 @@
+import 'package:nipaplay/models/media_library_scope.dart';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
@@ -59,6 +60,7 @@ class NipaplayLargeScreenAnimeDetailPage extends StatefulWidget {
   const NipaplayLargeScreenAnimeDetailPage({
     super.key,
     required this.animeId,
+    this.mediaLibraryScope,
     this.sharedSummary,
     this.sharedEpisodeLoader,
     this.sharedEpisodeBuilder,
@@ -66,6 +68,7 @@ class NipaplayLargeScreenAnimeDetailPage extends StatefulWidget {
     this.animeLoader,
   });
 
+  final MediaLibraryScope? mediaLibraryScope;
   final int animeId;
   final Future<BangumiAnime> Function(int animeId)? animeLoader;
   final SharedRemoteAnimeSummary? sharedSummary;
@@ -167,7 +170,8 @@ class _NipaplayLargeScreenAnimeDetailPageState
         if (episodeId != null && matchedIds.contains(episodeId)) {
           continue;
         }
-        final playable = builder(sharedEpisode);
+        final playable = builder(sharedEpisode)
+            .withMediaLibraryScope(widget.mediaLibraryScope);
         entries.add(_EpisodeEntry(
           sharedEpisode: sharedEpisode,
           sharedPlayable: playable,
@@ -369,10 +373,13 @@ class _NipaplayLargeScreenAnimeDetailPageState
     }
 
     final futures = episodes.map((episode) async {
-      final history = await WatchHistoryManager.getHistoryItemByEpisode(
-        anime.id,
-        episode.id,
-      );
+      final history = widget.mediaLibraryScope == null
+          ? await WatchHistoryManager.getHistoryItemByEpisode(
+              anime.id, episode.id)
+          : (await WatchHistoryManager.getMatchedItemsForEpisode(
+                  anime.id, episode.id))
+              .where(widget.mediaLibraryScope!.contains)
+              .firstOrNull;
       return MapEntry<int, WatchHistoryItem?>(episode.id, history);
     }).toList(growable: false);
 
@@ -451,7 +458,8 @@ class _NipaplayLargeScreenAnimeDetailPageState
             continue;
           }
           _sharedEpisodeMap[episodeId] = episode;
-          _sharedPlayableMap[episodeId] = widget.sharedEpisodeBuilder!(episode);
+          _sharedPlayableMap[episodeId] = widget.sharedEpisodeBuilder!(episode)
+              .withMediaLibraryScope(widget.mediaLibraryScope);
         }
         _isLoadingSharedEpisodes = false;
       });
@@ -543,7 +551,8 @@ class _NipaplayLargeScreenAnimeDetailPageState
         sharedPlayable != null &&
         sharedEpisode.fileExists) {
       context.read<LargeScreenUiSfxService>().playLaunchPlayer();
-      await PlaybackService().play(sharedPlayable);
+      await PlaybackService()
+          .play(sharedPlayable.withMediaLibraryScope(widget.mediaLibraryScope));
       if (!mounted) return;
       Navigator.of(context).maybePop();
       return;
@@ -556,6 +565,7 @@ class _NipaplayLargeScreenAnimeDetailPageState
     }
 
     final playableItem = PlayableItem(
+      mediaLibraryScope: widget.mediaLibraryScope,
       videoPath: history.filePath,
       title: anime?.nameCn ?? history.animeName,
       subtitle: entry.episode?.title ?? history.episodeTitle,

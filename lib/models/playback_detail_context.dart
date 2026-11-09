@@ -1,3 +1,4 @@
+import 'media_library_scope.dart';
 import 'media_server_playback.dart';
 import 'watch_history_model.dart';
 
@@ -141,7 +142,9 @@ class PlaylistLoadFailed extends PlaylistCursorResult {
 }
 
 class PlaybackDetailContext {
+  final MediaLibraryScope? mediaLibraryScope;
   const PlaybackDetailContext({
+    this.mediaLibraryScope,
     required this.sourceKind,
     required this.sourceLabel,
     required this.sourceKey,
@@ -172,6 +175,23 @@ class PlaybackDetailContext {
       animeId != null &&
       animeId! > 0;
 
+  PlaybackDetailContext withMediaLibraryScope(MediaLibraryScope? scope) =>
+      identical(scope, mediaLibraryScope)
+          ? this
+          : PlaybackDetailContext(
+              sourceKind: sourceKind,
+              sourceLabel: sourceLabel,
+              sourceKey: sourceKey,
+              title: title,
+              subtitle: subtitle,
+              summary: summary,
+              imageUrl: imageUrl,
+              animeId: animeId,
+              isIdentified: isIdentified,
+              episodeLoader: episodeLoader,
+              mediaLibraryScope: scope,
+            );
+
   PlaybackDetailContext withAnimeMatch({
     required int animeId,
     String? title,
@@ -181,6 +201,7 @@ class PlaybackDetailContext {
     final isLocalFile = sourceKind == PlaybackSourceKind.localFile;
 
     return PlaybackDetailContext(
+      mediaLibraryScope: mediaLibraryScope,
       sourceKind: isLocalFile ? PlaybackSourceKind.localLibrary : sourceKind,
       sourceLabel: isLocalFile ? '本地媒体库' : sourceLabel,
       sourceKey: '$sourceKey:anime:$animeId',

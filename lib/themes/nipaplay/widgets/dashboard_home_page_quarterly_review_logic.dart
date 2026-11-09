@@ -264,8 +264,7 @@ extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
             item.anime.nameCn.isNotEmpty ? item.anime.nameCn : item.anime.name,
         initialRating: item.rating ?? 0,
         initialComment: item.comment,
-        // The short-comment editor does not expose collection status. Saving
-        // below only sends rating/comment to preserve status and progress.
+        // Unchecking the watched option omits type, preserving the server state.
         collectionType: 3,
         onSubmit: (submission) async {
           try {
@@ -276,6 +275,7 @@ extension _DashboardQuarterlyReviewLogic on _DashboardHomePageState {
             }
             final result = await BangumiApiService.updateUserCollection(
               subjectId,
+              type: submission.markAsWatched ? 2 : null,
               rate: submission.rating,
               comment: submission.comment.trim(),
             );

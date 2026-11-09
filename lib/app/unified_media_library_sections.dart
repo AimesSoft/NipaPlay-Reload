@@ -1,6 +1,6 @@
 import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
-import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/models/media_library_scope.dart';
 
 enum UnifiedMediaLibraryContentType {
   mediaCollection,
@@ -15,6 +15,17 @@ enum UnifiedMediaLibrarySource {
   local,
   webdav,
   smb,
+}
+
+extension UnifiedMediaLibrarySourceScope on UnifiedMediaLibrarySource {
+  MediaLibraryScope get mediaLibraryScope => switch (this) {
+        UnifiedMediaLibrarySource.local =>
+          const MediaLibraryScope(MediaLibraryScopeKind.local),
+        UnifiedMediaLibrarySource.webdav =>
+          const MediaLibraryScope(MediaLibraryScopeKind.webdav),
+        UnifiedMediaLibrarySource.smb =>
+          const MediaLibraryScope(MediaLibraryScopeKind.smb),
+      };
 }
 
 enum UnifiedMediaLibraryServer {
@@ -213,19 +224,7 @@ bool mediaLibraryItemMatchesSource(
   // 但统计观看进度时仍需包含（includeClearedMatchInfo = true）
   if (!includeClearedMatchInfo && item.animeName.isEmpty) return false;
 
-  final path = item.filePath;
-  final isWebDAV = MediaSourceUtils.isWebDavPath(path);
-  final isSMB = MediaSourceUtils.isSmbPath(path);
-
-  return switch (source) {
-    UnifiedMediaLibrarySource.webdav => isWebDAV,
-    UnifiedMediaLibrarySource.smb => isSMB,
-    UnifiedMediaLibrarySource.local => !path.startsWith('jellyfin://') &&
-        !path.startsWith('emby://') &&
-        !isWebDAV &&
-        !isSMB &&
-        !path.contains('/api/media/local/share/'),
-  };
+  return source.mediaLibraryScope.contains(item);
 }
 
 bool mediaLibraryHasItemsForSource(

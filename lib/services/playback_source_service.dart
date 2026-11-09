@@ -41,6 +41,13 @@ class PlaybackSourceService {
   ];
 
   static Future<PlaybackDetailContext> resolve(
+      BuildContext context, PlayableItem item) async {
+    final resolved = await _resolve(context, item);
+    return resolved.withMediaLibraryScope(
+        item.mediaLibraryScope ?? resolved.mediaLibraryScope);
+  }
+
+  static Future<PlaybackDetailContext> _resolve(
     BuildContext context,
     PlayableItem item,
   ) async {
@@ -119,6 +126,7 @@ class PlaybackSourceService {
         kind == PlaybackSourceKind.sharedRemoteAnime;
 
     return PlaybackDetailContext(
+      mediaLibraryScope: item.mediaLibraryScope,
       sourceKind: kind,
       sourceLabel: _defaultSourceLabel(kind),
       sourceKey: _sourceKey(path, kind),

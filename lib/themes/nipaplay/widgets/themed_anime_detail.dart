@@ -1,3 +1,4 @@
+import 'package:nipaplay/models/media_library_scope.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -11,6 +12,7 @@ class ThemedAnimeDetail {
   static Future<WatchHistoryItem?> show(
     material.BuildContext context,
     int animeId, {
+    MediaLibraryScope? mediaLibraryScope,
     SharedRemoteAnimeSummary? sharedSummary,
     Future<List<SharedRemoteEpisode>> Function()? sharedEpisodeLoader,
     PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder,
@@ -20,6 +22,7 @@ class ThemedAnimeDetail {
     return AnimeDetailPage.show(
       context,
       animeId,
+      mediaLibraryScope: mediaLibraryScope,
       sharedSummary: sharedSummary,
       sharedEpisodeLoader: sharedEpisodeLoader,
       sharedEpisodeBuilder: sharedEpisodeBuilder,
