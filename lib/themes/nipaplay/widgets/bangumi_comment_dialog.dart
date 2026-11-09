@@ -88,6 +88,7 @@ class _BangumiCommentDialogState extends State<BangumiCommentDialog> {
   late int _selectedRating;
   late TextEditingController _commentController;
   bool _isSubmitting = false;
+  bool _markAsWatched = true;
 
   bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
   Color get _textColor => Theme.of(context).colorScheme.onSurface;
@@ -207,6 +208,20 @@ class _BangumiCommentDialogState extends State<BangumiCommentDialog> {
                         _buildRatingSection(),
                         SizedBox(height: 18),
                         _buildCommentInput(),
+                        const SizedBox(height: 8),
+                        CheckboxListTile(
+                          value: _markAsWatched,
+                          onChanged: _isSubmitting
+                              ? null
+                              : (value) => setState(
+                                  () => _markAsWatched = value ?? false),
+                          title: Text('将状态改为[已看]',
+                              style: TextStyle(color: _textColor, fontSize: 13)),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: EdgeInsets.zero,
+                          activeColor: _accentColor,
+                          dense: true,
+                        ),
                       ],
                     ),
                   ),
@@ -467,7 +482,8 @@ class _BangumiCommentDialogState extends State<BangumiCommentDialog> {
 
     final result = BangumiCollectionSubmitResult(
       rating: _selectedRating,
-      collectionType: widget.collectionType,
+      collectionType: _markAsWatched ? 2 : widget.collectionType,
+      markAsWatched: _markAsWatched,
       comment: _commentController.text,
       episodeStatus: 0,
     );
