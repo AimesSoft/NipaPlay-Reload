@@ -1509,7 +1509,7 @@ class MainFlutterWindow: NSWindow {
   private var nipaplayFlutterEngine: FlutterEngine?
 
   override func awakeFromNib() {
-    // Keep the window hidden until Dart has rasterized its first frame.
+    // Startup show() paths must keep this hidden until main.dart alone restores opacity after rasterization.
     alphaValue = 0
 
     // macOS must enter multiview mode before its first FlutterViewController
