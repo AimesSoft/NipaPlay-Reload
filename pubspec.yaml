@@ -44,7 +44,8 @@ dependencies:
   
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  # macOS relies on a null titleBarStyle skipping the opacity-changing setter.
+  # In 0.4.3, a null titleBarStyle skips setTitleBarStyle on macOS.
+  # That setter forces NSWindow.isOpaque to false. Recheck when upgrading.
   window_manager: 0.4.3
   screen_retriever: ^0.2.0
   tray_manager: ^0.5.2

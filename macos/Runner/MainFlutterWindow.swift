@@ -1509,7 +1509,7 @@ class MainFlutterWindow: NSWindow {
   private var nipaplayFlutterEngine: FlutterEngine?
 
   override func awakeFromNib() {
-    // main.dart restores opacity after first rasterization or its startup timeout.
+    // main.dart normally restores opacity after first rasterization or its timeout.
     alphaValue = 0
 
     // macOS must enter multiview mode before its first FlutterViewController
@@ -1596,6 +1596,15 @@ class MainFlutterWindow: NSWindow {
     MacOSNativeVideoPlugin.register(with: flutterViewController.registrar(forPlugin: "MacOSNativeVideoPlugin"))
 
     super.awakeFromNib()
+
+    // Dart may fail before it reaches windowManager.show().
+    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) { [weak self] in
+      guard let self, self.alphaValue == 0 else { return }
+      self.alphaValue = 1
+      if !self.isVisible {
+        self.makeKeyAndOrderFront(nil)
+      }
+    }
   }
 
   private static func shouldUseTransparentFlutterSurface() -> Bool {
