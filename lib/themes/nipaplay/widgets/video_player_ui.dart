@@ -433,6 +433,19 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   Widget _buildVideoSurfaceStage(VideoPlayerState videoState, int? textureId) {
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.macOS &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1' &&
+        _shouldUseMacOSWindowHostedVideoOverlay &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER'] != '0') {
+      // Leave the area outside the video unpainted in transparent video-only mode.
+      return Center(
+        child: AspectRatio(
+          aspectRatio: videoState.aspectRatio,
+          child: _buildVideoSurface(videoState, textureId),
+        ),
+      );
+    }
     if (_shouldUseWindowHostedVideoOverlay(videoState)) {
       // iOS only: the window-overlay plane mirrors this Flutter rect, so keep
       // it sized to the video aspect ratio and centered. This preserves the
