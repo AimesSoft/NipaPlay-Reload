@@ -1542,8 +1542,10 @@ class MainFlutterWindow: NSWindow {
     styleMask.insert(.fullSizeContentView)
 
     let transparentFlutterSurface = Self.shouldUseTransparentFlutterSurface()
+    let environment = ProcessInfo.processInfo.environment
     let transparentWindow = transparentFlutterSurface &&
-      ProcessInfo.processInfo.environment["NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER"] == "1"
+      (environment["NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER"] == "1" ||
+       environment["NIPAPLAY_MACOS_HDR_VIDEO_ONLY"] == "1")
     isOpaque = !transparentWindow
     if transparentWindow {
       backgroundColor = .clear
