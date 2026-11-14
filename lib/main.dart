@@ -591,12 +591,13 @@ void main(List<String> args) async {
       final startupPosition =
           await DesktopStartupWindowPreferences.loadPosition();
       final startupSize = await DesktopStartupWindowPreferences.loadSize();
-      final transparentWindowBackground = Platform
-              .environment['NIPAPLAY_DISABLE_WINDOWS_TRANSPARENT_BACKGROUND'] !=
-          '1';
+      // The macOS runner manages transparency for native video underlays.
+      final transparentWindowBackground = !Platform.isMacOS &&
+          Platform.environment['NIPAPLAY_DISABLE_WINDOWS_TRANSPARENT_BACKGROUND'] !=
+              '1';
       WindowOptions windowOptions = WindowOptions(
         skipTaskbar: false,
-        titleBarStyle: TitleBarStyle.hidden,
+        titleBarStyle: Platform.isMacOS ? null : TitleBarStyle.hidden,
         backgroundColor:
             transparentWindowBackground ? Colors.transparent : null,
         title: "NipaPlay",
@@ -615,6 +616,10 @@ void main(List<String> args) async {
         }
         await windowManager.show();
         await windowManager.focus();
+        if (Platform.isMacOS) {
+          await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+          await windowManager.setOpacity(1);
+        }
       });
     }
 

@@ -1509,6 +1509,9 @@ class MainFlutterWindow: NSWindow {
   private var nipaplayFlutterEngine: FlutterEngine?
 
   override func awakeFromNib() {
+    // Keep the window hidden until Dart has rasterized its first frame.
+    alphaValue = 0
+
     // macOS must enter multiview mode before its first FlutterViewController
     // is attached. The Dart-side window fork then reuses this same engine.
     let flutterEngine = FlutterEngine(
@@ -1533,10 +1536,21 @@ class MainFlutterWindow: NSWindow {
       nibName: nil,
       bundle: nil
     )
-    if Self.shouldUseTransparentFlutterSurface() {
-      self.isOpaque = false
-      self.backgroundColor = NSColor.clear
-      flutterViewController.backgroundColor = NSColor.clear
+    // window_manager's title-bar setter also makes the window non-opaque.
+    titleVisibility = .hidden
+    titlebarAppearsTransparent = true
+    styleMask.insert(.fullSizeContentView)
+
+    let transparentFlutterSurface = Self.shouldUseTransparentFlutterSurface()
+    let transparentWindow = transparentFlutterSurface &&
+      ProcessInfo.processInfo.environment["NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER"] == "1"
+    isOpaque = !transparentWindow
+    if transparentWindow {
+      backgroundColor = .clear
+    }
+    if transparentFlutterSurface {
+      // The native video underlay is inside this window.
+      flutterViewController.backgroundColor = .clear
     }
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
