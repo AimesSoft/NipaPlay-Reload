@@ -617,7 +617,10 @@ void main(List<String> args) async {
         await windowManager.show();
         await windowManager.focus();
         if (Platform.isMacOS) {
-          await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+          await WidgetsBinding.instance.waitUntilFirstFrameRasterized.timeout(
+            const Duration(seconds: 2),
+            onTimeout: () {},
+          );
           await windowManager.setOpacity(1);
         }
       });
