@@ -1509,6 +1509,9 @@ class MainFlutterWindow: NSWindow {
   private var nipaplayFlutterEngine: FlutterEngine?
 
   override func awakeFromNib() {
+    // main.dart normally restores opacity after first rasterization or its timeout.
+    alphaValue = 0
+
     // macOS must enter multiview mode before its first FlutterViewController
     // is attached. The Dart-side window fork then reuses this same engine.
     let flutterEngine = FlutterEngine(
@@ -1533,10 +1536,23 @@ class MainFlutterWindow: NSWindow {
       nibName: nil,
       bundle: nil
     )
-    if Self.shouldUseTransparentFlutterSurface() {
-      self.isOpaque = false
-      self.backgroundColor = NSColor.clear
-      flutterViewController.backgroundColor = NSColor.clear
+    // window_manager's title-bar setter also makes the window non-opaque.
+    titleVisibility = .hidden
+    titlebarAppearsTransparent = true
+    styleMask.insert(.fullSizeContentView)
+
+    let transparentFlutterSurface = Self.shouldUseTransparentFlutterSurface()
+    let environment = ProcessInfo.processInfo.environment
+    let transparentWindow = transparentFlutterSurface &&
+      (environment["NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER"] == "1" ||
+       environment["NIPAPLAY_MACOS_HDR_VIDEO_ONLY"] == "1")
+    isOpaque = !transparentWindow
+    if transparentWindow {
+      backgroundColor = .clear
+    }
+    if transparentFlutterSurface {
+      // The native video underlay is inside this window.
+      flutterViewController.backgroundColor = .clear
     }
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
@@ -1580,6 +1596,15 @@ class MainFlutterWindow: NSWindow {
     MacOSNativeVideoPlugin.register(with: flutterViewController.registrar(forPlugin: "MacOSNativeVideoPlugin"))
 
     super.awakeFromNib()
+
+    // Dart may fail before it reaches windowManager.show().
+    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) { [weak self] in
+      guard let self, self.alphaValue == 0 else { return }
+      self.alphaValue = 1
+      if !self.isVisible {
+        self.makeKeyAndOrderFront(nil)
+      }
+    }
   }
 
   private static func shouldUseTransparentFlutterSurface() -> Bool {
