@@ -254,8 +254,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
           if (jellyfinService.isConnected) {
             playbackSession = await jellyfinService.createPlaybackSession(
               itemId: jellyfinId,
-              startPositionMs: currentItem.lastPosition > 0
-                  ? currentItem.lastPosition
+              startPositionMs: currentItem.resumePosition > 0
+                  ? currentItem.resumePosition
                   : null,
             );
           } else {
@@ -277,8 +277,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
           if (embyService.isConnected) {
             playbackSession = await embyService.createPlaybackSession(
               itemId: embyId,
-              startPositionMs: currentItem.lastPosition > 0
-                  ? currentItem.lastPosition
+              startPositionMs: currentItem.resumePosition > 0
+                  ? currentItem.resumePosition
                   : null,
             );
           } else {

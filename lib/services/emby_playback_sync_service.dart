@@ -5,6 +5,7 @@ import 'package:nipaplay/models/media_server_playback.dart';
 import '../models/watch_history_model.dart';
 import 'emby_service.dart';
 import 'media_server_transport.dart';
+import 'media_server_watch_history_sync.dart';
 
 /// Emby播放记录同步服务
 /// 基于Jellyfin同步服务实现，适配Emby API接口差异
@@ -15,6 +16,40 @@ class EmbyPlaybackSyncService {
   EmbyPlaybackSyncService._internal();
 
   final EmbyService _embyService = EmbyService.instance;
+
+  MediaServerHistoryConnection? _historyConnection() {
+    if (!_embyService.isConnected || _embyService.userId == null) return null;
+    final owner = (
+      _embyService.currentProfile?.id ?? _embyService.serverUrl,
+      _embyService.userId,
+    );
+    return MediaServerHistoryConnection(
+      owner: jsonEncode([owner.$1, owner.$2]),
+      userId: _embyService.userId!,
+      profileId: _embyService.currentProfile?.id,
+      serverUrl: _embyService.serverUrl,
+      session: (owner, _embyService.serverUrl, _embyService.accessToken),
+    );
+  }
+
+  late final _historySync = MediaServerWatchHistorySync(
+    source: 'emby',
+    connection: _historyConnection,
+    request: (endpoint) => _makeAuthenticatedRequest('/emby$endpoint'),
+  );
+
+  Object? get historySession => _historyConnection()?.session;
+
+  Future<void> forgetHistoryWhere(bool Function(String) matches) =>
+      _historySync.forgetWhere(matches);
+
+  Future<List<WatchHistoryItem>> refreshHistory(
+          List<WatchHistoryItem> history) =>
+      _historySync.refresh(history, activeItemId: () => _currentItemId);
+
+  bool isCurrentHistoryItem(String filePath) =>
+      filePath.startsWith('emby://') &&
+      filePath.substring('emby://'.length).split('/').last == _currentItemId;
 
   // 当前播放状态
   String? _currentItemId;
@@ -34,32 +69,11 @@ class EmbyPlaybackSyncService {
         return localHistory;
       }
 
-      // 1. 获取服务器播放记录
+      await _historySync.bind(localHistory.filePath);
       final serverProgress = await _getServerPlaybackProgress(itemId);
-
-      if (serverProgress == null) {
-        debugPrint('[EmbySync] 服务器无播放记录，使用本地记录');
-        return localHistory;
-      }
-
-      // 2. 冲突处理：比较上次播放时间
-      final serverLastWatchTime =
-          DateTime.parse(serverProgress['LastPlayedDate'] ?? '').toUtc();
-      final localLastWatchTime = localHistory.lastWatchTime.toUtc();
-
-      debugPrint('[EmbySync] 服务器最后观看时间(UTC): $serverLastWatchTime');
-      debugPrint('[EmbySync] 本地最后观看时间(UTC): $localLastWatchTime');
-
-      if (serverLastWatchTime.isAfter(localLastWatchTime)) {
-        // 服务器记录更新，使用服务器记录
-        debugPrint('[EmbySync] 使用服务器记录（更新）');
-        return _createHistoryFromServerProgress(
-            itemId, serverProgress, localHistory);
-      } else {
-        // 本地记录更新，使用本地记录
-        debugPrint('[EmbySync] 使用本地记录（更新）');
-        return localHistory;
-      }
+      if (serverProgress == null) return localHistory;
+      return mergeMediaServerWatchHistory(localHistory, serverProgress) ??
+          localHistory;
     } catch (e) {
       debugPrint('[EmbySync] 同步播放记录失败: $e');
       return localHistory; // 出错时使用本地记录
@@ -100,7 +114,8 @@ class EmbyPlaybackSyncService {
       final resolvedMediaSourceId = _currentMediaSourceId ?? itemId;
       final startInfo = {
         'ItemId': itemId,
-        'PositionTicks': (historyItem.lastPosition * 10000).round(), // 转换为ticks
+        'PositionTicks':
+            (historyItem.resumePosition * 10000).round(), // 转换为ticks
         'PlaySessionId': resolvedSessionId,
         'CanSeek': true,
         'IsPaused': false,
@@ -219,12 +234,14 @@ class EmbyPlaybackSyncService {
       debugPrint(
           '[EmbySync] 用户数据: playbackPositionTicks=$playbackPositionTicks, playCount=$playCount, lastPlayedDate=$lastPlayedDate');
 
-      if (playCount == 0 || lastPlayedDate == null) {
+      if (lastPlayedDate == null) {
         debugPrint('[EmbySync] 项目从未播放过');
         return null;
       }
 
       return {
+        'Played': userData['Played'] == true,
+        'PlayedPercentage': userData['PlayedPercentage'],
         'PlayCount': playCount,
         'LastPlayedDate': lastPlayedDate,
         'PlaybackPositionTicks': playbackPositionTicks,
@@ -234,30 +251,6 @@ class EmbyPlaybackSyncService {
       debugPrint('[EmbySync] 获取服务器播放进度失败: $e');
       return null;
     }
-  }
-
-  /// 从服务器进度创建历史记录
-  WatchHistoryItem _createHistoryFromServerProgress(String itemId,
-      Map<String, dynamic> serverProgress, WatchHistoryItem originalHistory) {
-    final positionTicks = serverProgress['PlaybackPositionTicks'] ?? 0;
-    // Emby ticks 转换为毫秒：1 tick = 100 nanoseconds = 0.0001 milliseconds
-    final positionMs = (positionTicks / 10000).round(); // 转换为毫秒
-
-    debugPrint(
-        '[EmbySync] 服务器播放位置: ${positionTicks} ticks = ${positionMs} ms (约${(positionMs / 1000 / 60).toStringAsFixed(1)}分钟)');
-
-    return WatchHistoryItem(
-      filePath: originalHistory.filePath,
-      animeName: originalHistory.animeName,
-      episodeTitle: originalHistory.episodeTitle,
-      episodeId: originalHistory.episodeId,
-      animeId: originalHistory.animeId,
-      watchProgress: originalHistory.watchProgress, // 保持原有的观看进度
-      lastPosition: positionMs, // 使用服务器位置
-      duration: originalHistory.duration, // 保持原有的时长
-      lastWatchTime: DateTime.parse(serverProgress['LastPlayedDate']),
-      thumbnailPath: originalHistory.thumbnailPath, // 保持原有的缩略图
-    );
   }
 
   /// 开始定时同步播放进度

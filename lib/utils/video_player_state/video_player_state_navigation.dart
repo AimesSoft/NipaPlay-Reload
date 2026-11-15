@@ -147,8 +147,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final playbackSession =
                   await JellyfinService.instance.createPlaybackSession(
                 itemId: episodeId,
-                startPositionMs: resolvedHistory.lastPosition > 0
-                    ? resolvedHistory.lastPosition
+                startPositionMs: resolvedHistory.resumePosition > 0
+                    ? resolvedHistory.resumePosition
                     : null,
               );
               debugPrint('[上一话] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
@@ -177,8 +177,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final playbackSession =
                   await EmbyService.instance.createPlaybackSession(
                 itemId: episodeId,
-                startPositionMs: resolvedHistory.lastPosition > 0
-                    ? resolvedHistory.lastPosition
+                startPositionMs: resolvedHistory.resumePosition > 0
+                    ? resolvedHistory.resumePosition
                     : null,
               );
               debugPrint('[上一话] 获取Emby播放会话: ${playbackSession.streamUrl}');
@@ -605,8 +605,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final playbackSession =
                   await JellyfinService.instance.createPlaybackSession(
                 itemId: episodeId,
-                startPositionMs: resolvedHistory.lastPosition > 0
-                    ? resolvedHistory.lastPosition
+                startPositionMs: resolvedHistory.resumePosition > 0
+                    ? resolvedHistory.resumePosition
                     : null,
               );
               debugPrint('[下一话] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
@@ -635,8 +635,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final playbackSession =
                   await EmbyService.instance.createPlaybackSession(
                 itemId: episodeId,
-                startPositionMs: resolvedHistory.lastPosition > 0
-                    ? resolvedHistory.lastPosition
+                startPositionMs: resolvedHistory.resumePosition > 0
+                    ? resolvedHistory.resumePosition
                     : null,
               );
               debugPrint('[下一话] 获取Emby播放会话: ${playbackSession.streamUrl}');

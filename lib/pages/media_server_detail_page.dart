@@ -1947,8 +1947,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       }
       playableHistoryItem = selected.historyItem ?? playableHistoryItem;
 
-      final startPositionMs = playableHistoryItem.lastPosition > 0
-          ? playableHistoryItem.lastPosition
+      final startPositionMs = playableHistoryItem.resumePosition > 0
+          ? playableHistoryItem.resumePosition
           : null;
 
       if (playableHistoryItem.filePath.startsWith('emby://')) {
