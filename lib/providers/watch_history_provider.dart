@@ -28,6 +28,7 @@ class WatchHistoryProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   bool _remoteSyncRunning = false;
+  Completer<void>? _remoteSyncCompletion;
   bool _remoteSyncQueued = false;
 
   void _onRemoteConnectionChanged(bool connected) {
@@ -48,6 +49,7 @@ class WatchHistoryProvider extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     _remoteSyncRunning = true;
+    final completion = _remoteSyncCompletion = Completer<void>();
     final snapshot = _history.map((item) => item.copyWith()).toList();
     final originals = {for (final item in snapshot) item.filePath: item};
     final jellyfin = JellyfinPlaybackSyncService();
@@ -114,6 +116,10 @@ class WatchHistoryProvider extends ChangeNotifier with WidgetsBindingObserver {
       debugPrint('保存远程观看记录失败: $error');
     } finally {
       _remoteSyncRunning = false;
+      completion.complete();
+      if (identical(_remoteSyncCompletion, completion)) {
+        _remoteSyncCompletion = null;
+      }
       if (_remoteSyncQueued && !_disposed) {
         _remoteSyncQueued = false;
         unawaited(_syncRemoteHistory());
@@ -216,6 +222,10 @@ class WatchHistoryProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
 
     try {
+      // A refresh that started before this load must finish before its DB
+      // snapshot is read. While loading, further remote requests are queued.
+      // This prevents an older path-validation result replacing newer progress.
+      await _remoteSyncCompletion?.future;
       if (kIsWeb) {
         // 尝试从远程 API 获取历史记录
         final remoteHistory = await WebRemoteAccessService.fetchHistory();
