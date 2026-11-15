@@ -139,7 +139,7 @@ class _ImmersiveEpisodeRailState extends State<ImmersiveEpisodeRail> {
                         context))
                       AdaptiveMediaDetailActionButton(
                         icon: Ionicons.list_outline,
-                        label: '选择剧集',
+                        label: '剧集',
                         onPressed: widget.onSelectEpisodes,
                       )
                     else
@@ -158,7 +158,7 @@ class _ImmersiveEpisodeRailState extends State<ImmersiveEpisodeRail> {
                           ),
                         ),
                         icon: const Icon(Ionicons.list_outline, size: 17),
-                        label: const Text('选择剧集'),
+                        label: const Text('剧集', maxLines: 1, softWrap: false),
                       ),
                 ],
               ),

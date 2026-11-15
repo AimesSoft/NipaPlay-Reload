@@ -14,6 +14,7 @@ class AppleNativeMediaControl extends StatefulWidget {
     required this.label,
     required this.symbol,
     this.detail,
+    this.iconOnly = false,
     this.primary = false,
     this.color,
     this.onPressed,
@@ -43,6 +44,7 @@ class AppleNativeMediaControl extends StatefulWidget {
 
   final String label;
   final String symbol;
+  final bool iconOnly;
   final String? detail;
   final bool primary;
   final Color? color;
@@ -140,6 +142,7 @@ class _AppleNativeMediaControlState extends State<AppleNativeMediaControl>
   Map<String, Object?> get _parameters => {
         'label': widget.label,
         'symbol': widget.symbol,
+        'iconOnly': widget.iconOnly,
         'detail': widget.detail,
         'primary': widget.primary,
         'color': widget.color?.toARGB32(),

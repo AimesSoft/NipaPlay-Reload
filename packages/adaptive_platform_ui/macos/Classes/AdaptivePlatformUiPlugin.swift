@@ -68,6 +68,7 @@ private final class MediaContentButton: NSButton {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func updateContent(label: String, detail: String, symbol: String) {
+        titleField.isHidden = label.isEmpty
         titleField.stringValue = label
         detailField.stringValue = detail
         detailField.isHidden = detail.isEmpty
@@ -80,6 +81,11 @@ private final class MediaContentButton: NSButton {
 
     override func layout() {
         super.layout()
+        if titleField.isHidden && detailField.isHidden {
+            iconView.frame = NSRect(x: (bounds.width - 20) / 2,
+                y: (bounds.height - 20) / 2, width: 20, height: 20)
+            return
+        }
         let inset: CGFloat = 16
         let iconWidth: CGFloat = 20
         let spacing: CGFloat = 10
@@ -372,7 +378,8 @@ private final class MediaControlView: NSView {
         button.isEnabled = args["enabled"] as? Bool ?? false
         if !button.isEnabled { hovered = false; pressedState = false; focused = false }
         entries = args["items"] as? [[String: Any]]
-        button.updateContent(label: label, detail: detail, symbol: args["symbol"] as? String ?? "")
+        let iconOnly = args["iconOnly"] as? Bool ?? false
+        button.updateContent(label: iconOnly ? "" : label, detail: iconOnly ? "" : detail, symbol: args["symbol"] as? String ?? "")
         button.setAccessibilityLabel(label)
         button.setAccessibilityHelp(detail)
         button.isBordered = false

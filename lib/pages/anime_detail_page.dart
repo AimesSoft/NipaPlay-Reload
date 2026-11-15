@@ -35,7 +35,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
-import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/watch_history_provider.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/media_source_utils.dart';
@@ -65,7 +64,6 @@ import 'package:nipaplay/themes/nipaplay/widgets/nipaplay_main_tab_bar.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
-import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 
 enum _EpisodeCleanupAction {
   clearMatchInfo,
@@ -95,7 +93,6 @@ class AnimeDetailPage extends StatefulWidget {
   final PlaybackDetailContext? playbackDetailContext;
   final bool renderInWindowScaffold;
   final bool embeddedInPlayback;
-  final bool useImmersiveLayout;
 
   const AnimeDetailPage({
     super.key,
@@ -108,7 +105,6 @@ class AnimeDetailPage extends StatefulWidget {
     this.playbackDetailContext,
     this.renderInWindowScaffold = true,
     this.embeddedInPlayback = false,
-    this.useImmersiveLayout = false,
   });
 
   @override
@@ -160,17 +156,7 @@ class AnimeDetailPage extends StatefulWidget {
     }
 
     final surface = AppDisplaySurfaceScope.of(context);
-    final supportsImmersiveLayout =
-        surface == AppDisplaySurface.desktopTablet ||
-            surface == AppDisplaySurface.phone;
-    var useImmersiveLayout = false;
-    if (supportsImmersiveLayout) {
-      final labsSettings = context.read<LabsSettingsProvider>();
-      await labsSettings.ready;
-      if (!context.mounted) return null;
-      useImmersiveLayout = labsSettings.enableImmersiveAnimeDetail;
-    }
-    if (useImmersiveLayout) {
+    if (surface != AppDisplaySurface.television) {
       final enableAnimation =
           context.read<AppearanceSettingsProvider>().enablePageAnimation;
       return Navigator.of(context).push<WatchHistoryItem>(
@@ -186,28 +172,7 @@ class AnimeDetailPage extends StatefulWidget {
             sharedSourceLabel: sharedSourceLabel,
             playbackDetailContext: playbackDetailContext,
             renderInWindowScaffold: false,
-            useImmersiveLayout: true,
           ),
-        ),
-      );
-    }
-
-    if (surface == AppDisplaySurface.phone) {
-      return CupertinoBottomSheet.show<WatchHistoryItem>(
-        context: context,
-        title: '番剧详情',
-        floatingTitle: true,
-        heightRatio: 0.96,
-        child: AnimeDetailPage(
-          animeId: animeId,
-          mediaLibraryScope:
-              mediaLibraryScope ?? playbackDetailContext?.mediaLibraryScope,
-          sharedSummary: sharedSummary,
-          sharedEpisodeLoader: sharedEpisodeLoader,
-          sharedEpisodeBuilder: sharedEpisodeBuilder,
-          sharedSourceLabel: sharedSourceLabel,
-          playbackDetailContext: playbackDetailContext,
-          renderInWindowScaffold: false,
         ),
       );
     }
@@ -355,6 +320,12 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     4: '搁置',
     5: '抛弃',
   };
+
+  // Standalone desktop/tablet/phone details always use the full-page design.
+  // The player panel and remote-control surface have their own compact layouts.
+  bool get _usesImmersiveLayout =>
+      !widget.embeddedInPlayback &&
+      AppDisplaySurfaceScope.of(context) != AppDisplaySurface.television;
 
   bool get _isLargeScreenModeActive {
     return NipaplayLargeScreenHomeScope.isActive(context) ||
@@ -729,7 +700,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           _isLoading = false;
         });
 
-        if (widget.useImmersiveLayout) {
+        if (_usesImmersiveLayout) {
           _resolveImmersiveBackdrop();
         }
         _loadBangumiUserData(mergedAnime);
@@ -3195,13 +3166,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
         AdaptiveMediaDetailActionButton(
           icon: Ionicons.chatbubble_outline,
           label: '评论',
+          iconOnly: true,
           onPressed: _openImmersiveComments,
         ),
         if (useNativeGlass && AppleNativeMediaControl.supported)
           SizedBox(
-            width: 100,
+            width: 44,
             child: AppleNativeMediaControl(
               label: '更多',
+              iconOnly: true,
               symbol: 'ellipsis',
               items: [
                 for (final item in moreItems)
@@ -3223,6 +3196,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               child: AdaptiveMediaDetailActionButton(
                 icon: Ionicons.ellipsis_horizontal,
                 label: '更多',
+                iconOnly: true,
                 onPressed: () {},
               ),
             ),
@@ -3460,7 +3434,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   @override
   Widget build(BuildContext context) {
-    if (widget.useImmersiveLayout) {
+    if (_usesImmersiveLayout) {
       return CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
           const SingleActivator(LogicalKeyboardKey.escape):

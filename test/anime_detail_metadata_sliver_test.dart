@@ -10,12 +10,84 @@ import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/quarterly_review_cache.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_metadata_sliver.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_anime_detail_scaffold.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_media_detail_route.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('legacy detail keeps comments mounted when switching tabs',
+  for (final surface in [
+    AppDisplaySurface.phone,
+    AppDisplaySurface.desktopTablet,
+  ]) {
+    testWidgets('$surface opens full-page details with the old lab switch off',
+        (tester) async {
+      final anime = BangumiAnime(
+        id: 0,
+        name: 'Test title',
+        nameCn: 'Test title',
+        imageUrl: '',
+        summary: 'Summary',
+        tags: const [],
+        language: 'zh',
+      );
+      SharedPreferences.setMockInitialValues({
+        'labs_enable_immersive_anime_detail': false,
+        'bangumi_detail_0': jsonEncode({
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+          'animeDetail': anime.toJson(),
+        }),
+      });
+      final appearance = _TestAppearance();
+      final summary = SharedRemoteAnimeSummary(
+        animeId: 0,
+        name: 'Test title',
+        nameCn: 'Test title',
+        summary: 'Summary',
+        imageUrl: '',
+        lastWatchTime: DateTime(2026),
+        episodeCount: 0,
+        hasMissingFiles: false,
+      );
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppearanceSettingsProvider>.value(
+          value: appearance,
+          child: AppDisplaySurfaceScope(
+            surface: surface,
+            child: MaterialApp(
+              home: Builder(
+                  builder: (context) => Scaffold(
+                        body: TextButton(
+                          onPressed: () {
+                            AnimeDetailPage.show(context, 0,
+                                sharedSummary: summary);
+                          },
+                          child: const Text('Open detail'),
+                        ),
+                      )),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open detail'));
+      await tester.pumpAndSettle();
+      final detail = find.byType(AnimeDetailPage);
+      expect(detail, findsOneWidget);
+      expect(ModalRoute.of(tester.element(detail)),
+          isA<ImmersiveMediaDetailPageRoute>());
+      expect(find.byType(ImmersiveAnimeDetailScaffold), findsOneWidget);
+      Navigator.of(tester.element(detail)).pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Open detail'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      appearance.dispose();
+    });
+  }
+
+  testWidgets(
+      'embedded player detail keeps comments mounted when switching tabs',
       (tester) async {
     final anime = BangumiAnime(
       id: 0,
@@ -47,6 +119,7 @@ void main() {
               body: AnimeDetailPage(
             animeId: 0,
             renderInWindowScaffold: false,
+            embeddedInPlayback: true,
             sharedSummary: SharedRemoteAnimeSummary(
               animeId: 0,
               name: 'Test title',
