@@ -42,6 +42,7 @@ import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
+import 'package:nipaplay/widgets/player_volume_scroll_region.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
 
 typedef _PlaybackPageLayoutSnapshot = ({
@@ -558,25 +559,38 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   }) {
     final isPictureInPicture =
         DesktopPictureInPictureScope.isEnabledOf(context);
-    return Stack(
-      fit: StackFit.expand,
-      clipBehavior: Clip.hardEdge,
-      children: [
-        Positioned.fill(
-          child: VideoPlayerWidget(danmakuScale: portraitUiScale),
-        ),
-        if (videoState.hasVideo)
-          NipaplayLargeScreenModeScope.isActiveOf(context) &&
-                  !isPictureInPicture
-              ? _buildLargeScreenMaterialControls(videoState)
-              : KeyedSubtree(
-                  key: ValueKey<bool>(portraitUiScale < 0.999),
-                  child: _buildMaterialControls(
-                    videoState,
-                    portraitUiScale: portraitUiScale,
+    return PlayerVolumeScrollRegion(
+      isEnabled: () =>
+          globals.isDesktop &&
+          videoState.hasVideo &&
+          !videoState.hotkeysSuppressed,
+      onVolumeChange: (change) {
+        if (change > 0) {
+          videoState.increaseVolume(step: change);
+        } else {
+          videoState.decreaseVolume(step: -change);
+        }
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.hardEdge,
+        children: [
+          Positioned.fill(
+            child: VideoPlayerWidget(danmakuScale: portraitUiScale),
+          ),
+          if (videoState.hasVideo)
+            NipaplayLargeScreenModeScope.isActiveOf(context) &&
+                    !isPictureInPicture
+                ? _buildLargeScreenMaterialControls(videoState)
+                : KeyedSubtree(
+                    key: ValueKey<bool>(portraitUiScale < 0.999),
+                    child: _buildMaterialControls(
+                      videoState,
+                      portraitUiScale: portraitUiScale,
+                    ),
                   ),
-                ),
-      ],
+        ],
+      ),
     );
   }
 
