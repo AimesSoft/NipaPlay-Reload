@@ -105,6 +105,19 @@ Widget _wrap(Widget child, VideoPlayerState videoState) {
   );
 }
 
+Future<void> _prepareSubtitleFixture(
+  VideoPlayerState videoState,
+  String path,
+  String content,
+) async {
+  await File(path).writeAsString(content);
+  // These tests observe rendering/track ownership, not parser scheduling.
+  // Complete parsing before activation starts its fire-and-forget preloads,
+  // so those calls use the cache and cannot hold a fixture open at teardown.
+  await videoState.preloadSubtitleFile(path);
+  expect(videoState.getCachedSubtitle(path), isNotEmpty);
+}
+
 void main() {
   testWidgets('whole-block mode writes sub-visibility and polls sub-text',
       (tester) async {
@@ -211,12 +224,13 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('whole_block_ass');
     addTearDown(() => dir.delete(recursive: true));
     final assPath = '${dir.path}/sample.chs.ass';
-    await File(assPath).writeAsString(
+    await _prepareSubtitleFixture(
+      videoState,
+      assPath,
       '[Script Info]\nScriptType: v4.00+\n\n[Events]\n'
       'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
       'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,外挂\n',
     );
-
     // The subtitle menu goes through the stack entry points, which only
     // reach SubtitleManager.
     await videoState.addExternalSubtitleToStack(assPath);
@@ -251,10 +265,9 @@ void main() {
     addTearDown(() => dir!.delete(recursive: true));
     final path = '${dir!.path}/movie.srt';
     await tester.runAsync(() async {
-      await File(path)
-          .writeAsString('1\n00:00:00,000 --> 00:00:01,000\nExternal cue\n');
+      await _prepareSubtitleFixture(videoState, path,
+          '1\n00:00:00,000 --> 00:00:01,000\nExternal cue\n');
       await videoState.addExternalSubtitleToStack(path);
-      await videoState.preloadSubtitleFile(path);
     });
     (videoState.playbackTimeMs as ValueNotifier<double>).value = 500;
 
@@ -292,7 +305,8 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('srt_native_visibility_');
     addTearDown(() => dir.delete(recursive: true));
     final path = '${dir.path}/movie.srt';
-    await File(path).writeAsString('1\n00:00:00,000 --> 00:00:01,000\nCue\n');
+    await _prepareSubtitleFixture(
+        videoState, path, '1\n00:00:00,000 --> 00:00:01,000\nCue\n');
     var notifications = 0;
     videoState.addListener(() => notifications++);
 
@@ -346,13 +360,15 @@ void main() {
     addTearDown(() => dir.delete(recursive: true));
     final assPath = '${dir.path}/movie.ass';
     final srtPath = '${dir.path}/movie.srt';
-    await File(assPath).writeAsString(
+    await _prepareSubtitleFixture(
+      videoState,
+      assPath,
       '[Script Info]\nScriptType: v4.00+\n\n[Events]\n'
       'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
       'Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,ASS cue\n',
     );
-    await File(srtPath)
-        .writeAsString('1\n00:00:00,000 --> 00:00:01,000\nSRT cue\n');
+    await _prepareSubtitleFixture(videoState, srtPath,
+        '1\n00:00:00,000 --> 00:00:01,000\nSRT cue\n');
 
     await videoState.addExternalSubtitleToStack(srtPath);
     expect(delegate.writtenProperties['sub-visibility'], 'no');
@@ -387,7 +403,8 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('pending_sub_text_');
     addTearDown(() => dir.delete(recursive: true));
     final path = '${dir.path}/movie.srt';
-    await File(path).writeAsString('1\n00:00:00,000 --> 00:00:01,000\nCue\n');
+    await _prepareSubtitleFixture(
+        videoState, path, '1\n00:00:00,000 --> 00:00:01,000\nCue\n');
     await videoState.addExternalSubtitleToStack(path);
     response.complete('stale native SRT text');
     await Future<void>.delayed(Duration.zero);
