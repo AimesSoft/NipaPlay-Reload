@@ -999,7 +999,9 @@ class SubtitleManager extends ChangeNotifier {
             (other) => other != path && !_shouldRenderExternalSubtitleInApp(other));
     if (!kernelExternalActive) {
       try {
-        if (_player.activeSubtitleTracks.isNotEmpty) {
+        // Media Kit's cached list can still be empty while mpv has already
+        // auto-selected a sidecar. Always send the native "no subtitle" intent.
+        if (_isMediaKitKernel() || _player.activeSubtitleTracks.isNotEmpty) {
           _player.activeSubtitleTracks = [];
         }
       } catch (e) {
@@ -1040,11 +1042,17 @@ class SubtitleManager extends ChangeNotifier {
   /// plain text, which strips the script's positioning and colors (colored
   /// \pos annotations collapse into white centered text).
   bool isKernelRenderedExternalAssActive() {
+    bool isNativeAss(String path) {
+      if (_shouldRenderExternalSubtitleInApp(path)) return false;
+      final ext = p.extension(path).toLowerCase();
+      return ext == '.ass' || ext == '.ssa';
+    }
+
+    // In an ASS + SRT stack the last/primary path may be the app overlay;
+    // the ASS still owns the native track and must retain libass rendering.
+    if (_activeExternalSubtitlePaths.any(isNativeAss)) return true;
     final path = getActiveExternalSubtitlePath();
-    if (path == null || path.isEmpty) return false;
-    if (_shouldRenderExternalSubtitleInApp(path)) return false;
-    final ext = p.extension(path).toLowerCase();
-    return ext == '.ass' || ext == '.ssa';
+    return path != null && path.isNotEmpty && isNativeAss(path);
   }
 
   bool shouldRenderCurrentExternalSubtitleInApp() {

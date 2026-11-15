@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/widgets/embedded_subtitle_overlay.dart';
+import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,6 +29,9 @@ class _FakeMediaKitDelegate extends Fake implements MediaKitPlayerAdapter {
 
   Map<String, String> liveProperties;
   final Map<String, String> writtenProperties = {};
+  final List<List<int>> subtitleSelections = [];
+  List<int> selectedSubtitleTracks = [];
+  Future<String?> Function(String)? readLiveProperty;
 
   @override
   void setProperty(String key, String value) {
@@ -35,6 +40,7 @@ class _FakeMediaKitDelegate extends Fake implements MediaKitPlayerAdapter {
 
   @override
   Future<String?> getLiveProperty(String name) async {
+    if (readLiveProperty != null) return readLiveProperty!(name);
     return liveProperties[name];
   }
 
@@ -45,15 +51,21 @@ class _FakeMediaKitDelegate extends Fake implements MediaKitPlayerAdapter {
   bool get supportsExternalSubtitles => true;
 
   @override
-  List<int> get activeSubtitleTracks => const [];
+  List<int> get activeSubtitleTracks => selectedSubtitleTracks;
 
   // Loading an external ASS into the kernel also sets tracks and reads
   // mediaInfo; the menu-path test below goes through that load.
   @override
-  set activeSubtitleTracks(List<int> value) {}
+  set activeSubtitleTracks(List<int> value) {
+    selectedSubtitleTracks = List.of(value);
+    subtitleSelections.add(List.of(value));
+  }
 
   @override
   PlayerMediaInfo get mediaInfo => PlayerMediaInfo(duration: 10000);
+
+  @override
+  int get position => 500;
 
   @override
   void setMedia(String path, PlayerMediaType type) {}
@@ -223,6 +235,163 @@ void main() {
       'no',
       reason: 'Whole-block mode must take over again after the ASS is removed',
     );
+  });
+
+  testWidgets(
+      'an external SRT renders once and replaces the embedded text block',
+      (tester) async {
+    final delegate = _FakeMediaKitDelegate(liveProperties: {
+      'sub-text': 'External cue',
+    });
+    final videoState = await _buildVideoPlayerState(delegate);
+    await videoState.setEmbeddedSubtitleOverlayMode(true);
+    videoState.debugSetEmbeddedSubtitleOverlayText('External cue');
+    final dir = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('external_srt_overlay_'));
+    addTearDown(() => dir!.delete(recursive: true));
+    final path = '${dir!.path}/movie.srt';
+    await tester.runAsync(() async {
+      await File(path)
+          .writeAsString('1\n00:00:00,000 --> 00:00:01,000\nExternal cue\n');
+      await videoState.addExternalSubtitleToStack(path);
+      await videoState.preloadSubtitleFile(path);
+    });
+    (videoState.playbackTimeMs as ValueNotifier<double>).value = 500;
+
+    // Even if a native sidecar appears late, its renderer stays hidden and
+    // sub-text must not create another app overlay for the same SRT.
+    delegate.selectedSubtitleTracks = [0];
+    expect(delegate.writtenProperties['sub-visibility'], 'no');
+    videoState.debugSetEmbeddedSubtitleOverlayText('External cue');
+    await tester.pumpWidget(_wrap(
+      const SizedBox(
+        width: 800,
+        height: 600,
+        child: Stack(children: [
+          EmbeddedSubtitleOverlay(),
+          ExternalSubtitleOverlay(),
+        ]),
+      ),
+      videoState,
+    ));
+    await tester.pump();
+    expect(find.text('External cue'), findsNWidgets(2)); // stroke + fill
+
+    // The same mounted overlay follows selection changes through listeners.
+    videoState.selectEmbeddedSubtitleTrack(0);
+    videoState.debugSetEmbeddedSubtitleOverlayText('Embedded cue');
+    await tester.pump();
+    expect(find.text('External cue'), findsNothing);
+    expect(find.text('Embedded cue'), findsNWidgets(2));
+  });
+
+  test('an app-only external stack hides native sidecars until it is removed',
+      () async {
+    final delegate = _FakeMediaKitDelegate();
+    final videoState = await _buildVideoPlayerState(delegate);
+    final dir = await Directory.systemTemp.createTemp('srt_native_visibility_');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = '${dir.path}/movie.srt';
+    await File(path).writeAsString('1\n00:00:00,000 --> 00:00:01,000\nCue\n');
+    var notifications = 0;
+    videoState.addListener(() => notifications++);
+
+    // The adapter's cached active list is empty even if mpv selected a
+    // sidecar before publishing its track event. Attaching must still clear it.
+    expect(delegate.activeSubtitleTracks, isEmpty);
+    await videoState.addExternalSubtitleToStack(path);
+    expect(delegate.subtitleSelections, contains(isEmpty));
+    expect(delegate.writtenProperties['sub-visibility'], 'no');
+    expect(notifications, greaterThan(0));
+
+    await videoState.setEmbeddedSubtitleOverlayMode(true);
+    await videoState.setEmbeddedSubtitleOverlayMode(false);
+    expect(delegate.writtenProperties['sub-visibility'], 'no');
+    expect(videoState.shouldRenderEmbeddedSubtitleOverlay, isFalse);
+
+    videoState.selectEmbeddedSubtitleTrack(0);
+    expect(videoState.activeExternalSubtitlePaths, isEmpty);
+    expect(delegate.activeSubtitleTracks, [0]);
+    expect(delegate.writtenProperties['sub-visibility'], 'yes');
+
+    await videoState.addExternalSubtitleToStack(path);
+    final beforeRemoval = notifications;
+    await videoState.removeExternalSubtitle(path);
+    expect(notifications, greaterThan(beforeRemoval));
+    expect(delegate.writtenProperties['sub-visibility'], 'yes');
+
+    // Episode reset suppresses manager notifications; the normal open hook
+    // must nevertheless recompute visibility for the new media.
+    videoState.setExternalSubtitle(path);
+    videoState.subtitleManager.clearExternalSubtitle(notifyListenersToo: false);
+    videoState.subtitleManager.setCurrentVideoPath('${dir.path}/next.mkv');
+    videoState.applyEmbeddedSubtitleOverlayKernelState();
+    expect(delegate.writtenProperties['sub-visibility'], 'yes');
+    expect(videoState.activeExternalSubtitlePaths, isEmpty);
+    videoState.setExternalSubtitle(path);
+    expect(delegate.writtenProperties['sub-visibility'], 'no');
+    videoState.selectEmbeddedSubtitleTrack(-1);
+    expect(delegate.writtenProperties['sub-visibility'], 'yes');
+    expect(delegate.activeSubtitleTracks, isEmpty);
+    expect(videoState.activeExternalSubtitlePaths, isEmpty);
+  });
+
+  test('an ASS and SRT stack retains libass until the native ASS is removed',
+      () async {
+    final delegate = _FakeMediaKitDelegate();
+    final videoState = await _buildVideoPlayerState(delegate);
+    await videoState.setEmbeddedSubtitleOverlayMode(true);
+    final dir =
+        await Directory.systemTemp.createTemp('mixed_ass_srt_visibility_');
+    addTearDown(() => dir.delete(recursive: true));
+    final assPath = '${dir.path}/movie.ass';
+    final srtPath = '${dir.path}/movie.srt';
+    await File(assPath).writeAsString(
+      '[Script Info]\nScriptType: v4.00+\n\n[Events]\n'
+      'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
+      'Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,ASS cue\n',
+    );
+    await File(srtPath)
+        .writeAsString('1\n00:00:00,000 --> 00:00:01,000\nSRT cue\n');
+
+    await videoState.addExternalSubtitleToStack(srtPath);
+    expect(delegate.writtenProperties['sub-visibility'], 'no');
+    await videoState.addExternalSubtitleToStack(assPath);
+    expect(delegate.writtenProperties['sub-visibility'], 'yes');
+    expect(videoState.isKernelRenderedExternalAssActive, isTrue);
+    expect(videoState.shouldRenderEmbeddedSubtitleOverlay, isFalse);
+
+    // Reloading the SRT makes it the primary path, without removing the ASS.
+    videoState.subtitleManager
+        .setExternalSubtitle(srtPath, preserveStack: true);
+    expect(videoState.getActiveExternalSubtitlePath(), srtPath);
+    expect(videoState.isKernelRenderedExternalAssActive, isTrue);
+    expect(delegate.writtenProperties['sub-visibility'], 'yes');
+
+    await videoState.removeExternalSubtitle(assPath);
+    expect(videoState.activeExternalSubtitlePaths, [srtPath]);
+    expect(delegate.writtenProperties['sub-visibility'], 'no');
+    await videoState.removeExternalSubtitle(srtPath);
+    expect(videoState.shouldRenderEmbeddedSubtitleOverlay, isTrue);
+    expect(delegate.writtenProperties['sub-visibility'], 'no');
+  });
+
+  test('a pending native text read cannot refill the block after SRT selection',
+      () async {
+    final delegate = _FakeMediaKitDelegate();
+    final videoState = await _buildVideoPlayerState(delegate);
+    await videoState.setEmbeddedSubtitleOverlayMode(true);
+    final response = Completer<String?>();
+    delegate.readLiveProperty = (_) => response.future;
+    videoState.pollEmbeddedSubtitleOverlayText();
+    final dir = await Directory.systemTemp.createTemp('pending_sub_text_');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = '${dir.path}/movie.srt';
+    await File(path).writeAsString('1\n00:00:00,000 --> 00:00:01,000\nCue\n');
+    await videoState.addExternalSubtitleToStack(path);
+    response.complete('stale native SRT text');
+    await Future<void>.delayed(Duration.zero);
+    expect(videoState.embeddedSubtitleOverlayText, isEmpty);
   });
 
   testWidgets(

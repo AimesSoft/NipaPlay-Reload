@@ -297,6 +297,20 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   bool get isKernelRenderedExternalAssActive =>
       _subtitleManager.isKernelRenderedExternalAssActive();
 
+  // An app-only external stack replaces native subtitles. mpv can still
+  // auto-select a same-name sidecar after we clear sid, so keep its renderer
+  // hidden for as long as the app owns that stack. Mixed native ASS + SRT
+  // stacks retain the ASS renderer.
+  bool get _externalSubtitleOverlayIsExclusive =>
+      shouldRenderCurrentExternalSubtitleInApp() &&
+      !activeExternalSubtitlePaths
+          .any((path) => !externalSubtitleRenderedInApp(path));
+
+  bool get shouldRenderEmbeddedSubtitleOverlay =>
+      _embeddedSubtitleOverlayMode &&
+      !isKernelRenderedExternalAssActive &&
+      !_externalSubtitleOverlayIsExclusive;
+
   Future<void> setEmbeddedSubtitleOverlayMode(bool enabled) async {
     if (_embeddedSubtitleOverlayMode == enabled) return;
     _embeddedSubtitleOverlayMode = enabled;
@@ -341,21 +355,22 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
 
   /// Sync the kernel render switch with the current mode. Idempotent; call
   /// after mode toggles, video open, kernel hot-swap, and external-subtitle
-  /// activation changes. Media Kit + mode on + no kernel-rendered external
-  /// ASS -> sub-visibility=no; otherwise yes (and residue text is cleared).
+  /// activation changes. Media Kit hides its renderer for the embedded
+  /// whole-block mode or an app-only external stack. Native external ASS
+  /// stacks keep libass rendering, including when an SRT is stacked over it.
   void applyEmbeddedSubtitleOverlayKernelState() {
     if (kIsWeb || _isDisposed) return;
     try {
+      final renderEmbedded = shouldRenderEmbeddedSubtitleOverlay;
       if (player.getPlayerKernelName() == 'Media Kit' &&
-          _embeddedSubtitleOverlayMode &&
-          !isKernelRenderedExternalAssActive) {
+          (renderEmbedded || _externalSubtitleOverlayIsExclusive)) {
         player.setProperty('sub-visibility', 'no');
       } else {
         player.setProperty('sub-visibility', 'yes');
-        if (_embeddedSubtitleOverlayText.isNotEmpty) {
-          _embeddedSubtitleOverlayText = '';
-          _notifyListeners();
-        }
+      }
+      if (!renderEmbedded && _embeddedSubtitleOverlayText.isNotEmpty) {
+        _embeddedSubtitleOverlayText = '';
+        _notifyListeners();
       }
     } catch (e) {
       debugPrint('VideoPlayerState: sync whole-block kernel state failed: $e');
@@ -386,10 +401,9 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
 
   Future<void> _pollEmbeddedSubtitleOverlayText() async {
     try {
-      // While a kernel-rendered external ASS is active the whole block must
-      // not render (libass owns the styling); clear any residue collected
-      // before the switch so it never overlays the libass render.
-      if (isKernelRenderedExternalAssActive) {
+      // External subtitles already have a renderer. Clear any embedded
+      // text collected before the switch instead of duplicating their cues.
+      if (!shouldRenderEmbeddedSubtitleOverlay) {
         if (_embeddedSubtitleOverlayText.isNotEmpty) {
           _embeddedSubtitleOverlayText = '';
           _notifyListeners();
@@ -397,7 +411,8 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
         return;
       }
       final text = await player.getLiveProperty('sub-text') ?? '';
-      if (_isDisposed) return;
+      // A subtitle selection can change while the native read is in flight.
+      if (_isDisposed || !shouldRenderEmbeddedSubtitleOverlay) return;
       final trimmed = text.trim();
       if (trimmed == _embeddedSubtitleOverlayText) return;
       _embeddedSubtitleOverlayText = trimmed;
