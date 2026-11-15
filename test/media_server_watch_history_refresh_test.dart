@@ -59,8 +59,9 @@ void main() {
               'UserData': {
                 'Played': played,
                 'PlaybackPositionTicks': played ? 0 : 600000000,
-                'LastPlayedDate':
-                    played ? '2026-11-15T00:00:00Z' : '2026-11-01T00:00:00Z',
+                // Real Jellyfin retains this date when PlayedItems marks it
+                // completed, even though the local exit is more recent.
+                'LastPlayedDate': '2026-11-01T00:00:00Z',
               },
             }
           ],
@@ -104,7 +105,7 @@ void main() {
       watchProgress: .5,
       lastPosition: 60000,
       duration: 120000,
-      lastWatchTime: DateTime.utc(2026, 11, 1),
+      lastWatchTime: DateTime.utc(2026, 11, 16),
     ));
     await provider.loadHistory();
     await _until(() => batches == 1);

@@ -57,6 +57,22 @@ void main() {
   });
 
   test(
+      'manual played mark clears newer local progress without a new LastPlayedDate',
+      () {
+    final local = history('one', watchedAt: DateTime.utc(2026, 11, 16));
+    final data = (played('one')['UserData'] as Map).cast<String, dynamic>();
+    final merged = mergeMediaServerWatchHistory(local, data)!;
+    expect(merged.watchProgress, 1);
+    expect(merged.lastPosition, 0);
+    expect(merged.lastWatchTime, local.lastWatchTime);
+    expect(mergeMediaServerWatchHistory(merged, data), isNull);
+    expect(
+        mergeMediaServerWatchHistory(
+            local, {...data}..remove('PlaybackPositionTicks')),
+        isNull);
+  });
+
+  test(
       'remote resume progress recalculates fraction and preserves newer local play',
       () {
     final data = <String, dynamic>{

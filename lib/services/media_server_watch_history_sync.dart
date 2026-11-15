@@ -29,15 +29,22 @@ WatchHistoryItem? mergeMediaServerWatchHistory(
 }) {
   final watchedAt =
       DateTime.tryParse(userData['LastPlayedDate']?.toString() ?? '');
-  // Without a server timestamp an older remote record cannot safely replace a
-  // newer local play. A manually marked played item normally has LastPlayedDate.
+  // Jellyfin's PlayedItems endpoint clears the position without advancing
+  // LastPlayedDate. Its explicit completed state is authoritative even when
+  // local exit saved a later timestamp; active playback and SQL CAS are guarded
+  // by the caller. Nonzero rewatch positions still use timestamp precedence.
+  final ticksValue = userData['PlaybackPositionTicks'];
+  final ticks = (ticksValue as num?)?.toInt() ?? 0;
+  final completed =
+      userData['Played'] == true && ticksValue is num && ticks == 0;
   if (watchedAt == null) return null;
   final neverWatched = local.lastPosition == 0 && local.watchProgress == 0;
-  if (!neverWatched && watchedAt.isBefore(local.lastWatchTime)) return null;
+  if (!completed && !neverWatched && watchedAt.isBefore(local.lastWatchTime)) {
+    return null;
+  }
 
   final duration =
       durationMs != null && durationMs > 0 ? durationMs : local.duration;
-  final ticks = (userData['PlaybackPositionTicks'] as num?)?.toInt() ?? 0;
   final position = (ticks ~/ 10000).clamp(0, duration > 0 ? duration : 1 << 62);
   final played = userData['Played'] == true;
   final percentage = (userData['PlayedPercentage'] as num?)?.toDouble();
@@ -54,7 +61,9 @@ WatchHistoryItem? mergeMediaServerWatchHistory(
     lastPosition: position,
     duration: duration,
     watchProgress: progress,
-    lastWatchTime: watchedAt,
+    lastWatchTime: completed && watchedAt.isBefore(local.lastWatchTime)
+        ? local.lastWatchTime
+        : watchedAt,
   );
   return sameWatchHistoryProgress(local, result) ? null : result;
 }
