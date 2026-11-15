@@ -65,8 +65,9 @@ final class MediaDetailControlView: NSObject, FlutterPlatformView {
         guard #available(iOS 26.0, *) else { return }
         let primary = args["primary"] as? Bool ?? false
         var config: UIButton.Configuration = primary ? .prominentGlass() : .glass()
-        config.title = args["label"] as? String
-        config.subtitle = args["detail"] as? String
+        let iconOnly = args["iconOnly"] as? Bool ?? false
+        config.title = iconOnly ? nil : args["label"] as? String
+        config.subtitle = iconOnly ? nil : args["detail"] as? String
         config.image = UIImage(systemName: args["symbol"] as? String ?? "")
         config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 20)
         config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
@@ -81,11 +82,12 @@ final class MediaDetailControlView: NSObject, FlutterPlatformView {
                 for: UIFont.systemFont(ofSize: 11))
             return result
         }
-        config.imagePadding = 10
+        config.titleLineBreakMode = .byClipping
+        config.imagePadding = iconOnly ? 0 : 10
         config.titlePadding = 2
         config.titleAlignment = .leading
         config.cornerStyle = .capsule
-        config.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)
+        config.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: iconOnly ? 0 : 16, bottom: 6, trailing: iconOnly ? 0 : 16)
         config.baseForegroundColor = .white
         if primary, let argb = args["color"] as? NSNumber {
             let value = argb.uint32Value
@@ -102,6 +104,8 @@ final class MediaDetailControlView: NSObject, FlutterPlatformView {
         // the system button handles Reduce Motion / Reduce Transparency and
         // contrast preferences, including changes while this view is visible.
         button.configuration = config
+        button.titleLabel?.numberOfLines = 1
+        button.accessibilityLabel = args["label"] as? String
         button.isEnabled = args["enabled"] as? Bool ?? false
 
         if let entries = args["items"] as? [[String: Any]] {

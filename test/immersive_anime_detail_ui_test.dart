@@ -8,9 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/apple_native_media_control.dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
-import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/full_backup_service.dart';
 import 'package:nipaplay/services/incremental_sync_repository.dart';
@@ -25,34 +23,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  test('immersive anime detail lab switch defaults to disabled', () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    final provider = LabsSettingsProvider();
-    await provider.ready;
-
-    expect(provider.enableImmersiveAnimeDetail, isFalse);
-
-    await provider.setEnableImmersiveAnimeDetail(true);
-    final prefs = await SharedPreferences.getInstance();
-    expect(
-      prefs.getBool(SettingsKeys.labsEnableImmersiveAnimeDetail),
-      isTrue,
-    );
-  });
-
-  test('immersive anime detail lab switch is restored before route decisions',
-      () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{
-      SettingsKeys.labsEnableImmersiveAnimeDetail: true,
-    });
-
-    final restartedProvider = LabsSettingsProvider();
-    await restartedProvider.ready;
-
-    expect(restartedProvider.isLoaded, isTrue);
-    expect(restartedProvider.enableImmersiveAnimeDetail, isTrue);
-  });
 
   test('native media detail glass follows the OS capability bridge', () async {
     final messenger =

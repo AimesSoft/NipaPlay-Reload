@@ -58,7 +58,6 @@ import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/providers/remote_access_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
-import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/src/rust/api/startup_commands.dart'
     as startup_commands;
@@ -656,7 +655,6 @@ void main(List<String> args) async {
             ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
             ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
             ChangeNotifierProvider(create: (_) => DownloaderSettingsProvider()),
-            ChangeNotifierProvider(create: (_) => LabsSettingsProvider()),
             ChangeNotifierProvider(
                 create: (_) => RemoteAccessSettingsProvider()),
             ChangeNotifierProvider(create: (_) => PluginService()),

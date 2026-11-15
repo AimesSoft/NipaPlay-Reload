@@ -570,24 +570,14 @@ class _BackButton extends StatelessWidget {
       return AdaptiveMediaDetailActionButton(
         icon: Ionicons.chevron_back,
         label: '返回',
+        iconOnly: true,
         onPressed: onPressed,
       );
     }
-    return Semantics(
-      button: true,
-      label: '返回',
-      child: TextButton.icon(
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          foregroundColor: Colors.white,
-          backgroundColor:
-              onImage ? Colors.black.withValues(alpha: 0.58) : null,
-          minimumSize: const Size(48, 44),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        ),
-        icon: const Icon(Ionicons.chevron_back, size: 20),
-        label: const Text('返回', style: TextStyle(fontSize: 15)),
-      ),
+    return AdaptiveMediaDetailIconButton(
+      icon: Ionicons.chevron_back,
+      tooltip: '返回',
+      onPressed: onPressed,
     );
   }
 }

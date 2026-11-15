@@ -8,9 +8,6 @@ void main() {
     final labs = File(
       'lib/settings/pages/labs_settings_content.dart',
     ).readAsStringSync();
-    final labsProvider = File(
-      'lib/providers/labs_settings_provider.dart',
-    ).readAsStringSync();
     final settingsKeys = File(
       'lib/constants/settings_keys.dart',
     ).readAsStringSync();
@@ -18,7 +15,6 @@ void main() {
     expect(main, contains('shouldOfferLargeScreenModeControl('));
     expect(main, isNot(contains('_isLabsLargeScreenModeEnabled')));
     expect(labs, isNot(contains('enableLargeScreenMode')));
-    expect(labsProvider, isNot(contains('enableLargeScreenMode')));
     expect(settingsKeys, isNot(contains('labsEnableLargeScreenMode')));
   });
 

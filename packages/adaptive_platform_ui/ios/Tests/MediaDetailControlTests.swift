@@ -46,6 +46,21 @@ final class MediaDetailControlTests: XCTestCase {
         XCTAssertEqual(button.overrideUserInterfaceStyle, .dark)
     }
 
+    func testIconOnlyKeepsAccessibleNameAndCentersSymbol() {
+        let view = control(["iconOnly": true])
+        let button = view.button
+        button.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
+        button.layoutIfNeeded()
+        XCTAssertNil(button.configuration?.title)
+        XCTAssertEqual(button.accessibilityLabel, "评论")
+        XCTAssertNotNil(button.imageView?.image)
+        XCTAssertEqual(button.imageView!.frame.midX, button.bounds.midX, accuracy: 1)
+        XCTAssertEqual(button.imageView!.frame.midY, button.bounds.midY, accuracy: 1)
+        view.update(["label": "剧集", "symbol": "list.bullet", "enabled": true])
+        XCTAssertEqual(button.configuration?.title, "剧集")
+        XCTAssertEqual(button.titleLabel?.numberOfLines, 1)
+    }
+
     func testAccentOnlyAppliesToPrimaryAndClearsOnReuse() {
         let view = control(["primary": true, "color": NSNumber(value: UInt32(0xFFFF3366))])
         let accent = UIColor(red: 1, green: 0.2, blue: 0.4, alpha: 1)
