@@ -992,6 +992,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
       return;
     }
     try {
+      await windowManager.setSkipTaskbar(false);
       final isMinimized = await windowManager.isMinimized();
       if (isMinimized) {
         await windowManager.restore();
