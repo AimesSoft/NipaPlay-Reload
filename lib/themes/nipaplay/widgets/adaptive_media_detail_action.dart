@@ -20,6 +20,7 @@ class AdaptiveMediaDetailActionButton extends StatefulWidget {
     this.emphasis = MediaDetailActionEmphasis.secondary,
     this.expanded = false,
     this.iconOnly = false,
+    this.grouped = false,
   });
 
   final IconData icon;
@@ -29,6 +30,7 @@ class AdaptiveMediaDetailActionButton extends StatefulWidget {
   final MediaDetailActionEmphasis emphasis;
   final bool expanded;
   final bool iconOnly;
+  final bool grouped;
 
   static bool get supportsNativeLiquidGlass =>
       AppleNativeMediaControl.supported;
@@ -100,10 +102,14 @@ class _AdaptiveMediaDetailActionButtonState
         child: AppleNativeMediaControl(
           label: widget.label,
           iconOnly: widget.iconOnly,
+          plain: widget.grouped,
           detail: widget.detail,
           symbol: switch (widget.label) {
             '返回' => 'chevron.left',
-            '评论' => 'bubble.right',
+            '评论' => 'bubble.left.and.bubble.right',
+            '收藏' => 'heart',
+            '取消收藏' => 'heart.fill',
+            '编辑 Bangumi 评分' => 'square.and.pencil',
             '剧集' => 'list.bullet',
             '更多' => 'ellipsis',
             _ => 'play.fill',
@@ -130,9 +136,11 @@ class _AdaptiveMediaDetailActionButtonState
               vertical: widget.detail == null ? 12 : 9,
             ),
       decoration: BoxDecoration(
-        color: background,
+        color: widget.grouped
+            ? Colors.white.withValues(alpha: active ? 0.12 : 0)
+            : background,
         borderRadius: BorderRadius.circular(widget.iconOnly ? 22 : 10),
-        border: Border.all(color: border),
+        border: widget.grouped ? null : Border.all(color: border),
         boxShadow: primary && active
             ? [
                 BoxShadow(
@@ -234,6 +242,49 @@ class AdaptiveMediaDetailIconButton extends StatelessWidget {
         label: tooltip,
         iconOnly: true,
         onPressed: onPressed,
+      ),
+    );
+  }
+}
+
+/// A single capsule containing independently focusable media actions.
+class AdaptiveMediaDetailActionGroup extends StatelessWidget {
+  const AdaptiveMediaDetailActionGroup({
+    super.key,
+    required this.children,
+    this.nativeActions,
+  });
+
+  final List<Widget> children;
+  final List<AppleNativeMediaAction>? nativeActions;
+
+  @override
+  Widget build(BuildContext context) {
+    final nativeGlass =
+        AdaptiveMediaDetailActionButton.useNativeLiquidGlass(context);
+    if (nativeGlass && nativeActions != null) {
+      return AppleNativeMediaActionGroup(actions: nativeActions!);
+    }
+    return SizedBox(
+      height: 44,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.32),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.18),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(mainAxisSize: MainAxisSize.min, children: children),
+          ),
+        ],
       ),
     );
   }

@@ -27,6 +27,12 @@ class BangumiAnime {
   final List<EpisodeData>? episodeList; // Changed from 'episodes' to 'episodeList' to avoid conflict if 'episodes' is a field name in JSON for BangumiDetails itself.
   
   // 新增字段：存储番剧信息的语言类型
+  /// Original provider evidence retained for Erika-compatible TMDB resolution.
+  /// Null means an older cache/list response has not supplied these fields yet.
+  final List<Map<String, String>>? onlineDatabases;
+  final String? dandanplayType;
+  final List<String>? sourceAirDates;
+
   final String? language; // 'zh' for简体中文, 'zh_Hant' for繁体中文
 
   bool get hasDetails => summary != null && (rating != null || ratingDetails != null) && (tags != null || metadata != null);
@@ -55,6 +61,9 @@ class BangumiAnime {
     this.searchKeyword,
     this.episodeList,
     this.language,
+    this.onlineDatabases,
+    this.dandanplayType,
+    this.sourceAirDates,
   });
 
   BangumiAnime copyWith({
@@ -82,6 +91,9 @@ class BangumiAnime {
     String? searchKeyword,
     List<EpisodeData>? episodeList,
     String? language,
+    List<Map<String, String>>? onlineDatabases,
+    String? dandanplayType,
+    List<String>? sourceAirDates,
   }) {
     return BangumiAnime(
       id: id ?? this.id,
@@ -109,6 +121,9 @@ class BangumiAnime {
       searchKeyword: searchKeyword ?? this.searchKeyword,
       episodeList: episodeList ?? this.episodeList,
       language: language ?? this.language,
+      onlineDatabases: onlineDatabases ?? this.onlineDatabases,
+      dandanplayType: dandanplayType ?? this.dandanplayType,
+      sourceAirDates: sourceAirDates ?? this.sourceAirDates,
     );
   }
 
@@ -141,6 +156,9 @@ class BangumiAnime {
       typeDescription: null,
       titles: null,
       episodeList: null, // Episodes are not in BangumiIntro
+      onlineDatabases: _readOnlineDatabases(json),
+      dandanplayType: json['type'] as String?,
+      sourceAirDates: _readSourceAirDates(json),
       language: 'zh', // 默认语言为简体中文
     );
   }
@@ -261,6 +279,9 @@ class BangumiAnime {
       titles: parsedTitles,
       searchKeyword: json['searchKeyword'] as String?,
       episodeList: parsedEpisodeList,
+      onlineDatabases: _readOnlineDatabases(json) ?? const [],
+      dandanplayType: json['type'] as String?,
+      sourceAirDates: _readSourceAirDates(json),
       language: 'zh', // 默认语言为简体中文
     );
   }
@@ -298,6 +319,9 @@ class BangumiAnime {
         'episodeTitle': e.title,
         'airDate': e.airDate
       }).toList(), // 额外保存一份原始格式的数据，确保fromDandanplayDetail能正确解析
+      'onlineDatabases': onlineDatabases,
+      'type': dandanplayType,
+      'sourceAirDates': sourceAirDates,
       'language': language, // 保存番剧信息的语言类型
     };
   }
@@ -375,6 +399,9 @@ class BangumiAnime {
     }
 
     return BangumiAnime(
+      onlineDatabases: _readOnlineDatabases(json),
+      dandanplayType: json['type'] as String?,
+      sourceAirDates: _readSourceAirDates(json),
       id: id,
       name: resolvedName,
       nameCn: resolvedNameCn,
@@ -420,3 +447,25 @@ class EpisodeData {
     );
   }
 } 
+
+List<Map<String, String>>? _readOnlineDatabases(Map<String, dynamic> json) {
+  final rows = json['onlineDatabases'];
+  if (rows is! List) return null;
+  return rows.whereType<Map>().map((row) => <String, String>{
+    'name': row['name']?.toString() ?? '',
+    'url': row['url']?.toString() ?? '',
+  }).toList();
+}
+
+List<String>? _readSourceAirDates(Map<String, dynamic> json) {
+  final saved = json['sourceAirDates'];
+  if (saved is List) return saved.whereType<String>().toList();
+  final dates = <String>[];
+  for (final field in ['seasons', 'episodes']) {
+    final rows = json[field];
+    if (rows is List) {
+      dates.addAll(rows.whereType<Map>().map((row) => row['airDate']).whereType<String>());
+    }
+  }
+  return dates.isEmpty ? null : dates;
+}

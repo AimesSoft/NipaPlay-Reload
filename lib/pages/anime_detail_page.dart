@@ -1,5 +1,7 @@
 import 'package:nipaplay/models/media_library_scope.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/apple_native_media_control.dart';
+import 'package:nipaplay/services/tmdb_media_artwork_service.dart';
+import 'package:nipaplay/models/tmdb_artwork.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -72,8 +74,6 @@ enum _EpisodeCleanupAction {
 
 enum _ImmersiveMoreAction {
   changeBackdrop,
-  toggleFavorite,
-  editBangumiRating,
   searchTags,
   reverseEpisodes,
   clearHistory,
@@ -93,6 +93,8 @@ class AnimeDetailPage extends StatefulWidget {
   final PlaybackDetailContext? playbackDetailContext;
   final bool renderInWindowScaffold;
   final bool embeddedInPlayback;
+  final Object? posterHeroTag;
+  final String? posterImageUrl;
 
   const AnimeDetailPage({
     super.key,
@@ -105,6 +107,8 @@ class AnimeDetailPage extends StatefulWidget {
     this.playbackDetailContext,
     this.renderInWindowScaffold = true,
     this.embeddedInPlayback = false,
+    this.posterHeroTag,
+    this.posterImageUrl,
   });
 
   @override
@@ -127,6 +131,8 @@ class AnimeDetailPage extends StatefulWidget {
     PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder,
     String? sharedSourceLabel,
     PlaybackDetailContext? playbackDetailContext,
+    Object? posterHeroTag,
+    String? posterImageUrl,
   }) async {
     if (NipaplayLargeScreenModeScope.isActiveOf(context) &&
         playbackDetailContext == null) {
@@ -162,6 +168,7 @@ class AnimeDetailPage extends StatefulWidget {
       return Navigator.of(context).push<WatchHistoryItem>(
         ImmersiveMediaDetailPageRoute<WatchHistoryItem>(
           enableAnimation: enableAnimation,
+          animatePoster: posterHeroTag != null,
           builder: (_) => AnimeDetailPage(
             animeId: animeId,
             mediaLibraryScope:
@@ -172,6 +179,8 @@ class AnimeDetailPage extends StatefulWidget {
             sharedSourceLabel: sharedSourceLabel,
             playbackDetailContext: playbackDetailContext,
             renderInWindowScaffold: false,
+            posterHeroTag: posterHeroTag,
+            posterImageUrl: posterImageUrl,
           ),
         ),
       );
@@ -276,6 +285,15 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
   bool _isImmersiveDescriptionExpanded = false;
   bool _isImmersiveCommentsOpen = false;
   String? _immersiveBackdropUrl;
+  String? _immersiveLogoUrl;
+  Map<int, String> _immersiveEpisodeStills = const {};
+  List<String> _immersiveBackdropFallbacks = const [];
+  static final _tmdbArtworkService = TmdbMediaArtworkService(
+    loadDetails: (id) =>
+        BangumiService.instance.getAnimeDetails(id, forceRefresh: true),
+    bangumiServer: NetworkSettings.getBangumiServer,
+    requestUri: WebRemoteAccessService.proxyUri,
+  );
 
   int _immersiveBackdropRequestId = 0;
 
@@ -2594,31 +2612,54 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     final anime = _detailedAnime;
     final custom = anime?.backgroundImageUrl?.trim();
 
-    String? resolved;
-    if (custom?.isNotEmpty == true) {
-      resolved = custom;
-    } else if (anime != null) {
-      final subjectId = _extractBangumiSubjectId(anime);
-      if (subjectId != null) {
-        final bangumiServer = await NetworkSettings.getBangumiServer();
-        resolved = Uri.parse(bangumiServer).replace(
-          path: '${Uri.parse(bangumiServer).path}/v0/subjects/$subjectId/image'
-              .replaceAll('//', '/'),
-          queryParameters: const <String, String>{'type': 'large'},
-        ).toString();
-      }
+    String? bangumiLarge;
+    final subjectId = anime == null ? null : _extractBangumiSubjectId(anime);
+    if (subjectId != null) {
+      final server = Uri.parse(await NetworkSettings.getBangumiServer());
+      bangumiLarge = server.replace(
+        path:
+            '${server.path}/v0/subjects/$subjectId/image'.replaceAll('//', '/'),
+        queryParameters: const {'type': 'large'},
+      ).toString();
     }
-
-    resolved ??= _getPosterUrl();
-    if (kIsWeb && resolved != null) {
-      resolved = WebRemoteAccessService.imageProxyUrl(resolved) ?? resolved;
+    if (!mounted || requestId != _immersiveBackdropRequestId) return;
+    List<String> candidates(String? tmdb) => mediaDetailBackdropCandidates(
+          custom: custom,
+          tmdb: tmdb,
+          bangumiLarge: bangumiLarge,
+          poster: _getPosterUrl(),
+        )
+            .map((url) =>
+                kIsWeb ? WebRemoteAccessService.imageProxyUrl(url) ?? url : url)
+            .toList();
+    // Cached/custom/Bangumi artwork remains visible while TMDB is resolved.
+    if (_immersiveBackdropUrl == null || custom?.isNotEmpty == true) {
+      final initial = candidates(null);
+      setState(() {
+        _immersiveBackdropUrl = initial.firstOrNull;
+        _immersiveBackdropFallbacks = initial.skip(1).toList();
+      });
     }
-    if (!mounted ||
-        requestId != _immersiveBackdropRequestId ||
-        resolved == _immersiveBackdropUrl) {
-      return;
+    final artwork = anime != null && anime.id > 0
+        ? await _tmdbArtworkService.resolve(anime)
+        : null;
+    if (!mounted || requestId != _immersiveBackdropRequestId) return;
+    final backgrounds = candidates(artwork?.backdropUrl);
+    final logo = artwork?.logoUrl;
+    setState(() {
+      _immersiveBackdropUrl = backgrounds.firstOrNull;
+      _immersiveBackdropFallbacks = backgrounds.skip(1).toList();
+      _immersiveLogoUrl = kIsWeb && logo != null
+          ? WebRemoteAccessService.imageProxyUrl(logo) ?? logo
+          : logo;
+    });
+    if (artwork != null && anime != null) {
+      final stills = await _tmdbArtworkService.resolveEpisodeStills(
+          anime, artwork.reference);
+      if (!mounted || requestId != _immersiveBackdropRequestId) return;
+      setState(() => _immersiveEpisodeStills = stills.map((id, url) => MapEntry(
+          id, kIsWeb ? WebRemoteAccessService.imageProxyUrl(url) ?? url : url)));
     }
-    setState(() => _immersiveBackdropUrl = resolved);
   }
 
   String _immersiveSummary(BangumiAnime anime) {
@@ -3103,10 +3144,6 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     switch (action) {
       case _ImmersiveMoreAction.changeBackdrop:
         _changeImmersiveBackdrop(anime);
-      case _ImmersiveMoreAction.toggleFavorite:
-        _toggleFavorite();
-      case _ImmersiveMoreAction.editBangumiRating:
-        _showRatingDialog();
       case _ImmersiveMoreAction.searchTags:
         _openTagSearch();
       case _ImmersiveMoreAction.reverseEpisodes:
@@ -3118,25 +3155,14 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   Widget _buildImmersiveActions(BangumiAnime anime) {
     final episodes = anime.episodeList ?? const <EpisodeData>[];
-    final resolved =
-        episodes.isEmpty ? null : _resolveImmersivePrimary(episodes);
-    final useNativeGlass =
-        AdaptiveMediaDetailActionButton.useNativeLiquidGlass(context);
+    final resolved = episodes.isEmpty
+        ? null
+        : _resolveImmersivePrimary(episodes);
     final moreItems = [
       DropdownMenuItemData<_ImmersiveMoreAction>(
         title: '修改背景图',
         value: _ImmersiveMoreAction.changeBackdrop,
       ),
-      if (DandanplayService.isLoggedIn && anime.id > 0)
-        DropdownMenuItemData<_ImmersiveMoreAction>(
-          title: _isFavorited ? '取消收藏' : '收藏',
-          value: _ImmersiveMoreAction.toggleFavorite,
-        ),
-      if (BangumiApiService.isLoggedIn)
-        DropdownMenuItemData<_ImmersiveMoreAction>(
-          title: '编辑 Bangumi 评分与收藏',
-          value: _ImmersiveMoreAction.editBangumiRating,
-        ),
       if (anime.tags?.isNotEmpty == true)
         DropdownMenuItemData<_ImmersiveMoreAction>(
           title: '浏览标签',
@@ -3163,18 +3189,33 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
           emphasis: MediaDetailActionEmphasis.primary,
           onPressed: () => _playImmersivePrimary(anime),
         ),
-        AdaptiveMediaDetailActionButton(
-          icon: Ionicons.chatbubble_outline,
-          label: '评论',
-          iconOnly: true,
-          onPressed: _openImmersiveComments,
-        ),
-        if (useNativeGlass && AppleNativeMediaControl.supported)
-          SizedBox(
-            width: 44,
-            child: AppleNativeMediaControl(
+        AdaptiveMediaDetailActionGroup(
+          nativeActions: [
+            AppleNativeMediaAction(
+              label: _isFavorited ? '取消收藏' : '收藏',
+              symbol: _isFavorited ? 'heart.fill' : 'heart',
+              onPressed:
+                  DandanplayService.isLoggedIn &&
+                      anime.id > 0 &&
+                      !_isTogglingFavorite
+                  ? _toggleFavorite
+                  : null,
+            ),
+            AppleNativeMediaAction(
+              label: '评论',
+              symbol: 'bubble.left.and.bubble.right',
+              selected: _isImmersiveCommentsOpen,
+              onPressed: _openImmersiveComments,
+            ),
+            AppleNativeMediaAction(
+              label: '编辑 Bangumi 评分',
+              symbol: 'square.and.pencil',
+              onPressed: BangumiApiService.isLoggedIn
+                  ? _showRatingDialog
+                  : null,
+            ),
+            AppleNativeMediaAction(
               label: '更多',
-              iconOnly: true,
               symbol: 'ellipsis',
               items: [
                 for (final item in moreItems)
@@ -3183,24 +3224,64 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               onSelected: (index) =>
                   _handleImmersiveMoreAction(moreItems[index].value, anime),
             ),
-          )
-        else
-          BlurDropdown<_ImmersiveMoreAction>(
-            dropdownKey: _immersiveMoreDropdownKey,
-            onItemSelected: (action) =>
-                _handleImmersiveMoreAction(action, anime),
-            // 纯动作菜单，没有“当前选中项”，不预先高亮第一行。
-            highlightInitialItem: false,
-            items: moreItems,
-            controlBuilder: (context, selectedLabel) => IgnorePointer(
+          ],
+          children: [
+            Tooltip(
+              message: _isFavorited ? '取消收藏' : '收藏',
               child: AdaptiveMediaDetailActionButton(
-                icon: Ionicons.ellipsis_horizontal,
-                label: '更多',
+                icon: _isFavorited ? Ionicons.heart : Ionicons.heart_outline,
+                label: _isFavorited ? '取消收藏' : '收藏',
                 iconOnly: true,
-                onPressed: () {},
+                grouped: true,
+                onPressed:
+                    DandanplayService.isLoggedIn &&
+                        anime.id > 0 &&
+                        !_isTogglingFavorite
+                    ? _toggleFavorite
+                    : null,
               ),
             ),
-          ),
+            Tooltip(
+              message: '评论',
+              child: AdaptiveMediaDetailActionButton(
+                icon: Ionicons.chatbubbles_outline,
+                label: '评论',
+                iconOnly: true,
+                grouped: true,
+                onPressed: _openImmersiveComments,
+              ),
+            ),
+            Tooltip(
+              message: '编辑 Bangumi 评分',
+              child: AdaptiveMediaDetailActionButton(
+                icon: Ionicons.create_outline,
+                label: '编辑 Bangumi 评分',
+                iconOnly: true,
+                grouped: true,
+                onPressed: BangumiApiService.isLoggedIn
+                    ? _showRatingDialog
+                    : null,
+              ),
+            ),
+            BlurDropdown<_ImmersiveMoreAction>(
+              dropdownKey: _immersiveMoreDropdownKey,
+              onItemSelected: (action) =>
+                  _handleImmersiveMoreAction(action, anime),
+              // 纯动作菜单，没有“当前选中项”，不预先高亮第一行。
+              highlightInitialItem: false,
+              items: moreItems,
+              controlBuilder: (context, selectedLabel) => IgnorePointer(
+                child: AdaptiveMediaDetailActionButton(
+                  icon: Ionicons.ellipsis_horizontal,
+                  label: '更多',
+                  iconOnly: true,
+                  grouped: true,
+                  onPressed: () {},
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -3257,6 +3338,7 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
               title:
                   hasEpisodePrefix || episodeTitle.isEmpty ? '' : episodeTitle,
               thumbnailPath: history?.thumbnailPath,
+              fallbackThumbnailUrl: _immersiveEpisodeStills[episode.id],
               progress: progress,
               // duration 单位为毫秒，格式化前换算为秒。
               durationLabel:
@@ -3360,6 +3442,22 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
 
   Widget _buildImmersiveContent() {
     if (_isLoading) {
+      if (widget.posterHeroTag != null && _sharedSummary != null) {
+        final summary = _sharedSummary!;
+        return Stack(fit: StackFit.expand, children: [
+          ImmersiveAnimeDetailScaffold(
+            title: summary.nameCn?.isNotEmpty == true
+                ? summary.nameCn!
+                : summary.name,
+            posterUrl: widget.posterImageUrl ?? summary.imageUrl,
+            posterHeroTag: widget.posterHeroTag,
+            onBack: _dismissDetailIfNeeded,
+            actions: const SizedBox(height: 44),
+            episodeRail: const SizedBox.shrink(),
+          ),
+          const Center(child: CircularProgressIndicator()),
+        ]);
+      }
       return const ColoredBox(
         color: Color(0xFF080B12),
         child: Center(child: CircularProgressIndicator()),
@@ -3413,7 +3511,11 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     return ImmersiveAnimeDetailScaffold(
       title: displayTitle.isNotEmpty ? displayTitle : anime.name,
       subtitle: displaySubtitle,
-      backdropUrl: _immersiveBackdropUrl ?? _getPosterUrl(),
+      backdropUrl: _immersiveBackdropUrl,
+      logoUrl: _immersiveLogoUrl,
+      posterUrl: widget.posterImageUrl ?? _getPosterUrl(),
+      posterHeroTag: widget.posterHeroTag,
+      fallbackBackdropUrls: _immersiveBackdropFallbacks,
       metadata: _immersiveMetadata(anime),
       rating: _immersiveBangumiRating(anime),
       description: summary.isEmpty ? null : summary,
