@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import SwiftUI
 
 extension AdaptivePlatformUiPlugin {
     static func registerMediaDetailControls(with registrar: FlutterPluginRegistrar) {
@@ -25,7 +26,11 @@ private final class MediaDetailControlFactory: NSObject, FlutterPlatformViewFact
     }
     func create(withFrame frame: CGRect, viewIdentifier viewId: Int64,
                 arguments args: Any?) -> FlutterPlatformView {
-        MediaDetailControlView(frame, viewId, messenger, args as? [String: Any] ?? [:])
+        let params = args as? [String: Any] ?? [:]
+        if #available(iOS 26.0, *), params["actions"] != nil {
+            return MediaDetailActionGroupView(frame, viewId, messenger, params)
+        }
+        return MediaDetailControlView(frame, viewId, messenger, params)
     }
 }
 
@@ -64,7 +69,8 @@ final class MediaDetailControlView: NSObject, FlutterPlatformView {
     func update(_ args: [String: Any]) {
         guard #available(iOS 26.0, *) else { return }
         let primary = args["primary"] as? Bool ?? false
-        var config: UIButton.Configuration = primary ? .prominentGlass() : .glass()
+        var config: UIButton.Configuration = (args["plain"] as? Bool ?? false)
+            ? .plain() : (primary ? .prominentGlass() : .glass())
         let iconOnly = args["iconOnly"] as? Bool ?? false
         config.title = iconOnly ? nil : args["label"] as? String
         config.subtitle = iconOnly ? nil : args["detail"] as? String
@@ -126,4 +132,36 @@ final class MediaDetailControlView: NSObject, FlutterPlatformView {
         if #available(iOS 14.0, *), button.menu != nil { return }
         channel.invokeMethod("pressed", arguments: nil)
     }
+}
+
+
+/// One SwiftUI host owns the shared interactive glass and its native controls.
+@available(iOS 26.0, *)
+final class MediaDetailActionGroupView: NSObject, FlutterPlatformView {
+    let model = MediaCapsuleModel()
+    let container: MediaCapsuleHostingContainer
+    private let channel: FlutterMethodChannel
+
+    init(_ frame: CGRect, _ id: Int64, _ messenger: FlutterBinaryMessenger,
+         _ args: [String: Any]) {
+        container = MediaCapsuleHostingContainer(frame: frame, model: model)
+        channel = FlutterMethodChannel(name: "nipaplay/native_media_control_\(id)", binaryMessenger: messenger)
+        super.init()
+        model.onPressed = { [weak self] index in
+            self?.channel.invokeMethod("pressed", arguments: ["index": index])
+        }
+        model.onSelected = { [weak self] index, selected in
+            self?.channel.invokeMethod("selected", arguments: ["index": index, "selected": selected])
+        }
+        model.update(args)
+        channel.setMethodCallHandler { [weak self] call, result in
+            guard call.method == "update" else { result(FlutterMethodNotImplemented); return }
+            if let args = call.arguments as? [String: Any] { self?.model.update(args) }
+            result(nil)
+        }
+    }
+
+    deinit { channel.setMethodCallHandler(nil) }
+    func view() -> UIView { container }
+    func update(_ args: [String: Any]) { model.update(args) }
 }

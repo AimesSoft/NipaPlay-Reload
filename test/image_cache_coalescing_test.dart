@@ -26,12 +26,19 @@ void main() {
         'AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
     var requests = 0;
     var fail = false;
+    var corruptNext = false;
     server.listen((request) async {
       requests++;
       // Keep requests in flight long enough for the second decoded size to join.
       await Future<void>.delayed(const Duration(milliseconds: 30));
       request.response.statusCode = fail ? 500 : 200;
-      request.response.add(bytes);
+      request.response.add(request.uri.path.endsWith('.svg')
+          ? utf8.encode(
+              '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="30"></svg>')
+          : corruptNext
+              ? utf8.encode('truncated')
+              : bytes);
+      corruptNext = false;
       await request.response.close();
     });
     final url = 'http://${server.address.address}:${server.port}/poster.png';
@@ -46,12 +53,39 @@ void main() {
       expect(identical(images[0], images[2]), isTrue);
       await manager.loadImage(url, targetWidth: 24, targetHeight: 24);
       expect(requests, 1, reason: 'new size can reuse disk bytes');
+      // Decoded-memory eviction is not disk eviction. Reopening or requesting
+      // encoded logo bytes must not fetch the original again.
+      manager.clear();
+      await manager.loadImage(url, targetWidth: 16, targetHeight: 16);
+      await manager.loadImageBytes(url);
+      expect(requests, 1);
+
+      corruptNext = true;
+      final damaged = '$url?damaged';
+      await manager.loadImageBytes(damaged);
+      final beforeRepair = requests;
+      await manager.loadImage(damaged, targetWidth: 16);
+      expect(requests, beforeRepair + 1,
+          reason: 'repair corrupt cached bytes once');
+      manager.clear();
+      await manager.loadImage(damaged, targetWidth: 16);
+      expect(requests, beforeRepair + 1,
+          reason: 'repaired disk data is reused');
+      final svgUrl = '$url.svg';
+      final beforeSvg = requests;
+      final svg = await manager.loadImageBytes(svgUrl);
+      expect(utf8.decode(svg), startsWith('<svg'));
+      await manager.loadImageBytes(svgUrl);
+      expect(requests, beforeSvg + 1,
+          reason: 'SVG logos share the persistent byte cache');
+      final beforeFailure = requests;
+
       fail = true;
       await expectLater(manager.loadImage('$url?retry', cacheOnDisk: false),
           throwsA(anything));
       fail = false;
       await manager.loadImage('$url?retry', cacheOnDisk: false);
-      expect(requests, 3);
+      expect(requests, beforeFailure + 2);
       final before =
           await directory.list(recursive: true).where((f) => f is File).length;
       await manager.loadImage('$url?no-disk', cacheOnDisk: false);

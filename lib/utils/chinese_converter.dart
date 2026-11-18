@@ -106,6 +106,9 @@ class ChineseConverter {
             ? convert(anime.typeDescription)
             : null,
         bangumiUrl: anime.bangumiUrl,
+        onlineDatabases: anime.onlineDatabases,
+        dandanplayType: anime.dandanplayType,
+        sourceAirDates: anime.sourceAirDates,
         isOnAir: anime.isOnAir,
         isFavorited: anime.isFavorited,
         titles: anime.titles,
@@ -241,6 +244,9 @@ class ChineseConverter {
             ? convert(anime.typeDescription)
             : null,
         bangumiUrl: anime.bangumiUrl,
+        onlineDatabases: anime.onlineDatabases,
+        dandanplayType: anime.dandanplayType,
+        sourceAirDates: anime.sourceAirDates,
         isOnAir: anime.isOnAir,
         isFavorited: anime.isFavorited,
         titles: anime.titles,

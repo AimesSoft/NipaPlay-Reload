@@ -18,6 +18,8 @@ class ThemedAnimeDetail {
     PlayableItem Function(SharedRemoteEpisode episode)? sharedEpisodeBuilder,
     String? sharedSourceLabel,
     PlaybackDetailContext? playbackDetailContext,
+    Object? posterHeroTag,
+    String? posterImageUrl,
   }) {
     return AnimeDetailPage.show(
       context,
@@ -28,6 +30,8 @@ class ThemedAnimeDetail {
       sharedEpisodeBuilder: sharedEpisodeBuilder,
       sharedSourceLabel: sharedSourceLabel,
       playbackDetailContext: playbackDetailContext,
+      posterHeroTag: posterHeroTag,
+      posterImageUrl: posterImageUrl,
     );
   }
 }

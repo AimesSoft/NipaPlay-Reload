@@ -1,3 +1,4 @@
+import 'package:nipaplay/themes/nipaplay/widgets/media_detail_poster.dart';
 import 'package:nipaplay/models/media_library_scope.dart';
 import 'package:nipaplay/widgets/page_activity_mixin.dart';
 import 'dart:async';
@@ -1236,6 +1237,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             final anime = animeSummaries[index];
             return HorizontalAnimeCard(
               key: ValueKey('shared_${anime.animeId}'),
+              posterHeroTag: mediaLibraryPosterHeroTag(
+                  'shared:${provider.activeHost?.baseUrl}', anime.animeId),
               title:
                   anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
               imageUrl: anime.imageUrl ?? '',
@@ -1903,6 +1906,9 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         context,
         anime.animeId,
         sharedSummary: anime,
+        posterHeroTag: mediaLibraryPosterHeroTag(
+            'shared:${provider.activeHost?.baseUrl}', anime.animeId),
+        posterImageUrl: anime.imageUrl,
         sharedEpisodeLoader: () =>
             provider.loadAnimeEpisodes(anime.animeId, force: true),
         sharedEpisodeBuilder: (episode) => provider.buildPlayableItem(

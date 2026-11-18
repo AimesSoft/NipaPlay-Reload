@@ -446,7 +446,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
-    expect(find.byType(ScaleTransition), findsWidgets);
+    expect(find.byType(ClipPath), findsWidgets);
     expect(find.text('媒体详情'), findsOneWidget);
     await tester.pumpAndSettle();
 
@@ -564,7 +564,9 @@ void main() {
           )
           .height);
       previewLines.add(tester.widget<Text>(find.text(description)).maxLines!);
-      titleTops.add(tester.getTopLeft(find.text('自适应标题')).dy);
+      titleTops.add(tester
+          .getTopLeft(find.byKey(const ValueKey('immersive-hero-title')))
+          .dy);
       expect(find.text('查看更多'), findsOneWidget);
       expect(find.byKey(const ValueKey('immersive-description-scroll')),
           findsNothing);
@@ -709,7 +711,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('魔法少女小圆'), findsOneWidget);
+      expect(find.text('魔法少女小圆'), findsNWidgets(2));
       expect(find.text('开始观看'), findsOneWidget);
       expect(find.text('剧集轨道'), findsOneWidget);
       if (size.height > size.width) {

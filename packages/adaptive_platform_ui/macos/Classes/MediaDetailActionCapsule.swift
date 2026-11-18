@@ -1,0 +1,1 @@
+../../tvos/Classes/MediaDetailActionCapsule.swift
