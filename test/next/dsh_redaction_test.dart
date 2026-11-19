@@ -30,7 +30,7 @@ void main() {
       () async {
     final out = await _node(r'''
 const r = new bridge.Redactions();
-r.remember(['sk-live-0123456789abcdef', 'x', 'abc', 'p4ss', 'http', '密码', 42, 'p@ss w/ord+1234']);
+r.remember(['sk-live-0123456789abcdef', 'x', 'abc', 'p4ss', 'http', '密码', 'n!', 42, 'p@ss w/ord+1234']);
 const text = (t) => r.text(t);
 console.log(JSON.stringify({
   plain: text('key=sk-live-0123456789abcdef\n'),
@@ -43,6 +43,10 @@ console.log(JSON.stringify({
   escaped: text('{"out":"\\np4ss"}'),
   encodedAlone: text('https://x/?p=' + encodeURIComponent('密码')),
   encodedInside: text('https://x/' + encodeURIComponent('密码重置')),
+  escapedSpace: text('{"out":"\\u00a0p4ss"}'),
+  encodedStop: text('https://x/?p=' + encodeURIComponent('密码。')),
+  encodedLetter: text('https://x/' + encodeURIComponent('密码') + '%61'),
+  insideEscape: text('{"out":"\\n!"}'),
   untouched: text('nothing here'),
   size: r.size,
 }));
@@ -63,6 +67,15 @@ console.log(JSON.stringify({
     expect(out['encodedAlone'], 'https://x/?p=${'[已隐去的凭据]'}');
     expect(out['encodedInside'],
         'https://x/${Uri.encodeComponent('密码重置')}');
+    // Neighbours are read as what they stand for: `\u00a0` is a space,
+    // `%E3%80%82` a full stop, `%61` the letter a; and `\n!` is a newline
+    // and `!`, not the secret `n!`.
+    expect(out['escapedSpace'], isNot(contains('p4ss')));
+    expect(out['encodedStop'],
+        'https://x/?p=${'[已隐去的凭据]'}${Uri.encodeComponent('。')}');
+    expect(out['encodedLetter'],
+        'https://x/${Uri.encodeComponent('密码')}%61');
+    expect(out['insideEscape'], r'{"out":"\n!"}');
     expect(out['untouched'], 'nothing here');
   }, skip: node ? false : 'node is not on PATH');
 

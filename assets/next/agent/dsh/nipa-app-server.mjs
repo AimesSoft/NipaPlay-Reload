@@ -405,18 +405,77 @@ export function secretForms(secret) {
 
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Standing alone: not next to a letter, digit or `_`, nor to a byte of a
-// percent-encoded non-ASCII letter (`%E9`); a JSON escape before it (`\n`,
-// `\u001f`) is a separator, not the letter `n`.
-const WORD = String.raw`[\p{L}\p{N}_]`;
-const ENCODED_LETTER = String.raw`%[89A-Fa-f][0-9A-Fa-f]`;
-const ESCAPE_BEFORE = String.raw`(?<=\\[nrtbf])|(?<=\\u00[01][0-9A-Fa-f])`;
+// Standing alone: the characters on either side, as the text means them,
+// are not letters, digits or `_`. Tool output is often JSON or a URL, so a
+// neighbour written as a JSON escape (`\n`, `\u00a0`) or as percent-encoded
+// UTF-8 (`%E3%80%82`) is read as the character it stands for; and a match
+// that begins inside an escape (`n!` in `\n!`) is not the secret.
+const LETTER = /[\p{L}\p{N}_]/u;
+const JSON_ESCAPES = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '"': '"', '\\': '\\', '/': '/' };
+
+function unescapedBackslash(text, i) {
+  if (text[i] !== '\\') return false;
+  let run = 0;
+  for (let k = i - 1; k >= 0 && text[k] === '\\'; k--) run++;
+  return run % 2 === 0;
+}
+
+function insideEscape(text, i) {
+  if (i > 0 && unescapedBackslash(text, i - 1)) return true;
+  for (let back = 2; back <= 5; back++) {
+    const j = i - back;
+    if (j >= 0 && text[j + 1] === 'u' && unescapedBackslash(text, j) &&
+        /^[0-9A-Fa-f]*$/.test(text.slice(j + 2, i))) return true;
+  }
+  return false;
+}
+
+function percentChar(chunk) {
+  if (!/^(%[0-9A-Fa-f]{2})+$/.test(chunk)) return null;
+  try {
+    const decoded = decodeURIComponent(chunk);
+    return [...decoded].length === 1 ? decoded : null;
+  } catch { return null; }
+}
+
+function charBefore(text, i) {
+  if (i <= 0) return null;
+  if (i >= 6 && unescapedBackslash(text, i - 6) && text[i - 5] === 'u' &&
+      /^[0-9A-Fa-f]{4}$/.test(text.slice(i - 4, i))) {
+    return String.fromCharCode(parseInt(text.slice(i - 4, i), 16));
+  }
+  if (i >= 2 && unescapedBackslash(text, i - 2) && text[i - 1] in JSON_ESCAPES) {
+    return JSON_ESCAPES[text[i - 1]];
+  }
+  for (let bytes = 1; bytes <= 4 && i - 3 * bytes >= 0; bytes++) {
+    const char = percentChar(text.slice(i - 3 * bytes, i));
+    if (char) return char;
+  }
+  return [...text.slice(Math.max(0, i - 2), i)].pop();
+}
+
+function charAfter(text, j) {
+  if (j >= text.length) return null;
+  if (unescapedBackslash(text, j)) {
+    if (text[j + 1] === 'u' && /^[0-9A-Fa-f]{4}$/.test(text.slice(j + 2, j + 6))) {
+      return String.fromCharCode(parseInt(text.slice(j + 2, j + 6), 16));
+    }
+    if (text[j + 1] in JSON_ESCAPES) return JSON_ESCAPES[text[j + 1]];
+  }
+  for (let bytes = 1; bytes <= 4 && j + 3 * bytes <= text.length; bytes++) {
+    const char = percentChar(text.slice(j, j + 3 * bytes));
+    if (char) return char;
+  }
+  return String.fromCodePoint(text.codePointAt(j));
+}
+
 function standingAlone(form) {
-  return new RegExp(
-    String.raw`(?:(?<!${WORD})|${ESCAPE_BEFORE})(?<!${ENCODED_LETTER})` +
-      escapeRegExp(form) +
-      String.raw`(?!${WORD})(?!${ENCODED_LETTER})`,
-    'gu');
+  const pattern = new RegExp(escapeRegExp(form), 'gu');
+  return (text) => text.replace(pattern, (match, offset, whole) => {
+    if (insideEscape(whole, offset)) return match;
+    const before = charBefore(whole, offset), after = charAfter(whole, offset + match.length);
+    return (before && LETTER.test(before)) || (after && LETTER.test(after)) ? match : REDACTED;
+  });
 }
 
 export class Redactions {
@@ -443,9 +502,7 @@ export class Redactions {
     let out = value;
     for (const form of this.#forms) {
       if (!out.includes(form.text)) continue;
-      out = form.alone
-        ? out.replace(form.alone, REDACTED)
-        : out.split(form.text).join(REDACTED);
+      out = form.alone ? form.alone(out) : out.split(form.text).join(REDACTED);
     }
     return out;
   }
