@@ -354,7 +354,7 @@ trust_level = "trusted"
       expect(sent, contains('PRINTED=[已隐去的凭据] KEY=[已隐去的凭据]'));
       expect(sent, isNot(contains(secret)));
       expect(sent, isNot(contains(_key)));
-      expect(sent, contains('NipaPlay keeps its credentials'));
+      expect(sent, contains('This path is NipaPlay\'s own'));
       expect(jsonEncode(fake.requests.last['input']),
           isNot(contains('VAULT_FILE_BODY')));
       // A secret learned while it runs is hidden from then on.

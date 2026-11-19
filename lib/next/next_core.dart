@@ -69,6 +69,9 @@ import 'db/wiring.dart';
 import 'state/query.dart';
 import 'subscriptions/store.dart';
 import 'subscriptions/capability.dart';
+import 'store/capability.dart';
+import 'store/rika_store.dart';
+import 'store/sources.dart';
 import 'secrets/capability.dart';
 import 'state/views.dart';
 import 'state/system_views.dart';
@@ -192,6 +195,13 @@ final class NextCore {
   late final ChangeHistory changeHistory;
   late final ActivityInvocations activityInvocations;
   late final Followups followups;
+
+  /// 梨花's store: skills and DSH plugins, official or from npm.
+  late final RikaStore store;
+
+  /// Restarts the conversation host so store changes take effect; set by
+  /// the interface that runs it.
+  Future<void> Function()? restartAgent;
   late final SessionStore sessions;
   late final HarnessMemory memory;
   late final CapabilityCatalogChanges catalogChanges;
@@ -424,6 +434,7 @@ final class NextCore {
     diskDeletion.engine = engine;
     settingConsent.engine = engine;
     followups = Followups(database, engine, harnessLocation);
+    store = rikaStore(root);
     settings.register(inboxSettings(followups));
     media.service.folderRequest = followups.folderRequest;
     memory = HarnessMemory(harnessLocation, settings, followups.discover);
@@ -628,6 +639,12 @@ final class NextCore {
       programs.capability,
       programRepository,
       FollowupCapability(followups),
+      StoreCapability(store, restart: () async {
+        final restart = restartAgent ??
+            (throw const Failure(FailureCode.unavailable,
+                'No conversation host runs here to restart.'));
+        await restart();
+      }),
       UiDataCapability(uiData),
       LibraryCapability(libraryData),
     ];

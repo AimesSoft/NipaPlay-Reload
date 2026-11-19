@@ -28,6 +28,7 @@ Next 处于开发者预览阶段。梨花以当前系统用户的权限运行，
 
 - [自动化与个人工具](advanced/automation.md)：个人 harness、`nipa` 命令行、事件程序、定时程序、SQL。
 - [DSH 高级配置](advanced/dsh-config.md)：上下文预算、压缩、插件。
+- [梨花的商店](advanced/store.md)：技能和插件，官方列表与任意 npm 包。
 - [数据与恢复](advanced/data-and-recovery.md)：数据位置、备份、恢复、迁移。
 - [Linux 无界面版](advanced/headless.md)：在服务器上运行 NipaPlay 和梨花。
 

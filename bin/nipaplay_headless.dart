@@ -8,6 +8,7 @@ import 'package:nipaplay/next/headless/host_marker.dart';
 import 'package:nipaplay/next/headless/package_layout.dart';
 import 'package:nipaplay/next/headless/core.dart';
 import 'package:nipaplay/next/headless/dsh.dart';
+import 'package:nipaplay/next/headless/store_command.dart';
 import 'package:nipaplay/next/media/media_probe_io.dart';
 import 'package:nipaplay/next/harness_redaction.dart';
 import 'package:nipaplay/next/headless/vault.dart';
@@ -32,6 +33,7 @@ Future<void> main(List<String> arguments) async {
   var loginDandanplay = false;
   String? dshMode, agentMode;
   var keyStdin = false;
+  String? storeNpm;
   for (var i = 0; i < arguments.length; i++) {
     final key = arguments[i];
     if (key == '--version') {
@@ -62,7 +64,9 @@ Future<void> main(List<String> arguments) async {
           '      (the key is read from standard input, never from an argument: printf %s "\$KEY" | ... --key-stdin)\n'
           '  --model-status | --model-check | --model-clear --data DIR\n'
           '  --agent-enable | --agent-disable | --agent-status --data DIR (the switch that lets Nipa run on this host)\n'
-          '  A running host applies these without a restart. Talk to her with ./nipa chat in the host harness.');
+          '  A running host applies these without a restart. Talk to her with ./nipa chat in the host harness.\n'
+          '  Nipa\'s store (official items: ./nipa call store.list / store.install in the harness):\n'
+          '  --store-install-npm NAME[@VERSION] --data DIR (an npm skill or DSH plugin nobody reviewed, in an interactive terminal: type its name to confirm; loaded when Nipa next starts)');
       return;
     }
     if (key == '--enroll-token-stdin') { enroll = true; continue; }
@@ -73,6 +77,10 @@ Future<void> main(List<String> arguments) async {
       continue;
     }
     if (key == '--key-stdin') { keyStdin = true; continue; }
+    if (key == '--store-install-npm' && i + 1 < arguments.length) {
+      storeNpm = arguments[++i];
+      continue;
+    }
     if (const {
       '--model-set', '--model-status', '--model-check', '--model-clear',
       '--agent-enable', '--agent-disable', '--agent-status'
@@ -115,6 +123,10 @@ Future<void> main(List<String> arguments) async {
   if (agentMode != null) {
     exitCode = await runHeadlessAgentCommand(agentMode, root,
         options: options, keyStdin: keyStdin);
+    return;
+  }
+  if (storeNpm != null) {
+    exitCode = await runHeadlessStoreInstall(root, storeNpm);
     return;
   }
   if (keyStdin || const {'--provider', '--base-url', '--model', '--api', '--reasoning'}

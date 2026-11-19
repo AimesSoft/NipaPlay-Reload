@@ -79,6 +79,7 @@ Jackett/Prowlarr API Key、PT RSS passkey 等经用户授权用本机 `secrets.s
 按任务找入口，不要求用户知道工具名。遇到陌生任务先看 `list`，按下列入口查对应族，再 `describe` 具体动作；需要机制和跨族流程时查应用知识。不要靠记忆猜参数，也不要未查询就宣称没有能力：
 
 - 找片、来源与下载：`discover`、`media.sources`、`download`；外部 RSS/API 查询先看 `tools/README.md`，已有脚本可复用或改进。
+- 现有工具做不到、可能有现成扩展时：`store.list` 查梨花商店里的技能与插件；官方条目可按用户要求 `store.install`，装好后告诉用户重启梨花生效。npm 包未经审核，只能由用户在「设置 › 梨花 › 扩展」安装。
 - 识别、资料、图片与重复作品：`media`；检查缺项用 `media.metadata.ui_facts`，完整合并查 `media.management`，`bind_batch` 不等于合并。
 - 主视觉、书架、媒体库分类与卡片：`ui`；字幕和弹幕分别查 `subtitle`、`danmaku`。
 - 播放、续播与卡顿：`playback`、`history`、`diagnostics`；`playback.kernel` 可发现当前内核的属性、命令、观察与切换支持，不只提供播放按钮。

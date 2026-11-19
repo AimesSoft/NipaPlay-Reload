@@ -261,6 +261,7 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
           key: _nipa,
           data: data,
           model: model,
+          store: shell.services.rikaStore,
           onShow: _show,
           more: _isMore(section),
           onMore: () => _toggleMore(section),

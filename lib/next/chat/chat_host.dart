@@ -20,6 +20,7 @@ import 'session_store.dart';
 import 'turn_process_store.dart';
 import '../memory/service.dart';
 import 'model_launch.dart';
+import '../store/rika_store.dart' show StoreHostFacts;
 
 typedef ChatMessage = Map<String, dynamic>;
 
@@ -70,6 +71,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       this.baseInstructions,
       this.dsh,
       this.dshPlugins,
+      this.extensions,
       this.environment = const {},
       this.protectedPaths = const [],
       Duration memoryStaleWindow = const Duration(seconds: 2)})
@@ -100,6 +102,40 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
 
   /// NipaPlay's DSH plugins (`assets/next/agent/dsh`), required with [dsh].
   final Directory? dshPlugins;
+
+  /// What 梨花's store adds when the host starts: the skills in her
+  /// instructions and, with DSH, the plugins it loads ([runtimeModules] is
+  /// that runtime's `node_modules`). A store that fails leaves her as she is.
+  final Future<StoreHostFacts> Function({Directory? runtimeModules})?
+      extensions;
+
+  Future<StoreHostFacts?> _extensionFacts(DshRuntime? runtime) async {
+    final read = extensions;
+    if (read == null) return null;
+    try {
+      return await read(
+              runtimeModules: runtime == null
+                  ? null
+                  : File(runtime.bin).parent.parent.parent.parent)
+          .timeout(const Duration(seconds: 10));
+    } catch (error) {
+      stderr.writeln('[NextChat] store extensions not added: '
+          '${redactHarnessText('$error')}');
+      return null;
+    }
+  }
+
+  /// The base instructions, with the installed skills after them.
+  Future<File?> _instructions() async {
+    final base = baseInstructions;
+    if (base == null) return null;
+    final extra = (await _extensionFacts(null))?.instructions ?? '';
+    if (extra.isEmpty) return base;
+    final file = File('${base.parent.path}/nipa-base+store.md');
+    await file.writeAsString('${(await base.readAsString()).trimRight()}\n\n$extra\n',
+        flush: true);
+    return file;
+  }
 
   /// Values the host adds to the runtime's environment (DSH only), e.g. the
   /// endpoint file a host without the desktop's default location uses. They
@@ -281,7 +317,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
           ],
           '-c',
           await _trustOverride(),
-          if (baseInstructions case final file?) ...[
+          if (await _instructions() case final file?) ...[
             '-c',
             'model_instructions_file=${jsonEncode(file.path)}'
           ],
@@ -409,12 +445,17 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       File('${dshPlugins!.path}/persona-prefix.md').readAsString(),
       File('${dshPlugins!.path}/persona-suffix.md').readAsString(),
     ]);
+    final store = await _extensionFacts(runtime);
     final rows = dshPatch(
         config: _launch?.dshConfig,
         route: route,
         plugins: dshPlugins!,
         personaPrefix: persona[0].trim(),
-        personaSuffix: persona[1].trim(),
+        personaSuffix: [
+          persona[1].trim(),
+          if (store?.instructions.isNotEmpty == true) store!.instructions,
+        ].join('\n\n'),
+        storePlugins: store?.dshPlugins ?? const [],
         harness: repository.path,
         version: runtime.version,
         protectedPaths: protectedPaths,
@@ -545,7 +586,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
             await _trustOverride(),
             'model=${jsonEncode(_launch?.model)}',
             'model_provider=${jsonEncode(_launch?.provider)}',
-            'model_instructions_file=${jsonEncode(baseInstructions?.path)}',
+            'model_instructions_file=${jsonEncode((await _instructions())?.path)}',
           ],
           workingDirectory: repository.path,
           environment: _launch?.home == null ? inherited : clean,
