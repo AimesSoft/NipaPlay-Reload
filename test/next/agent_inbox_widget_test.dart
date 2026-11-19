@@ -325,6 +325,128 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await world.events.close();
   });
+
+  testWidgets(
+      'a failed background followup says which task, once while retried and '
+      'once when it gives up, and can be retried now or stopped (#1122)',
+      (tester) async {
+    final world = _Inbox();
+    final followup = <String, Object?>{
+      'id': 'f1',
+      'state': 'started',
+      'title': '帮手找到的番',
+      'turnId': 't1',
+      'threadId': 'main',
+    };
+    world.followups.add(followup);
+    await tester.pumpWidget(world.widget());
+    await tester.pump();
+    void failed(String turn, String message) => world.events.add({
+          'method': 'turn/completed',
+          'params': {
+            'threadId': 'main',
+            'turn': {
+              'id': turn,
+              'status': 'failed',
+              'error': {'message': message}
+            }
+          }
+        });
+    failed('t1', 'model returned no content');
+    await tester.pump();
+    // The dispatcher takes the failure in and will deliver it again.
+    followup
+      ..['state'] = 'ready'
+      ..['turnId'] = null
+      ..['retryAt'] = '2026-11-19T02:13:00Z'
+      ..['failedTurns'] = ['t1'];
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(world.notified, hasLength(1));
+    expect(world.notified.single['followupId'], 'f1');
+    expect(world.notified.single['requestId'], 'followup-f1-retrying');
+    expect(world.notified.single['title'], contains('「帮手找到的番」'));
+    expect(world.notified.single['body'], contains('model returned no content'));
+
+    // Its next delivery fails too: no second reminder while it is retried.
+    world.events.add({
+      'method': 'turn/started',
+      'params': {'threadId': 'main', 'turn': {'id': 't2'}}
+    });
+    followup['turnId'] = 't2';
+    followup['state'] = 'started';
+    await tester.pump();
+    failed('t2', 'model returned no content');
+    followup
+      ..['state'] = 'ready'
+      ..['turnId'] = null
+      ..['failedTurns'] = ['t1', 't2'];
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(world.notified, hasLength(1));
+
+    // The reminder offers to deliver it now, or to stop it.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    await tester.tap(find.text('「帮手找到的番」暂时没能完成'));
+    await tester.pump();
+    expect(find.text('立即重试'), findsOneWidget);
+    expect(find.text('停止'), findsOneWidget);
+    await tester.tap(find.text('停止'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(world.followupCalls, ['cancel f1']);
+
+    // Given up for good: one more reminder, which can only be retried.
+    world.events.add({
+      'method': 'turn/started',
+      'params': {'threadId': 'main', 'turn': {'id': 't3'}}
+    });
+    followup
+      ..['state'] = 'execution_failed'
+      ..['turnId'] = 't3'
+      ..remove('retryAt');
+    await tester.pump();
+    failed('t3', 'rate limited (429)');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(world.notified, hasLength(2));
+    expect(world.notified.last['requestId'], 'followup-f1-failed');
+    await tester.tap(find.text('「帮手找到的番」没能完成'));
+    await tester.pump();
+    expect(find.text('停止'), findsNothing);
+    await tester.tap(find.text('立即重试'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(world.followupCalls, ['cancel f1', 'retry f1']);
+    await tester.pumpWidget(const SizedBox());
+    await world.events.close();
+  });
+
+  testWidgets('a failure of the person\'s own turn is reported as it came',
+      (tester) async {
+    final world = _Inbox();
+    await tester.pumpWidget(world.widget());
+    await tester.pump();
+    world.events.add({
+      'method': 'turn/completed',
+      'params': {
+        'threadId': 'main',
+        'turn': {
+          'id': 'own',
+          'status': 'failed',
+          'error': {'message': 'connection reset'}
+        }
+      }
+    });
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(world.notified.single['title'], '梨花运行失败');
+    expect(world.notified.single.containsKey('followupId'), isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await world.events.close();
+  });
 }
 
 class _Inbox {
@@ -343,6 +465,9 @@ class _Inbox {
   ];
   final answers = <JsonMap>[];
   int notices = 0, lists = 0;
+  final notified = <JsonMap>[];
+  final followups = <JsonMap>[];
+  final followupCalls = <String>[];
   final changes = StreamController<void>.broadcast();
   late final calls =
       GuiCalls(() async => Harness([_Capability(this)]), changes: changes.stream);
@@ -386,10 +511,38 @@ class _Capability implements Capability {
                   effect: Effect.write,
                   input: ObjectSchema({}, additionalProperties: true),
                   output: ObjectSchema({}, additionalProperties: true)),
-              (_, invocation) async {
+              (input, invocation) async {
             world.notices++;
+            world.notified.add(Map.of(input));
+            if (input['followupId'] != null) {
+              // As the inbox keeps it: unread, with its request.
+              world.rows.insert(0, {
+                'id': 'notice-${world.notices}',
+                'kind': 'notice',
+                'state': 'unread',
+                'hidden': false,
+                'title': input['title'],
+                'body': input['body'],
+                'severity': 'error',
+                'request': Map.of(input),
+              });
+            }
             return {};
           }),
+          for (final op in ['list', 'retry', 'cancel'])
+            ClassicAction(
+                ActionSpec(
+                    id: 'followup.$op',
+                    title: op,
+                    description: op,
+                    effect: op == 'list' ? Effect.read : Effect.write,
+                    input: const ObjectSchema({}, additionalProperties: true),
+                    output: const ObjectSchema({}, additionalProperties: true)),
+                (input, _) async {
+              if (op == 'list') return {'followups': world.followups};
+              world.followupCalls.add('$op ${input['id']}');
+              return {'followup': {'id': input['id']}};
+            }),
           for (final op in ['list', 'respond', 'dismiss'])
             ClassicAction(
                 ActionSpec(

@@ -130,6 +130,7 @@
 | `followup.cancel` | write | 取消尚未启动的后续 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
 | `followup.list` | read | 查询后续及投递状态 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
 | `followup.register` | write | 登记任务或事件触发的持久后续 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
+| `followup.retry` | write | 立即再次投递失败或等待重试的后续 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
 | `history.continue_watching` | read | Get continue watching | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/history_capability.dart) |
 | `history.mark_watched_batch` | write | 标记本地观看状态 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/watched_history.dart) |
 | `history.remove` | write | Remove watch history | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/local_library_operations.dart) |

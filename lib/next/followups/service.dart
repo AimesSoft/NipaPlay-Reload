@@ -47,6 +47,10 @@ const followupFields = ObjectSchema({
   'sourceFollowupId': StringSchema(nullable: true),
   'deliveryState': StringSchema(nullable: true),
   'remoteReceipt': ObjectSchema({}, additionalProperties: true, nullable: true),
+  // Deliveries the model provider failed, and when the next one is due.
+  'attempts': IntegerSchema(nullable: true),
+  'retryAt': StringSchema(nullable: true),
+  'failedTurns': ArraySchema(StringSchema(), nullable: true),
 });
 
 /// Durable conditions and one delivery. Agent instructions remain opaque text.
@@ -487,6 +491,37 @@ final class Followups {
             reason: 'Cancelled by caller.');
         return _public(row);
       });
+
+  /// Delivers [id] again now: one waiting for its next automatic delivery
+  /// after the model provider failed, or one whose delivery failed. Asked by
+  /// the person, from the reminder of that failure (#1122); a turn already
+  /// started is never touched, and a followup delivered elsewhere is retried
+  /// there.
+  Future<JsonMap> retry(String id, Invocation invocation) async {
+    final retried = await _serial(() async {
+      final row = await _get(id);
+      final waiting = row['state'] == 'ready' && row['retryAt'] != null;
+      if (!waiting && row['state'] != 'execution_failed') {
+        throw const Failure(FailureCode.conflict,
+            'Only a followup waiting to be delivered again, or one whose delivery failed, can be retried.');
+      }
+      if (row['remoteDeviceId'] != null) {
+        throw const Failure(FailureCode.conflict,
+            'This followup is delivered on another device; retry it there.');
+      }
+      row
+        ..remove('retryAt')
+        ..['turnId'] = null
+        ..['turnStatus'] = null;
+      await _save(row, 'ready', 'retrying',
+          origin: invocation.origin,
+          invocationId: invocation.id,
+          reason: 'Delivered again at the request of the caller.');
+      return _public(row);
+    });
+    if (_started) _schedule();
+    return retried;
+  }
 
   Future<void> consumeHelperResult(String jobId, JsonMap taken) =>
       _serial(() async {

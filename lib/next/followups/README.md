@@ -54,6 +54,13 @@ failed the turn). If the runner refuses (the turn just ended, another turn id) t
 row returns to `ready` and waits for idle as before; an unknown outcome is never
 resent. Codex followups still wait for idle.
 
+`followup.retry` delivers again now a followup waiting for its next automatic
+delivery (`retryAt`) or one whose delivery failed (`execution_failed`); the
+viewer offers it, and `followup.cancel`, on the reminder of such a failure,
+which `ui.notify` ties to the followup with `followupId` (its conversation is the
+reminder's target). The viewer reports a failed followup delivery at most twice:
+once while it is retried, once if it gives up.
+
 `followup.list`, `followup.cancel` and the `followups` public view expose titles,
 waiting conditions, origin, trigger evidence, actual thread/turn IDs and reasons.
 Cancel is idempotent until delivery begins. Registration, triggering, pending
