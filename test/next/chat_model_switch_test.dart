@@ -101,6 +101,13 @@ void main() {
 
       const codex = UiModelSetup(source: UiModelSource.codex);
       expect(modelLabel(codex), 'Codex 配置');
+      // Just switched: the running conversation still uses the old one
+      // until its next turn; the pill names the choice.
+      const switched = UiModelSetup(
+          source: UiModelSource.nipaplay,
+          model: 'deepseek-pro',
+          inUse: 'deepseek-flash');
+      expect(modelLabel(switched), 'deepseek-pro');
     });
 
     testWidgets(

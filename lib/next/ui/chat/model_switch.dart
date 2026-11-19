@@ -117,11 +117,13 @@ class _ModelSwitchState extends State<ModelSwitch> {
   }
 }
 
-/// What the pill says: the model in use, else the one chosen; null while
-/// there is none to name (the setup chip shows the way then).
+/// What the pill says: the model chosen (the running conversation takes it
+/// up at its next turn; naming the one still in use would look as if the
+/// choice had not been taken), else the one in use; null while there is
+/// none to name (the setup chip shows the way then).
 String? modelLabel(UiModelSetup setup) {
   if (setup.source == UiModelSource.codex) return setup.inUse ?? 'Codex 配置';
-  return setup.inUse ?? setup.model;
+  return setup.model ?? setup.inUse;
 }
 
 /// The choice that keeps [setup] and changes what is given: a recent
@@ -222,7 +224,14 @@ class _ModelSheetState extends State<ModelSheet> {
   @override
   Widget build(BuildContext context) {
     final setup = _setup;
-    final recent = setup?.recent ?? const <UiModelChoice>[];
+    // Codex speaks Responses only: a Chat Completions model set up for
+    // DeepSeek Harness cannot be picked under it.
+    final recent = [
+      for (final model in setup?.recent ?? const <UiModelChoice>[])
+        if (setup?.runtime != UiAgentRuntimeKind.codex ||
+            model.api != UiModelApi.chat)
+          model
+    ];
     final others = setup == null
         ? const <String>[]
         : [

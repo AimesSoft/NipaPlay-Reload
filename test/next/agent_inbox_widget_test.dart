@@ -232,6 +232,99 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await world.events.close();
   });
+
+  testWidgets(
+      'failures kept by conversations in their liveness reports are each '
+      'reported once, and a new turn elsewhere does not repeat them',
+      (tester) async {
+    final errors = ValueNotifier<String?>(null);
+    final world = _Inbox();
+    await tester.pumpWidget(world.widget(errors: errors));
+    await tester.pump();
+    // As ChatHost sends it: every second, one report per conversation,
+    // each keeping its failure until its next turn starts.
+    void tick() {
+      for (final (thread, error) in [
+        ('main', null),
+        ('helper-a', 'model returned no content'),
+        ('helper-b', 'rate limited (429)'),
+      ]) {
+        world.events.add({
+          'method': 'host/liveness',
+          'params': {
+            'threadId': thread,
+            'status': error == null ? 'inProgress' : 'failed',
+            'latestError': error
+          }
+        });
+      }
+    }
+
+    for (var i = 0; i < 5; i++) {
+      tick();
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(world.notices, 2);
+    // The main conversation starts a turn: the helpers' failures are not
+    // news.
+    world.events.add({
+      'method': 'turn/started',
+      'params': {'threadId': 'main', 'turn': {'id': 't2'}}
+    });
+    for (var i = 0; i < 3; i++) {
+      tick();
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(world.notices, 2);
+    // A helper tries again and fails the same way: that is news.
+    world.events.add({
+      'method': 'turn/started',
+      'params': {'threadId': 'helper-a', 'turn': {'id': 't3'}}
+    });
+    await tester.pump();
+    world.events.add({
+      'method': 'turn/completed',
+      'params': {
+        'threadId': 'helper-a',
+        'turn': {
+          'id': 't3',
+          'status': 'failed',
+          'error': {'message': 'model returned no content'}
+        }
+      }
+    });
+    await tester.pump();
+    tick();
+    await tester.pump(const Duration(seconds: 1));
+    expect(world.notices, 3);
+    await tester.pumpWidget(const SizedBox());
+    await world.events.close();
+  });
+
+  testWidgets(
+      "the conversation's text arriving before the runner's report is still "
+      'one reminder', (tester) async {
+    final errors = ValueNotifier<String?>(null);
+    final world = _Inbox();
+    await tester.pumpWidget(world.widget(errors: errors));
+    await tester.pump();
+    errors.value = 'connection reset';
+    await tester.pump();
+    world.events.add({
+      'method': 'turn/completed',
+      'params': {
+        'threadId': 'main',
+        'turn': {
+          'status': 'failed',
+          'error': {'message': 'connection reset'}
+        }
+      }
+    });
+    await tester.pump();
+    expect(world.notices, 1);
+    await tester.pumpWidget(const SizedBox());
+    await world.events.close();
+  });
 }
 
 class _Inbox {

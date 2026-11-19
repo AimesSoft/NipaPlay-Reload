@@ -188,6 +188,19 @@ void main() {
       expect(await remote.readAsBytes(), payload);
       expect(remote.path, contains('/chat-attachments/guests/ipad/'));
       expect(remote.path, isNot(contains(':')));
+
+      // Windows would write "notes" for "notes. ": the path told to Nipa
+      // must be the file written.
+      final dotted = await guests.handle(
+          'mesh/chat/attach',
+          {
+            'name': 'notes. ',
+            'size': 2,
+            'offset': 0,
+            'data': base64Encode([1, 2]),
+          },
+          'ipad');
+      expect(dotted['path'], endsWith('-notes'));
     });
 
     test('rejects cross-peer hijack, invalid offsets, and cleans .part on close',

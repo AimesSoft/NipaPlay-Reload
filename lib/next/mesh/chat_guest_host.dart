@@ -550,6 +550,9 @@ final class _GuestAttachments {
     final cleaned = base
         .replaceAll(RegExp(r'[\x00-\x1f<>:"|?*]'), '_')
         .replaceAll(RegExp(r'^\.+'), '')
+        // Windows drops trailing dots and spaces from a name: the path told
+        // to Nipa would not be the file written.
+        .replaceAll(RegExp(r'[. ]+$'), '')
         .trim();
     if (cleaned.isEmpty) return 'attachment';
     return cleaned.length <= 120

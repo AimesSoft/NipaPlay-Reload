@@ -44,7 +44,7 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
   List<JsonMap> _items = [];
   bool _loading = false, _acting = false, _expanded = false, _more = false;
   int _limit = 30;
-  String? _error, _lastEventError, _lastLoadError;
+  String? _error, _lastExternalError, _lastLoadError;
   String? _selectedId;
   final Set<String> _collapsedIds = {};
 
@@ -84,16 +84,27 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
 
   void _externalError() {
     final error = widget.errors?.value;
-    if (error != null) _recordError(error);
+    if (error != null) _recordError(error, external: true);
   }
+
+  /// The failure already reported for each conversation (null: the host's
+  /// own, which names none). A conversation's failure stays in its liveness
+  /// report, sent every second for every conversation, until its next turn
+  /// starts: it is reported once and not again until then, and two
+  /// conversations holding different failures do not take turns at it.
+  final _reported = <String?, String>{};
 
   void _event(Map event) {
     final method = event['method'];
+    final params = event['params'] as Map? ?? const {};
+    final thread = params['threadId'] is String ? params['threadId'] as String : null;
     if (method == 'turn/started') {
-      _lastEventError = null;
+      // That conversation tries again: a failure of it is news again; the
+      // others keep theirs.
+      _reported.remove(thread);
+      _lastExternalError = null;
       return;
     }
-    final params = event['params'] as Map? ?? const {};
     final turn = params['turn'] as Map?;
     Object? raw;
     if (method == 'host/error') raw = params['error'] ?? params;
@@ -104,7 +115,7 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
     if (raw == null || raw == '') return;
     final body =
         raw is String ? raw : const JsonEncoder.withIndent('  ').convert(raw);
-    _recordError(body);
+    _recordError(body, thread: method == 'host/error' ? null : thread);
   }
 
   /// What a runtime error says, whichever way it arrived. The runner's error
@@ -123,10 +134,26 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
     return body.trim();
   }
 
-  void _recordError(String body) {
+  /// [external]: the conversation's own text of a failure (no conversation
+  /// named), which follows, or precedes, the runner's report of it.
+  void _recordError(String body, {String? thread, bool external = false}) {
     final signature = _errorSignature(body);
-    if (signature == _lastEventError) return;
-    _lastEventError = signature;
+    if (external) {
+      if (signature == _lastExternalError ||
+          _reported.containsValue(signature)) {
+        return;
+      }
+      _lastExternalError = signature;
+    } else {
+      if (_reported[thread] == signature) return;
+      _reported[thread] = signature;
+      // The conversation's text of this failure came first: the pair is one
+      // failure, reported once.
+      if (signature == _lastExternalError) {
+        _lastExternalError = null;
+        return;
+      }
+    }
     // This is the runner's original UI error payload, never a model summary.
     unawaited(_call('ui.notify', {
       'requestId': 'runtime-${DateTime.now().microsecondsSinceEpoch}',

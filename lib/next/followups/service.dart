@@ -1050,6 +1050,7 @@ final class Followups {
 
   /// Errors that say the model provider was briefly unavailable (rate limits,
   /// server errors, a dropped stream), not that the turn itself went wrong.
+  /// Public for the classification tests (#1122).
   static bool isProviderHiccup(Object? error) => _providerHiccup(error);
 
   static bool _providerHiccup(Object? error) {
