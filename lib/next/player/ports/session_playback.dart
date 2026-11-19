@@ -13,6 +13,7 @@ import 'package:nipaplay/services/intro_skip/skip_segment.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../capabilities/media_models.dart';
@@ -65,8 +66,10 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       this.externalHandoff,
       this.skipSources,
       PlaybackWindows? windows,
-      this.hideAfter = const Duration(seconds: 3)})
+      this.hideAfter = const Duration(seconds: 3),
+      Future<void> Function(bool enable)? setWakelock})
       : _localOperations = localOperations,
+        _setWakelock = setWakelock ?? _defaultWakelock,
         windows = windows ?? PlaybackWindows() {
     _frame = _Frame(this);
     danmaku.addListener(_danmakuChanged);
@@ -74,12 +77,14 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     sources = PlaybackSources(host, sourceResolver ?? NextSourceResolver());
     sources.addListener(_frame.poke);
     _fullscreen.addListener(_frame.poke);
+    _transport.addListener(_keepAwake);
     host.current.addListener(_bind);
     _bind();
     externalHandoff?.addListener(_externalChanged);
+    _keepAwake();
     unawaited(_readLevels());
     if (_desktop) {
-      _window = _FullscreenWatch(_fullscreen);
+      _window = _FullscreenWatch(_fullscreen, () => _setAwake(false));
       windowManager.addListener(_window!);
     }
   }
@@ -112,6 +117,31 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
       _sync();
     }
     _frame.poke();
+  }
+
+  static Future<void> _defaultWakelock(bool enable) =>
+      WakelockPlus.toggle(enable: enable);
+
+  final Future<void> Function(bool enable) _setWakelock;
+
+  /// The screen stays on while this player plays, whichever kernel draws it,
+  /// and is let go on pause, stop, failure and dispose (#1121; Classic's
+  /// VideoPlayerState does the same for its own). An external player keeps
+  /// the screen on itself.
+  bool _awake = false;
+  void _keepAwake() {
+    final t = _transport.value;
+    _setAwake(t.phase == PlaybackPhase.playing && t.status != 'external');
+  }
+
+  void _setAwake(bool on) {
+    if (on == _awake) return;
+    _awake = on;
+    // A session without a ScreenSaver service (WSLg, a bare Linux) has no
+    // wakelock; that must not interrupt playback.
+    unawaited(_setWakelock(on).catchError((Object error) {
+      debugPrint('[NextPlayer] wakelock unavailable: $error');
+    }));
   }
 
   static bool get _desktop =>
@@ -1324,6 +1354,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
   }
 
   Future<void> dispose() async {
+    _transport.removeListener(_keepAwake);
+    _setAwake(false);
     setDanmakuSettingsActive(false);
     danmaku.removeListener(_danmakuChanged);
     danmaku.dispose();
@@ -1425,14 +1457,17 @@ final class _Frame extends ChangeNotifier {
   }
 }
 
-/// Full screen as the window says, whoever asked for it.
+/// Full screen and close signals as the window says, whoever asked for them.
 final class _FullscreenWatch with WindowListener {
-  _FullscreenWatch(this._full);
+  _FullscreenWatch(this._full, this._onClose);
   final ValueNotifier<bool> _full;
+  final VoidCallback _onClose;
   @override
   void onWindowEnterFullScreen() => _full.value = true;
   @override
   void onWindowLeaveFullScreen() => _full.value = false;
+  @override
+  void onWindowClose() => _onClose();
 }
 
 /// What was asked to play while its session does not exist yet.
