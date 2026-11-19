@@ -873,8 +873,10 @@ final class NextRuntime extends ChangeNotifier {
         labRoot: labRoot,
         baseInstructions: base,
         dsh: dsh,
-        dshPlugins: dsh == null ? null : Directory('$agent/dsh'));
+        dshPlugins: dsh == null ? null : Directory('$agent/dsh'),
+        extensions: ServiceProvider.nextCore.store.hostFacts);
     final core = ServiceProvider.nextCore;
+    core.restartAgent = _restartChat;
     core.jobOrigins.threadFor = host.threadForOrigin;
     core.memory.recent = (current) async {
       final activity = await core.state.views['activity']!.readPage!(0, 5);

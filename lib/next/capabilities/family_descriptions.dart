@@ -367,6 +367,11 @@ Classic 与 Next 使用各自的播放会话；部分设置、观看记录和进
 - 这些改动不跨内核实例：关闭 Next 界面时会话关闭，实例随之销毁。长期生效的改动用 settings.set；播放中保存内核相关设置不影响正在播放的实例，下一次打开按新值，settings.get 的 effective 报告正在播放的实例是按什么值建的。''',
   'discover': r'''弹弹play 每日放送与推荐。''',
   'plugins': r'''应用插件。''',
+  'store': r'''梨花的商店：技能（说明加脚本，装在本机 store/skills/<id>/）和 DeepSeek Harness 插件（store/plugins/<id>/，只在 DSH 下加载）。
+- list 读取官方列表与本机已装条目，含版本、启用、可更新和上次启动没加载的插件及原因；readme 读取官方条目的说明。
+- install 用 id 装官方条目（经审核、按 SHA-256 锁定），先把条目的 notices 告诉用户，只装用户要的。npm 包未经审核，只能由用户本人在「设置 › 梨花 › 扩展」安装；不要替用户找包或劝装。
+- enable 开关、remove 卸载。改动在对话宿主下次启动时生效；apply 重启宿主会结束你自己的回合，只由用户调用，所以装好后告诉用户重启梨花。
+- 已装技能的说明路径在你的提示里；运行技能脚本取得的是证据，保存、下载、订阅仍按授权规则经 nipa 进行。''',
   'media.sources': r'''SMB、WebDAV 文件来源。
 - list 读取配置与已有观察，不联系来源、不读取凭据。add/update 配置地址和用户名，login 单独登录；可在明确用户授权后使用 password 与 userAuthorization，未提供密码时打开登录窗口。任务输入和回执不保存秘密。
 - browse/sync 发现文件并保留来源目录事实；原生身份命名空间是 https://sources.nipaplay.app，已有 ID 格式保持不变。用户与梨花通过明确匹配建立作品身份，刷新不改人工绑定和覆盖。

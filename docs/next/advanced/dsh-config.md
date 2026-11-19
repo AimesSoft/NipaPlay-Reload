@@ -76,4 +76,4 @@ DSH 默认上下文容量 262144 token、输出上限 32768 token。这两个值
 
 ---
 
-上一篇：[自动化与个人工具](automation.md) · 下一篇：[数据与恢复](data-and-recovery.md)
+上一篇：[自动化与个人工具](automation.md) · 下一篇：[梨花的商店](store.md)

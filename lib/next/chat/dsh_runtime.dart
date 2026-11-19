@@ -293,6 +293,7 @@ List<Map<String, Object?>> dshPatch(
         required String version,
         bool webSearch = false,
         List<String> protectedPaths = const [],
+        List<Map<String, Object?>> storePlugins = const [],
         DshConfig? config}) =>
     [
       for (final id in dshDisabledRows) {'id': id, 'disabled': true},
@@ -344,6 +345,9 @@ List<Map<String, Object?>> dshPatch(
               ...?config?.request,
             },
           },
+          // Installed from 梨花's store, after NipaPlay's own: each an
+          // entry file by absolute path, as `RikaStore.hostFacts` gives it.
+          ...storePlugins,
         ]
       },
     ];

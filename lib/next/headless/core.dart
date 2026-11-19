@@ -1,3 +1,6 @@
+import '../store/capability.dart';
+import '../store/rika_store.dart';
+import '../store/sources.dart';
 import '../followups/inbox_capability.dart';
 import '../mesh/files.dart';
 import 'dart:async';
@@ -129,6 +132,7 @@ final class HeadlessCore {
   late final MediaService media;
   late final AgentEndpoint endpoint;
   late final Followups followups;
+  late final RikaStore store;
   late final SettingsRegistry settings;
   late final ChangeHistory history;
   late final UiDataService uiData;
@@ -367,6 +371,7 @@ final class HeadlessCore {
         HeadlessRepository(repository.path), settings, followups.discover)
       ..redact = uiData.meshLibrary!.worker.redactText;
     model = HeadlessModel(root: root, vault: vault);
+    store = rikaStore(root);
     nipa = HeadlessNipa(
         root: root,
         repository: repository,
@@ -380,6 +385,7 @@ final class HeadlessCore {
         activityPage: activityView.readPage,
         staleSources: [bodyEvents.committed.stream],
         redact: uiData.meshLibrary!.worker.redactText,
+        store: store,
         environment: environment);
     final db = createDbService(database: database, media: media, uiData: uiData);
     final downloadSources =
@@ -419,6 +425,7 @@ final class HeadlessCore {
         DanmakuCapability(danmaku),
         SettingsCapability(settings),
         FollowupCapability(followups),
+        StoreCapability(store, restart: () => nipa.restart()),
         UiDataCapability(uiData),
         LibraryCapability(libraryData),
         DbCapability(db),
