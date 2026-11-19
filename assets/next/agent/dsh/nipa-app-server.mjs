@@ -412,7 +412,6 @@ const LETTER = /[\p{L}\p{N}_]/u;
 const JSON_ESCAPES = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '"': '"', '\\': '\\', '/': '/' };
 
 const HEX = /^[0-9A-Fa-f]$/;
-const ESCAPE_LETTERS = 'nrtbf"\\/u';
 
 // Counted at most 64 back: a long run of backslashes must not make every
 // check walk it again.
@@ -423,15 +422,20 @@ function unescapedBackslash(text, i) {
   return run % 2 === 0;
 }
 
+// Whether the backslash at k begins a JSON escape, and how long it is.
+function escapeAt(text, k) {
+  if (!unescapedBackslash(text, k)) return 0;
+  if (text[k + 1] === 'u') return /^[0-9A-Fa-f]{4}$/.test(text.slice(k + 2, k + 6)) ? 6 : 0;
+  return 'nrtbf"\\/'.includes(text[k + 1] ?? '') ? 2 : 0;
+}
+
 // Whether position i is inside a JSON escape (`\n`, `\u00a0`) or a
 // percent-encoded byte (`%20`) that began before it.
 function splitsEscape(text, i) {
   if (i <= 0 || i >= text.length) return false;
-  if (unescapedBackslash(text, i - 1) && ESCAPE_LETTERS.includes(text[i])) return true;
-  for (let back = 2; back <= 5; back++) {
+  for (let back = 1; back <= 5; back++) {
     const j = i - back;
-    if (j >= 0 && text[j + 1] === 'u' && unescapedBackslash(text, j) &&
-        /^[0-9A-Fa-f]{4}$/.test(text.slice(j + 2, j + 6))) return true;
+    if (j >= 0 && escapeAt(text, j) > back) return true;
   }
   if (text[i - 1] === '%' && HEX.test(text[i]) && HEX.test(text[i + 1] ?? '')) return true;
   return i >= 2 && text[i - 2] === '%' && HEX.test(text[i - 1]) && HEX.test(text[i]);
@@ -447,13 +451,15 @@ function percentChar(chunk) {
 
 function charBefore(text, i) {
   if (i <= 0) return null;
-  if (i >= 6 && unescapedBackslash(text, i - 6) && text[i - 5] === 'u' &&
-      /^[0-9A-Fa-f]{4}$/.test(text.slice(i - 4, i))) {
-    return String.fromCharCode(parseInt(text.slice(i - 4, i), 16));
+  if (i >= 6 && escapeAt(text, i - 6) === 6) {
+    const unit = parseInt(text.slice(i - 4, i), 16);
+    // A low surrogate's letter is the pair's, escaped as two.
+    if (unit >= 0xdc00 && unit <= 0xdfff && i >= 12 && escapeAt(text, i - 12) === 6) {
+      return String.fromCharCode(parseInt(text.slice(i - 10, i - 6), 16), unit);
+    }
+    return String.fromCharCode(unit);
   }
-  if (i >= 2 && unescapedBackslash(text, i - 2) && text[i - 1] in JSON_ESCAPES) {
-    return JSON_ESCAPES[text[i - 1]];
-  }
+  if (i >= 2 && escapeAt(text, i - 2) === 2) return JSON_ESCAPES[text[i - 1]];
   for (let bytes = 1; bytes <= 4 && i - 3 * bytes >= 0; bytes++) {
     const char = percentChar(text.slice(i - 3 * bytes, i));
     if (char) return char;
@@ -463,12 +469,15 @@ function charBefore(text, i) {
 
 function charAfter(text, j) {
   if (j >= text.length) return null;
-  if (unescapedBackslash(text, j)) {
-    if (text[j + 1] === 'u' && /^[0-9A-Fa-f]{4}$/.test(text.slice(j + 2, j + 6))) {
-      return String.fromCharCode(parseInt(text.slice(j + 2, j + 6), 16));
+  const escape = escapeAt(text, j);
+  if (escape === 6) {
+    const unit = parseInt(text.slice(j + 2, j + 6), 16);
+    if (unit >= 0xd800 && unit <= 0xdbff && escapeAt(text, j + 6) === 6) {
+      return String.fromCharCode(unit, parseInt(text.slice(j + 8, j + 12), 16));
     }
-    if (text[j + 1] in JSON_ESCAPES) return JSON_ESCAPES[text[j + 1]];
+    return String.fromCharCode(unit);
   }
+  if (escape === 2) return JSON_ESCAPES[text[j + 1]];
   for (let bytes = 1; bytes <= 4 && j + 3 * bytes <= text.length; bytes++) {
     const char = percentChar(text.slice(j, j + 3 * bytes));
     if (char) return char;
@@ -482,7 +491,7 @@ function standsAlone(text, at, length) {
   // in `%20`, a secret ending in `\` before `"`).
   if (splitsEscape(text, at) || splitsEscape(text, end)) return false;
   for (let k = at; k < end; k++) {
-    if (unescapedBackslash(text, k) && k + (text[k + 1] === 'u' ? 6 : 2) > end) return false;
+    if (k + escapeAt(text, k) > end) return false;
   }
   const before = charBefore(text, at), after = charAfter(text, end);
   return !(before && LETTER.test(before)) && !(after && LETTER.test(after));
@@ -544,7 +553,7 @@ export class Redactions {
     if (typeof value === 'string') return this.text(value);
     if (Array.isArray(value)) return value.map((item) => this.json(item));
     if (value && typeof value === 'object') {
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.json(v)]));
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [this.text(k), this.json(v)]));
     }
     return value;
   }

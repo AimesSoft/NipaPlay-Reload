@@ -83,7 +83,7 @@ console.log(JSON.stringify({
       () async {
     final out = await _node(r'''
 const r = new bridge.Redactions();
-r.remember(['!\\', '20', 'p4ss', 'ab-ab']);
+r.remember(['!\\', '20', 'p4ss', 'ab-ab', 'utils', 'abc\\']);
 const both = new bridge.Redactions();
 both.remember(['密码']);
 both.remember(['%E5%AF%86%E7%A0%81']);
@@ -99,6 +99,10 @@ console.log(JSON.stringify({
   rawSlash: r.text('\\p4ss'),
   overlap: r.text('xab-ab-ab!'),
   longWins: both.text('x%E5%AF%86%E7%A0%81x'),
+  windowsPath: r.text('C:\\utils'),
+  endsInSlash: r.text('TOKEN=abc\\\n'),
+  pairEscaped: r.text('{"out":"\\uD801\\uDC00p4ss"}'),
+  key: r.json({ p4ss: 'accepted' }),
   took,
 }));
 ''');
@@ -111,6 +115,13 @@ console.log(JSON.stringify({
     expect(out['overlap'], 'xab-${'[已隐去的凭据]'}!');
     // The same text as a long secret is hidden everywhere.
     expect(out['longWins'], 'x${'[已隐去的凭据]'}x');
+    // `\u` without four hex digits is no escape; a secret ending in `\`
+    // before a line end stands alone; an escaped surrogate pair is one
+    // letter; and a structured result's keys are hidden too.
+    expect(out['windowsPath'], 'C:\\${'[已隐去的凭据]'}');
+    expect(out['endsInSlash'], 'TOKEN=${'[已隐去的凭据]'}\n');
+    expect(out['pairEscaped'], r'{"out":"\uD801\uDC00p4ss"}');
+    expect(out['key'], {'[已隐去的凭据]': 'accepted'});
     expect(out['took'] as num, lessThan(1000));
   }, skip: node ? false : 'node is not on PATH');
 
