@@ -258,8 +258,13 @@ void main() {
       aged.setLastModifiedSync(now.subtract(const Duration(days: 31)));
       final recent = File('${folder.path}/new-shot.png')..writeAsStringSync('n');
       recent.setLastModifiedSync(now.subtract(const Duration(days: 2)));
-      final part = File('${folder.path}/.abandoned.part')..writeAsStringSync('p');
+      final part = File('${folder.path}/.abcdefghijkl.part')
+        ..writeAsStringSync('p');
       part.setLastModifiedSync(now.subtract(const Duration(hours: 2)));
+      // A file that was sent with a name ending in .part is a finished copy.
+      final sent = File('${folder.path}/k3j2h1g0f9e8-notes.part')
+        ..writeAsStringSync('s');
+      sent.setLastModifiedSync(now.subtract(const Duration(hours: 2)));
       await guests.handle(
           'mesh/chat/attach',
           {'name': 'today.txt', 'size': 1, 'offset': 0, 'data': base64Encode([7])},
@@ -267,6 +272,45 @@ void main() {
       expect(aged.existsSync(), isFalse);
       expect(part.existsSync(), isFalse);
       expect(recent.existsSync(), isTrue);
+      expect(sent.existsSync(), isTrue);
+    });
+
+    test('two chunks for the same place at once: one is taken', () async {
+      final first = await guests.handle(
+          'mesh/chat/attach',
+          {
+            'name': 'clip.bin',
+            'size': 6,
+            'offset': 0,
+            'data': base64Encode([1, 2])
+          },
+          'ipad');
+      final uploadId = first['uploadId'] as String;
+      Future<Object> chunk() => guests
+          .handle(
+              'mesh/chat/attach',
+              {
+                'uploadId': uploadId,
+                'size': 6,
+                'offset': 2,
+                'data': base64Encode([3, 4])
+              },
+              'ipad')
+          .then<Object>((r) => r, onError: (Object e) => e);
+      final both = await Future.wait([chunk(), chunk()]);
+      expect(both.whereType<Map>().single['received'], 4);
+      expect(both.whereType<Failure>().single.code, FailureCode.invalidInput);
+      final done = await guests.handle(
+          'mesh/chat/attach',
+          {
+            'uploadId': uploadId,
+            'size': 6,
+            'offset': 4,
+            'data': base64Encode([5, 6])
+          },
+          'ipad');
+      expect(await File(done['path'] as String).readAsBytes(),
+          [1, 2, 3, 4, 5, 6]);
     });
 
     test('rejects cross-peer hijack, invalid offsets, and cleans .part on close',

@@ -420,6 +420,23 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(world.followupCalls, ['cancel f1', 'retry f1']);
+
+    // Retried by hand and failed for good again: said again, not swallowed.
+    world.events.add({
+      'method': 'turn/started',
+      'params': {'threadId': 'main', 'turn': {'id': 't4'}}
+    });
+    followup
+      ..['state'] = 'execution_failed'
+      ..['turnId'] = 't4'
+      ..['retries'] = 1;
+    await tester.pump();
+    failed('t4', 'rate limited (429)');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(world.notified, hasLength(3));
+    expect(world.notified.last['requestId'], 'followup-f1-1-failed');
     await tester.pumpWidget(const SizedBox());
     await world.events.close();
   });

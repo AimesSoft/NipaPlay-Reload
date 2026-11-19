@@ -30,13 +30,14 @@ void main() {
       () async {
     final out = await _node(r'''
 const r = new bridge.Redactions();
-r.remember(['sk-live-0123456789abcdef', 'short', 42, 'p@ss w/ord+1234']);
+r.remember(['sk-live-0123456789abcdef', 'abc', 'p4ss', 42, 'p@ss w/ord+1234']);
 const text = (t) => r.text(t);
 console.log(JSON.stringify({
   plain: text('key=sk-live-0123456789abcdef\n'),
   json: text('{"secret":"p@ss w\/ord+1234"}'),
   url: text('https://x/?k=' + encodeURIComponent('p@ss w/ord+1234')),
-  short: text('short is not a secret'),
+  tiny: text('abc is too short to hide'),
+  short: text('pw=p4ss'),
   untouched: text('nothing here'),
   size: r.size,
 }));
@@ -44,7 +45,10 @@ console.log(JSON.stringify({
     expect(out['plain'], 'key=${'[已隐去的凭据]'}\n');
     expect(out['json'], isNot(contains('ord+1234')));
     expect(out['url'], isNot(contains('ord%2B1234')));
-    expect(out['short'], 'short is not a secret');
+    // A short password is still hidden (#1119 review); under four
+    // characters a value would hide ordinary text, so it is not.
+    expect(out['short'], 'pw=${'[已隐去的凭据]'}');
+    expect(out['tiny'], 'abc is too short to hide');
     expect(out['untouched'], 'nothing here');
   }, skip: node ? false : 'node is not on PATH');
 

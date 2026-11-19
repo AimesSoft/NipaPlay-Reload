@@ -350,6 +350,9 @@ final class LibraryProjection {
           .query('next_library_index', where: 'id=?', whereArgs: [workId]);
       if (rows.isNotEmpty) {
         final facts = jsonDecode(rows.single['facts'] as String) as JsonMap;
+        // Progress can move `next` to another episode (#1127): its local
+        // episode goes with it.
+        facts['nextLocalEpisodeId'] = _localTargets[work.next?.episodeId];
         facts['watch'] = updated
                 .any((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1)
             ? 'watching'

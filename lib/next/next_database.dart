@@ -142,7 +142,13 @@ Future<Database> openNextDatabase(Directory root,
     final files = DanmakuFiles(db);
     await files.migrate();
     await pruneActivityInvocations(db);
-    await _compact(db);
+    try {
+      await _compact(db);
+    } on DatabaseException catch (error) {
+      // Reclaiming space is a courtesy: a disk too full for VACUUM's copy
+      // must not keep the database from opening. Tried again next start.
+      stderr.writeln('[NextDatabase] compaction skipped: $error');
+    }
     observedPath = db.path;
     await notifications.observe(db);
     return db;

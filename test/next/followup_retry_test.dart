@@ -95,6 +95,8 @@ void main() {
     expect(retried['state'], 'ready');
     expect(retried['turnId'], isNull);
     expect(retried['turnStatus'], isNull);
+    // Each retry by hand starts a round its reminders are told apart by.
+    expect(retried['retries'], 1);
   });
 
   test('others are refused: still waiting, delivered elsewhere', () async {

@@ -189,7 +189,11 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
       return;
     }
     final id = followup['id'] as String;
-    final requestId = 'followup-$id-${retrying ? 'retrying' : 'failed'}';
+    // One reminder per round: retried by hand, a followup that fails again
+    // is said again (#1122 review).
+    final round = followup['retries'] as int? ?? 0;
+    final requestId =
+        'followup-$id${round == 0 ? '' : '-$round'}-${retrying ? 'retrying' : 'failed'}';
     if (!_followupNotices.add(requestId)) return;
     final label = _followupLabel(followup);
     try {

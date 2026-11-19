@@ -545,6 +545,14 @@ final class _GuestAttachments {
       ({String peer, File part, File done, int size, DateTime touchedAt})>{};
   final _random = Random.secure();
   static const _staleAfter = Duration(minutes: 30);
+
+  /// What an upload in progress is called (`.<id>.part`); a finished file
+  /// keeps the name it was sent with, whatever it ends in.
+  static final _partName = RegExp(r'^\.[a-z0-9]{12}\.part$');
+
+  /// Chunks are taken one at a time: two at once for the same upload would
+  /// both see the same length and both be appended.
+  Future<void> _receiving = Future.value();
   static const _maxPeerUploads = 16;
 
   /// A guest's file here is a copy (the original stays on the guest), kept
@@ -592,7 +600,7 @@ final class _GuestAttachments {
     try {
       await for (final entity in root.list(recursive: true, followLinks: false)) {
         if (entity is! File || owned.contains(entity.path)) continue;
-        final part = entity.uri.pathSegments.last.endsWith('.part');
+        final part = _partName.hasMatch(entity.uri.pathSegments.last);
         final age = now.difference(await entity.lastModified());
         if (age > (part ? _staleAfter : keptFor)) {
           await entity.delete().catchError((Object _) => entity);
@@ -613,7 +621,13 @@ final class _GuestAttachments {
     }
   }
 
-  Future<JsonMap> receive(JsonMap params, String peer) async {
+  Future<JsonMap> receive(JsonMap params, String peer) {
+    final result = _receiving.then((_) => _receive(params, peer));
+    _receiving = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
+  Future<JsonMap> _receive(JsonMap params, String peer) async {
     final now = DateTime.now();
     await _pruneStale(now);
     await _sweep(now);
@@ -687,8 +701,14 @@ final class _GuestAttachments {
           details: {'received': received});
     }
     await upload.part.writeAsBytes(bytes, mode: FileMode.append, flush: true);
-    final written = received + bytes.length;
+    final written = await upload.part.length();
     if (written < size) return {'uploadId': id, 'received': written};
+    if (written != size) {
+      _uploads.remove(id);
+      await upload.part.delete().catchError((Object _) => upload.part);
+      throw Failure(FailureCode.conflict,
+          'The attachment arrived with $written bytes instead of $size; send it again.');
+    }
     await upload.part.rename(upload.done.path);
     _uploads.remove(id);
     return {'uploadId': id, 'received': written, 'path': upload.done.path};

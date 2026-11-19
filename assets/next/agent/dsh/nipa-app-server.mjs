@@ -390,7 +390,9 @@ class Wire {
  * memory; NipaPlay sends them with `nipa/redact`, never through a file.
  */
 export const REDACTED = '[已隐去的凭据]';
-const MIN_SECRET = 8;
+// Shorter values would hide ordinary text (a digit, a word) wherever it
+// appears; four characters is where a value is still mostly its own.
+const MIN_SECRET = 4;
 
 export function secretForms(secret) {
   const forms = new Set([secret]);

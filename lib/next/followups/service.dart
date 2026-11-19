@@ -51,6 +51,8 @@ const followupFields = ObjectSchema({
   'attempts': IntegerSchema(nullable: true),
   'retryAt': StringSchema(nullable: true),
   'failedTurns': ArraySchema(StringSchema(), nullable: true),
+  // Deliveries asked for again (followup.retry): a reminder per round.
+  'retries': IntegerSchema(nullable: true),
 });
 
 /// Durable conditions and one delivery. Agent instructions remain opaque text.
@@ -512,7 +514,8 @@ final class Followups {
       row
         ..remove('retryAt')
         ..['turnId'] = null
-        ..['turnStatus'] = null;
+        ..['turnStatus'] = null
+        ..['retries'] = (row['retries'] as int? ?? 0) + 1;
       await _save(row, 'ready', 'retrying',
           origin: invocation.origin,
           invocationId: invocation.id,
