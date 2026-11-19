@@ -309,7 +309,9 @@ final class HeadlessNipa {
         dshPlugins: plugins,
         // The harness's own ./nipa finds this endpoint from the hooks and
         // from her shell alike.
-        environment: {'NIPAPLAY_ENDPOINT_FILE': endpoint.credentialFile.path});
+        environment: {'NIPAPLAY_ENDPOINT_FILE': endpoint.credentialFile.path},
+        // The vault is plain files of this user; her tools may not name it.
+        protectedPaths: [p.join(root.path, 'vault')]);
     _host = host;
     jobOrigins.threadFor = host.threadForOrigin;
     memory.recent = (current) async {

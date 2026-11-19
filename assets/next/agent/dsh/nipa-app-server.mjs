@@ -383,6 +383,113 @@ class Wire {
   }
 }
 
+/**
+ * What NipaPlay holds as secrets (its vault, the model key): a tool that
+ * printed one (a `cat` of the vault, an `env` of a process) does not hand it
+ * to the model or to the session log (#1119). Values only, in this process's
+ * memory; NipaPlay sends them with `nipa/redact`, never through a file.
+ */
+export const REDACTED = '[已隐去的凭据]';
+const MIN_SECRET = 8;
+
+export function secretForms(secret) {
+  const forms = new Set([secret]);
+  forms.add(JSON.stringify(secret).slice(1, -1));
+  try { forms.add(encodeURIComponent(secret)); } catch { /* lone surrogate */ }
+  return [...forms].filter((form) => form.length >= MIN_SECRET);
+}
+
+export class Redactions {
+  #forms = [];
+  remember(values) {
+    let changed = false;
+    for (const value of Array.isArray(values) ? values : []) {
+      if (typeof value !== 'string' || value.length < MIN_SECRET) continue;
+      for (const form of secretForms(value)) {
+        if (!this.#forms.includes(form)) { this.#forms.push(form); changed = true; }
+      }
+    }
+    // Longest first: a secret containing another is hidden whole.
+    if (changed) this.#forms.sort((a, b) => b.length - a.length);
+  }
+  get size() { return this.#forms.length; }
+  text(value) {
+    if (typeof value !== 'string' || this.#forms.length === 0) return value;
+    let out = value;
+    for (const form of this.#forms) {
+      if (out.includes(form)) out = out.split(form).join(REDACTED);
+    }
+    return out;
+  }
+  json(value) {
+    if (typeof value === 'string') return this.text(value);
+    if (Array.isArray(value)) return value.map((item) => this.json(item));
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.json(v)]));
+    }
+    return value;
+  }
+  /** Text blocks with secrets hidden; the same array when none was there. */
+  content(blocks) {
+    if (!Array.isArray(blocks) || this.#forms.length === 0) return blocks;
+    let changed = false;
+    const out = blocks.map((block) => {
+      if (block?.type !== 'text' || typeof block.text !== 'string') return block;
+      const text = this.text(block.text);
+      if (text === block.text) return block;
+      changed = true;
+      return { ...block, text };
+    });
+    return changed ? out : blocks;
+  }
+  /**
+   * A `tools/post-execute` decision with secrets hidden from what the model
+   * reads of it. A failed call is rewritten as a block, so that its error
+   * message (shown and logged) is the hidden text too.
+   */
+  decision(result, decision) {
+    if (this.#forms.length === 0) return decision;
+    if (decision.kind === 'block') {
+      const feedback = this.content(decision.feedback);
+      return feedback === decision.feedback ? decision : { ...decision, feedback };
+    }
+    if (Object.hasOwn(decision, 'value')) {
+      const value = this.json(decision.value);
+      return JSON.stringify(value) === JSON.stringify(decision.value) ? decision : { ...decision, value };
+    }
+    const original = decision.content ?? result.content;
+    const content = this.content(original);
+    const failedMessage = result.isError ? this.text(String(result.error?.message ?? '')) : '';
+    const messageChanged = result.isError && failedMessage !== String(result.error?.message ?? '');
+    if (content === original && !messageChanged) return decision;
+    if (result.isError) {
+      return {
+        kind: 'block',
+        feedback: content,
+        ...(decision.additionalContexts ? { additionalContexts: decision.additionalContexts } : {}),
+      };
+    }
+    return { ...decision, content };
+  }
+}
+
+/**
+ * Whether a call names a protected path (a vault directory) in any of its
+ * arguments, as written or resolved: it is refused before it runs. A path
+ * built some other way still reaches only redacted output.
+ */
+export function namesProtectedPath(args, protectedPaths) {
+  if (!protectedPaths.length) return false;
+  const strings = [];
+  const walk = (value) => {
+    if (typeof value === 'string') strings.push(value);
+    else if (Array.isArray(value)) value.forEach(walk);
+    else if (value && typeof value === 'object') Object.values(value).forEach(walk);
+  };
+  walk(args);
+  return strings.some((text) => protectedPaths.some((path) => text.includes(path)));
+}
+
 export function apply(ctx, config = {}) {
   const provider = String(config.provider ?? 'nipaplay');
   const model = String(config.model ?? '');
@@ -396,6 +503,25 @@ export function apply(ctx, config = {}) {
   const home = process.env.DSH_HOME ?? join(process.env.HOME ?? '.', '.dsh');
   const meta = new ThreadMeta(join(home, 'nipaplay', 'threads.json'));
   const version = String(config.dshVersion ?? 'unknown');
+  const redactions = new Redactions();
+  redactions.remember([process.env.NIPAPLAY_MODEL_API_KEY]);
+  const protectedPaths = [];
+  for (const path of Array.isArray(config.protectedPaths) ? config.protectedPaths : []) {
+    if (typeof path !== 'string' || !path) continue;
+    protectedPaths.push(path);
+    try { protectedPaths.push(realpathSync(path)); } catch { /* not there yet */ }
+  }
+  ctx.on('tools/pre-execute', async (exec, next) => {
+    if (namesProtectedPath(exec.arguments, protectedPaths)) {
+      return { kind: 'deny', reason: 'NipaPlay keeps its credentials in this directory; they are not read by tools. Use the secret names NipaPlay gives instead.' };
+    }
+    return next();
+  }, { prepend: true });
+  // Outermost, so what any other policy (a spill preview) returns is hidden too.
+  ctx.on('tools/post-execute', async (exec, result, next) =>
+    redactions.decision(result, await next()), { prepend: true });
+  ctx.on('tools/ptc-dispatch-log', async (dispatch, next) =>
+    redactions.content(await next()), { prepend: true });
 
   /** Root agents this host created or resumed; DSH's subagent service owns its children. */
   const handles = new Map();
@@ -628,6 +754,10 @@ export function apply(ctx, config = {}) {
   };
 
   async function onMessage({ id, method, params }) {
+    if (method === 'nipa/redact' && (id === undefined || id === null)) {
+      redactions.remember(params?.values);
+      return;
+    }
     if (method === 'nipa/memoryStale' && (id === undefined || id === null)) {
       // NipaPlay's recent facts changed: nipa-memory rebuilds its block
       // before each root session's next model request.

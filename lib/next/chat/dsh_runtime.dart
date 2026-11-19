@@ -292,6 +292,7 @@ List<Map<String, Object?>> dshPatch(
         required String harness,
         required String version,
         bool webSearch = false,
+        List<String> protectedPaths = const [],
         DshConfig? config}) =>
     [
       for (final id in dshDisabledRows) {'id': id, 'disabled': true},
@@ -334,6 +335,9 @@ List<Map<String, Object?>> dshPatch(
               'model': route.model,
               'cwd': harness,
               'dshVersion': version,
+              // Where NipaPlay keeps credentials as files: tools that name
+              // them are refused (#1119). Paths only, never a value.
+              if (protectedPaths.isNotEmpty) 'protectedPaths': protectedPaths,
               if (route.reasoningEffort != null)
                 'reasoningEffort': route.reasoningEffort,
               if (config != null) 'maxTokens': config.maxTokens,
