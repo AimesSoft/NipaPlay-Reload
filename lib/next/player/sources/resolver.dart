@@ -5,7 +5,6 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
 import 'details.dart';
-import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 
 import '../kernel/driver.dart';
@@ -63,7 +62,7 @@ class NextSourceResolver {
       await MediaSourceUtils.prepareRemotePath(path);
       actual = MediaSourceUtils.resolveWebDavPathToUrl(path) ?? '';
     } else if (MediaSourceUtils.isNewSmbPath(path)) {
-      await SMBProxyService.instance.initialize();
+      await MediaSourceUtils.prepareRemotePath(path);
       actual = MediaSourceUtils.resolveSmbPathToUrl(path) ?? '';
       direct = true;
     } else if (scheme == 'file') {

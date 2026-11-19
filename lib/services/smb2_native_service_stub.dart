@@ -32,6 +32,8 @@ class Smb2NativeService {
   }) {
     throw UnsupportedError('libsmb2 is not supported on this platform.');
   }
+
+  void dispose() {}
 }
 
 class Smb2Stat {

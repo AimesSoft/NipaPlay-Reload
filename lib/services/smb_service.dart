@@ -293,13 +293,35 @@ class SMBService {
   final ProcessMemoryListCache<_SMBDirectoryCacheKey, SMBFileEntry>
       _directoryCache =
       ProcessMemoryListCache<_SMBDirectoryCacheKey, SMBFileEntry>();
+  final List<VoidCallback> _connectionListeners = <VoidCallback>[];
 
   List<SMBConnection> get connections => List.unmodifiable(_connections);
+
+  /// 注册连接列表或优选地址变更回调。
+  void addConnectionListener(VoidCallback listener) {
+    if (!_connectionListeners.contains(listener)) {
+      _connectionListeners.add(listener);
+    }
+  }
+
+  /// 移除连接变更回调。
+  void removeConnectionListener(VoidCallback listener) {
+    _connectionListeners.remove(listener);
+  }
+
+  void _notifyConnectionListeners() {
+    for (final listener in List<VoidCallback>.of(_connectionListeners)) {
+      try {
+        listener();
+      } catch (_) {}
+    }
+  }
 
   /// 记录（并供后续读取）某连接优先使用的地址；true 表示优先公网。
   void setPreferredAddress(String connectionId, {required bool useWan}) {
     if (connectionId.trim().isEmpty) return;
     _preferWanById[connectionId] = useWan;
+    _notifyConnectionListeners();
   }
 
   /// 某连接最近一次内网/公网地址的连通性检测结果。
@@ -358,6 +380,7 @@ class SMBService {
         ..addAll(decoded
             .whereType<Map<String, dynamic>>()
             .map((e) => _normalizeConnection(SMBConnection.fromJson(e))));
+      _notifyConnectionListeners();
     } catch (e) {
       print('加载SMB连接失败: $e');
     }
@@ -381,6 +404,7 @@ class SMBService {
     if (success) {
       _connections.add(normalized.copyWith(isConnected: true));
       clearDirectoryCache(connectionName: normalized.name);
+      _notifyConnectionListeners();
       await _saveConnections();
     }
     return success;
@@ -405,6 +429,7 @@ class SMBService {
       ..addAll(replacement);
     observeChanges();
     clearDirectoryCache();
+    _notifyConnectionListeners();
   }
 
   Future<void> persistConnections() async {
@@ -413,6 +438,7 @@ class SMBService {
         _connectionsKey,
         jsonEncode(_connections.map((c) => c.toJson()).toList()));
     observeChanges();
+    _notifyConnectionListeners();
   }
 
   Future<bool> updateConnection(
@@ -435,6 +461,7 @@ class SMBService {
     if (normalized.name != originalName) {
       clearDirectoryCache(connectionName: normalized.name);
     }
+    _notifyConnectionListeners();
     await _saveConnections();
     return true;
   }
@@ -442,6 +469,7 @@ class SMBService {
   Future<void> removeConnection(String name) async {
     _connections.removeWhere((conn) => conn.name == name);
     clearDirectoryCache(connectionName: name);
+    _notifyConnectionListeners();
     await _saveConnections();
   }
 
@@ -459,6 +487,7 @@ class SMBService {
     final success = await _testAddresses(normalized);
     _connections[index] = normalized.copyWith(isConnected: success);
     clearDirectoryCache(connectionName: name);
+    _notifyConnectionListeners();
     await _saveConnections();
   }
 
@@ -515,6 +544,7 @@ class SMBService {
     _preferWanById[normalized.id] = !lanSuccess && wanSuccess;
     _addressReachabilityById[normalized.id] =
         (lan: lanSuccess, wan: wanSuccess);
+    _notifyConnectionListeners();
     return lanSuccess || wanSuccess;
   }
 
