@@ -394,17 +394,6 @@ final class LibraryProjection {
         conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<List<String>> _identities(String id) async => [
-        for (final b in await db.rawQuery(
-            "SELECT o.* FROM media_bindings b JOIN media_external_objects o ON o.id=b.object_id WHERE b.entity_id=? AND b.status='accepted' AND b.relation IN ('exact','contains') AND o.provider IN ('dandanplay','tmdb','bangumi')",
-            [id]))
-          jsonEncode([
-            b['provider'],
-            b['object_type'] == 'anime' ? 'work' : b['object_type'],
-            b['scope'],
-            b['external_id']
-          ])
-      ];
   Future<String?> _sample(String path) async {
     try {
       final file = File(path);
@@ -435,45 +424,153 @@ final class LibraryProjection {
     }
   }
 
-  Future<String?> _asset(String? path) async {
+  Future<String?> _asset(String? path, {Map<String, String?>? memo}) async {
     if (path == null) return null;
-    final real = await File(path).resolveSymbolicLinks();
-    final stat = await File(real).stat();
+    if (memo != null && memo.containsKey(path)) return memo[path];
+    final String real;
+    final FileStat stat;
+    try {
+      real = await File(path).resolveSymbolicLinks();
+      stat = await File(real).stat();
+    } on FileSystemException {
+      // A poster that is gone (a pruned cache, a drive not yet mounted) is a
+      // work without that picture, not a library that cannot be built
+      // (#1125).
+      if (memo != null) memo[path] = null;
+      return null;
+    }
+    if (stat.type != FileSystemEntityType.file) {
+      if (memo != null) memo[path] = null;
+      return null;
+    }
     final id = 'asset:${_hash([
           real,
           stat.size,
           stat.modified.microsecondsSinceEpoch
         ])}';
     _assets[id] = real;
+    if (memo != null) memo[path] = id;
     return id;
   }
 
   Future<void> _buildLocal(String stamp) async {
     final records = <JsonMap>[];
+    final assetMemo = <String, String?>{};
     final entityAliases = <String, List<String>>{};
     for (final row in await db.query('media_entity_aliases')) {
       (entityAliases[row['entity_id'] as String] ??= [])
           .add(row['old_id'] as String);
     }
+    // Batch per-library lookup tables once instead of issuing N+1 queries per
+    // work and per episode (#1125).
+    final workRows = <Map<String, Object?>>[];
+    final childrenByParent = <String, List<String>>{};
+    final releasesByWork = <String, List<String>>{};
+    for (final row in await db.query('media_entities',
+        columns: ['id', 'parent_id', 'kind', 'attributes'], orderBy: 'rowid')) {
+      final id = row['id'] as String;
+      final parentId = row['parent_id'] as String?;
+      final kind = row['kind'] as String;
+      if (parentId != null) {
+        (childrenByParent[parentId] ??= []).add(id);
+        if (kind == 'release') {
+          (releasesByWork[parentId] ??= []).add(id);
+        }
+      }
+      if (kind == 'work') workRows.add(row);
+    }
+    final acceptedEntities = <String>{
+      for (final row in await db.rawQuery(
+          "SELECT DISTINCT entity_id FROM media_bindings WHERE status='accepted'"))
+        row['entity_id'] as String,
+    };
+    final fileBoundEntities = <String>{
+      for (final row in await db
+          .rawQuery('SELECT DISTINCT episode_id FROM media_file_episodes'))
+        row['episode_id'] as String,
+    };
+    final minBindingCreated = <String, String>{
+      for (final row in await db.rawQuery(
+          'SELECT entity_id, MIN(created_at) AS added FROM media_bindings GROUP BY entity_id'))
+        if (row['added'] is String)
+          row['entity_id'] as String: row['added'] as String,
+    };
+    final identitiesByEntity = <String, List<String>>{};
+    for (final b in await db.rawQuery(
+        "SELECT b.entity_id, o.provider, o.object_type, o.scope, o.external_id "
+        "FROM media_bindings b "
+        "JOIN media_external_objects o ON o.id=b.object_id "
+        "WHERE b.status='accepted' AND b.relation IN ('exact','contains') "
+        "AND o.provider IN ('dandanplay','tmdb','bangumi')")) {
+      (identitiesByEntity[b['entity_id'] as String] ??= []).add(jsonEncode([
+        b['provider'],
+        b['object_type'] == 'anime' ? 'work' : b['object_type'],
+        b['scope'],
+        b['external_id']
+      ]));
+    }
+    final searchTitlesByWork = <String, List<String>>{};
+    for (final snapshot in await db.rawQuery(
+        "SELECT CASE WHEN e.kind='release' THEN e.parent_id ELSE e.id END AS work_id, s.fields "
+        "FROM media_snapshots s "
+        "JOIN media_bindings b ON b.object_id=s.object_id "
+        "JOIN media_entities e ON e.id=b.entity_id "
+        "WHERE b.status='accepted' AND b.relation IN ('exact','contains') "
+        "AND (e.kind='work' OR e.kind='release')")) {
+      final workId = snapshot['work_id'] as String?;
+      if (workId == null) continue;
+      final decoded = jsonDecode(snapshot['fields'] as String) as Map;
+      (searchTitlesByWork[workId] ??= []).addAll(
+          librarySearchTitles(decoded['metadata'] as Map? ?? decoded));
+    }
+    final sourceIdsByWork = <String, Set<String>>{};
+    for (final f in await db.rawQuery(
+        'SELECT r.parent_id AS work_id, f.attributes '
+        'FROM media_entities f '
+        'JOIN media_file_episodes fe ON fe.file_id=f.id '
+        'JOIN media_entities e ON e.id=fe.episode_id '
+        'JOIN media_entities r ON r.id=e.parent_id '
+        'WHERE r.parent_id IS NOT NULL')) {
+      final workId = f['work_id'] as String;
+      final remote =
+          (jsonDecode(f['attributes'] as String) as Map)['remoteSource'] as Map?;
+      (sourceIdsByWork[workId] ??= {})
+          .add(remote?['sourceId'] as String? ?? 'local');
+    }
+    final nativeFilesByEpisode = <String, List<Map<String, Object?>>>{};
+    for (final f in await db.rawQuery(
+        "SELECT e.episode_id, l.locator, l.file_id AS fileId, e.start_ms AS startMs, e.end_ms AS endMs, f.attributes "
+        "FROM media_locations l "
+        "JOIN media_file_episodes e ON e.file_id=l.file_id "
+        "JOIN media_entities f ON f.id=l.file_id "
+        "WHERE l.owner_device_id=? AND l.source='local' AND l.available=1",
+        [ui.media.store.ownerDeviceId])) {
+      (nativeFilesByEpisode[f['episode_id'] as String] ??= []).add(f);
+    }
+
+    List<String> subtreeOf(String rootId) {
+      final visited = <String>[rootId];
+      for (var i = 0; i < visited.length; i++) {
+        final children = childrenByParent[visited[i]];
+        if (children != null) visited.addAll(children);
+      }
+      return visited;
+    }
+
     final reads = LibraryReads(ui.media.store);
     final files = await ui.localFiles();
-    for (final row in await db.query('media_entities',
-        where: "kind='work'", orderBy: 'rowid')) {
+    for (final row in workRows) {
       final id = row['id'] as String;
-      if ((jsonDecode(row['attributes'] as String) as Map)['removed'] == true)
-        continue;
+      final attributes = jsonDecode(row['attributes'] as String) as Map;
+      if (attributes['removed'] == true) continue;
+      final subtree = subtreeOf(id);
       // A work made from identities alone, left with none and with no file,
       // is nothing the viewer has. It stays stored (progress, provenance)
       // and shows again when it is bound again.
-      if ((jsonDecode(row['attributes'] as String) as Map)['localOnly'] !=
-              true &&
-          (await db.rawQuery(
-                      'WITH RECURSIVE t(id) AS (SELECT ? UNION ALL SELECT e.id FROM media_entities e JOIN t ON e.parent_id=t.id) '
-                      "SELECT EXISTS(SELECT 1 FROM media_bindings WHERE entity_id IN (SELECT id FROM t) AND status='accepted') "
-                      'OR EXISTS(SELECT 1 FROM media_file_episodes WHERE episode_id IN (SELECT id FROM t)) AS kept',
-                      [id]))
-                  .single['kept'] ==
-              0) {
+      if (attributes['localOnly'] != true &&
+          !subtree.any((entityId) =>
+              acceptedEntities.contains(entityId) ||
+              fileBoundEntities.contains(entityId))) {
         continue;
       }
       final episodes = await ui.localEpisodes(id, files: files, reads: reads);
@@ -482,22 +579,24 @@ final class LibraryProjection {
       work.remove('next');
       final art = work['artwork'] as JsonMap;
       for (final kind in ['poster', 'backdrop', 'logo']) {
-        art[kind] = await _asset(art[kind] as String?);
+        art[kind] = await _asset(art[kind] as String?, memo: assetMemo);
       }
       if (!_added.containsKey(id)) {
-        final observed = await db.rawQuery(
-            'WITH RECURSIVE children(id) AS (SELECT ? UNION ALL SELECT e.id FROM media_entities e JOIN children c ON e.parent_id=c.id) SELECT MIN(created_at) AS added FROM media_bindings WHERE entity_id IN (SELECT id FROM children)',
-            [id]);
-        _added[id] =
-            DateTime.tryParse(observed.single['added'] as String? ?? '')
-                    ?.microsecondsSinceEpoch ??
-                DateTime.now().microsecondsSinceEpoch;
+        String? earliest;
+        for (final entityId in subtree) {
+          final created = minBindingCreated[entityId];
+          if (created != null &&
+              (earliest == null || created.compareTo(earliest) < 0)) {
+            earliest = created;
+          }
+        }
+        _added[id] = DateTime.tryParse(earliest ?? '')?.microsecondsSinceEpoch ??
+            DateTime.now().microsecondsSinceEpoch;
       }
-      final identities = await _identities(id);
-      for (final release in await db.query('media_entities',
-          where: "kind='release' AND parent_id=?", whereArgs: [id])) {
-        identities.addAll((await _identities(release['id'] as String)).where(
-            (k) =>
+      final identities = <String>[...(identitiesByEntity[id] ?? const [])];
+      for (final releaseId in releasesByWork[id] ?? const <String>[]) {
+        identities.addAll((identitiesByEntity[releaseId] ?? const <String>[])
+            .where((k) =>
                 ['work', 'tv', 'movie'].contains((jsonDecode(k) as List)[1])));
       }
       records.add({
@@ -508,37 +607,20 @@ final class LibraryProjection {
         'added': _added[id],
         'value': work,
         'metadata': publicHarnessFacts(await reads.metadata(id)),
-        'attributes': jsonDecode(row['attributes'] as String)
+        'attributes': attributes
       });
-      records.last['searchTitles'] = [
-        for (final snapshot in await db.rawQuery(
-            "SELECT s.fields FROM media_snapshots s JOIN media_bindings b ON b.object_id=s.object_id JOIN media_entities e ON e.id=b.entity_id WHERE b.status='accepted' AND b.relation IN ('exact','contains') AND (e.id=? OR (e.kind='release' AND e.parent_id=?))",
-            [
-              id,
-              id
-            ]))
-          ...librarySearchTitles((jsonDecode(snapshot['fields'] as String)
-                  as Map)['metadata'] as Map? ??
-              jsonDecode(snapshot['fields'] as String) as Map)
-      ];
-      final sourceIds = <String>{};
-      for (final f in await db.rawQuery(
-          "SELECT f.attributes FROM media_entities f JOIN media_file_episodes fe ON fe.file_id=f.id JOIN media_entities e ON e.id=fe.episode_id JOIN media_entities r ON r.id=e.parent_id WHERE r.parent_id=?",
-          [id])) {
-        final remote = (jsonDecode(f['attributes'] as String)
-            as Map)['remoteSource'] as Map?;
-        sourceIds.add(remote?['sourceId'] as String? ?? 'local');
-      }
-      records.last['sourceIds'] = sourceIds.toList();
+      records.last['searchTitles'] =
+          List<String>.of(searchTitlesByWork[id] ?? const []);
+      records.last['sourceIds'] =
+          (sourceIdsByWork[id] ?? const <String>{}).toList();
       for (final episode in episodes) {
         final value = episodeJson(episode);
-        value['still'] = await _asset(episode.still);
+        value['still'] = await _asset(episode.still, memo: assetMemo);
         final locations = <JsonMap>[];
         final subtitles =
             await ui.subtitles?.episodeSubtitles(episode.episodeId);
-        final nativeFiles = await db.rawQuery(
-            "SELECT l.locator,l.file_id AS fileId,e.start_ms AS startMs,e.end_ms AS endMs,f.attributes FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id JOIN media_entities f ON f.id=l.file_id WHERE e.episode_id=? AND l.owner_device_id=? AND l.source='local' AND l.available=1",
-            [episode.episodeId, ui.media.store.ownerDeviceId]);
+        final nativeFiles =
+            nativeFilesByEpisode[episode.episodeId] ?? const [];
         for (final f in nativeFiles) {
           final path = f['locator'] as String;
           final sample = await _sample(path);
@@ -586,7 +668,8 @@ final class LibraryProjection {
           'id': episode.episodeId,
           'aliases': entityAliases[episode.episodeId] ?? <String>[],
           'workId': id,
-          'keys': await _identities(episode.episodeId),
+          'keys': List<String>.of(
+              identitiesByEntity[episode.episodeId] ?? const []),
           'files': locations,
           'metadata':
               publicHarnessFacts(await reads.metadata(episode.episodeId)),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -5,6 +6,7 @@ import '../media/identity_store.dart';
 import '../media_sources/metadata.dart';
 import '../harness_redaction.dart';
 import '../mesh/library_codec.dart';
+import '../platform/report_error.dart';
 import '../state/query.dart';
 import 'library.dart';
 import 'library_source_cache.dart';
@@ -71,12 +73,44 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
         if (!_prepared) {
           await ui.meshLibrary?.prepareIndex();
           _prepared = true;
+          if (_servedEarlier) _built.add(null);
         }
       })()
           .whenComplete(() => _preparing = null);
+
+  /// Until this run has built the index once, a read is answered from the
+  /// index the last run left (it is replaced whole, so it is complete) while
+  /// the build goes on behind it; [changes] tells when to read again. A cold
+  /// start showed an empty library for as long as the build took (#1125).
+  /// Only a library never indexed waits for its first build.
+  Future<void> _prepareOrServeEarlier() async {
+    if (_prepared) return;
+    final earlier = (await db.rawQuery(
+            'SELECT EXISTS(SELECT 1 FROM next_library_index) AS n'))
+        .single['n'] == 1;
+    if (!earlier) return _prepare();
+    _servedEarlier = true;
+    unawaited(_prepare().then<void>((_) {}, onError: (Object error, StackTrace stack) {
+      // The next read starts it again.
+      reportNextError(error, stack, 'Next library index');
+    }));
+  }
+
+  bool _servedEarlier = false;
+  final _built = StreamController<void>.broadcast();
   Database get db => ui.db;
   @override
-  Stream<void> get changes => ui.changes;
+  late final Stream<void> changes = Stream<void>.multi((listener) {
+    final subscriptions = [
+      ui.changes.listen(listener.add),
+      _built.stream.listen(listener.add),
+    ];
+    listener.onCancel = () {
+      for (final subscription in subscriptions) {
+        unawaited(subscription.cancel());
+      }
+    };
+  }, isBroadcast: true);
   Future<List<JsonMap>> _sources({bool initialize = true}) async {
     if (initialize) _sourcesRead = true;
     return [
@@ -420,7 +454,7 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
         }
         return UiSlice(result, total: ids.length);
       default:
-        await _prepare();
+        await _prepareOrServeEarlier();
         final where = <String>[];
         final args = <Object?>[];
         if (content['allLocal'] != true)

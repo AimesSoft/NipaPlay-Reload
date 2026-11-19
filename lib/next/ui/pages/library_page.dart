@@ -313,6 +313,16 @@ class _LibraryPageState extends State<LibraryPage>
                       NextButton.ghost(label: '重试', onTap: _load),
                     ]),
               )),
+            // Reading is not the same as empty (#1125).
+            if (_status == null && page == null && _loadError == null)
+              SliverToBoxAdapter(
+                  key: const Key('library.reading'),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: NextLayout.gutter(context), vertical: 16),
+                    child: Text('正在读取媒体库…',
+                        style: NextText.sans(14, color: NextColors.p3)),
+                  )),
             if (_status case final status?)
               StatusView(status: status, on: _on)
             else if (page != null)
