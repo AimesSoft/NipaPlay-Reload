@@ -68,6 +68,11 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
   void handleDanmakuRendererChanged() {
     try {
       if (!player.supportsNativeDanmaku) {
+        // 所有权切回 Flutter（如 Erika 超分开启）：把当前合并列表喂给
+        // Flutter 弹幕控制器，否则叠层恢复后是空的，要等下一次 loadDanmaku。
+        if (_danmakuList.isNotEmpty) {
+          danmakuController?.loadDanmaku(_danmakuList);
+        }
         _notifyListeners();
         return;
       }
