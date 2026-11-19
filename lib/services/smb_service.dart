@@ -280,7 +280,15 @@ class SMBService {
     'pls',
   };
 
-  SMBService._();
+  SMBService._({Future<bool> Function(SMBConnection)? connectionValidator})
+      : _connectionValidator = connectionValidator;
+
+  @visibleForTesting
+  SMBService.forTesting({
+    required Future<bool> Function(SMBConnection) connectionValidator,
+  }) : this._(connectionValidator: connectionValidator);
+
+  final Future<bool> Function(SMBConnection)? _connectionValidator;
   static final SMBService instance = SMBService._();
 
   final List<SMBConnection> _connections = [];
@@ -353,11 +361,22 @@ class SMBService {
       final savedJson = prefs.getString(_connectionsKey);
       if (savedJson == null) return;
       final List<dynamic> decoded = json.decode(savedJson);
+      final needsIdMigration = decoded.whereType<Map>().any(
+            (entry) => entry['id']?.toString().trim().isNotEmpty != true,
+          );
       _connections
         ..clear()
         ..addAll(decoded
             .whereType<Map<String, dynamic>>()
-            .map((e) => _normalizeConnection(SMBConnection.fromJson(e))));
+            .map((e) {
+              final connection =
+                  _normalizeConnection(SMBConnection.fromJson(e));
+              final result = lastAddressReachability(connection.id);
+              return result == null
+                  ? connection
+                  : connection.copyWith(isConnected: result.lan || result.wan);
+            }));
+      if (needsIdMigration) await _saveConnections();
     } catch (e) {
       print('加载SMB连接失败: $e');
     }
@@ -654,6 +673,8 @@ class SMBService {
 
   Future<bool> _testConnection(SMBConnection connection,
       [_SmbProbeNote? note]) async {
+    final validator = _connectionValidator;
+    if (validator != null) return validator(connection);
     try {
       await connection.resolvePassword();
     } catch (e) {

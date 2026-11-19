@@ -624,14 +624,17 @@ Future<void> _main(List<String> args) async {
       final startupPosition =
           await DesktopStartupWindowPreferences.loadPosition();
       final startupSize = await DesktopStartupWindowPreferences.loadSize();
-      final transparentWindowBackground = Platform
-              .environment['NIPAPLAY_DISABLE_WINDOWS_TRANSPARENT_BACKGROUND'] !=
-          '1';
+      // The macOS runner manages transparency for native video underlays.
+      final transparentWindowBackground = !Platform.isMacOS &&
+          Platform.environment['NIPAPLAY_DISABLE_WINDOWS_TRANSPARENT_BACKGROUND'] !=
+              '1';
       WindowOptions windowOptions = WindowOptions(
         // window_manager maps this to the activation policy; quiet lab
         // instances stay accessory so they are never activated.
         skipTaskbar: LabProfile.quiet,
-        titleBarStyle: TitleBarStyle.hidden,
+        // The macOS runner hides its title bar itself: window_manager's
+        // setter would also make the window non-opaque.
+        titleBarStyle: Platform.isMacOS ? null : TitleBarStyle.hidden,
         backgroundColor:
             transparentWindowBackground ? Colors.transparent : null,
         title: LabProfile.title('NipaPlay'),
@@ -658,6 +661,15 @@ Future<void> _main(List<String> args) async {
         } else {
           await windowManager.show();
           await windowManager.focus();
+        }
+        // The macOS runner starts the window transparent, so the first frame
+        // is never a flash; a quiet lab instance needs it as much.
+        if (Platform.isMacOS) {
+          await WidgetsBinding.instance.waitUntilFirstFrameRasterized.timeout(
+            const Duration(seconds: 2),
+            onTimeout: () {},
+          );
+          await windowManager.setOpacity(1);
         }
       });
     }
@@ -692,6 +704,8 @@ Future<void> _main(List<String> args) async {
             ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
             ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
             ChangeNotifierProvider(create: (_) => DownloaderSettingsProvider()),
+            // Next's agent endpoint switch (Classic's immersive detail page
+            // left Labs on main).
             ChangeNotifierProvider(create: (_) => LabsSettingsProvider()),
             ChangeNotifierProvider(
                 create: (_) => RemoteAccessSettingsProvider()),
@@ -1039,6 +1053,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
       return;
     }
     try {
+      await windowManager.setSkipTaskbar(false);
       final isMinimized = await windowManager.isMinimized();
       if (isMinimized) {
         await windowManager.restore();

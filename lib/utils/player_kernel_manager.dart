@@ -250,6 +250,7 @@ class PlayerKernelManager {
       mediaKey: request?.mediaKey,
       resetManualDanmakuOffset: false,
       manualMatchHandled: request != null,
+      restartCompleted: false,
       episodeFileSelectionHandled: true,
     );
     if (videoPlayerState.isDisposed) return;

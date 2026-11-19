@@ -140,13 +140,15 @@ void main() {
 
     expect(detailSource, contains('shouldCompress: false'));
     // The widget loads every image, compressed or not, through the cache
-    // manager, which downloads with the unified loader.
+    // manager, which downloads with the unified loader: one load, whose
+    // cacheOnDisk follows shouldCompress.
     expect(widgetSource, isNot(contains('http.get(')));
     expect(
       RegExp(r'ImageCacheManager\.instance\.loadImage\(')
           .allMatches(widgetSource),
-      hasLength(greaterThanOrEqualTo(2)),
+      isNotEmpty,
     );
+    expect(widgetSource, contains('widget.shouldCompress'));
     expect(cacheSource, isNot(contains('http.get(')));
     expect(cacheSource, contains('loadNetworkImageBytes('));
   });

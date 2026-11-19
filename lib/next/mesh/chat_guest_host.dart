@@ -21,7 +21,13 @@ const chatGuestMethods = {
   'mesh/chat/interrupt',
   'mesh/chat/answer',
   'mesh/chat/events',
+  'mesh/chat/attach',
 };
+
+/// The largest file a guest may hand to the Nipa here, and the most of it
+/// one call carries (well under the frame limit once in base64).
+const chatAttachmentLimit = 256 << 20;
+const chatAttachmentChunk = 384 << 10;
 
 final _threadIdPattern = RegExp(r'^[A-Za-z0-9_-]{8,128}$');
 
@@ -78,6 +84,8 @@ final class ChatGuests {
   GuestChat? _listening;
   final _subscriptions = <StreamSubscription<Object?>>[];
   final _random = Random.secure();
+  late final _attachments =
+      _GuestAttachments(Directory('${root.path}/chat-attachments/guests'));
 
   /// Told apart from the numbering of an earlier run of this host.
   final epoch = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
@@ -201,6 +209,7 @@ final class ChatGuests {
     }
     _subscriptions.clear();
     _wake();
+    await _attachments.close();
     await _serial;
   }
 
@@ -213,6 +222,7 @@ final class ChatGuests {
     }
     await _exclusive(_load);
     if (method == 'mesh/chat/events') return _events(params, peer);
+    if (method == 'mesh/chat/attach') return _attachments.receive(params, peer);
     final host = _running();
     return switch (method) {
       'mesh/chat/state' => _state(host),
@@ -244,6 +254,8 @@ final class ChatGuests {
         'epoch': epoch,
         'sequence': _sequence,
         'sharedThreads': true,
+        // Takes files over `mesh/chat/attach`; an older host says nothing.
+        'attachments': true,
       };
 
   String _thread(JsonMap params, String peer) {
@@ -520,4 +532,185 @@ final class _Entry {
   final int sequence;
   final bool question;
   final Map<String, dynamic> message;
+}
+
+
+/// Files a guest hands to the Nipa here, a part per call, written where she
+/// can read them; a guest's sentence then names them by their path here, as
+/// a file dropped in on this device would be.
+final class _GuestAttachments {
+  _GuestAttachments(this.root);
+  final Directory root;
+  final _uploads = <String,
+      ({String peer, File part, File done, int size, DateTime touchedAt})>{};
+  final _random = Random.secure();
+  static const _staleAfter = Duration(minutes: 30);
+
+  /// What an upload in progress is called (`.<id>.part`); a finished file
+  /// keeps the name it was sent with, whatever it ends in.
+  static final _partName = RegExp(r'^\.[a-z0-9]{12}\.part$');
+
+  /// Chunks are taken one at a time: two at once for the same upload would
+  /// both see the same length and both be appended.
+  Future<void> _receiving = Future.value();
+  static const _maxPeerUploads = 16;
+
+  /// A guest's file here is a copy (the original stays on the guest), kept
+  /// while the conversation is likely to come back to it.
+  static const keptFor = Duration(days: 30);
+  DateTime? _sweptAt;
+
+  static String _safeName(Object? raw) {
+    final base = raw is String ? raw.split(RegExp(r'[\\/]')).last : '';
+    final cleaned = base
+        .replaceAll(RegExp(r'[\x00-\x1f<>:"|?*]'), '_')
+        .replaceAll(RegExp(r'^\.+'), '')
+        // Windows drops trailing dots and spaces from a name: the path told
+        // to Nipa would not be the file written.
+        .replaceAll(RegExp(r'[. ]+$'), '')
+        .trim();
+    if (cleaned.isEmpty) return 'attachment';
+    return cleaned.length <= 120
+        ? cleaned
+        : cleaned.substring(cleaned.length - 120);
+  }
+
+  Future<void> _pruneStale(DateTime now) async {
+    final expired = [
+      for (final entry in _uploads.entries)
+        if (now.difference(entry.value.touchedAt) > _staleAfter) entry.key,
+    ];
+    for (final id in expired) {
+      final upload = _uploads.remove(id);
+      if (upload != null && await upload.part.exists()) {
+        await upload.part.delete().catchError((Object _) => upload.part);
+      }
+    }
+  }
+
+  /// Removes the copies older than [keptFor] (and parts no upload of this
+  /// run owns), at most once an hour, as files arrive.
+  Future<void> _sweep(DateTime now) async {
+    if (_sweptAt != null && now.difference(_sweptAt!) < const Duration(hours: 1)) {
+      return;
+    }
+    _sweptAt = now;
+    if (!await root.exists()) return;
+    final owned = {for (final u in _uploads.values) u.part.path};
+    try {
+      await for (final entity in root.list(recursive: true, followLinks: false)) {
+        if (entity is! File || owned.contains(entity.path)) continue;
+        final part = _partName.hasMatch(entity.uri.pathSegments.last);
+        final age = now.difference(await entity.lastModified());
+        if (age > (part ? _staleAfter : keptFor)) {
+          await entity.delete().catchError((Object _) => entity);
+        }
+      }
+    } on FileSystemException {
+      // Tried again within the hour's next arrival.
+    }
+  }
+
+  Future<void> close() async {
+    final pending = _uploads.values.toList();
+    _uploads.clear();
+    for (final upload in pending) {
+      if (await upload.part.exists()) {
+        await upload.part.delete().catchError((Object _) => upload.part);
+      }
+    }
+  }
+
+  Future<JsonMap> receive(JsonMap params, String peer) {
+    final result = _receiving.then((_) => _receive(params, peer));
+    _receiving = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
+  Future<JsonMap> _receive(JsonMap params, String peer) async {
+    final now = DateTime.now();
+    await _pruneStale(now);
+    await _sweep(now);
+    final size = params['size'], offset = params['offset'];
+    final data = params['data'];
+    if (size is! int || size <= 0 || size > chatAttachmentLimit) {
+      throw const Failure(FailureCode.invalidInput,
+          'size must be 1 byte to $chatAttachmentLimit bytes.');
+    }
+    if (offset is! int || data is! String) {
+      throw const Failure(
+          FailureCode.invalidInput, 'offset and data are required.');
+    }
+    final List<int> bytes;
+    try {
+      bytes = base64Decode(data);
+    } on FormatException {
+      throw const Failure(FailureCode.invalidInput, 'data is not base64.');
+    }
+    final uploadId = params['uploadId'];
+    final ({String peer, File part, File done, int size, DateTime touchedAt})
+        upload;
+    if (uploadId == null) {
+      if (offset != 0) {
+        throw const Failure(
+            FailureCode.invalidInput, 'A new attachment starts at offset 0.');
+      }
+      final activeForPeer =
+          _uploads.values.where((u) => u.peer == peer).length;
+      if (activeForPeer >= _maxPeerUploads) {
+        throw const Failure(FailureCode.conflict,
+            'Too many in-flight attachment uploads for this device.');
+      }
+      final folder = Directory(
+          '${root.path}/${peer.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_')}');
+      await folder.create(recursive: true);
+      final id = List.generate(
+          12, (_) => _random.nextInt(36).toRadixString(36)).join();
+      final name = _safeName(params['name']);
+      upload = (
+        peer: peer,
+        part: File('${folder.path}/.$id.part'),
+        done: File('${folder.path}/$id-$name'),
+        size: size,
+        touchedAt: now,
+      );
+      await upload.part.writeAsBytes(const [], flush: true);
+      _uploads[id] = upload;
+      params = {...params, 'uploadId': id};
+    } else {
+      final known = uploadId is String ? _uploads[uploadId] : null;
+      if (known == null || known.peer != peer || known.size != size) {
+        throw const Failure(FailureCode.notFound, 'Unknown attachment upload.');
+      }
+      upload = (
+        peer: known.peer,
+        part: known.part,
+        done: known.done,
+        size: known.size,
+        touchedAt: now,
+      );
+      _uploads[uploadId as String] = upload;
+    }
+    final id = params['uploadId'] as String;
+    final received = await upload.part.length();
+    if (offset != received ||
+        bytes.length > chatAttachmentChunk ||
+        offset + bytes.length > size ||
+        (bytes.isEmpty && received < size)) {
+      throw Failure(FailureCode.invalidInput, 'Expected the part at $received.',
+          details: {'received': received});
+    }
+    await upload.part.writeAsBytes(bytes, mode: FileMode.append, flush: true);
+    final written = await upload.part.length();
+    if (written < size) return {'uploadId': id, 'received': written};
+    if (written != size) {
+      _uploads.remove(id);
+      await upload.part.delete().catchError((Object _) => upload.part);
+      throw Failure(FailureCode.conflict,
+          'The attachment arrived with $written bytes instead of $size; send it again.');
+    }
+    await upload.part.rename(upload.done.path);
+    _uploads.remove(id);
+    return {'uploadId': id, 'received': written, 'path': upload.done.path};
+  }
 }

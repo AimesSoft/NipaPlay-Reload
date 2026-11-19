@@ -221,6 +221,50 @@ void main() {
     await tester.pump();
     expect(find.byType(Texture), findsNothing);
   });
+
+  test('wakelock enables while playing and releases on pause, close and dispose (#1121)',
+      () async {
+    final toggles = <bool>[];
+    final rig = FakeHost();
+    final playback = SessionPlayback(
+      rig.host,
+      setWakelock: (enable) async {
+        toggles.add(enable);
+      },
+    );
+    expect(toggles, isEmpty);
+
+    await playback.openItem(PlayableItem(videoPath: video));
+    await pumpEventQueue();
+    expect(toggles, [true]);
+
+    await playback.port.setPaused(true);
+    await pumpEventQueue();
+    expect(toggles, [true, false]);
+
+    await playback.port.setPaused(false);
+    await pumpEventQueue();
+    expect(toggles, [true, false, true]);
+
+    // Disposing while playing must release the process-wide wakelock.
+    await playback.dispose();
+    await pumpEventQueue();
+    expect(toggles, [true, false, true, false]);
+  });
+
+  test('wakelock errors are contained and do not interrupt playback (#1121)',
+      () async {
+    final rig = FakeHost();
+    final playback = SessionPlayback(
+      rig.host,
+      setWakelock: (_) async => throw StateError('no dbus screensaver'),
+    );
+    await playback.openItem(PlayableItem(videoPath: video));
+    await pumpEventQueue();
+    expect(playback.transport.value.status, 'playing');
+    await playback.close(reason: 'test');
+    await playback.dispose();
+  });
 }
 
 final class _StageHost implements VideoStageHost {

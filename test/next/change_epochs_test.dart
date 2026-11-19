@@ -149,6 +149,10 @@ void main() {
     await old.execute('DROP TABLE change_epochs');
     await old.execute('DROP TABLE media_entity_aliases');
     await old.execute('DROP TABLE media_work_merges');
+    // Created by migrations released after this version.
+    await old.execute('DROP TABLE subscription_reports');
+    await old.execute('DROP TABLE subscriptions');
+    await old.execute('DROP TABLE harness_secret_names');
     await old.setVersion(20);
     await old.close();
     db = await openNextDatabase(root, factory: databaseFactoryFfi);

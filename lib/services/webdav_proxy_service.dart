@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:nipaplay/services/remote_proxy_diagnostics.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shelf/shelf.dart';
@@ -26,6 +28,7 @@ class WebDAVProxyService {
 
   static final WebDAVProxyService instance = WebDAVProxyService._();
 
+  final _diagnostics = RemoteProxyDiagnostics('WebDAV');
   HttpServer? _server;
   int _port = 0;
   bool _isRunning = false;
@@ -36,7 +39,12 @@ class WebDAVProxyService {
   Future<void>? _initializing;
 
   Future<void> initialize() async {
-    if (_isRunning || kIsWeb) return;
+    _diagnostics
+        .log('initialize running=$_isRunning pending=${_initializing != null}');
+    if (_isRunning || kIsWeb) {
+      if (_isRunning) unawaited(_diagnostics.probe('initialize-reuse'));
+      return;
+    }
     final pending = _initializing ??= _initialize();
     try {
       await pending;
@@ -55,7 +63,7 @@ class WebDAVProxyService {
       ..add('GET', '/webdav/stream', _handleStream)
       ..get('/webdav/health', (Request request) => Response.ok('ok'));
 
-    final handler = const Pipeline().addHandler(router.call);
+    final handler = _diagnostics.wrap(const Pipeline().addHandler(router.call));
 
     final prefs = await SharedPreferences.getInstance();
     final savedPort = prefs.getInt(_portKey);
@@ -74,11 +82,12 @@ class WebDAVProxyService {
     Object? lastError;
     for (final candidatePort in portsToTry) {
       try {
-        _server = await shelf_io.serve(
-          handler,
+        _diagnostics.log('bind-attempt candidatePort=$candidatePort');
+        _server = await HttpServer.bind(
           InternetAddress.loopbackIPv4,
           candidatePort,
         );
+        shelf_io.serveRequests(_diagnostics.observe(_server!), handler);
         _port = _server!.port;
         _isRunning = true;
         try {
@@ -88,6 +97,8 @@ class WebDAVProxyService {
         }
         return;
       } catch (e) {
+        _diagnostics.log(
+            'bind-failed candidatePort=$candidatePort ${RemoteProxyDiagnostics.errorSummary(e)}');
         lastError = e;
       }
     }
@@ -96,11 +107,13 @@ class WebDAVProxyService {
   }
 
   Future<void> stop() async {
+    _diagnostics.log('stop-request running=$_isRunning');
     await _initializing;
     await _server?.close(force: true);
     _server = null;
     _port = 0;
     _isRunning = false;
+    _diagnostics.log('stop-complete');
   }
 
   /// 解析稳定路径（webdav://conn/rel 或旧式直链）并生成代理流地址。
@@ -281,11 +294,14 @@ class WebDAVProxyService {
         headers: passthroughHeaders,
       );
     } on TimeoutException {
+      _diagnostics.log('upstream-timeout');
       return Response(
         HttpStatus.gatewayTimeout,
         body: 'WebDAV upstream timeout',
       );
     } catch (e) {
+      _diagnostics
+          .log('upstream-error ${RemoteProxyDiagnostics.errorSummary(e)}');
       return Response.internalServerError(body: 'WebDAV stream error: $e');
     } finally {
       if (!handedToStream) {

@@ -46,6 +46,73 @@ final class MediaDetailControlTests: XCTestCase {
         XCTAssertEqual(button.overrideUserInterfaceStyle, .dark)
     }
 
+    func testIconOnlyKeepsAccessibleNameAndCentersSymbol() {
+        let view = control(["iconOnly": true])
+        let button = view.button
+        button.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
+        button.layoutIfNeeded()
+        XCTAssertNil(button.configuration?.title)
+        XCTAssertEqual(button.accessibilityLabel, "评论")
+        XCTAssertNotNil(button.imageView?.image)
+        XCTAssertEqual(button.imageView!.frame.midX, button.bounds.midX, accuracy: 1)
+        XCTAssertEqual(button.imageView!.frame.midY, button.bounds.midY, accuracy: 1)
+        view.update(["label": "剧集", "symbol": "list.bullet", "enabled": true])
+        XCTAssertEqual(button.configuration?.title, "剧集")
+        XCTAssertEqual(button.titleLabel?.numberOfLines, 1)
+    }
+
+    func testGroupedActionKeepsNativeSymbolAndActivationWithoutItsOwnGlass() {
+        let view = control(["label": "收藏", "symbol": "heart", "iconOnly": true, "plain": true])
+        XCTAssertNil(view.button.configuration?.title)
+        XCTAssertEqual(view.button.accessibilityLabel, "收藏")
+        XCTAssertNotNil(view.button.configuration?.image)
+        XCTAssertEqual(view.button.configuration?.background.visualEffect,
+                       UIButton.Configuration.plain().background.visualEffect)
+        view.button.sendActions(for: .primaryActionTriggered)
+        XCTAssertEqual(messenger.calls.map { $0.method }, ["pressed"])
+    }
+
+    func testSwiftUIHostOwnsSharedGlassActionsAndMenu() {
+        let group = MediaDetailActionGroupView(CGRect(x: 0, y: 0, width: 184, height: 44), 2, messenger, ["actions": [
+            ["label": "收藏", "symbol": "heart", "enabled": true],
+            ["label": "评论", "symbol": "bubble.left.and.bubble.right", "enabled": true, "selected": true],
+            ["label": "评分", "symbol": "square.and.pencil", "enabled": false],
+            ["label": "更多", "symbol": "ellipsis", "enabled": true,
+             "items": [["label": "修改背景图", "enabled": true], ["label": "清理", "enabled": false]]],
+        ]])
+        let host = group.container.hosting
+        XCTAssertTrue(host.view.superview === group.container)
+        XCTAssertTrue(host.rootView.model === group.model)
+        XCTAssertEqual(group.model.actions.count, 4)
+        XCTAssertTrue(group.model.actions[1].selected)
+        XCTAssertFalse(group.model.actions[2].enabled)
+        group.model.activate(1)
+        group.model.activate(2)
+        XCTAssertEqual(messenger.calls.count, 1)
+        XCTAssertEqual(messenger.calls[0].arguments as? [String: Int], ["index": 1])
+        group.model.select(3, item: 0)
+        group.model.select(3, item: 1)
+        XCTAssertEqual(messenger.calls.count, 2)
+        XCTAssertEqual(messenger.calls[1].arguments as? [String: Int], ["index": 3, "selected": 0])
+        group.update(["actions": [["label": "取消收藏", "symbol": "heart.fill", "enabled": true]]])
+        XCTAssertTrue(group.container.hosting === host)
+        XCTAssertEqual(group.model.actions[0].symbol, "heart.fill")
+    }
+
+    func testSwiftUIHostingControllerFollowsNativeContainment() {
+        let model = MediaCapsuleModel()
+        model.update(["actions": [["label": "评论", "symbol": "bubble.right", "enabled": true]]])
+        let container = MediaCapsuleHostingContainer(frame: CGRect(x: 0, y: 0, width: 52, height: 44), model: model)
+        let parent = UIViewController()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
+        window.rootViewController = parent
+        parent.view.addSubview(container)
+        window.makeKeyAndVisible()
+        XCTAssertTrue(container.hosting.parent === parent)
+        container.removeFromSuperview()
+        XCTAssertNil(container.hosting.parent)
+    }
+
     func testAccentOnlyAppliesToPrimaryAndClearsOnReuse() {
         let view = control(["primary": true, "color": NSNumber(value: UInt32(0xFFFF3366))])
         let accent = UIColor(red: 1, green: 0.2, blue: 0.4, alpha: 1)

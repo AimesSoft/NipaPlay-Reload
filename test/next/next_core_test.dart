@@ -119,14 +119,18 @@ void main() {
     expect(core.danmaku.service.store.db,
         same((core.engine.store as SqliteJobStore).database));
     final db = core.media.service.store.database;
-    expect(await db.getVersion(), 26);
+    expect(await db.getVersion(), 29);
     expect(await db.query('settings_changes'), isEmpty);
     expect(await db.query('danmaku_bindings'), isEmpty);
     expect((await db.rawQuery('PRAGMA foreign_key_check')), isEmpty);
 
-    // The backend finishes after startup; only application observation imports it.
+    // A session that appears after startup outside Next (no download task is
+    // active, so the backend is not watched: downloads/README.md) is taken in
+    // by the next refresh the person asks for, or the next start.
     backend.present = true;
     await backend.finish();
+    expect(await core.engine.list(type: 'download'), isEmpty);
+    await core.downloads.refresh();
     final deadline = DateTime.now().add(const Duration(seconds: 3));
     while ((await core.engine.list(type: 'download')).isEmpty) {
       if (DateTime.now().isAfter(deadline)) fail('Session was not adopted.');

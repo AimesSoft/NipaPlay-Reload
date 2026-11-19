@@ -225,13 +225,20 @@ final class MeshRuntime implements MeshDeviceSource {
   final _seen = <String, int>{};
   final _descriptions = <String, JsonMap>{};
   final _unknownPeerCheckedAt = <String, DateTime>{};
-  late final _addressLookup = MeshAddressLookup(
+  late final MeshAddressLookup _addressLookup = MeshAddressLookup(
     cache: _peerCandidates,
     baseDelay: candidateLookupBase,
     maxDelay: candidateLookupInterval,
     request: (peer) => _coordinator!.request(
         'GET', '/mesh/v1/addresses?device_id=$peer'),
     onChanged: () => unawaited(_persistRoutes()),
+    // As after a heartbeat that recovered: forget the backoff of devices not
+    // known reachable and say so; what waits for them asks again (#1101).
+    onCooldownEnded: () {
+      if (_closed) return;
+      _addressLookup.refresh(_active.where((id) => _reachability[id] != true));
+      if (!_hostChanges.isClosed) _hostChanges.add(null);
+    },
   );
   bool _hostFactsLoaded = false;
   bool _routesLoaded = false;
@@ -1664,6 +1671,9 @@ final class MeshRuntime implements MeshDeviceSource {
         'online': false,
         if (presence.of(id) case final fact?) 'presence': fact.toJson(),
         'error': failure.toJson(),
+        // Whether its address is old, waiting to be asked again, or was
+        // refused: an offline device is not always an unreachable one.
+        if (_coordinator != null) 'addressLookup': _addressLookup.peerFacts(id),
         if (includeCatalog) 'actions': _catalogs[id] ?? <Object?>[]
       };
     }

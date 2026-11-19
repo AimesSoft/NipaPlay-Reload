@@ -93,7 +93,7 @@ python3 nipa call activity.report '{"title":"检测到变化", "source":"我的�
 
 ## 后续
 
-梨花可以登记后续（`followup.register`）：指定事件发生后回到原对话继续工作，如某个文件下载完成（`download.file_completed`）、某个下载停滞（`download.stalled`）。后续与唤醒共用持久队列，重启后保留。查看和取消：`followup.list`、`followup.cancel`。
+梨花可以登记后续（`followup.register`）：指定事件发生后回到原对话继续工作，如某个文件下载完成（`download.file_completed`）、某个下载停滞（`download.stalled`）。后续与唤醒共用持久队列，重启后保留。查看和取消：`followup.list`、`followup.cancel`；投递失败或正在等待自动重试的后续，可以用 `followup.retry` 立即再投一次。后台后续投递失败时，提醒会写明是哪个后续，并提供"立即重试"和"停止"。
 
 脚本发起的下载没有所属对话，停滞通知通过 `download.stalled` 事件程序或后续获得。
 

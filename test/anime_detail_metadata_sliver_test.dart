@@ -10,15 +10,100 @@ import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/services/quarterly_review_cache.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/anime_detail_metadata_sliver.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_anime_detail_scaffold.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/immersive_media_detail_route.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/bangumi_comments_widget.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('legacy detail keeps comments mounted when switching tabs',
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    // This application-wide cache outlives individual widget trees. Load its
+    // expiry timer outside their fake clocks, then dispose it once per suite.
+    await QuarterlyReviewCache.instance.load();
+  });
+  tearDownAll(() => QuarterlyReviewCache.instance.dispose());
+
+  for (final surface in [
+    AppDisplaySurface.phone,
+    AppDisplaySurface.desktopTablet,
+  ]) {
+    testWidgets('$surface opens full-page details with the old lab switch off',
+        (tester) async {
+      // BangumiService also caches details in memory, so resetting preferences
+      // alone does not isolate fixtures that reuse an anime ID.
+      final animeId = -1 - surface.index;
+      final anime = BangumiAnime(
+        id: animeId,
+        name: 'Test title',
+        nameCn: 'Test title',
+        imageUrl: '',
+        summary: 'Summary',
+        tags: const [],
+        language: 'zh',
+      );
+      SharedPreferences.setMockInitialValues({
+        'labs_enable_immersive_anime_detail': false,
+        'bangumi_detail_$animeId': jsonEncode({
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+          'animeDetail': anime.toJson(),
+        }),
+      });
+      final appearance = _TestAppearance();
+      final summary = SharedRemoteAnimeSummary(
+        animeId: animeId,
+        name: 'Test title',
+        nameCn: 'Test title',
+        summary: 'Summary',
+        imageUrl: '',
+        lastWatchTime: DateTime(2026),
+        episodeCount: 0,
+        hasMissingFiles: false,
+      );
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppearanceSettingsProvider>.value(
+          value: appearance,
+          child: AppDisplaySurfaceScope(
+            surface: surface,
+            child: MaterialApp(
+              home: Builder(
+                  builder: (context) => Scaffold(
+                        body: TextButton(
+                          onPressed: () {
+                            AnimeDetailPage.show(context, animeId,
+                                sharedSummary: summary);
+                          },
+                          child: const Text('Open detail'),
+                        ),
+                      )),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open detail'));
+      await tester.pumpAndSettle();
+      final detail = find.byType(AnimeDetailPage);
+      expect(detail, findsOneWidget);
+      expect(ModalRoute.of(tester.element(detail)),
+          isA<ImmersiveMediaDetailPageRoute>());
+      expect(find.byType(ImmersiveAnimeDetailScaffold), findsOneWidget);
+      Navigator.of(tester.element(detail)).pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Open detail'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      appearance.dispose();
+    });
+  }
+
+  testWidgets(
+      'embedded player detail keeps comments mounted when switching tabs',
       (tester) async {
+    const animeId = -100;
     final anime = BangumiAnime(
-      id: 0,
+      id: animeId,
       name: 'Test title',
       nameCn: 'Test title',
       imageUrl: '',
@@ -31,7 +116,7 @@ void main() {
       ],
     );
     SharedPreferences.setMockInitialValues({
-      'bangumi_detail_0': jsonEncode({
+      'bangumi_detail_$animeId': jsonEncode({
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'animeDetail': anime.toJson(),
       }),
@@ -45,10 +130,11 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
               body: AnimeDetailPage(
-            animeId: 0,
+            animeId: animeId,
             renderInWindowScaffold: false,
+            embeddedInPlayback: true,
             sharedSummary: SharedRemoteAnimeSummary(
-              animeId: 0,
+              animeId: animeId,
               name: 'Test title',
               nameCn: 'Test title',
               summary: 'Summary',
@@ -78,7 +164,6 @@ void main() {
     expect(tester.state(find.byType(BangumiCommentsWidget)), same(comments));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
-    QuarterlyReviewCache.instance.dispose();
     appearance.dispose();
   });
 
@@ -160,6 +245,9 @@ class _TestAppearance extends ChangeNotifier
 
   @override
   bool get enableWidgetBlurEffect => false;
+
+  @override
+  bool get enableMediaDetailLiquidGlass => true;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

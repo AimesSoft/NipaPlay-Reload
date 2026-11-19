@@ -15,12 +15,13 @@ final class InboxCapability implements Capability {
                   title: '提醒用户',
                   effect: Effect.write,
                   description:
-                      'Publish a durable nonmodal reminder immediately. You decide whether and when to notify and write its title/body; no automatic completion summary. Same requestId and content returns the original reminder. Hiding or reading is not consent. severity error displays the error text supplied without replacing it with a generic message. UI popup preference does not delete the inbox entry.',
+                      'Publish a durable nonmodal reminder immediately. You decide whether and when to notify and write its title/body; no automatic completion summary. Same requestId and content returns the original reminder. Hiding or reading is not consent. severity error displays the error text supplied without replacing it with a generic message. UI popup preference does not delete the inbox entry. followupId names the followup a reminder is about: it opens that followup\'s conversation, and the viewer is offered followup.retry and followup.cancel on it.',
                   input: ObjectSchema({
                     'requestId': _id,
                     'title': StringSchema(minLength: 1, maxLength: 200),
                     'body': StringSchema(minLength: 1, maxLength: 16000),
-                    'severity': StringSchema(values: ['info', 'error'])
+                    'severity': StringSchema(values: ['info', 'error']),
+                    'followupId': _id
                   }, required: [
                     'requestId',
                     'title',

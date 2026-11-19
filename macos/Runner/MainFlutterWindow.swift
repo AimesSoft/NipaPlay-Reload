@@ -1716,6 +1716,9 @@ class MainFlutterWindow: NSWindow {
   private var nextActivity: NSObjectProtocol?
 
   override func awakeFromNib() {
+    // main.dart normally restores opacity after first rasterization or its timeout.
+    alphaValue = 0
+
     do {
       try LabProfile.install()
       if let profile = LabProfile.name { title = "NipaPlay · LAB [\(profile)]" }
@@ -1764,10 +1767,23 @@ class MainFlutterWindow: NSWindow {
       nibName: nil,
       bundle: nil
     )
-    if Self.shouldUseTransparentFlutterSurface() {
-      self.isOpaque = false
-      self.backgroundColor = NSColor.clear
-      flutterViewController.backgroundColor = NSColor.clear
+    // window_manager's title-bar setter also makes the window non-opaque.
+    titleVisibility = .hidden
+    titlebarAppearsTransparent = true
+    styleMask.insert(.fullSizeContentView)
+
+    let transparentFlutterSurface = Self.shouldUseTransparentFlutterSurface()
+    let environment = ProcessInfo.processInfo.environment
+    let transparentWindow = transparentFlutterSurface &&
+      (environment["NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER"] == "1" ||
+       environment["NIPAPLAY_MACOS_HDR_VIDEO_ONLY"] == "1")
+    isOpaque = !transparentWindow
+    if transparentWindow {
+      backgroundColor = .clear
+    }
+    if transparentFlutterSurface {
+      // The native video underlay is inside this window.
+      flutterViewController.backgroundColor = .clear
     }
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
@@ -1875,6 +1891,20 @@ class MainFlutterWindow: NSWindow {
     nextChrome = NextWindowChrome(window: self, messenger: flutterEngine.binaryMessenger)
 
     super.awakeFromNib()
+
+    // Dart may fail before it reaches windowManager.show().
+    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) { [weak self] in
+      guard let self, self.alphaValue == 0 else { return }
+      self.alphaValue = 1
+      if !self.isVisible {
+        // A quiet lab instance stays behind the user's windows even then.
+        if LabProfile.quiet {
+          self.orderBack(nil)
+        } else {
+          self.makeKeyAndOrderFront(nil)
+        }
+      }
+    }
   }
 
   private static func shouldUseTransparentFlutterSurface() -> Bool {

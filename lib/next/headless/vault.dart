@@ -21,6 +21,26 @@ final class HeadlessVault implements CredentialVault {
       result = await Process.run('chmod', ['700', directory.path]);
     }
     if (result.exitCode != 0) throw StateError('headless_vault_permissions_failed');
+    await _rememberAll();
+  }
+
+  /// Every stored value is known to the redactor from the start, not only
+  /// once read: what a tool prints of one is hidden even if NipaPlay has
+  /// not used it in this run (#1119).
+  Future<void> _rememberAll() async {
+    await for (final entity in directory.list()) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+      try {
+        final stored = jsonDecode(await entity.readAsString()) as Map;
+        final ref = stored['ref'], secret = stored['secret'];
+        if (ref is Map && secret is String) {
+          SecretRedactor.remember(
+              CredentialRef.fromJson(ref.cast<String, Object?>()), secret);
+        }
+      } on Object {
+        // A damaged file holds nothing to hide; reading it stays an error.
+      }
+    }
   }
   File _file(CredentialRef ref) => File('${directory.path}/${sha256.convert(utf8.encode(jsonEncode(ref.toJson())))}.json');
   @override

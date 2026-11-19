@@ -66,6 +66,18 @@ abstract interface class ChatPort {
   void dispose();
 }
 
+/// A port whose Nipa runs on another device: files picked or dropped here
+/// are not where she can read them until they are handed over.
+abstract interface class ChatFileStaging {
+  /// Why files cannot be handed over now (that device's NipaPlay is too old
+  /// to take them), in a sentence for the conversation; null when they can.
+  String? get filesRefused;
+
+  /// Hands [paths] (files on this device) to the device Nipa runs on and
+  /// returns, in order, where she reads each one there.
+  Future<List<String>> stage(List<String> paths);
+}
+
 /// The production port over the embedded Codex host.
 final class ChatHostPort implements ChatPort {
   ChatHostPort(this.runtime) {

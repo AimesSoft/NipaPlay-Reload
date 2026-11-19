@@ -71,6 +71,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       this.dsh,
       this.dshPlugins,
       this.environment = const {},
+      this.protectedPaths = const [],
       Duration memoryStaleWindow = const Duration(seconds: 2)})
       : assert(dsh == null || dshPlugins != null),
         sessionId = 'nipa-${DateTime.now().microsecondsSinceEpoch}-'
@@ -104,6 +105,25 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   /// endpoint file a host without the desktop's default location uses. They
   /// are set after the login environment and never hold a credential.
   final Map<String, String> environment;
+
+  /// Where this host keeps credentials as files (a headless vault): DSH
+  /// refuses tool calls that name them (#1119).
+  final List<String> protectedPaths;
+
+  /// Tells DSH each secret NipaPlay learns, so that a tool printing it does
+  /// not hand it to the model (#1119). Over the process's stdin only.
+  void _redact(String value, CredentialRef _) {
+    if (dsh != null && available) {
+      _send({
+        'method': 'nipa/redact',
+        'params': {
+          'values': [value]
+        }
+      });
+    }
+  }
+
+  bool _redacting = false;
 
   /// Durable main/current pointers are kept per runtime: a Codex thread
   /// cannot be resumed by DSH, nor the reverse.
@@ -397,6 +417,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
         personaSuffix: persona[1].trim(),
         harness: repository.path,
         version: runtime.version,
+        protectedPaths: protectedPaths,
         webSearch: (clean['DEEPSEEK_API_KEY'] ?? '').isNotEmpty);
     // The patch carries both persona files. Formatting and writing it can grow
     // with their text, so only the ready process facts return to this isolate.
@@ -548,6 +569,17 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       'capabilities': {'experimentalApi': modelLaunch != null}
     });
     _send({'method': 'initialized', 'params': {}});
+    if (dsh != null) {
+      // What is known so far, then each value as it is learned.
+      _send({
+        'method': 'nipa/redact',
+        'params': {'values': SecretRedactor.remembered().keys.toList()}
+      });
+      if (!_redacting) {
+        _redacting = true;
+        SecretRedactor.addListener(_redact);
+      }
+    }
     if (modelLaunch != null) {
       final configuration = await _request('config/read', {});
       final config = configuration['config'] as Map;
@@ -1307,6 +1339,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
 
   Future<void> _close() async {
     _closing = true;
+    if (_redacting) SecretRedactor.removeListener(_redact);
     _memoryStale.close();
     _clock?.cancel();
     _flush?.cancel();

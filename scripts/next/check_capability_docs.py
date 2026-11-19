@@ -42,7 +42,7 @@ def group(prefix, ops, path, reads='', destructive='', desc=''):
 group('task.', 'list get wait cancel reconcile', 'packages/nipa_harness/lib/src/tasks/actions.dart', 'list get wait', desc='查询、等待、取消或核对持久任务；以任务回执为完成依据')
 group('media.management.', 'bind_batch unbind_batch', 'lib/next/media/management.dart', desc='预览或提交显式身份绑定变更')
 group('chat.session.', 'main new list switch', 'lib/next/followups/capability.dart', 'list', desc='选择、创建或列出对话会话')
-group('followup.', 'register list cancel', 'lib/next/followups/capability.dart', 'list', desc='登记、查询或取消持久后续')
+group('followup.', 'register list cancel retry', 'lib/next/followups/capability.dart', 'list', desc='登记、查询、取消或立即重投持久后续')
 put('agent.wake', 'lib/next/followups/capability.dart', 'write', '排队唤醒指定或主会话')
 put('activity.report', 'lib/next/followups/capability.dart', 'write', '记录带来源的发现')
 put('agent.dispatch', 'lib/next/followups/capability.dart', 'write', '派发宿主管理的独立回合')
@@ -90,7 +90,7 @@ for k in rows:
 import hashlib
 BASELINE_HASHES = {
  'lib/next/voice/capability.dart': '635811717bf4e74b5540aaf660b7a128e575fe5a1c4a3f89329361b43027f6b1',
- 'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': '566fb00085f124eddebb5e86bf2e9feb5bca63a6ed33be6b1ff6c3eaed656eb8',
+ 'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': '9762fedade67a672296e97d314a669f8317dcf80006f9d49df0477b100a34862',
  'lib/next/knowledge/capability.dart': '705ef8725a060aa20504794279f0b433e14288663ee024d17e33477dd9b3c400',
  'lib/next/accounts/capability.dart': '1174193fe779e32c1cf3d97792ab7be09ea3aea93d424bca90d2b4ac3b8341e1',
  'lib/next/app_capabilities.dart': 'e154e184c3914b08fad13fc06fe9bc3276ce46951c6b340fea616887595daeda',
@@ -117,10 +117,10 @@ BASELINE_HASHES = {
  'lib/next/danmaku/capability.dart': '79f0e4bcf286a616bc0d7d668f83955b5ae5eb9cf746f3c1c47536c9caef3d8c',
  'lib/next/db/capability.dart': '4c0ccb89a9406d1d435625d698e27855b0ff802833f722ece4467a1cc2819367',
  'lib/next/events/capability.dart': '767a2f960e2504b93b723a033ed6b0200056202cc07895b0321b99642fb4880b',
- 'lib/next/followups/capability.dart': 'c78ce3ccc38d9f6167ff10d1bfd7bd08e58d750bb4e5a93b09e050d234187199',
+ 'lib/next/followups/capability.dart': 'ac81682804be09b60cf3d7bb66c0109f20c2ee7c692b2c8d6922aa64450add42',
  'lib/next/headless/chat_capability.dart': 'b3512e2ca26b2086f0fc28273331a2b4ad621a65b6e75ee37f08aeb0550b4e80',
  'lib/next/headless/core.dart': '9d7f6e2e33590b69974544fa5c6c3f7a82447fc3b7ef4d363eeca39817bb7c1b',
- 'lib/next/headless/downloads.dart': 'f01b25716bb35c7e3dc286987832b8898e83db0f4393d52c152f49ea3908e436',
+ 'lib/next/headless/downloads.dart': '98598b4844673facd8d03947d6e8fae1e064062d85096f076ca680a19223d363',
  'lib/next/headless/library_roots.dart': 'cf11e2a49f6a437e031e0d39f544291dc61fe73f27db4cc2036b3f90ab146c44',
  'lib/next/headless/ports.dart': 'f07f7a3cf4b2071f6b7f1578c0047a1bbeb4af070634c481026836b926208d46',
  'lib/next/instance_facts.dart': '0d0f827edf8f0e3ff81706bbfb14e622506600c580439d157e75788d47936f8f',
@@ -136,7 +136,7 @@ BASELINE_HASHES = {
  'lib/next/mesh/delegation.dart': '7083cfde13976088d821b4c66671adc8d0cda91ae5396c13e46cfe1aead4d1e4',
  'lib/next/mesh/files.dart': '88bf2fb55f8d5a6404ca1955e1e430db11e417339dae7335144234992d0bf840',
  'lib/next/mesh/library_capability.dart': 'd9999630399b9aff79bb10f2f14ff2a902b80c572dc6f30edf8ec2f330b37240',
- 'lib/next/mesh/runtime.dart': 'a5a6270e7aa97f202f675d8ddaa5bfd7d60980e3ad5dcd8b0c0329c4d60544e2',
+ 'lib/next/mesh/runtime.dart': 'af1d711cf8f3bddd646268f229a528b5ade351d3a94152f7fe8d0129ab38ee89',
  'lib/next/network/capability.dart': '0b12d2f9e1b415cc986e124d016767a5d230d0178a3e19f22fbb8d15481109d8',
  'lib/next/next_core.dart': '450b51edb8eef7b544806b5b1a9f64359a453a9f9c91b612ee61637f57f615d2',
  'lib/next/next_runtime.dart': 'dda0616a27fe1a9daebce3eaeacbd637c12be36b4b81c71fa311efc1d5b120ed',

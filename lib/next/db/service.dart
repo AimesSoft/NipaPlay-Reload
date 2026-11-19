@@ -188,6 +188,51 @@ String singleStatement(String sql) {
   return text;
 }
 
+final _identifierStart = RegExp(r'[A-Za-z_]');
+final _identifierPart = RegExp(r'[A-Za-z0-9_$]');
+
+/// Whether [sql] names a schema (`main.t`, `temp.t`, `"main".t`) outside
+/// quotes and comments. A write is checked as the body of a trigger, where
+/// SQLite refuses schema-qualified tables; SQLite 3.54 no longer does in a
+/// TEMP trigger, so the rule is kept here (only main and temp exist: ATTACH
+/// is refused).
+bool namesSchema(String sql) {
+  const schemas = {'main', 'temp', 'temporary'};
+  bool dotAfter(int j) {
+    while (j < sql.length && sql[j].trim().isEmpty) {
+      j++;
+    }
+    return j < sql.length && sql[j] == '.';
+  }
+
+  var i = 0;
+  while (i < sql.length) {
+    final skipped = _skipQuoted(sql, i);
+    if (skipped >= 0) {
+      if ('"`['.contains(sql[i]) &&
+          skipped - i >= 2 &&
+          schemas.contains(sql.substring(i + 1, skipped - 1).toLowerCase()) &&
+          dotAfter(skipped)) {
+        return true;
+      }
+      i = skipped;
+    } else if (_identifierStart.hasMatch(sql[i]) &&
+        (i == 0 || !_identifierPart.hasMatch(sql[i - 1]))) {
+      var j = i;
+      while (j < sql.length && _identifierPart.hasMatch(sql[j])) {
+        j++;
+      }
+      if (schemas.contains(sql.substring(i, j).toLowerCase()) && dotAfter(j)) {
+        return true;
+      }
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return false;
+}
+
 /// The statement as SQLite's trigger parser can read it: a trigger body takes
 /// no variables, so each `?` or `?NNN` outside quotes and comments becomes
 /// NULL. Nothing else changes, so the parser sees the same kind of statement
@@ -1008,6 +1053,10 @@ final class DbService {
         // SQLite's parser accepts only DML as a trigger body: DDL, PRAGMA,
         // ATTACH, BEGIN/COMMIT/SAVEPOINT are syntax errors there.
         final probe = 'nipa_probe_${log.substring(9)}';
+        if (namesSchema(statements[i].sql)) {
+          _fail(FailureCode.invalidInput,
+              'Statement ${i + 1}: name tables without a schema (no main. or temp.).');
+        }
         try {
           await tx.rawQuery(
               'CREATE TEMP TRIGGER $probe AFTER INSERT ON ${_q(log)} BEGIN\n${probeText(statements[i].sql)}\n;\nEND');

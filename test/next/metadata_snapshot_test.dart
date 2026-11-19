@@ -477,14 +477,15 @@ void main() {
                             playbackDetailContext: context))))));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    // The full-page detail (main) names a rating that is not Bangumi's.
     final ratingVisible = tester
         .widgetList<RichText>(find.byType(RichText))
-        .any((w) => w.text.toPlainText().contains('豆瓣: 8.1'));
+        .any((w) => w.text.toPlainText().contains('豆瓣 8.1'));
     expect(ratingVisible, isTrue);
     expect(find.textContaining('改编自马伯庸'), findsOneWidget);
     expect(tester.takeException(), isNull);
     print('X9_CLASSIC_TMDB_ONLY ${jsonEncode({
-          'ratingText': '豆瓣: 8.1',
+          'ratingText': '豆瓣 8.1',
           'rendered': ratingVisible,
           'dandanplayIdentity': false,
           'summaryRendered': true
@@ -613,6 +614,8 @@ class _TestAppearance extends ChangeNotifier
   bool get enablePageAnimation => false;
   @override
   bool get enableWidgetBlurEffect => false;
+  @override
+  bool get enableMediaDetailLiquidGlass => false;
   @override
   dynamic noSuchMethod(invocation) => super.noSuchMethod(invocation);
 }
