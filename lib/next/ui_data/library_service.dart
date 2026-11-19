@@ -501,17 +501,36 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
                 'SELECT COUNT(*) AS n FROM next_library_index $clause', args))
             .single['n'] as int;
         final rows = await db.rawQuery(
-            'SELECT payload FROM next_library_index $clause ORDER BY $ordering LIMIT ? OFFSET ?',
+            "SELECT payload, json_extract(facts,'\$.nextLocalEpisodeId') AS local, "
+            "json_type(facts,'\$.nextLocalEpisodeId') IS NOT NULL AS knows "
+            'FROM next_library_index $clause ORDER BY $ordering LIMIT ? OFFSET ?',
             [...args, limit, offset]);
         return UiSlice([
           for (final r in rows)
-            UiWorkItem(await _availableWork(
-                _decodeWork(decodeMediaJson(r['payload']))))
+            UiWorkItem(await _indexedWork(
+                _decodeWork(decodeMediaJson(r['payload'])),
+                knows: r['knows'] == 1,
+                localEpisodeId: r['local'] as String?))
         ], total: count);
     }
   }
 
-  Future<UiWork> _availableWork(UiWork work) async {
+  /// A work as the index has it. The index says which of this device's
+  /// episodes is behind `next`; an index written before it said so is
+  /// served as it is until the build in progress replaces it (and [changes]
+  /// asks for it again), rather than waiting on the library worker, which
+  /// at startup is busy with the indexers for as long as they take.
+  Future<UiWork> _indexedWork(UiWork work,
+      {required bool knows, String? localEpisodeId}) async {
+    if (knows) return _availableWork(work, local: (localEpisodeId,));
+    if (!_prepared) return work;
+    return _availableWork(work);
+  }
+
+  /// [work], with `next` no longer playable when its file is on a source
+  /// that is not connected. [local] is this device's episode behind `next`
+  /// when already known (its value null: none here).
+  Future<UiWork> _availableWork(UiWork work, {(String?,)? local}) async {
     final next = work.next;
     if (next == null || !next.playable) return work;
     final original = sourceEntityRef(next.episodeId, 'episode');
@@ -522,7 +541,9 @@ final class LibraryDataService implements NextLibraryData, NextLibraryActions {
         if (original.length == 3) 'serverId': original[2]
       };
     } else {
-      final id = await ui.meshLibrary?.localEpisodeId(next.episodeId) ??
+      final id = (local != null
+              ? local.$1
+              : await ui.meshLibrary?.localEpisodeId(next.episodeId)) ??
           next.episodeId;
       final rows = await db.rawQuery(
           'SELECT f.attributes FROM media_locations l JOIN media_file_episodes e ON e.file_id=l.file_id '

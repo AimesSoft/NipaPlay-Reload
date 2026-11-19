@@ -1128,6 +1128,10 @@ final class LibraryProjection {
                     (searchTitles[episode.episodeId] ?? <String>{}).toList(),
               }
           ],
+          // This device's own episode behind `next` (null: none here), so a
+          // read of the index can tell whether it plays without asking the
+          // worker, which may be busy with the indexers.
+          'nextLocalEpisodeId': newLocalTargets[work.next?.episodeId],
           'watch': episodes
                   .any((e) => (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1)
               ? 'watching'

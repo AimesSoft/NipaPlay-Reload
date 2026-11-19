@@ -279,6 +279,36 @@ void main() {
     expect(current.workId, isNot(remote.workId));
     expect((await worker.homePlan()).hero?.work.workId, current.workId);
   });
+  test('the index says which local episode is behind next (#1125)', () async {
+    final db = jobs.database;
+    final video = File(ppath.join(root.path, 'episode2.mkv'));
+    await video.writeAsString('video 2');
+    await db.insert(
+        'media_entities', {'id': 'f2', 'kind': 'file', 'attributes': '{}'});
+    await db.insert('media_locations', {
+      'id': 'l2',
+      'file_id': 'f2',
+      'source': 'local',
+      'owner_device_id': 'owner',
+      'locator': video.path,
+      'available': 1,
+    });
+    await db.insert('media_file_episodes', {
+      'file_id': 'f2',
+      'episode_id': 'e2',
+      'relation': 'exact',
+      'ordinal': 0,
+    });
+    await worker.buildCurrent('owner');
+    final snapshot = await worker.compose({}, {}, null);
+    final next = snapshot.works.values.single.next!;
+    expect(next.playable, isTrue);
+    expect(snapshot.localTargets[next.episodeId], 'e2');
+    final facts = jsonDecode(
+        (await db.query('next_library_index')).single['facts'] as String);
+    expect(facts['nextLocalEpisodeId'], 'e2');
+  });
+
   test('an unreadable local file does not block the catalogue', () async {
     final db = jobs.database;
     for (var i = 1; i <= 2; i++) {
