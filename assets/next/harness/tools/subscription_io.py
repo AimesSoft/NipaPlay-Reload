@@ -8,6 +8,8 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
+from public_http import decoded
+
 ROOT = Path(__file__).resolve().parents[1]
 MAX_BYTES = 16 * 1024 * 1024
 
@@ -53,12 +55,13 @@ def fetch(url):
                                                        "Accept-Encoding": "identity"})
         with urllib.request.build_opener(SameOrigin(selected)).open(request, timeout=30) as response:
             body = response.read(MAX_BYTES + 1)
+            encoding = response.headers.get("Content-Encoding")
     except Exception:
         # urllib exceptions and server bodies can embed the authenticated URL.
         raise RuntimeError("Feed request failed") from None
     if len(body) > MAX_BYTES:
         raise ValueError("Feed exceeds 16 MiB")
-    return body
+    return decoded(body, encoding)
 
 
 def xml(body):

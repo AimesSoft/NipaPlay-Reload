@@ -27,7 +27,9 @@ def parse(body):
 
 
 def read(url, secret_name=None):
-    if any(re.search(r"pass|auth|token|secret|cookie|key", key, re.I) and value != "{secret}"
+    # `key` as a word (key, api_key, x-api-key) or apikey; a search's
+    # `keyword` is not a credential.
+    if any(re.search(r"pass|auth|token|secret|cookie|apikey|(?<![a-z])key(?![a-z])", key, re.I) and value != "{secret}"
            for key, value in urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query)):
         raise ValueError("RSS credentials must come from a named secret")
     private = secret(secret_name) if secret_name else None
