@@ -405,28 +405,47 @@ export function secretForms(secret) {
 
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Standing alone: not next to a letter, digit or `_`, nor to a byte of a
+// percent-encoded non-ASCII letter (`%E9`); a JSON escape before it (`\n`,
+// `\u001f`) is a separator, not the letter `n`.
+const WORD = String.raw`[\p{L}\p{N}_]`;
+const ENCODED_LETTER = String.raw`%[89A-Fa-f][0-9A-Fa-f]`;
+const ESCAPE_BEFORE = String.raw`(?<=\\[nrtbf])|(?<=\\u00[01][0-9A-Fa-f])`;
+function standingAlone(form) {
+  return new RegExp(
+    String.raw`(?:(?<!${WORD})|${ESCAPE_BEFORE})(?<!${ENCODED_LETTER})` +
+      escapeRegExp(form) +
+      String.raw`(?!${WORD})(?!${ENCODED_LETTER})`,
+    'gu');
+}
+
 export class Redactions {
   #forms = [];
   remember(values) {
     let changed = false;
     for (const value of Array.isArray(values) ? values : []) {
       if (typeof value !== 'string' || value.length < MIN_SECRET) continue;
+      // Whether it is short is the secret's own length, not its encoded
+      // form's: `密码` is short however long `%E5%AF%86%E7%A0%81` is.
+      const whole = value.length >= WHOLE_FROM;
       for (const form of secretForms(value)) {
-        if (!this.#forms.includes(form)) { this.#forms.push(form); changed = true; }
+        if (this.#forms.some((known) => known.text === form)) continue;
+        this.#forms.push({ text: form, alone: whole ? null : standingAlone(form) });
+        changed = true;
       }
     }
     // Longest first: a secret containing another is hidden whole.
-    if (changed) this.#forms.sort((a, b) => b.length - a.length);
+    if (changed) this.#forms.sort((a, b) => b.text.length - a.text.length);
   }
   get size() { return this.#forms.length; }
   text(value) {
     if (typeof value !== 'string' || this.#forms.length === 0) return value;
     let out = value;
     for (const form of this.#forms) {
-      if (!out.includes(form)) continue;
-      out = form.length >= WHOLE_FROM
-        ? out.split(form).join(REDACTED)
-        : out.replace(new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(form)}(?![\\p{L}\\p{N}_])`, 'gu'), REDACTED);
+      if (!out.includes(form.text)) continue;
+      out = form.alone
+        ? out.replace(form.alone, REDACTED)
+        : out.split(form.text).join(REDACTED);
     }
     return out;
   }

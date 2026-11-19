@@ -30,7 +30,7 @@ void main() {
       () async {
     final out = await _node(r'''
 const r = new bridge.Redactions();
-r.remember(['sk-live-0123456789abcdef', 'x', 'abc', 'p4ss', 'http', 42, 'p@ss w/ord+1234']);
+r.remember(['sk-live-0123456789abcdef', 'x', 'abc', 'p4ss', 'http', '密码', 42, 'p@ss w/ord+1234']);
 const text = (t) => r.text(t);
 console.log(JSON.stringify({
   plain: text('key=sk-live-0123456789abcdef\n'),
@@ -40,6 +40,9 @@ console.log(JSON.stringify({
   short: text('pw=p4ss'),
   word: text('abc, but not abcdef'),
   inside: text('see https://example.org'),
+  escaped: text('{"out":"\\np4ss"}'),
+  encodedAlone: text('https://x/?p=' + encodeURIComponent('密码')),
+  encodedInside: text('https://x/' + encodeURIComponent('密码重置')),
   untouched: text('nothing here'),
   size: r.size,
 }));
@@ -54,6 +57,12 @@ console.log(JSON.stringify({
     expect(out['word'], '${'[已隐去的凭据]'}, but not abcdef');
     expect(out['inside'], 'see https://example.org');
     expect(out['tiny'], 'x marks the spot');
+    // After a JSON escape (`\n`) it still stands alone; encoded, a short
+    // secret is still short, and the bytes of a following letter join it.
+    expect(out['escaped'], isNot(contains('p4ss')));
+    expect(out['encodedAlone'], 'https://x/?p=${'[已隐去的凭据]'}');
+    expect(out['encodedInside'],
+        'https://x/${Uri.encodeComponent('密码重置')}');
     expect(out['untouched'], 'nothing here');
   }, skip: node ? false : 'node is not on PATH');
 
