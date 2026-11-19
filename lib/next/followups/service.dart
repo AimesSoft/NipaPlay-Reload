@@ -1050,6 +1050,8 @@ final class Followups {
 
   /// Errors that say the model provider was briefly unavailable (rate limits,
   /// server errors, a dropped stream), not that the turn itself went wrong.
+  static bool isProviderHiccup(Object? error) => _providerHiccup(error);
+
   static bool _providerHiccup(Object? error) {
     if (error is! Map) return false;
     return RegExp(r'\b(429|5\d\d)\b|responseTooManyFailedAttempts|'

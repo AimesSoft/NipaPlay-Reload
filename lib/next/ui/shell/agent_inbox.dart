@@ -58,7 +58,21 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    watchUpdates(widget.calls.changes, _load);
+    watchUpdates(widget.calls.changes, _paced);
+  }
+
+  /// Change notifications read the inbox at most once a second: the stream
+  /// also carries every library change, and a scan moves it continuously
+  /// (#1114 counted 861 reads in one minute). Notifications arriving in the
+  /// wait are folded into the next read; what the user does reads at once.
+  static const _pace = Duration(seconds: 1);
+  DateTime? _loadedAt;
+  Future<void> _paced() async {
+    final since = _loadedAt == null ? null : DateTime.now().difference(_loadedAt!);
+    if (since != null && since < _pace) {
+      await Future<void>.delayed(_pace - since);
+    }
+    await _load();
   }
 
   Future<JsonMap> _call(String action, JsonMap input, [String? peer]) => peer ==
@@ -75,6 +89,10 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
 
   void _event(Map event) {
     final method = event['method'];
+    if (method == 'turn/started') {
+      _lastEventError = null;
+      return;
+    }
     final params = event['params'] as Map? ?? const {};
     final turn = params['turn'] as Map?;
     Object? raw;
@@ -89,9 +107,26 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
     _recordError(body);
   }
 
+  /// What a runtime error says, whichever way it arrived. The runner's error
+  /// object (indented JSON) and the chat's text of the same failure carry one
+  /// message and are one failure: compared as written they published two
+  /// reminders 0.7 s apart (#1122).
+  static String _errorSignature(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map && decoded['message'] is String) {
+        return (decoded['message'] as String).trim();
+      }
+    } on FormatException {
+      // Plain text: the message itself.
+    }
+    return body.trim();
+  }
+
   void _recordError(String body) {
-    if (body == _lastEventError) return;
-    _lastEventError = body;
+    final signature = _errorSignature(body);
+    if (signature == _lastEventError) return;
+    _lastEventError = signature;
     // This is the runner's original UI error payload, never a model summary.
     unawaited(_call('ui.notify', {
       'requestId': 'runtime-${DateTime.now().microsecondsSinceEpoch}',
@@ -106,6 +141,7 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
   Future<void> _load() async {
     if (_loading || !mounted) return;
     _loading = true;
+    _loadedAt = DateTime.now();
     final peers = <String?>[null];
     final peer = widget.peer?.call();
     if (peer != null) peers.add(peer);

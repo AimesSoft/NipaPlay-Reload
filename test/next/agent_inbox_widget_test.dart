@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -155,6 +156,82 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await world.events.close();
   });
+
+  testWidgets(
+      'a burst of library changes reads the inbox at most once a second (#1114)',
+      (tester) async {
+    final world = _Inbox();
+    await tester.pumpWidget(world.widget());
+    await tester.pump();
+    final before = world.lists;
+    expect(before, greaterThan(0));
+    // A scan: a change every 20 ms for a second.
+    for (var i = 0; i < 50; i++) {
+      world.changes.add(null);
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    // Unpaced this was 50 reads; the last change is still read.
+    expect(world.lists - before, inInclusiveRange(1, 3));
+    await tester.pumpWidget(const SizedBox());
+    await world.events.close();
+  });
+
+  testWidgets('one failure arriving in two forms is one reminder (#1122)',
+      (tester) async {
+    final errors = ValueNotifier<String?>(null);
+    final world = _Inbox();
+    await tester.pumpWidget(world.widget(errors: errors));
+    await tester.pump();
+    const message =
+        'model "gpt-6.1-sol" returned a completed response with no content';
+    // The runner's error object, then the chat's text of the same failure,
+    // then the liveness report repeating it.
+    world.events.add({
+      'method': 'turn/completed',
+      'params': {
+        'turn': {
+          'status': 'failed',
+          'error': {
+            'message': message,
+            'codexErrorInfo': 'other',
+            'additionalDetails': 'EMPTY_RESPONSE'
+          }
+        }
+      }
+    });
+    await tester.pump();
+    errors.value = message;
+    await tester.pump();
+    world.events.add({
+      'method': 'host/liveness',
+      'params': {
+        'latestError': {'message': message}
+      }
+    });
+    await tester.pump();
+    expect(world.notices, 1);
+    errors.value = 'a different failure';
+    await tester.pump();
+    expect(world.notices, 2);
+    // Starting a new turn resets dedupe so a later recurrence is still shown.
+    world.events.add({'method': 'turn/started', 'params': {}});
+    await tester.pump();
+    world.events.add({
+      'method': 'turn/completed',
+      'params': {
+        'turn': {
+          'status': 'failed',
+          'error': {'message': 'a different failure', 'codexErrorInfo': 'other'}
+        }
+      }
+    });
+    await tester.pump();
+    expect(world.notices, 3);
+    await tester.pumpWidget(const SizedBox());
+    await world.events.close();
+  });
 }
 
 class _Inbox {
@@ -172,9 +249,15 @@ class _Inbox {
     }
   ];
   final answers = <JsonMap>[];
-  int notices = 0;
-  late final calls = GuiCalls(() async => Harness([_Capability(this)]));
-  Widget widget({String? peer, double bottomInset = 0}) => MaterialApp(
+  int notices = 0, lists = 0;
+  final changes = StreamController<void>.broadcast();
+  late final calls =
+      GuiCalls(() async => Harness([_Capability(this)]), changes: changes.stream);
+  Widget widget(
+          {String? peer,
+          double bottomInset = 0,
+          ValueListenable<String?>? errors}) =>
+      MaterialApp(
           home: Scaffold(
               body: Stack(children: [
         Align(
@@ -184,6 +267,7 @@ class _Inbox {
             bottomInset: bottomInset,
             calls: calls,
             events: events.stream,
+            errors: errors,
             peer: () => peer),
       ])));
 }
@@ -223,6 +307,7 @@ class _Capability implements Capability {
                     input: const ObjectSchema({}, additionalProperties: true),
                     output: const ObjectSchema({}, additionalProperties: true)),
                 (input, _) async {
+              if (op == 'list') world.lists++;
               if (op == 'list')
                 return {
                   'items': world.rows

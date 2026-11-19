@@ -66,7 +66,7 @@ function exitStatus(text) {
  * followup only after a provider hiccup, which it recognises by HTTP status or
  * by these Codex names; DSH's own message and code are kept.
  */
-function turnError(failure) {
+export function turnError(failure) {
   if (!failure) return null;
   const message = String(failure.message ?? failure);
   const parsed = /\((\d{3})\)/.exec(message);
@@ -79,8 +79,11 @@ function turnError(failure) {
     info = { responseTooManyFailedAttempts: { httpStatusCode: status ?? 429 } };
   } else if (code === 'SERVER' || (status !== undefined && status >= 500)) {
     info = { responseTooManyFailedAttempts: { httpStatusCode: status ?? null } };
-  } else if (['TRANSPORT', 'TIMEOUT', 'LLM_STREAM_IDLE_TIMEOUT', 'EMPTY_RESPONSE'].includes(code)) {
+  } else if (['TRANSPORT', 'TIMEOUT', 'LLM_STREAM_IDLE_TIMEOUT'].includes(code)) {
     info = { responseStreamDisconnected: { httpStatusCode: status ?? null } };
+    // EMPTY_RESPONSE stays 'other': the stream ended normally with nothing in
+    // it, after DSH's own retries in the turn. Called a disconnect, NipaPlay
+    // delivered the same followup five more times (#1122: 24 requests).
   } else if (code === 'CONTEXT_WINDOW_EXCEEDED') {
     info = 'contextWindowExceeded';
   } else if (code === 'INVALID_CREDENTIAL' || code === 'MISSING_CREDENTIAL') {
