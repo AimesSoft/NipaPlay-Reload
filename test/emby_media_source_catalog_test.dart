@@ -6,8 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/emby_media_source_catalog.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  // Classic requests ask ClassicModePolicy whether Next is open, from the
+  // stored preferences; no binding (it would intercept the local servers).
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   test('coalesces concurrent loads and keeps the completed result per scope',
       () async {
     var loaderCalls = 0;

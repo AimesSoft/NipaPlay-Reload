@@ -10,8 +10,12 @@ import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
 import 'package:nipaplay/services/media_server_service_base.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  // Classic requests ask ClassicModePolicy whether Next is open, from the
+  // stored preferences; no binding (it would intercept the local servers).
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   test('Emby and Jellyfin playback sync use the configured User-Agent',
       () async {
     final embyRequests = <_RecordedRequest>[];

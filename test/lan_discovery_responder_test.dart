@@ -32,6 +32,16 @@ void main() {
   });
 
   group('NipaPlayLanDiscoveryResponder', () {
+    // 本机运行着 NipaPlay 时 32123 已被占用：应答器在空闲端口上测。
+    late int port;
+    setUp(() async {
+      final probe = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      port = probe.port;
+      probe.close();
+      NipaPlayLanDiscoveryResponder.portOverrideForTest = port;
+    });
+    tearDown(() => NipaPlayLanDiscoveryResponder.portOverrideForTest = null);
+
     test('应在 5 秒内回应合法发现请求', () async {
       final responder = NipaPlayLanDiscoveryResponder();
       final started = await responder.start(webPort: 12345);
@@ -59,7 +69,7 @@ void main() {
       socket.send(
         NipaPlayLanDiscoveryProtocol.buildRequestBytes(),
         InternetAddress.loopbackIPv4,
-        nipaplayLanDiscoveryPort,
+        port,
       );
 
       final datagram = await response.future
@@ -82,7 +92,7 @@ void main() {
       if (Platform.isWindows) {
         NipaPlayLanDiscoveryResponder.bindOverrideForTest =
             (InternetAddress host, int port, {bool reuseAddress = true}) async {
-          throw const SocketException('测试注入：模拟 UDP 32123 被占用/被系统保留');
+          throw SocketException('测试注入：模拟 UDP $port 被占用/被系统保留');
         };
         addTearDown(() {
           NipaPlayLanDiscoveryResponder.bindOverrideForTest = null;
@@ -92,7 +102,7 @@ void main() {
         // SO_REUSEADDR 的 UDP socket 可以共享端口，占位方必须显式关闭。
         dartBlocker = await RawDatagramSocket.bind(
           InternetAddress.anyIPv4,
-          nipaplayLanDiscoveryPort,
+          port,
           reuseAddress: false,
         );
         addTearDown(dartBlocker.close);
@@ -103,7 +113,7 @@ void main() {
       expect(started, isFalse, reason: '端口被占用时不应报告启动成功');
       expect(responder.isRunning, isFalse);
       expect(responder.lastStartError, isNotNull);
-      expect(responder.lastStartError, contains('32123'));
+      expect(responder.lastStartError, contains('$port'));
       await responder.stop();
     });
   });

@@ -540,7 +540,11 @@ void main() {
         return !path.endsWith(
               'themes/cupertino/widgets/cupertino_bottom_sheet.dart',
             ) &&
-            !path.endsWith('settings/adaptive_settings_widgets.dart');
+            !path.endsWith('settings/adaptive_settings_widgets.dart') &&
+            // Next's interface is its own (its menus live in
+            // next/ui/widgets/menu.dart, its phone top bar uses the native
+            // iOS menu); Classic's adaptive layer is not its to share.
+            !path.contains('/next/ui/');
       },
     );
     final directPopupUsers = <String>[];

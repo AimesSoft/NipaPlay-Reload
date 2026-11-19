@@ -8,6 +8,7 @@ import 'package:nipaplay/services/emby_media_selection_resolver.dart';
 import 'package:nipaplay/services/emby_media_source_selection.dart';
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 PlaybackMediaSource _source(String id, String path) {
   return PlaybackMediaSource(
@@ -81,6 +82,9 @@ PlaybackSession _sessionFor(EmbySourceCandidate candidate) {
 }
 
 void main() {
+  // Classic requests ask ClassicModePolicy whether Next is open, from the
+  // stored preferences; no binding (it would intercept the local servers).
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   group('resolveEmbyPlaybackSession', () {
     final sourceA = _descriptor('source-a', '[Baha] Episode 01');
     final sourceB = _descriptor('source-b', '[LoliHouse] Episode 01');

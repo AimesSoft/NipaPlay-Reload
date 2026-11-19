@@ -2728,6 +2728,23 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
     return null;
   }
 
+  /// Bangumi's rating, shown as the number alone; without one, the first
+  /// other source's (豆瓣 for a TMDB-only video), named, so that the
+  /// immersive page does not lose what the earlier layout showed.
+  (double, String?)? _immersiveRating(BangumiAnime anime) {
+    final bangumi = _immersiveBangumiRating(anime);
+    if (bangumi != null) return (bangumi, null);
+    for (final entry in anime.ratingDetails?.entries ?? const <MapEntry<String, dynamic>>[]) {
+      final value = entry.value;
+      if (entry.key == 'Bangumi评分' || value is! num || value <= 0) continue;
+      final source = entry.key.endsWith('评分')
+          ? entry.key.substring(0, entry.key.length - 2)
+          : entry.key;
+      return (value.toDouble(), source);
+    }
+    return null;
+  }
+
   String _formatPlaybackTime(int seconds) {
     if (seconds <= 0) return '0:00';
     final duration = Duration(seconds: seconds);
@@ -3523,7 +3540,8 @@ class _AnimeDetailPageState extends State<AnimeDetailPage>
       posterHeroTag: widget.posterHeroTag,
       fallbackBackdropUrls: _immersiveBackdropFallbacks,
       metadata: _immersiveMetadata(anime),
-      rating: _immersiveBangumiRating(anime),
+      rating: _immersiveRating(anime)?.$1,
+      ratingSource: _immersiveRating(anime)?.$2,
       description: summary.isEmpty ? null : summary,
       descriptionExpanded: _isImmersiveDescriptionExpanded,
       // 显隐交给 Scaffold 内部按实测溢出情况决定，不再按字符数猜测。

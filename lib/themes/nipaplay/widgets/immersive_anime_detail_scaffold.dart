@@ -66,6 +66,7 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
     this.fallbackBackdropUrls = const [],
     this.metadata = const <String>[],
     this.rating,
+    this.ratingSource,
     this.description,
     this.descriptionExpanded = false,
     this.onToggleDescription,
@@ -83,6 +84,10 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
   final Object? posterHeroTag;
   final List<String> metadata;
   final double? rating;
+
+  /// Where [rating] comes from when it is not Bangumi's (e.g. 豆瓣), shown
+  /// before it; null for Bangumi's, shown as the number alone.
+  final String? ratingSource;
   final String? description;
   final bool descriptionExpanded;
   final VoidCallback? onToggleDescription;
@@ -195,6 +200,7 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                               subtitle: subtitle,
                               metadata: metadata,
                               rating: rating,
+                              ratingSource: ratingSource,
                               compact: compact),
                           if (description?.trim().isNotEmpty == true) ...[
                             SizedBox(height: compact ? 10 : 16),
@@ -274,6 +280,7 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                 subtitle: subtitle,
                 metadata: metadata,
                 rating: rating,
+                ratingSource: ratingSource,
                 compact: phone)),
       ]),
     );
@@ -735,6 +742,7 @@ class _InformationHeader extends StatelessWidget {
     required this.subtitle,
     required this.metadata,
     required this.rating,
+    this.ratingSource,
     this.compact = false,
     this.logoUrl,
   });
@@ -744,6 +752,7 @@ class _InformationHeader extends StatelessWidget {
   final String? subtitle;
   final List<String> metadata;
   final double? rating;
+  final String? ratingSource;
   final bool compact;
 
   @override
@@ -811,7 +820,9 @@ class _InformationHeader extends StatelessWidget {
                           color: Colors.white.withValues(alpha: 0.34))),
                 Icon(Ionicons.star, size: 15, color: AppAccentColors.current),
                 Text(
-                  rating!.toStringAsFixed(1),
+                  ratingSource == null
+                      ? rating!.toStringAsFixed(1)
+                      : '$ratingSource ${rating!.toStringAsFixed(1)}',
                   style: TextStyle(
                     color: AppAccentColors.current,
                     fontSize: 14,
