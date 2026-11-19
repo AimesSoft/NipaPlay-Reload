@@ -78,6 +78,8 @@ const notCatalogueTables = [
   'file_skip_segments',
   // Derived from the catalogue; writing it is what building does.
   'next_library_index',
+  // Where removing the external media sources has got to (a migration's).
+  'next_external_sources_retirement',
   // The counter itself, and SQLite's own.
   'change_epochs',
   'sqlite_sequence',

@@ -22,6 +22,10 @@ void main() {
       await database.execute('DROP TABLE db_operations');
       await database.execute('DROP TABLE media_entity_aliases');
       await database.execute('DROP TABLE media_work_merges');
+      // Created by migrations released after this version.
+      await database.execute('DROP TABLE subscription_reports');
+      await database.execute('DROP TABLE subscriptions');
+      await database.execute('DROP TABLE harness_secret_names');
       await database.setVersion(23);
       await database.close();
       database = await openNextDatabase(root, factory: databaseFactoryFfi);
