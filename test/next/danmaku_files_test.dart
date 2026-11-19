@@ -152,6 +152,10 @@ void main() {
     await db.execute('DROP TABLE next_library_index');
     await db.execute('DROP TABLE media_entity_aliases');
     await db.execute('DROP TABLE media_work_merges');
+    // Created by migrations released after this version.
+    await db.execute('DROP TABLE subscription_reports');
+    await db.execute('DROP TABLE subscriptions');
+    await db.execute('DROP TABLE harness_secret_names');
     await db.setVersion(14);
     await db.close();
     final before = await File('${root.path}/next.db').length();
