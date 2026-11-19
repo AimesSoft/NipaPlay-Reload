@@ -14,6 +14,7 @@ import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/words.dart';
 import 'composer.dart';
+import 'model_switch.dart';
 import 'transcript.dart';
 
 /// The conversation as a whole, wherever it is shown (the home expanded,
@@ -78,6 +79,7 @@ class ChatFrame extends StatelessWidget {
               NipaAvatar(size: 40, mood: chat.mood),
               const SizedBox(width: 12),
               Expanded(child: _PhoneTitle(chat: chat, peers: shell.services.peers)),
+              const ModelSwitch(),
               trailing,
             ]),
           ),
@@ -85,8 +87,11 @@ class ChatFrame extends StatelessWidget {
         Padding(
           padding: EdgeInsets.fromLTRB(sidePadding, 14, sidePadding - 6, 6),
           child: column(Row(children: [
-            _Title(chat: chat),
+            Flexible(child: _Title(chat: chat)),
             const Spacer(),
+            const Padding(
+                padding: EdgeInsets.only(left: 12, right: 6),
+                child: ModelSwitch()),
             trailing,
           ])),
         ),
@@ -229,12 +234,14 @@ class _Title extends StatelessWidget {
         pressScale: 0.98,
         builder: (context, hovered) =>
             Row(mainAxisSize: MainAxisSize.min, children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 320),
-            child: Text(chat.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: NextText.sans(15, weight: FontWeight.w600)),
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: Text(chat.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: NextText.sans(15, weight: FontWeight.w600)),
+            ),
           ),
           const SizedBox(width: 7),
           AnimatedRotation(

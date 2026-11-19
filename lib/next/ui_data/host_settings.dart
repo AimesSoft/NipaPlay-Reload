@@ -175,6 +175,11 @@ abstract interface class NextHostSettings {
   /// Takes effect for the next conversation turn.
   Future<void> setModel(UiModelChoice choice);
 
+  /// The models the provider set up here lists (`GET {address}/models`,
+  /// with its stored key), to pick another of them where the conversation
+  /// is; empty when it lists none or cannot be asked.
+  Future<List<String>> providerModels();
+
   /// What the Codex configuration on this computer holds (without its key),
   /// or null when there is none to read.
   Future<UiModelChoice?> codexModel();
@@ -226,8 +231,14 @@ final class UiModelSetup {
     this.reasoning,
     this.compat,
     this.runtime = UiAgentRuntimeKind.codex,
+    this.recent = const [],
   });
   final UiModelSource source;
+
+  /// The providers and models set up here before, most recent first (the
+  /// current one among them); their keys stay in the vault, so picking one
+  /// again needs none. Without keys.
+  final List<UiModelChoice> recent;
 
   /// Which runtime reads this model.
   final UiAgentRuntimeKind runtime;

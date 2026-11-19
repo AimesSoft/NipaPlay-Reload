@@ -210,3 +210,31 @@ Future<UiModelCheck> _probeResponses(
       ? const UiModelCheck(ok: true, message: '可以使用，支持工具调用')
       : const UiModelCheck(ok: false, message: '未通过工具调用检查');
 }
+
+
+/// The model IDs an OpenAI-compatible provider lists at `{base}/models`
+/// (`{data: [{id}]}`), sorted; a provider without the list answers with an
+/// error, which is thrown.
+Future<List<String>> listProviderModels(
+    HttpClient client, Uri base, String key) async {
+  final prefix = base.path.replaceFirst(RegExp(r'/+$'), '');
+  final request = await client.getUrl(base.replace(path: '$prefix/models'));
+  request.followRedirects = false;
+  request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $key');
+  request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+  final response = await request.close();
+  final body = await utf8.decodeStream(response);
+  if (response.statusCode != 200) {
+    throw HttpException('HTTP ${response.statusCode}');
+  }
+  final decoded = jsonDecode(body);
+  final data = decoded is Map ? decoded['data'] : null;
+  return {
+    for (final entry in data is List ? data : const [])
+      if (entry is Map &&
+          entry['id'] is String &&
+          (entry['id'] as String).isNotEmpty)
+        entry['id'] as String
+  }.toList()
+    ..sort();
+}

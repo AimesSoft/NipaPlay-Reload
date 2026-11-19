@@ -342,6 +342,9 @@ final class UnavailableHostSettings implements NextHostSettings {
       const UiModelCheck(ok: false, message: _problem);
 
   @override
+  Future<List<String>> providerModels() async => const [];
+
+  @override
   Future<UiModelChoice?> codexModel() async => null;
 
   @override
