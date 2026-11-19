@@ -86,7 +86,7 @@ final class StoreFetch {
       final response =
           await request.close().timeout(const Duration(seconds: 30));
       if (response.statusCode != 200) {
-        await response.drain<void>();
+        // Not read: the connection is closed below, whatever the body does.
         throw StoreFetchException('HTTP ${response.statusCode}');
       }
       final out = BytesBuilder(copy: false);

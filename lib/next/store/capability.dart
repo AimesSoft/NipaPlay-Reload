@@ -8,13 +8,15 @@ import 'store_index.dart';
 const _output = ObjectSchema({}, additionalProperties: true);
 const _id = StringSchema(minLength: 1, maxLength: 64);
 
-/// The person, at this device or another of theirs: not the agent.
-bool _person(Invocation invocation) =>
-    invocation.origin == 'gui' || invocation.origin.startsWith('mesh:');
+/// The person, at this device's interface: not the agent, nor anything
+/// arriving over Mesh (another device's agent included).
+bool _person(Invocation invocation) => invocation.origin == 'gui';
 
 Future<T> _failures<T>(Future<T> Function() action) async {
   try {
     return await action();
+  } on StoreChanged catch (error) {
+    throw Failure(FailureCode.conflict, error.message);
   } on StoreFormatException catch (error) {
     throw Failure(FailureCode.invalidInput, error.message);
   } on StoreFetchException catch (error) {
@@ -62,9 +64,10 @@ final class StoreCapability implements Capability {
                   title: '从商店安装',
                   effect: Effect.write,
                   description:
-                      'Install or update an item of the official list (id), or an npm package (npm: "name" or "name@version"). An npm package is not reviewed: only the person may install one, from the store UI. Plugins load only with the DSH runtime. Install only what the person asked for, after telling them the item\'s notices (store.list). Takes effect when the conversation host next starts.',
+                      'Install or update an item of the official list (id), or an npm package (npm: "name" or "name@version"). An npm package is not reviewed: only the person may install one, from this device\'s store UI (or, headless, the host\'s --store-install-npm). With version, only that version of the listed item (the one whose notices the person read); a newer listing is a conflict. Plugins load only with the DSH runtime. Install only what the person asked for, after telling them the item\'s notices (store.list). Takes effect when the conversation host next starts.',
                   input: ObjectSchema({
                     'id': _id,
+                    'version': StringSchema(minLength: 1, maxLength: 64),
                     'npm': StringSchema(minLength: 1, maxLength: 260),
                   }),
                   output: _output), (input, invocation) {
@@ -75,12 +78,13 @@ final class StoreCapability implements Capability {
             }
             if (npm != null && !_person(invocation)) {
               throw const Failure(FailureCode.invalidInput,
-                  'Only the person may install an npm package nobody reviewed; tell them where to do it (设置 › 梨花 › 扩展).');
+                  'Only the person may install an npm package nobody reviewed; tell them where to do it (设置 › 梨花 › 扩展, or nipaplay-headless --store-install-npm).');
             }
             return _failures(() async {
               final installed = npm != null
                   ? await store.installNpm(npm)
-                  : await store.installOfficial(id!);
+                  : await store.installOfficial(id!,
+                      version: input['version'] as String?);
               return {
                 'installed': _installed(installed),
                 'takesEffect': 'next conversation host start',
@@ -184,5 +188,6 @@ Future<JsonMap> _list(RikaStore store, bool refresh) async {
     ],
     if (store.listProblem != null) 'listProblem': store.listProblem,
     if (store.notLoaded.isNotEmpty) 'notLoadedAtLastStart': store.notLoaded,
+    if (store.unreadable.isNotEmpty) 'unreadable': store.unreadable,
   };
 }

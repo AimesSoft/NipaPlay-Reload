@@ -362,12 +362,12 @@ errors 为字符串数组。时间为 ISO-8601。所有判断归巡查脚本，�
 
 | Action | Effect | 用途或限制 | 宿主代码 | Mesh | 定义 |
 | --- | --- | --- | --- | --- | --- |
-| `store.list` | read | 官方列表（技能与 DSH 插件）和本机已装条目：版本、启用、可更新、上次启动未加载的插件及原因；refresh 立即重读列表（否则最多 10 分钟一次） | GUI Core / Headless | 允许 | [源码](../../../lib/next/store/capability.dart) |
-| `store.readme` | read | id；官方条目的说明，按列表的 SHA-256 校验 | GUI Core / Headless | 允许 | [源码](../../../lib/next/store/capability.dart) |
-| `store.install` | write | id（官方列表）或 npm（`name`/`name@version`）二选一；npm 包未经审核，只有用户本人（gui、mesh）可装；不运行安装脚本 | GUI Core / Headless | 允许 | [源码](../../../lib/next/store/capability.dart) |
-| `store.enable` | write | id、enabled；不卸载地停用或启用 | GUI Core / Headless | 允许 | [源码](../../../lib/next/store/capability.dart) |
-| `store.remove` | destructive | id；删除条目及其文件，插件存在 DSH 自己数据里的设置和登录保留 | GUI Core / Headless | 允许 | [源码](../../../lib/next/store/capability.dart) |
-| `store.apply` | write | 重启对话宿主使改动生效，会结束进行中的回合；只有用户本人可调用 | GUI Core / Headless | 允许 | [源码](../../../lib/next/store/capability.dart) |
+| `store.list` | read | 官方列表（技能与 DSH 插件）和本机已装条目：版本、启用、可更新、上次启动未加载的插件及原因、读不出的安装记录（可 remove）；refresh 立即重读列表（否则最多 10 分钟一次） | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.readme` | read | id；官方条目的说明，按列表的 SHA-256 校验 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.install` | write | id（官方列表，可带 version：只装用户看过说明的那个版本，列表已更新则冲突）或 npm（`name`/`name@version`）二选一；npm 包未经审核，只有本机界面的用户本人可装（无界面版用 `--store-install-npm`）；不运行安装脚本 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.enable` | write | id、enabled；不卸载地停用或启用 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.remove` | destructive | id；删除条目及其文件，插件存在 DSH 自己数据里的设置和登录保留 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.apply` | write | 重启对话宿主使改动生效，会结束进行中的回合；只有本机界面的用户本人可调用 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
 
 改动在对话宿主下次启动时生效。技能装在 `<Next 数据>/store/skills/<id>/`，启动时把名称、说明和 SKILL.md 路径写进梨花的提示；
 插件装在 `store/plugins/<id>/`，运行环境提供的包以链接接入，只在 DeepSeek Harness 下加载。格式与审核规则见

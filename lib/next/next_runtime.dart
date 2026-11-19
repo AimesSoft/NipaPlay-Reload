@@ -874,7 +874,8 @@ final class NextRuntime extends ChangeNotifier {
         baseInstructions: base,
         dsh: dsh,
         dshPlugins: dsh == null ? null : Directory('$agent/dsh'),
-        extensions: ServiceProvider.nextCore.store.hostFacts);
+        extensions: ServiceProvider.nextCore.store.hostFacts,
+        protectedPaths: ServiceProvider.nextCore.store.protectedPaths);
     final core = ServiceProvider.nextCore;
     core.restartAgent = _restartChat;
     core.jobOrigins.threadFor = host.threadForOrigin;

@@ -93,7 +93,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('store.notice.accept')));
     await tester.pumpAndSettle();
-    expect(fake.calls, contains('store.install {id: dmhy}'));
+    expect(fake.calls, contains('store.install {id: dmhy, version: 1.0.0}'));
     expect(find.text('卸载'), findsOneWidget);
 
     await tester.tap(find.text('重启梨花'));

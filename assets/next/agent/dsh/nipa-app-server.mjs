@@ -641,7 +641,7 @@ export function apply(ctx, config = {}) {
   }
   ctx.on('tools/pre-execute', async (exec, next) => {
     if (namesProtectedPath(exec.arguments, protectedPaths)) {
-      return { kind: 'deny', reason: 'NipaPlay keeps its credentials in this directory; they are not read by tools. Use the secret names NipaPlay gives instead.' };
+      return { kind: 'deny', reason: 'This path is NipaPlay\'s own (its credentials, or what its store loads); tools do not read or change it. Use the secret names NipaPlay gives, and the store.* actions, instead.' };
     }
     return next();
   }, { prepend: true });

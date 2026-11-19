@@ -89,7 +89,7 @@ for k in rows:
         rows[k][0][1] = '弹幕 ' + k.split('.')[-1].replace('_', ' ') + '；来源及副作用见目标契约'
 import hashlib
 BASELINE_HASHES = {
- 'lib/next/store/capability.dart': 'eb71da6d4ae60897ab2a5985fac0a02faca4521f635958315077e995c8f02539',
+ 'lib/next/store/capability.dart': '46be4666fb71d7c74a32f2cff6a3b561ed321f05c16dbd7e0ca69436ccaaa2a5',
  'lib/next/voice/capability.dart': '635811717bf4e74b5540aaf660b7a128e575fe5a1c4a3f89329361b43027f6b1',
  'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': '9762fedade67a672296e97d314a669f8317dcf80006f9d49df0477b100a34862',
  'lib/next/knowledge/capability.dart': '705ef8725a060aa20504794279f0b433e14288663ee024d17e33477dd9b3c400',
@@ -102,7 +102,7 @@ BASELINE_HASHES = {
  'lib/next/capabilities/download_capability.dart': '18e66aee3ccb0788165ddbea65c842b0b52c8d90aa09db3ed018caaf80e9472c',
  'lib/next/capabilities/download_metadata_capability.dart': '9c55fdf10875cbe97126d4d08e162efbc2fadd9538d32fec4044b35b945ec27a',
  'lib/next/capabilities/download_playback_capability.dart': '56f9b51ac7c8ee83cbc3192f1ff3dd9e27faa3575b55b69c48ec3a650a3eefcf',
- 'lib/next/capabilities/family_descriptions.dart': 'ed93c6124f224235c8b128dd7e5efdab848be6344c61df55028a16c859796346',
+ 'lib/next/capabilities/family_descriptions.dart': '82b236561224efae3c1f4fe25114e7f3221a0f488f000190885a6c4564d820a7',
  'lib/next/capabilities/history_capability.dart': '16c32339022d69d1a86120694938820408a879120a22aae2e2cec1862893619f',
  'lib/next/capabilities/kernel_control.dart': 'f565296087c0709468ea14d526bedaca86af286b75751264d9ae07f13a5eb1d6',
  'lib/next/capabilities/library_capability.dart': '107685542a32791dbc7424b8a6dcf6d49a0d00a6c9d33ae2cfaccbe7e42a19d2',
@@ -140,7 +140,7 @@ BASELINE_HASHES = {
  'lib/next/mesh/runtime.dart': 'af1d711cf8f3bddd646268f229a528b5ade351d3a94152f7fe8d0129ab38ee89',
  'lib/next/network/capability.dart': '0b12d2f9e1b415cc986e124d016767a5d230d0178a3e19f22fbb8d15481109d8',
  'lib/next/next_core.dart': 'd92aa76d467b4c5da17f497f15c38e67b8c847cf708086a0fa5ecdb62bbfcc92',
- 'lib/next/next_runtime.dart': '1cf36482b19ff562cc35c34316eac5259446a6f34842469c75ae38ff41540bc5',
+ 'lib/next/next_runtime.dart': '57cc646a333f248feed44aebb3e37907458b9118f38fc1cf86e2ee0ecc3d5874',
  'lib/next/player/features/local_operations.dart': '6e1d4e008ebf23f0f62c11abace5e1c10eb355675607d2ee26929b80f362e5b0',
  'lib/next/player/features/operation_specs.dart': '514a6c5049507ee3513bffeb4532d760d03d8f4154a93f00ee680c8af1e3d35a',
  'lib/next/player/ports/session_ports.dart': '4cf2d88a57dc8e3939b12237e23e243ec728cfa5587c5b2e20e3c48db275da9e',

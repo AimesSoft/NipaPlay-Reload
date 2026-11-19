@@ -14,7 +14,7 @@
 
 `diagnostics.status/operations`、`network.status/check` 和 `app.capabilities` 区分已观察事实、主动检查与宿主前置；无观察不等于离线。按需读取日志并检查个人信息，诊断不会自动上传。`plugins` 族按目标实际支持情况管理应用插件。
 
-`store` 族是梨花的商店：技能（说明加脚本）和 DeepSeek Harness 插件。官方列表的条目经审核、按 SHA-256 锁定，可按用户要求安装；npm 包未经审核，`store.install` 的 npm 参数只接受用户本人（gui、mesh）调用。改动在对话宿主下次启动时生效，`store.apply` 重启宿主，同样只由用户调用。格式和存放位置见[梨花的商店](../../advanced/store.md)。
+`store` 族是梨花的商店：技能（说明加脚本）和 DeepSeek Harness 插件。官方列表的条目经审核、按 SHA-256 锁定，可按用户要求安装；npm 包未经审核，`store.install` 的 npm 参数只接受本机界面的用户本人调用（无界面版用 `--store-install-npm`），经 Mesh 也不行。改动在对话宿主下次启动时生效，`store.apply` 重启宿主，同样只由用户调用。格式和存放位置见[梨花的商店](../../advanced/store.md)。
 
 `window` 管理支持的主窗口状态与尺寸；`notification` 的系统通知需平台和系统授权，受理不保证展示。`share.prepare/open` 先准备内容再打开系统分享面板，用户选目的地，打开面板不等于分享成功。每项操作后读取状态或回执；遇到不可用先检查宿主和权限。
 

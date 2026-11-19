@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -347,6 +348,121 @@ void main() {
           throwsA(isA<StoreFormatException>()));
       expect(NpmPackages.idFor('@huai_xin/dsh-workbuddy'),
           'npm-huai-xin-dsh-workbuddy');
+    });
+  });
+
+  group('review of #1129', () {
+    test('an archive that expands without end is stopped at the limit', () {
+      final bomb = GZipEncoder().encodeBytes(TarEncoder().encodeBytes(
+          Archive()
+            ..add(ArchiveFile.bytes(
+                'package/zeros.bin', Uint8List(4 << 20)))));
+      expect(bomb.length, lessThan(64 << 10));
+      expect(
+          () => readPackageTarball(bomb, maxBytes: 1 << 20),
+          throwsA(isA<StoreFormatException>()
+              .having((e) => e.message, 'message', '软件包过大')));
+    });
+
+    test('a plugin named nipa-… without a patch loads as the store item, '
+        'and a record nobody can read hides nothing else', () async {
+      final tarball = _tgz({
+        'package.json': '{"name":"nipa-evil","main":"index.js"}',
+        'index.js': 'export {}',
+      });
+      (server, registry) = await _registry({
+        'nipa-evil': (
+          _manifest('nipa-evil', tarball, extra: {
+            'keywords': ['dsh-plugin']
+          }),
+          tarball
+        ),
+      });
+      final installed = await store.installNpm('nipa-evil');
+      expect(installed.item.dsh.single.id, 'npm-nipa-evil');
+      // A record this version cannot read (written by another, or damaged).
+      final file = File(p.join(temp.path, 'store', 'installed.json'));
+      final raw = jsonDecode(await file.readAsString()) as Map;
+      (raw['items'] as List).add({'id': 'broken', 'kind': 'theme'});
+      await file.writeAsString(jsonEncode(raw));
+      expect((await store.installed()).map((i) => i.item.id),
+          ['npm-nipa-evil']);
+      expect(store.unreadable.keys, ['broken']);
+      // Saving keeps it; removing it drops it.
+      await store.setEnabled('npm-nipa-evil', false);
+      expect(await file.readAsString(), contains('"broken"'));
+      await store.remove('broken');
+      expect(await file.readAsString(), isNot(contains('"broken"')));
+      expect(store.unreadable, isEmpty);
+    });
+
+    test('an update whose record cannot be saved leaves the old version',
+        () async {
+      await writeList([
+        await skill('dmhy', {'SKILL.md': '用法', 'dmhy.py': 'v1'})
+      ]);
+      await store.installOfficial('dmhy');
+      await writeList([
+        {
+          ...await skill('dmhy', {'SKILL.md': '用法', 'dmhy.py': 'v2'}),
+          'version': '2.0.0'
+        }
+      ]);
+      // The record's staging file cannot be written.
+      await Directory(p.join(temp.path, 'store', 'installed.json.pending'))
+          .create();
+      await expectLater(store.installOfficial('dmhy'), throwsA(anything));
+      expect(
+          await File(p.join(temp.path, 'store', 'skills', 'dmhy', 'dmhy.py'))
+              .readAsString(),
+          'v1');
+      expect((await store.installed()).single.item.version, '1.0.0');
+    });
+
+    test('an error reply that never ends does not hold the store, and a '
+        'starting host does not wait on an install', () async {
+      final hanging = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => hanging.close(force: true));
+      hanging.listen((request) {
+        request.response.statusCode = request.uri.path.contains('-/')
+            ? 200
+            : 500;
+        request.response.bufferOutput = false;
+        request.response.add(List.filled(64, 1));
+        // Never closed.
+      });
+      registry = 'http://127.0.0.1:${hanging.port}';
+      final watch = Stopwatch()..start();
+      await expectLater(
+          StoreFetch(HttpClient.new).bytes(
+              [Uri.parse('$registry/x/latest')], maxBytes: 1 << 20),
+          throwsA(isA<StoreFetchException>()));
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+
+      // An install stuck in a download, and a host starting meanwhile.
+      unawaited(store
+          .installNpm('stuck')
+          .then<void>((_) {}, onError: (Object _) {}));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final facts = await store
+          .hostFacts(runtimeModules: runtime)
+          .timeout(const Duration(seconds: 2));
+      expect(facts.dshPlugins, isEmpty);
+    });
+
+    test('the version the person confirmed, or a conflict', () async {
+      await writeList([
+        await skill('dmhy', {'SKILL.md': '用法', 'dmhy.py': 'v1'})
+      ]);
+      await expectLater(store.installOfficial('dmhy', version: '0.9.0'),
+          throwsA(isA<StoreChanged>()));
+      expect(await store.installed(), isEmpty);
+      expect((await store.installOfficial('dmhy', version: '1.0.0')).item.id,
+          'dmhy');
+      expect(store.protectedPaths, [
+        p.join(temp.path, 'store', 'plugins'),
+        p.join(temp.path, 'store', 'installed.json'),
+      ]);
     });
   });
 }

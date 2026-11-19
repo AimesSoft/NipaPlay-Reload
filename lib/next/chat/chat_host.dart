@@ -114,9 +114,10 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     if (read == null) return null;
     try {
       return await read(
-          runtimeModules: runtime == null
-              ? null
-              : File(runtime.bin).parent.parent.parent.parent);
+              runtimeModules: runtime == null
+                  ? null
+                  : File(runtime.bin).parent.parent.parent.parent)
+          .timeout(const Duration(seconds: 10));
     } catch (error) {
       stderr.writeln('[NextChat] store extensions not added: '
           '${redactHarnessText('$error')}');

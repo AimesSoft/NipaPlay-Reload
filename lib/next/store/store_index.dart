@@ -31,6 +31,11 @@ final class StoreFormatException implements Exception {
   String toString() => message;
 }
 
+/// The list changed under what the person confirmed; read it again.
+final class StoreChanged extends StoreFormatException {
+  const StoreChanged(super.message);
+}
+
 Never _bad(String message) => throw StoreFormatException(message);
 
 bool storeId(String value) => _id.hasMatch(value);

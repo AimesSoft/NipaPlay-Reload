@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -16,8 +17,18 @@ import 'store_index.dart';
 Map<String, Uint8List> readPackageTarball(List<int> tgz,
     {int maxFiles = 5000, int maxBytes = 64 << 20}) {
   final Archive archive;
+  // Unpacked as it is counted: a small archive that expands without end is
+  // stopped at the limit, not after it has filled memory.
+  final tar = _CappedBytes(maxBytes);
   try {
-    archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(tgz));
+    final input = gzip.decoder.startChunkedConversion(tar);
+    for (var at = 0; at < tgz.length; at += 1 << 16) {
+      input.add(tgz.sublist(at, math.min(at + (1 << 16), tgz.length)));
+    }
+    input.close();
+    archive = TarDecoder().decodeBytes(tar.bytes.takeBytes());
+  } on StoreFormatException {
+    rethrow;
   } catch (_) {
     throw const StoreFormatException('软件包不是有效的 tar.gz');
   }
@@ -44,6 +55,23 @@ Map<String, Uint8List> readPackageTarball(List<int> tgz,
   }
   if (files.isEmpty) throw const StoreFormatException('软件包是空的');
   return files;
+}
+
+final class _CappedBytes implements Sink<List<int>> {
+  _CappedBytes(this.limit);
+  final int limit;
+  final bytes = BytesBuilder(copy: false);
+
+  @override
+  void add(List<int> chunk) {
+    if (bytes.length + chunk.length > limit) {
+      throw const StoreFormatException('软件包过大');
+    }
+    bytes.add(chunk);
+  }
+
+  @override
+  void close() {}
 }
 
 bool _extractable(String path) =>
@@ -278,12 +306,9 @@ final class NpmPackages {
   /// The rows of a plugin's own `cordis.patch.yml`, accepted only when each
   /// adds an entry of this package; without one, a single row for it.
   static List<StoreDshRow> _patchRows(String name, Uint8List? patch, String id) {
-    if (patch == null) {
-      return [
-        StoreDshRow(
-            id: id.replaceFirst('npm-', ''), package: name)
-      ];
-    }
+    // Without a patch of its own, the plugin is loaded as the store item
+    // (`npm-...`), which no plugin of DSH or NipaPlay is called.
+    if (patch == null) return [StoreDshRow(id: id, package: name)];
     final Object? doc;
     try {
       doc = loadYaml(utf8.decode(patch));

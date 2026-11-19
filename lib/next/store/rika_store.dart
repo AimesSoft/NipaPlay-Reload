@@ -84,6 +84,12 @@ final class RikaStore {
   String? _listProblem;
   Future<void> _operations = Future.value();
 
+  /// What decides what DSH loads (the plugins and the record of what is
+  /// installed and on): tools naming them are refused (#1119), so Nipa
+  /// cannot install for herself what only the person may. Skills stay
+  /// open: she reads and runs them.
+  List<String> get protectedPaths => [_plugins.path, _installedFile.path];
+
   Directory get _skills => Directory(p.join(root.path, 'skills'));
   Directory get _plugins => Directory(p.join(root.path, 'plugins'));
   File get _installedFile => File(p.join(root.path, 'installed.json'));
@@ -145,23 +151,56 @@ final class RikaStore {
         maxBytes: maxFileBytes));
   }
 
+  /// What is installed. A record this version cannot read is left out (and
+  /// kept, see [unreadable]), so one bad entry does not hide the rest.
   Future<List<InstalledItem>> installed() async {
-    if (!await _installedFile.exists()) return const [];
-    final raw = jsonDecode(await _installedFile.readAsString());
-    if (raw is! Map || raw['items'] is! List) return const [];
-    return [
-      for (final item in raw['items'] as List)
-        if (item is Map) InstalledItem.parse(item)
-    ];
+    final items = <InstalledItem>[];
+    final unreadable = <String, String>{};
+    for (final raw in await _records()) {
+      try {
+        items.add(InstalledItem.parse(raw));
+      } on Object catch (error) {
+        unreadable['${raw['id']}'] = '$error';
+      }
+    }
+    _unreadable = unreadable;
+    return items;
   }
 
-  Future<void> _save(List<InstalledItem> items) async {
+  /// Installed records that could not be read, and why; removable.
+  Map<String, String> get unreadable => Map.unmodifiable(_unreadable);
+  Map<String, String> _unreadable = const {};
+
+  Future<List<Map>> _records() async {
+    if (!await _installedFile.exists()) return const [];
+    try {
+      final raw = jsonDecode(await _installedFile.readAsString());
+      if (raw is! Map || raw['items'] is! List) return const [];
+      return [
+        for (final item in raw['items'] as List)
+          if (item is Map) item
+      ];
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  /// Saves [items], keeping records nobody could read unless [dropping].
+  Future<void> _save(List<InstalledItem> items, {String? dropping}) async {
+    final kept = {for (final i in items) i.item.id};
+    final unread = [
+      for (final raw in await _records())
+        if (_unreadable.containsKey('${raw['id']}') &&
+            !kept.contains(raw['id']) &&
+            raw['id'] != dropping)
+          raw
+    ];
     await root.create(recursive: true);
     await _write(
         _installedFile,
         const JsonEncoder.withIndent('  ').convert({
           'version': 1,
-          'items': [for (final item in items) item.toJson()]
+          'items': [for (final item in items) item.toJson(), ...unread]
         }));
   }
 
@@ -177,11 +216,18 @@ final class RikaStore {
     return result;
   }
 
-  /// Installs (or updates to the listed version) the official item [id].
-  Future<InstalledItem> installOfficial(String id) => _serial(() async {
+  /// Installs (or updates to the listed version) the official item [id];
+  /// with [version], only that version (the one whose notices the person
+  /// read), else [StoreChanged].
+  Future<InstalledItem> installOfficial(String id, {String? version}) =>
+      _serial(() async {
         final list = await officialList(refresh: true);
         final item = list.items.where((i) => i.id == id).firstOrNull ??
             (throw StoreFormatException('官方列表里没有 $id'));
+        if (version != null && item.version != version) {
+          throw StoreChanged(
+              '「${item.name}」刚更新到 ${item.version}，请看过新版的说明后再安装');
+        }
         return _install(item, null);
       });
 
@@ -200,6 +246,8 @@ final class RikaStore {
       });
 
   Future<InstalledItem> _install(StoreItem item, List<int>? tarball) async {
+    // What is saved must read back: checked before anything is written.
+    StoreItem.parse(item.toJson(), origin: item.origin);
     final folder = Directory(p.join(
         item.kind == StoreKind.skill ? _skills.path : _plugins.path, item.id));
     final staging = Directory('${folder.path}.pending');
@@ -243,41 +291,54 @@ final class RikaStore {
               p.joinAll([staging.path, ...package.path.split('/')])));
         }
       }
-      final old = Directory('${folder.path}.old');
-      if (await old.exists()) await old.delete(recursive: true);
-      if (await folder.exists()) await folder.rename(old.path);
-      await staging.rename(folder.path);
-      if (await old.exists()) await old.delete(recursive: true);
     } catch (_) {
       if (await staging.exists()) await staging.delete(recursive: true);
       rethrow;
     }
-    final now = DateTime.now().toUtc();
     final items = await installed();
     final before = items.where((i) => i.item.id == item.id).firstOrNull;
-    final installed_ =
-        InstalledItem(item, enabled: before?.enabled ?? true, at: now);
-    await _save([
-      for (final i in items)
-        if (i.item.id != item.id) i,
-      installed_,
-    ]);
+    final installed_ = InstalledItem(item,
+        enabled: before?.enabled ?? true, at: DateTime.now().toUtc());
+    // The old files stay until the record of the new ones is saved; if it
+    // cannot be, the old version is put back as it was.
+    final old = Directory('${folder.path}.old');
+    if (await old.exists()) await old.delete(recursive: true);
+    final hadOld = await folder.exists();
+    if (hadOld) await folder.rename(old.path);
+    try {
+      await staging.rename(folder.path);
+      await _save([
+        for (final i in items)
+          if (i.item.id != item.id) i,
+        installed_,
+      ]);
+    } catch (_) {
+      if (await folder.exists()) await folder.delete(recursive: true);
+      if (hadOld) await old.rename(folder.path);
+      if (await staging.exists()) await staging.delete(recursive: true);
+      rethrow;
+    }
+    if (hadOld) await old.delete(recursive: true);
     _changes.add(null);
     return installed_;
   }
 
   Future<void> remove(String id) => _serial(() async {
+        if (!storeId(id)) throw StoreFormatException('没有安装 $id');
         final items = await installed();
-        final item = items.where((i) => i.item.id == id).firstOrNull ??
-            (throw StoreFormatException('没有安装 $id'));
+        if (!items.any((i) => i.item.id == id) &&
+            !_unreadable.containsKey(id)) {
+          throw StoreFormatException('没有安装 $id');
+        }
         await _save([
           for (final i in items)
             if (i.item.id != id) i
-        ]);
-        final folder = Directory(p.join(
-            item.item.kind == StoreKind.skill ? _skills.path : _plugins.path,
-            id));
-        if (await folder.exists()) await folder.delete(recursive: true);
+        ], dropping: id);
+        _unreadable = {..._unreadable}..remove(id);
+        for (final kind in [_skills, _plugins]) {
+          final folder = Directory(p.join(kind.path, id));
+          if (await folder.exists()) await folder.delete(recursive: true);
+        }
         _changes.add(null);
       });
 
@@ -333,8 +394,10 @@ final class RikaStore {
   /// What the enabled items add to a host starting now: [runtimeModules] is
   /// the `node_modules` of the DSH runtime it starts with (null: Codex, which
   /// loads no plugins).
+  ///
+  /// Not queued behind installs: a host starting never waits on a download.
   Future<StoreHostFacts> hostFacts({Directory? runtimeModules}) =>
-      _serial(() async {
+      (() async {
         final items = [
           for (final i in await installed())
             if (i.enabled) i.item
@@ -363,7 +426,7 @@ final class RikaStore {
           dshPlugins: rows,
           skipped: skipped,
         );
-      });
+      })();
 
   Future<List<Map<String, Object?>>> _pluginRows(
       StoreItem item, Directory runtimeModules) async {

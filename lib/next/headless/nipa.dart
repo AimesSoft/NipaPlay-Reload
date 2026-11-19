@@ -330,7 +330,10 @@ final class HeadlessNipa {
         // from her shell alike.
         environment: {'NIPAPLAY_ENDPOINT_FILE': endpoint.credentialFile.path},
         // The vault is plain files of this user; her tools may not name it.
-        protectedPaths: [p.join(root.path, 'vault')]);
+        protectedPaths: [
+          p.join(root.path, 'vault'),
+          ...?store?.protectedPaths,
+        ]);
     _host = host;
     jobOrigins.threadFor = host.threadForOrigin;
     memory.recent = (current) async {

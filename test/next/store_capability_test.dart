@@ -105,6 +105,14 @@ void main() {
     final npm = await call('store.install', {'npm': 'some-plugin'},
         origin: 'agent:x');
     expect((npm as Failed).failure.message, contains('Only the person'));
+    // Over Mesh is not the person at this device (another device's agent
+    // arrives that way too).
+    final remote = await call('store.install', {'npm': 'some-plugin'},
+        origin: 'mesh:phone');
+    expect((remote as Failed).failure.message, contains('Only the person'));
+    expect(((await call('store.apply', {}, origin: 'mesh:phone')) as Failed)
+        .failure
+        .message, contains('ask the person'));
     final apply = await call('store.apply', {}, origin: 'agent:x');
     expect((apply as Failed).failure.message, contains('ask the person'));
     expect(restarts, 0);
@@ -120,6 +128,9 @@ void main() {
     expect(
         (await call('store.install', {'id': 'dmhy', 'npm': 'x'})) is Failed,
         isTrue);
+    final changed =
+        await call('store.install', {'id': 'dmhy', 'version': '1.0.0'});
+    expect((changed as Failed).failure.code, FailureCode.conflict);
     final missing = await call('store.install', {'id': 'nothing'});
     expect((missing as Failed).failure.code, FailureCode.invalidInput);
   });

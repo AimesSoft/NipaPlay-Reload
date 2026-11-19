@@ -106,8 +106,14 @@ final class NextRikaStore {
   Future<String?> readme(String id) async =>
       (await calls.call('store.readme', {'id': id}))['readme'] as String?;
 
-  Future<JsonMap> install({String? id, String? npm}) => calls.call(
-      'store.install', {if (id != null) 'id': id, if (npm != null) 'npm': npm});
+  /// From the list ([id] at the [version] whose notices were shown), or the
+  /// npm package [npm].
+  Future<JsonMap> install({String? id, String? version, String? npm}) =>
+      calls.call('store.install', {
+        if (id != null) 'id': id,
+        if (version != null) 'version': version,
+        if (npm != null) 'npm': npm,
+      });
 
   Future<void> setEnabled(String id, bool enabled) =>
       calls.call('store.enable', {'id': id, 'enabled': enabled});

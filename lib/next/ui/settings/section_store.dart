@@ -95,7 +95,8 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
           width: 460);
       if (go != true) return;
     }
-    await _run(item.id, () => widget.store.install(id: item.id));
+    await _run(item.id,
+        () => widget.store.install(id: item.id, version: item.version));
   }
 
   Future<void> _installNpm() async {
