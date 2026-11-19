@@ -88,7 +88,8 @@ void main() {
         contains('动漫花园'));
 
     final installed =
-        value(await call('store.install', {'id': 'dmhy'}, origin: 'agent:x'));
+        value(await call('store.install', {'id': 'dmhy', 'version': '1.1.0'},
+            origin: 'agent:x'));
     expect((installed['installed'] as Map)['version'], '1.1.0');
     expect(installed['takesEffect'], contains('next'));
     final after = value(await call('store.list', {}));
@@ -131,7 +132,11 @@ void main() {
     final changed =
         await call('store.install', {'id': 'dmhy', 'version': '1.0.0'});
     expect((changed as Failed).failure.code, FailureCode.conflict);
-    final missing = await call('store.install', {'id': 'nothing'});
+    // An official item without the version the person was told of.
+    expect(((await call('store.install', {'id': 'dmhy'})) as Failed).failure.message,
+        contains('version'));
+    final missing =
+        await call('store.install', {'id': 'nothing', 'version': '1.0.0'});
     expect((missing as Failed).failure.code, FailureCode.invalidInput);
   });
 }

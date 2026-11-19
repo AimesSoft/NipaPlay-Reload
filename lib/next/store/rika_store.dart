@@ -204,27 +204,41 @@ final class RikaStore {
         }));
   }
 
+  Future<T> _locked<T>(Future<T> Function() action) async {
+    await root.create(recursive: true);
+    final lock = await File(p.join(root.path, 'installed.lock'))
+        .open(mode: FileMode.append);
+    try {
+      await lock.lock(FileLock.blockingExclusive);
+      return await action();
+    } finally {
+      await lock.close();
+    }
+  }
+
   static Future<void> _write(File file, String text) async {
     final staging = File('${file.path}.pending');
     await staging.writeAsString(text, flush: true);
     await staging.rename(file.path);
   }
 
+  /// One change of what is installed at a time: in this process by a queue,
+  /// across processes (a headless host and its --store-install-npm) by an
+  /// exclusive lock on `installed.lock`.
   Future<T> _serial<T>(Future<T> Function() action) {
-    final result = _operations.then((_) => action());
+    final result = _operations.then((_) => _locked(action));
     _operations = result.then<void>((_) {}, onError: (_, __) {});
     return result;
   }
 
-  /// Installs (or updates to the listed version) the official item [id];
-  /// with [version], only that version (the one whose notices the person
-  /// read), else [StoreChanged].
-  Future<InstalledItem> installOfficial(String id, {String? version}) =>
+  /// Installs (or updates to) the official item [id] at [version], the one
+  /// whose notices the person read; a list that moved on is [StoreChanged].
+  Future<InstalledItem> installOfficial(String id, {required String version}) =>
       _serial(() async {
         final list = await officialList(refresh: true);
         final item = list.items.where((i) => i.id == id).firstOrNull ??
             (throw StoreFormatException('官方列表里没有 $id'));
-        if (version != null && item.version != version) {
+        if (item.version != version) {
           throw StoreChanged(
               '「${item.name}」刚更新到 ${item.version}，请看过新版的说明后再安装');
         }
@@ -318,7 +332,10 @@ final class RikaStore {
       if (await staging.exists()) await staging.delete(recursive: true);
       rethrow;
     }
-    if (hadOld) await old.delete(recursive: true);
+    // Installed: the old copy going is housekeeping, retried next time.
+    if (hadOld) {
+      await old.delete(recursive: true).then<void>((_) {}, onError: (Object _) {});
+    }
     _changes.add(null);
     return installed_;
   }

@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/next/headless/store_command.dart';
 import 'package:nipaplay/next/store/npm_package.dart';
 import 'package:nipaplay/next/store/rika_store.dart';
 import 'package:nipaplay/next/store/store_fetch.dart';
@@ -137,7 +138,7 @@ void main() {
           'dmhy.py': 'print("ok")',
         })
       ]);
-      final installed = await store.installOfficial('dmhy');
+      final installed = await store.installOfficial('dmhy', version: '1.0.0');
       expect(installed.item.reviewed, isTrue);
       final folder = p.join(temp.path, 'store', 'skills', 'dmhy');
       expect(await File(p.join(folder, 'dmhy.py')).readAsString(), 'print("ok")');
@@ -159,7 +160,7 @@ void main() {
       ]);
       await File(p.join(list.path, 'skills', 'dmhy', 'dmhy.py'))
           .writeAsString('print("changed")');
-      await expectLater(store.installOfficial('dmhy'),
+      await expectLater(store.installOfficial('dmhy', version: '1.0.0'),
           throwsA(isA<StoreFetchException>()));
       expect(await store.installed(), isEmpty);
       expect(
@@ -401,7 +402,7 @@ void main() {
       await writeList([
         await skill('dmhy', {'SKILL.md': '用法', 'dmhy.py': 'v1'})
       ]);
-      await store.installOfficial('dmhy');
+      await store.installOfficial('dmhy', version: '1.0.0');
       await writeList([
         {
           ...await skill('dmhy', {'SKILL.md': '用法', 'dmhy.py': 'v2'}),
@@ -411,7 +412,8 @@ void main() {
       // The record's staging file cannot be written.
       await Directory(p.join(temp.path, 'store', 'installed.json.pending'))
           .create();
-      await expectLater(store.installOfficial('dmhy'), throwsA(anything));
+      await expectLater(
+          store.installOfficial('dmhy', version: '2.0.0'), throwsA(anything));
       expect(
           await File(p.join(temp.path, 'store', 'skills', 'dmhy', 'dmhy.py'))
               .readAsString(),
@@ -448,6 +450,50 @@ void main() {
           .hostFacts(runtimeModules: runtime)
           .timeout(const Duration(seconds: 2));
       expect(facts.dshPlugins, isEmpty);
+    });
+
+    test('an update is done though the old copy cannot be cleared away',
+        () async {
+      await writeList([
+        await skill('dmhy', {'SKILL.md': '用法', 'dmhy.py': 'v1'})
+      ]);
+      await store.installOfficial('dmhy', version: '1.0.0');
+      // Something in the old copy that this account cannot delete.
+      final stuck = await Directory(
+              p.join(temp.path, 'store', 'skills', 'dmhy', 'stuck'))
+          .create();
+      await File(p.join(stuck.path, 'x')).writeAsString('x');
+      await Process.run('chmod', ['555', stuck.path]);
+      addTearDown(() async {
+        for (final dir in [
+          p.join(temp.path, 'store', 'skills', 'dmhy.old', 'stuck'),
+          stuck.path
+        ]) {
+          if (await Directory(dir).exists()) {
+            await Process.run('chmod', ['755', dir]);
+          }
+        }
+      });
+      await writeList([
+        {
+          ...await skill('dmhy', {'SKILL.md': '用法', 'dmhy.py': 'v2'}),
+          'version': '2.0.0'
+        }
+      ]);
+      final updated = await store.installOfficial('dmhy', version: '2.0.0');
+      expect(updated.item.version, '2.0.0');
+      expect(
+          await File(p.join(temp.path, 'store', 'skills', 'dmhy', 'dmhy.py'))
+              .readAsString(),
+          'v2');
+    },
+        skip: Platform.isWindows ||
+            Process.runSync('id', ['-u']).stdout.toString().trim() == '0');
+
+    test('headless: an npm package needs the person at a terminal', () async {
+      expect(await runHeadlessStoreInstall(temp, 'some-plugin'), 64);
+      expect(await Directory(p.join(temp.path, 'store', 'plugins')).exists(),
+          isFalse);
     });
 
     test('the version the person confirmed, or a conflict', () async {

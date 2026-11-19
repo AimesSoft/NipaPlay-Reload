@@ -89,7 +89,7 @@ for k in rows:
         rows[k][0][1] = '弹幕 ' + k.split('.')[-1].replace('_', ' ') + '；来源及副作用见目标契约'
 import hashlib
 BASELINE_HASHES = {
- 'lib/next/store/capability.dart': '46be4666fb71d7c74a32f2cff6a3b561ed321f05c16dbd7e0ca69436ccaaa2a5',
+ 'lib/next/store/capability.dart': '8c529b63cdb33d65fc67268713f778338b1089c76ca8d535fdae9628950b7930',
  'lib/next/voice/capability.dart': '635811717bf4e74b5540aaf660b7a128e575fe5a1c4a3f89329361b43027f6b1',
  'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': '9762fedade67a672296e97d314a669f8317dcf80006f9d49df0477b100a34862',
  'lib/next/knowledge/capability.dart': '705ef8725a060aa20504794279f0b433e14288663ee024d17e33477dd9b3c400',
@@ -102,7 +102,7 @@ BASELINE_HASHES = {
  'lib/next/capabilities/download_capability.dart': '18e66aee3ccb0788165ddbea65c842b0b52c8d90aa09db3ed018caaf80e9472c',
  'lib/next/capabilities/download_metadata_capability.dart': '9c55fdf10875cbe97126d4d08e162efbc2fadd9538d32fec4044b35b945ec27a',
  'lib/next/capabilities/download_playback_capability.dart': '56f9b51ac7c8ee83cbc3192f1ff3dd9e27faa3575b55b69c48ec3a650a3eefcf',
- 'lib/next/capabilities/family_descriptions.dart': '82b236561224efae3c1f4fe25114e7f3221a0f488f000190885a6c4564d820a7',
+ 'lib/next/capabilities/family_descriptions.dart': 'a21bba29d8239a54dec0bafbecb27ad4a1fd5ef47c63997e3a27c3135cb6520d',
  'lib/next/capabilities/history_capability.dart': '16c32339022d69d1a86120694938820408a879120a22aae2e2cec1862893619f',
  'lib/next/capabilities/kernel_control.dart': 'f565296087c0709468ea14d526bedaca86af286b75751264d9ae07f13a5eb1d6',
  'lib/next/capabilities/library_capability.dart': '107685542a32791dbc7424b8a6dcf6d49a0d00a6c9d33ae2cfaccbe7e42a19d2',

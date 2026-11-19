@@ -64,7 +64,7 @@ final class StoreCapability implements Capability {
                   title: '从商店安装',
                   effect: Effect.write,
                   description:
-                      'Install or update an item of the official list (id), or an npm package (npm: "name" or "name@version"). An npm package is not reviewed: only the person may install one, from this device\'s store UI (or, headless, the host\'s --store-install-npm). With version, only that version of the listed item (the one whose notices the person read); a newer listing is a conflict. Plugins load only with the DSH runtime. Install only what the person asked for, after telling them the item\'s notices (store.list). Takes effect when the conversation host next starts.',
+                      'Install or update an item of the official list (id), or an npm package (npm: "name" or "name@version"). An npm package is not reviewed: only the person may install one, from this device\'s store UI (or, headless, the host\'s --store-install-npm). An official item needs its version from store.list, the one whose notices the person was told; a newer listing is a conflict. Plugins load only with the DSH runtime. Install only what the person asked for, after telling them the item\'s notices (store.list). Takes effect when the conversation host next starts.',
                   input: ObjectSchema({
                     'id': _id,
                     'version': StringSchema(minLength: 1, maxLength: 64),
@@ -72,9 +72,14 @@ final class StoreCapability implements Capability {
                   }),
                   output: _output), (input, invocation) {
             final id = input['id'] as String?, npm = input['npm'] as String?;
+            final version = input['version'] as String?;
             if ((id == null) == (npm == null)) {
               throw const Failure(
                   FailureCode.invalidInput, 'Give exactly one of id or npm.');
+            }
+            if (id != null && version == null) {
+              throw const Failure(FailureCode.invalidInput,
+                  'Give the version from store.list whose notices the person was told.');
             }
             if (npm != null && !_person(invocation)) {
               throw const Failure(FailureCode.invalidInput,
@@ -83,8 +88,7 @@ final class StoreCapability implements Capability {
             return _failures(() async {
               final installed = npm != null
                   ? await store.installNpm(npm)
-                  : await store.installOfficial(id!,
-                      version: input['version'] as String?);
+                  : await store.installOfficial(id!, version: version!);
               return {
                 'installed': _installed(installed),
                 'takesEffect': 'next conversation host start',

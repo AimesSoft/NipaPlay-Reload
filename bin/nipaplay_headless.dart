@@ -34,7 +34,6 @@ Future<void> main(List<String> arguments) async {
   String? dshMode, agentMode;
   var keyStdin = false;
   String? storeNpm;
-  var acceptUnreviewed = false;
   for (var i = 0; i < arguments.length; i++) {
     final key = arguments[i];
     if (key == '--version') {
@@ -67,7 +66,7 @@ Future<void> main(List<String> arguments) async {
           '  --agent-enable | --agent-disable | --agent-status --data DIR (the switch that lets Nipa run on this host)\n'
           '  A running host applies these without a restart. Talk to her with ./nipa chat in the host harness.\n'
           '  Nipa\'s store (official items: ./nipa call store.list / store.install in the harness):\n'
-          '  --store-install-npm NAME[@VERSION] --accept-unreviewed --data DIR (an npm skill or DSH plugin nobody reviewed; loaded when Nipa next starts)');
+          '  --store-install-npm NAME[@VERSION] --data DIR (an npm skill or DSH plugin nobody reviewed, in an interactive terminal: type its name to confirm; loaded when Nipa next starts)');
       return;
     }
     if (key == '--enroll-token-stdin') { enroll = true; continue; }
@@ -78,7 +77,6 @@ Future<void> main(List<String> arguments) async {
       continue;
     }
     if (key == '--key-stdin') { keyStdin = true; continue; }
-    if (key == '--accept-unreviewed') { acceptUnreviewed = true; continue; }
     if (key == '--store-install-npm' && i + 1 < arguments.length) {
       storeNpm = arguments[++i];
       continue;
@@ -128,8 +126,7 @@ Future<void> main(List<String> arguments) async {
     return;
   }
   if (storeNpm != null) {
-    exitCode = await runHeadlessStoreInstall(root, storeNpm,
-        accepted: acceptUnreviewed);
+    exitCode = await runHeadlessStoreInstall(root, storeNpm);
     return;
   }
   if (keyStdin || const {'--provider', '--base-url', '--model', '--api', '--reasoning'}
