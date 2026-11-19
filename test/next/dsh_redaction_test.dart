@@ -30,14 +30,16 @@ void main() {
       () async {
     final out = await _node(r'''
 const r = new bridge.Redactions();
-r.remember(['sk-live-0123456789abcdef', 'abc', 'p4ss', 42, 'p@ss w/ord+1234']);
+r.remember(['sk-live-0123456789abcdef', 'x', 'abc', 'p4ss', 'http', 42, 'p@ss w/ord+1234']);
 const text = (t) => r.text(t);
 console.log(JSON.stringify({
   plain: text('key=sk-live-0123456789abcdef\n'),
   json: text('{"secret":"p@ss w\/ord+1234"}'),
   url: text('https://x/?k=' + encodeURIComponent('p@ss w/ord+1234')),
-  tiny: text('abc is too short to hide'),
+  tiny: text('x marks the spot'),
   short: text('pw=p4ss'),
+  word: text('abc, but not abcdef'),
+  inside: text('see https://example.org'),
   untouched: text('nothing here'),
   size: r.size,
 }));
@@ -45,10 +47,13 @@ console.log(JSON.stringify({
     expect(out['plain'], 'key=${'[已隐去的凭据]'}\n');
     expect(out['json'], isNot(contains('ord+1234')));
     expect(out['url'], isNot(contains('ord%2B1234')));
-    // A short password is still hidden (#1119 review); under four
-    // characters a value would hide ordinary text, so it is not.
+    // A short password is hidden where it stands alone (#1119 review), not
+    // inside a longer word: a password `http` leaves `https://` whole. One
+    // character cannot be told from text.
     expect(out['short'], 'pw=${'[已隐去的凭据]'}');
-    expect(out['tiny'], 'abc is too short to hide');
+    expect(out['word'], '${'[已隐去的凭据]'}, but not abcdef');
+    expect(out['inside'], 'see https://example.org');
+    expect(out['tiny'], 'x marks the spot');
     expect(out['untouched'], 'nothing here');
   }, skip: node ? false : 'node is not on PATH');
 

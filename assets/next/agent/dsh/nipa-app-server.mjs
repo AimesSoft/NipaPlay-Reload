@@ -390,9 +390,11 @@ class Wire {
  * memory; NipaPlay sends them with `nipa/redact`, never through a file.
  */
 export const REDACTED = '[已隐去的凭据]';
-// Shorter values would hide ordinary text (a digit, a word) wherever it
-// appears; four characters is where a value is still mostly its own.
-const MIN_SECRET = 4;
+// A value of one character cannot be told from text. One under
+// [WHOLE_FROM] characters is hidden only where it stands alone (not inside
+// a longer word or number): a password `http` must not break `https://`.
+const MIN_SECRET = 2;
+const WHOLE_FROM = 8;
 
 export function secretForms(secret) {
   const forms = new Set([secret]);
@@ -400,6 +402,8 @@ export function secretForms(secret) {
   try { forms.add(encodeURIComponent(secret)); } catch { /* lone surrogate */ }
   return [...forms].filter((form) => form.length >= MIN_SECRET);
 }
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export class Redactions {
   #forms = [];
@@ -419,7 +423,10 @@ export class Redactions {
     if (typeof value !== 'string' || this.#forms.length === 0) return value;
     let out = value;
     for (const form of this.#forms) {
-      if (out.includes(form)) out = out.split(form).join(REDACTED);
+      if (!out.includes(form)) continue;
+      out = form.length >= WHOLE_FROM
+        ? out.split(form).join(REDACTED)
+        : out.replace(new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(form)}(?![\\p{L}\\p{N}_])`, 'gu'), REDACTED);
     }
     return out;
   }
