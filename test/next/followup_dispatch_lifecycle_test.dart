@@ -1,3 +1,6 @@
+@Tags(['codex_integration'])
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
