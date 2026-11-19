@@ -974,9 +974,11 @@ final class Followups {
             row['turnId'] = null;
             row['retryAt'] = retryAt.toIso8601String();
             _until(retryAt);
+            // What the provider said goes with it, so whoever reads the
+            // followup (the agent, asked why it keeps failing) can tell.
             await _save(row, 'ready', 'retrying',
                 reason:
-                    'The model provider failed this turn; delivering again at ${row['retryAt']}.');
+                    'The model provider failed this turn (${_said(error)}); delivering again at ${row['retryAt']}.');
           } else if (row['steered'] == true &&
               status != 'completed' &&
               !(turn['items'] as List).cast<Map>().any((item) =>
@@ -1087,6 +1089,12 @@ final class Followups {
   /// server errors, a dropped stream), not that the turn itself went wrong.
   /// Public for the classification tests (#1122).
   static bool isProviderHiccup(Object? error) => _providerHiccup(error);
+
+  /// A turn's error as a reason can carry it: redacted, and short.
+  static String _said(Object? error) {
+    final said = redactHarnessText(jsonEncode(error));
+    return said.length <= 600 ? said : '${said.substring(0, 600)}…';
+  }
 
   static bool _providerHiccup(Object? error) {
     if (error is! Map) return false;
