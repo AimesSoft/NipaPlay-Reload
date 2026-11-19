@@ -62,14 +62,45 @@ UiEpisode episodeValue(JsonMap e, {UiDevice? device}) => UiEpisode(
     heat: (e['heat'] as List?)?.map((n) => (n as num).toDouble()).toList(),
     playable: e['playable'] == true && (device?.online ?? true),
     device: device);
+/// The episode a work's play button opens, from [episodes] in their order.
+///
+/// Where it was last left: the episode played most recently, while it is
+/// unfinished, or else the first unfinished one after it. Only without a
+/// playable one there does it fall back to the first episode in progress,
+/// then the first unfinished. Taking the first in progress alone reopened an
+/// episode left half-watched long ago instead of the one just left (#1127).
+UiEpisode? nextEpisode(List<UiEpisode> episodes) {
+  UiEpisode? latest;
+  var at = -1;
+  for (var i = 0; i < episodes.length; i++) {
+    final played = episodes[i].lastPlayedAt;
+    if (played != null &&
+        (latest == null || played.isAfter(latest.lastPlayedAt!))) {
+      latest = episodes[i];
+      at = i;
+    }
+  }
+  bool unfinished(UiEpisode e) => (e.progress ?? 0) < 1;
+  if (latest != null) {
+    if (unfinished(latest) && latest.playable) return latest;
+    if (!unfinished(latest)) {
+      final after = episodes
+          .skip(at + 1)
+          .where((e) => e.playable && unfinished(e))
+          .firstOrNull;
+      if (after != null) return after;
+    }
+  }
+  return episodes
+          .where((e) => e.playable && (e.progress ?? 0) > 0 && unfinished(e))
+          .firstOrNull ??
+      episodes.where((e) => e.playable && unfinished(e)).firstOrNull ??
+      episodes.where(unfinished).firstOrNull;
+}
+
 UiWork workValue(JsonMap w, List<UiEpisode> episodes, List<UiDevice> devices) {
   final a = w['artwork'] as Map;
-  final next = episodes
-          .where((e) =>
-              e.playable && (e.progress ?? 0) > 0 && (e.progress ?? 0) < 1)
-          .firstOrNull ??
-      episodes.where((e) => e.playable && (e.progress ?? 0) < 1).firstOrNull ??
-      episodes.where((e) => (e.progress ?? 0) < 1).firstOrNull;
+  final next = nextEpisode(episodes);
   return UiWork(
       workId: w['workId'] as String,
       title: w['title'] as String,
