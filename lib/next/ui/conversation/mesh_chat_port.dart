@@ -61,6 +61,7 @@ final class MeshChatPort implements ChatPort, ChatFileStaging {
   int _generation = 0;
   bool _looping = false;
   bool _sharedThreads = false;
+  bool _takesFiles = false;
   Timer? _again;
   Future<void>? _probing;
 
@@ -137,6 +138,7 @@ final class MeshChatPort implements ChatPort, ChatFileStaging {
       _epoch = state['epoch'] as String?;
       _sequence = (state['sequence'] as int?) ?? 0;
       _sharedThreads = state['sharedThreads'] == true;
+      _takesFiles = state['attachments'] == true;
       _up = true;
       _servedBy = peer;
       _why = null;
@@ -322,7 +324,13 @@ final class MeshChatPort implements ChatPort, ChatFileStaging {
   /// Each file goes over in parts to the device Nipa runs on, which keeps it
   /// where she reads it; what is said then names it there.
   @override
+  String? get filesRefused => !_up || _takesFiles
+      ? null
+      : '「${_name()}」上的 NipaPlay 需要更新后才能接收附件。';
+
+  @override
   Future<List<String>> stage(List<String> paths) async {
+    if (filesRefused case final why?) throw ChatUnavailable(why);
     final staged = <String>[];
     for (final path in paths) {
       final file = File(path);

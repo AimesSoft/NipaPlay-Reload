@@ -254,6 +254,8 @@ final class ChatGuests {
         'epoch': epoch,
         'sequence': _sequence,
         'sharedThreads': true,
+        // Takes files over `mesh/chat/attach`; an older host says nothing.
+        'attachments': true,
       };
 
   String _thread(JsonMap params, String peer) {
@@ -545,6 +547,11 @@ final class _GuestAttachments {
   static const _staleAfter = Duration(minutes: 30);
   static const _maxPeerUploads = 16;
 
+  /// A guest's file here is a copy (the original stays on the guest), kept
+  /// while the conversation is likely to come back to it.
+  static const keptFor = Duration(days: 30);
+  DateTime? _sweptAt;
+
   static String _safeName(Object? raw) {
     final base = raw is String ? raw.split(RegExp(r'[\\/]')).last : '';
     final cleaned = base
@@ -573,6 +580,29 @@ final class _GuestAttachments {
     }
   }
 
+  /// Removes the copies older than [keptFor] (and parts no upload of this
+  /// run owns), at most once an hour, as files arrive.
+  Future<void> _sweep(DateTime now) async {
+    if (_sweptAt != null && now.difference(_sweptAt!) < const Duration(hours: 1)) {
+      return;
+    }
+    _sweptAt = now;
+    if (!await root.exists()) return;
+    final owned = {for (final u in _uploads.values) u.part.path};
+    try {
+      await for (final entity in root.list(recursive: true, followLinks: false)) {
+        if (entity is! File || owned.contains(entity.path)) continue;
+        final part = entity.uri.pathSegments.last.endsWith('.part');
+        final age = now.difference(await entity.lastModified());
+        if (age > (part ? _staleAfter : keptFor)) {
+          await entity.delete().catchError((Object _) => entity);
+        }
+      }
+    } on FileSystemException {
+      // Tried again within the hour's next arrival.
+    }
+  }
+
   Future<void> close() async {
     final pending = _uploads.values.toList();
     _uploads.clear();
@@ -586,6 +616,7 @@ final class _GuestAttachments {
   Future<JsonMap> receive(JsonMap params, String peer) async {
     final now = DateTime.now();
     await _pruneStale(now);
+    await _sweep(now);
     final size = params['size'], offset = params['offset'];
     final data = params['data'];
     if (size is! int || size <= 0 || size > chatAttachmentLimit) {

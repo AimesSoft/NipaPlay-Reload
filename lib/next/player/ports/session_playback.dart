@@ -84,7 +84,8 @@ final class SessionPlayback implements NextPlayback, VideoStageHost {
     _keepAwake();
     unawaited(_readLevels());
     if (_desktop) {
-      _window = _FullscreenWatch(_fullscreen, () => _setAwake(false));
+      _window = _FullscreenWatch(_fullscreen,
+          onClose: () => _setAwake(false), onFocus: _keepAwake);
       windowManager.addListener(_window!);
     }
   }
@@ -1457,17 +1458,21 @@ final class _Frame extends ChangeNotifier {
   }
 }
 
-/// Full screen and close signals as the window says, whoever asked for them.
+/// Full screen as the window says, whoever asked for it; and the window
+/// closing (it may only go to the tray while playback goes on: the screen is
+/// let go) and coming back (whether it is held is asked again).
 final class _FullscreenWatch with WindowListener {
-  _FullscreenWatch(this._full, this._onClose);
+  _FullscreenWatch(this._full, {required this.onClose, required this.onFocus});
   final ValueNotifier<bool> _full;
-  final VoidCallback _onClose;
+  final VoidCallback onClose, onFocus;
   @override
   void onWindowEnterFullScreen() => _full.value = true;
   @override
   void onWindowLeaveFullScreen() => _full.value = false;
   @override
-  void onWindowClose() => _onClose();
+  void onWindowClose() => onClose();
+  @override
+  void onWindowFocus() => onFocus();
 }
 
 /// What was asked to play while its session does not exist yet.

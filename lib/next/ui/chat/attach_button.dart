@@ -54,10 +54,15 @@ class AttachButton extends StatefulWidget {
     this.enabled = true,
     this.picker = const SystemAttachmentPicker(),
     this.offerPictures,
+    this.refused,
   });
 
   final ValueChanged<List<String>> onFiles;
   final bool enabled;
+
+  /// Why files cannot go now ([NipaChat.filesRefused]): the button stays,
+  /// dimmed, and says so when pressed instead of picking.
+  final String? refused;
   final AttachmentPicker picker;
 
   /// Null: [attachmentsOfferPictures].
@@ -72,6 +77,12 @@ class _AttachButtonState extends State<AttachButton> {
 
   Future<void> _pick() async {
     if (_picking) return;
+    if (widget.refused case final why?) {
+      await showNextSheet<void>(
+          (context, close) => _Refused(why: why, onClose: close),
+          width: 380);
+      return;
+    }
     final pictures = widget.offerPictures ?? attachmentsOfferPictures;
     final from = pictures
         ? await showNextSheet<String>(
@@ -109,12 +120,34 @@ class _AttachButtonState extends State<AttachButton> {
           ),
           child: NextIcon(NextGlyph.plus,
               size: 17,
-              color: !widget.enabled || _picking
+              color: !widget.enabled || _picking || widget.refused != null
                   ? NextColors.p4
                   : hovered
                       ? NextColors.paper
                       : NextColors.p2),
         ),
+      );
+}
+
+class _Refused extends StatelessWidget {
+  const _Refused({required this.why, required this.onClose});
+  final String why;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) => SheetSurface(
+        padding: const EdgeInsets.fromLTRB(22, 18, 14, 18),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(why,
+                  key: const Key('chat.attach.refused'),
+                  style: NextText.sans(14, height: 1.5)),
+            ),
+          ),
+          NextIconButton(glyph: NextGlyph.close, label: '关闭', onTap: onClose),
+        ]),
       );
 }
 

@@ -8,6 +8,7 @@ import 'package:nipa_harness/nipa_harness.dart' hide Invocation;
 import 'package:nipaplay/next/mesh/chat_guest_host.dart';
 import 'package:nipaplay/next/mesh/nipa_peers.dart';
 import 'package:nipaplay/next/ui/chat/attach_button.dart';
+import 'package:nipaplay/next/ui/conversation/chat_port.dart' show ChatUnavailable;
 import 'package:nipaplay/next/ui/conversation/mesh_chat_port.dart';
 import 'package:nipaplay/next/ui/conversation/nipa_chat.dart';
 import 'package:nipaplay/next/ui/widgets/sheet.dart';
@@ -124,6 +125,27 @@ void main() {
     });
   });
 
+  testWidgets('refused: says why instead of picking', (tester) async {
+    final picker = _FakePicker(pickedFiles: ['/tmp/a.png']);
+    final attached = <List<String>>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Stack(children: [
+      Scaffold(
+          body: Center(
+              child: AttachButton(
+                  onFiles: attached.add,
+                  picker: picker,
+                  offerPictures: false,
+                  refused: '「MacBook」上的 NipaPlay 需要更新后才能接收附件。'))),
+      const NextSheetLayer(),
+    ])));
+    await tester.tap(find.byKey(const Key('chat.attach')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chat.attach.refused')), findsOneWidget);
+    expect(picker.fileCalls, 0);
+    expect(attached, isEmpty);
+  });
+
   group('Mesh attachment staging (mesh/chat/attach + MeshChatPort + NipaChat)',
       () {
     late Directory dir;
@@ -201,6 +223,50 @@ void main() {
           },
           'ipad');
       expect(dotted['path'], endsWith('-notes'));
+    });
+
+    test('an older host that does not take files is told apart, not tried',
+        () async {
+      var attaches = 0;
+      final old = MeshChatPort(
+        call: (peer, method, params) async {
+          if (method == 'mesh/chat/attach') attaches++;
+          final result = await guests.handle(method, params, 'ipad');
+          return method == 'mesh/chat/state'
+              ? ({...result}..remove('attachments'))
+              : result;
+        },
+        hostChanges: changed.stream,
+        peers: peers,
+        retry: const Duration(milliseconds: 100),
+      );
+      addTearDown(old.dispose);
+      for (var i = 0; i < 50 && old.filesRefused == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(old.filesRefused, contains('需要更新'));
+      final file = File('${dir.path}/a.txt')..writeAsStringSync('x');
+      await expectLater(old.stage([file.path]), throwsA(isA<ChatUnavailable>()));
+      expect(attaches, 0);
+    });
+
+    test('copies older than 30 days and forgotten parts are swept', () async {
+      final folder = Directory('${dir.path}/host/chat-attachments/guests/ipad')
+        ..createSync(recursive: true);
+      final now = DateTime.now();
+      final aged = File('${folder.path}/old-shot.png')..writeAsStringSync('o');
+      aged.setLastModifiedSync(now.subtract(const Duration(days: 31)));
+      final recent = File('${folder.path}/new-shot.png')..writeAsStringSync('n');
+      recent.setLastModifiedSync(now.subtract(const Duration(days: 2)));
+      final part = File('${folder.path}/.abandoned.part')..writeAsStringSync('p');
+      part.setLastModifiedSync(now.subtract(const Duration(hours: 2)));
+      await guests.handle(
+          'mesh/chat/attach',
+          {'name': 'today.txt', 'size': 1, 'offset': 0, 'data': base64Encode([7])},
+          'ipad');
+      expect(aged.existsSync(), isFalse);
+      expect(part.existsSync(), isFalse);
+      expect(recent.existsSync(), isTrue);
     });
 
     test('rejects cross-peer hijack, invalid offsets, and cleans .part on close',

@@ -273,7 +273,8 @@ class _ChatComposerState extends State<ChatComposer>
                 if (attaching) ...[
                   AttachButton(
                       onFiles: chat.attach,
-                      enabled: chat.acceptsTyping && chat.question == null),
+                      enabled: chat.acceptsTyping && chat.question == null,
+                      refused: chat.filesRefused),
                   const SizedBox(width: 4),
                 ],
                 Expanded(

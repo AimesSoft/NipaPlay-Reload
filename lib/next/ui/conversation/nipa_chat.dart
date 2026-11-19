@@ -529,6 +529,13 @@ class NipaChat extends ChangeNotifier {
   /// Whether the input takes text now.
   bool get acceptsTyping => !(question != null && secretAsked);
 
+  /// Why files cannot go with what is said now (Nipa runs on a device whose
+  /// NipaPlay cannot take them); null when they can.
+  String? get filesRefused => switch (port) {
+        final ChatFileStaging staging => staging.filesRefused,
+        _ => null,
+      };
+
   String get hint {
     if (question != null) return secretAsked ? '这里不输入密码' : '也可以直接说';
     if (attachments.isNotEmpty) return '想让梨花做什么？';
