@@ -19,6 +19,8 @@ class AdaptiveMediaDetailActionButton extends StatefulWidget {
     this.detail,
     this.emphasis = MediaDetailActionEmphasis.secondary,
     this.expanded = false,
+    this.iconOnly = false,
+    this.grouped = false,
   });
 
   final IconData icon;
@@ -27,6 +29,8 @@ class AdaptiveMediaDetailActionButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final MediaDetailActionEmphasis emphasis;
   final bool expanded;
+  final bool iconOnly;
+  final bool grouped;
 
   static bool get supportsNativeLiquidGlass =>
       AppleNativeMediaControl.supported;
@@ -90,16 +94,24 @@ class _AdaptiveMediaDetailActionButtonState
       final detailWidth = textWidth(widget.detail ?? '', detailStyle);
       final width = (labelWidth > detailWidth ? labelWidth : detailWidth) + 72;
       return SizedBox(
-        width: widget.expanded
-            ? double.infinity
-            : width.clamp(80.0, MediaQuery.sizeOf(context).width - 32),
+        width: widget.iconOnly
+            ? 44
+            : widget.expanded
+                ? double.infinity
+                : width.clamp(80.0, MediaQuery.sizeOf(context).width - 32),
         child: AppleNativeMediaControl(
           label: widget.label,
+          iconOnly: widget.iconOnly,
+          plain: widget.grouped,
           detail: widget.detail,
           symbol: switch (widget.label) {
             '返回' => 'chevron.left',
-            '评论' => 'bubble.right',
-            '选择剧集' => 'list.bullet',
+            '评论' => 'bubble.left.and.bubble.right',
+            '收藏' => 'heart',
+            '取消收藏' => 'heart.fill',
+            '编辑 Bangumi 评分' => 'square.and.pencil',
+            '剧集' => 'list.bullet',
+            '更多' => 'ellipsis',
             _ => 'play.fill',
           },
           primary: primary,
@@ -112,15 +124,23 @@ class _AdaptiveMediaDetailActionButtonState
     final content = AnimatedContainer(
       duration: const Duration(milliseconds: 160),
       curve: Curves.easeOutCubic,
-      constraints: const BoxConstraints(minHeight: 52),
-      padding: EdgeInsets.symmetric(
-        horizontal: primary ? 20 : 17,
-        vertical: widget.detail == null ? 12 : 9,
+      constraints: BoxConstraints(
+        minHeight: widget.iconOnly ? 44 : 52,
+        minWidth: widget.iconOnly ? 44 : 0,
+        maxWidth: widget.iconOnly ? 44 : double.infinity,
       ),
+      padding: widget.iconOnly
+          ? EdgeInsets.zero
+          : EdgeInsets.symmetric(
+              horizontal: primary ? 20 : 17,
+              vertical: widget.detail == null ? 12 : 9,
+            ),
       decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: border),
+        color: widget.grouped
+            ? Colors.white.withValues(alpha: active ? 0.12 : 0)
+            : background,
+        borderRadius: BorderRadius.circular(widget.iconOnly ? 22 : 10),
+        border: widget.grouped ? null : Border.all(color: border),
         boxShadow: primary && active
             ? [
                 BoxShadow(
@@ -136,36 +156,37 @@ class _AdaptiveMediaDetailActionButtonState
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(widget.icon, size: 22, color: foreground),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: foreground,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (widget.detail?.isNotEmpty == true)
+          if (!widget.iconOnly) const SizedBox(width: 10),
+          if (!widget.iconOnly)
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    widget.detail!,
+                    widget.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: foreground.withValues(alpha: 0.78),
-                      fontSize: 11,
-                      height: 1.25,
+                      color: foreground,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-              ],
+                  if (widget.detail?.isNotEmpty == true)
+                    Text(
+                      widget.detail!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: foreground.withValues(alpha: 0.78),
+                        fontSize: 11,
+                        height: 1.25,
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -187,7 +208,7 @@ class _AdaptiveMediaDetailActionButtonState
             color: Colors.transparent,
             child: InkWell(
               onTap: widget.onPressed,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(widget.iconOnly ? 22 : 10),
               focusColor: Colors.transparent,
               hoverColor: Colors.transparent,
               splashColor: Colors.white.withValues(alpha: 0.08),
@@ -219,7 +240,51 @@ class AdaptiveMediaDetailIconButton extends StatelessWidget {
       child: AdaptiveMediaDetailActionButton(
         icon: icon,
         label: tooltip,
+        iconOnly: true,
         onPressed: onPressed,
+      ),
+    );
+  }
+}
+
+/// A single capsule containing independently focusable media actions.
+class AdaptiveMediaDetailActionGroup extends StatelessWidget {
+  const AdaptiveMediaDetailActionGroup({
+    super.key,
+    required this.children,
+    this.nativeActions,
+  });
+
+  final List<Widget> children;
+  final List<AppleNativeMediaAction>? nativeActions;
+
+  @override
+  Widget build(BuildContext context) {
+    final nativeGlass =
+        AdaptiveMediaDetailActionButton.useNativeLiquidGlass(context);
+    if (nativeGlass && nativeActions != null) {
+      return AppleNativeMediaActionGroup(actions: nativeActions!);
+    }
+    return SizedBox(
+      height: 44,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.32),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.18),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(mainAxisSize: MainAxisSize.min, children: children),
+          ),
+        ],
       ),
     );
   }

@@ -486,13 +486,13 @@ class _AdaptiveMediaLibraryPageState extends State<AdaptiveMediaLibraryPage>
       if (filePath.startsWith('jellyfin://')) {
         playbackSession = await JellyfinService.instance.createPlaybackSession(
           itemId: filePath.replaceFirst('jellyfin://', ''),
-          startPositionMs: item.lastPosition > 0 ? item.lastPosition : null,
+          startPositionMs: item.resumePosition > 0 ? item.resumePosition : null,
         );
       } else if (filePath.startsWith('emby://')) {
         final id = filePath.replaceFirst('emby://', '').split('/').last;
         playbackSession = await EmbyService.instance.createPlaybackSession(
           itemId: id,
-          startPositionMs: item.lastPosition > 0 ? item.lastPosition : null,
+          startPositionMs: item.resumePosition > 0 ? item.resumePosition : null,
         );
       } else if (!kIsWeb &&
           !filePath.startsWith('http://') &&

@@ -32,6 +32,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
   final double? width;
   final double? height;
   final Widget Function(BuildContext, Object)? errorBuilder;
+  final WidgetBuilder? placeholderBuilder;
   final bool shouldRelease;
   final Duration fadeDuration;
   final bool shouldCompress; // 兼容旧参数：允许原始字节落盘，不做额外压缩
@@ -56,6 +57,7 @@ class CachedNetworkImageWidget extends StatefulWidget {
     this.width,
     this.height,
     this.errorBuilder,
+    this.placeholderBuilder,
     this.shouldRelease = true,
     this.fadeDuration = _kDefaultImageFadeDuration,
     this.shouldCompress = true, // 默认为true，保持原有行为
@@ -82,7 +84,6 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
   bool _isImageLoaded = false;
   bool _isDisposed = false;
   ui.Image? _basicImage; // 基础图片
-  bool _hasRetriedLowRes = false;
   String? _smartCropKey;
   Alignment _smartCropAlignment = Alignment.center;
 
@@ -177,7 +178,6 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     }
     _currentUrl = widget.imageUrl;
     _loadGeneration++;
-    _hasRetriedLowRes = false;
 
     final target = _resolveDecodeTarget();
     _decodeTarget = target;
@@ -191,6 +191,9 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
           targetHeight: targetHeight,
         ) ??
         _basicImage;
+    // A synchronous memory hit must never fade from transparent again when
+    // FutureBuilder receives the completed future on the next frame.
+    _isImageLoaded = _basicImage != null;
     _imageFuture = ImageCacheManager.instance.loadImage(
       widget.imageUrl,
       targetWidth: targetWidth,
@@ -222,7 +225,10 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
     int? width = widget.memCacheWidth;
     int? height = widget.memCacheHeight;
 
-    if (width == null || height == null) {
+    // An explicit single decode dimension preserves the source aspect ratio.
+    // Filling the missing dimension from the display box can distort a logo
+    // and produce a second, incompatible cache key for the same rendition.
+    if (width == null && height == null) {
       final double? logicalWidth =
           widget.width != null && widget.width!.isFinite ? widget.width : null;
       final double? logicalHeight =
@@ -454,27 +460,6 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                       ? _smartCropAlignment
                       : widget.alignment;
 
-              if (!_hasRetriedLowRes &&
-                  widget.blurIfLowRes &&
-                  !widget.forceBlur &&
-                  selectedImage != null &&
-                  snapshot.hasData &&
-                  _shouldApplyBlur(selectedImage, displaySize, context)) {
-                _hasRetriedLowRes = true;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && !_isDisposed) {
-                    setState(() {
-                      _imageFuture = ImageCacheManager.instance.loadImage(
-                        widget.imageUrl,
-                        targetWidth: _decodeTarget?.$1,
-                        targetHeight: _decodeTarget?.$2,
-                        forceRefresh: true,
-                      );
-                    });
-                  }
-                });
-              }
-
               if (snapshot.hasError && selectedImage == null) {
                 _scheduleAutoRetry();
                 if (widget.errorBuilder != null) {
@@ -537,6 +522,9 @@ class _CachedNetworkImageWidgetState extends State<CachedNetworkImageWidget> {
                     imageWidget, selectedImage, displaySize, context);
               }
 
+              if (widget.placeholderBuilder != null) {
+                return widget.placeholderBuilder!(context);
+              }
               return LoadingPlaceholder(
                 width: widget.width ?? 160,
                 height: widget.height ?? 228,

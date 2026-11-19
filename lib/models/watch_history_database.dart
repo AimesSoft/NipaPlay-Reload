@@ -820,6 +820,35 @@ class WatchHistoryDatabase {
         'is_from_scan': item.isFromScan ? 1 : 0,
       };
 
+  /// A remote request may finish after local playback saved a new position.
+  /// Only replace the progress we actually fetched, in one atomic SQL update.
+  Future<bool> updateRemoteProgressIfUnchanged(
+    WatchHistoryItem original,
+    WatchHistoryItem updated,
+  ) async {
+    if (kIsWeb) return false;
+    final db = await database;
+    final count = await db.update(
+      'watch_history',
+      {
+        'watch_progress': updated.watchProgress,
+        'last_position': updated.lastPosition,
+        'duration': updated.duration,
+        'last_watch_time': updated.lastWatchTime.toIso8601String(),
+      },
+      where: 'file_path = ? AND last_watch_time = ? AND last_position = ? '
+          'AND duration = ? AND watch_progress = ?',
+      whereArgs: [
+        original.filePath,
+        original.lastWatchTime.toIso8601String(),
+        original.lastPosition,
+        original.duration,
+        original.watchProgress,
+      ],
+    );
+    return count == 1;
+  }
+
   Future<List<WatchHistoryItem>> getRecentWatchHistory({int limit = 40}) async {
     if (limit <= 0) return [];
     if (kIsWeb) return (await getAllWatchHistory()).take(limit).toList();

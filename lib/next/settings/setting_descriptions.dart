@@ -324,8 +324,6 @@ const classicSettingDescriptions = <String, String>{
       '收集应用的所有打印输出，用于调试和问题诊断；开启时立即开始收集，关闭时立即停止。Classic 设置页名称：调试日志收集。默认开启。',
   'diagnostics.fileLog':
       '把日志每 1 秒写入磁盘，保留最近 5 份日志文件；开启时立即开始写入，关闭时立即停止。Classic 设置页名称：日志写入文件。默认开启。',
-  'labs.enableImmersiveAnimeDetail':
-      '实验开关：开启后桌面、平板和手机都使用新版全屏番剧详情页（Classic 实验室页名称：新版番剧卡片页面）。默认关闭。',
 
   // ---- WebDAV 快捷入口 ----
   'webdavQuick.showTab':

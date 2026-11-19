@@ -61,8 +61,6 @@ void main() {
       expect(store.enabled, false);
       expect(
           SettingsLayout.sectionOf('labs.voiceEnabled'), SettingsSection.labs);
-      expect(SettingsLayout.sectionOf('labs.enableImmersiveAnimeDetail'),
-          SettingsSection.labs);
       await expectLater(() => registry.set('labs.voiceModel', 'unknown', agent),
           throwsA(isA<Failure>()));
       await expectLater(() => registry.set('labs.voiceStatus', '{}', agent),

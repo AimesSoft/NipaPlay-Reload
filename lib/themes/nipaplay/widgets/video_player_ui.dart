@@ -7,6 +7,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -433,6 +434,21 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   Widget _buildVideoSurfaceStage(VideoPlayerState videoState, int? textureId) {
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.macOS &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1' &&
+        _shouldUseMacOSWindowHostedVideoOverlay &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER'] != '0') {
+      // Leave the area outside the video unpainted in transparent video-only mode.
+      return Center(
+        child: AspectRatio(
+          aspectRatio: DesktopPlayerWindowService.normalizeAspectRatio(
+            videoState.aspectRatio,
+          ),
+          child: _buildVideoSurface(videoState, textureId),
+        ),
+      );
+    }
     if (_shouldUseWindowHostedVideoOverlay(videoState)) {
       // iOS only: the window-overlay plane mirrors this Flutter rect, so keep
       // it sized to the video aspect ratio and centered. This preserves the

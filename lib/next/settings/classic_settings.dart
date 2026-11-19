@@ -645,14 +645,6 @@ final class ClassicSettings {
         await FileLogService().stop();
       }
     }, source: developerSource);
-    add(
-        'labs.enableImmersiveAnimeDetail',
-        '沉浸式番剧详情',
-        const BooleanSchema(),
-        false,
-        SettingsKeys.labsEnableImmersiveAnimeDetail,
-        (v) => current.labs.setEnableImmersiveAnimeDetail(v as bool),
-        source: 'lib/providers/labs_settings_provider.dart');
     for (final shortcut in HotkeyService.defaultShortcuts.entries) {
       add(
           'shortcuts.${shortcut.key}',
