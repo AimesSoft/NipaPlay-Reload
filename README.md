@@ -14,6 +14,7 @@
 ![GitHub downloads](https://img.shields.io/github/downloads/aimessoft/nipaplay-reload/total?style=flat-square&color=green)
 ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20%7C%20tvOS%20%7C%20HarmonyOS-lightgrey?style=flat-square)
 ![License](https://img.shields.io/github/license/aimessoft/nipaplay-reload?style=flat-square)
+[![NipaPlay Next 技术报告 DOI](https://img.shields.io/badge/报告_DOI-10.5281%2Fzenodo.24364872-blue?style=flat-square)](https://doi.org/10.5281/zenodo.24364872)
 
 <br>
 
@@ -184,6 +185,11 @@ Next 还引入个人 Git Harness、跨设备 Mesh、
 这是一次关于 Agentic Native Software 的公开实验，
 其行为、可靠性和安全边界仍在持续研究和验证中。
 
+### 研究与引用
+
+技术报告《Mechanism in the Host, Judgment in the Agent》以 NipaPlay Next 为例，记录了播放器如何与梨花分工，以及梨花在识别媒体文件、匹配剧集和维护媒体库时的实际表现。
+
+[研究站](https://aimes-soft.com/research/) · [报告全文与 BibTeX 引用](https://aimes-soft.com/research/tr-2026-01/) · [DOI 10.5281/zenodo.24364872](https://doi.org/10.5281/zenodo.24364872)
 
 ### 参与开发者预览
 
