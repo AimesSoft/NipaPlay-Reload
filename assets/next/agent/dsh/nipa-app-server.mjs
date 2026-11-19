@@ -403,8 +403,6 @@ export function secretForms(secret) {
   return [...forms].filter((form) => form.length >= MIN_SECRET);
 }
 
-const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 // Standing alone: the characters on either side, as the text means them,
 // are not letters, digits or `_`. Tool output is often JSON or a URL, so a
 // neighbour written as a JSON escape (`\n`, `\u00a0`) or as percent-encoded
@@ -413,21 +411,30 @@ const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const LETTER = /[\p{L}\p{N}_]/u;
 const JSON_ESCAPES = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '"': '"', '\\': '\\', '/': '/' };
 
+const HEX = /^[0-9A-Fa-f]$/;
+const ESCAPE_LETTERS = 'nrtbf"\\/u';
+
+// Counted at most 64 back: a long run of backslashes must not make every
+// check walk it again.
 function unescapedBackslash(text, i) {
   if (text[i] !== '\\') return false;
   let run = 0;
-  for (let k = i - 1; k >= 0 && text[k] === '\\'; k--) run++;
+  for (let k = i - 1; k >= 0 && k >= i - 64 && text[k] === '\\'; k--) run++;
   return run % 2 === 0;
 }
 
-function insideEscape(text, i) {
-  if (i > 0 && unescapedBackslash(text, i - 1)) return true;
+// Whether position i is inside a JSON escape (`\n`, `\u00a0`) or a
+// percent-encoded byte (`%20`) that began before it.
+function splitsEscape(text, i) {
+  if (i <= 0 || i >= text.length) return false;
+  if (unescapedBackslash(text, i - 1) && ESCAPE_LETTERS.includes(text[i])) return true;
   for (let back = 2; back <= 5; back++) {
     const j = i - back;
     if (j >= 0 && text[j + 1] === 'u' && unescapedBackslash(text, j) &&
-        /^[0-9A-Fa-f]*$/.test(text.slice(j + 2, i))) return true;
+        /^[0-9A-Fa-f]{4}$/.test(text.slice(j + 2, j + 6))) return true;
   }
-  return false;
+  if (text[i - 1] === '%' && HEX.test(text[i]) && HEX.test(text[i + 1] ?? '')) return true;
+  return i >= 2 && text[i - 2] === '%' && HEX.test(text[i - 1]) && HEX.test(text[i]);
 }
 
 function percentChar(chunk) {
@@ -469,13 +476,35 @@ function charAfter(text, j) {
   return String.fromCodePoint(text.codePointAt(j));
 }
 
+function standsAlone(text, at, length) {
+  const end = at + length;
+  // Neither end may cut an escape in two (the secret `n!` in `\n!`, `20`
+  // in `%20`, a secret ending in `\` before `"`).
+  if (splitsEscape(text, at) || splitsEscape(text, end)) return false;
+  for (let k = at; k < end; k++) {
+    if (unescapedBackslash(text, k) && k + (text[k + 1] === 'u' ? 6 : 2) > end) return false;
+  }
+  const before = charBefore(text, at), after = charAfter(text, end);
+  return !(before && LETTER.test(before)) && !(after && LETTER.test(after));
+}
+
 function standingAlone(form) {
-  const pattern = new RegExp(escapeRegExp(form), 'gu');
-  return (text) => text.replace(pattern, (match, offset, whole) => {
-    if (insideEscape(whole, offset)) return match;
-    const before = charBefore(whole, offset), after = charAfter(whole, offset + match.length);
-    return (before && LETTER.test(before)) || (after && LETTER.test(after)) ? match : REDACTED;
-  });
+  return (text) => {
+    let out = '', from = 0, changed = false;
+    let at = text.indexOf(form);
+    while (at !== -1) {
+      if (standsAlone(text, at, form.length)) {
+        out += text.slice(from, at) + REDACTED;
+        from = at + form.length;
+        changed = true;
+        at = text.indexOf(form, from);
+      } else {
+        // The next occurrence may overlap this one.
+        at = text.indexOf(form, at + 1);
+      }
+    }
+    return changed ? out + text.slice(from) : text;
+  };
 }
 
 export class Redactions {
@@ -488,7 +517,12 @@ export class Redactions {
       // form's: `密码` is short however long `%E5%AF%86%E7%A0%81` is.
       const whole = value.length >= WHOLE_FROM;
       for (const form of secretForms(value)) {
-        if (this.#forms.some((known) => known.text === form)) continue;
+        const known = this.#forms.find((f) => f.text === form);
+        if (known) {
+          // The same text from a long secret is hidden everywhere.
+          if (whole && known.alone) { known.alone = null; changed = true; }
+          continue;
+        }
         this.#forms.push({ text: form, alone: whole ? null : standingAlone(form) });
         changed = true;
       }

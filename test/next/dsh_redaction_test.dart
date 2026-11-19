@@ -79,6 +79,41 @@ console.log(JSON.stringify({
     expect(out['untouched'], 'nothing here');
   }, skip: node ? false : 'node is not on PATH');
 
+  test('a short credential: overlaps, escapes cut in two, long runs',
+      () async {
+    final out = await _node(r'''
+const r = new bridge.Redactions();
+r.remember(['!\\', '20', 'p4ss', 'ab-ab']);
+const both = new bridge.Redactions();
+both.remember(['密码']);
+both.remember(['%E5%AF%86%E7%A0%81']);
+const slashes = new bridge.Redactions();
+slashes.remember(['\\\\']);
+const run = JSON.stringify({ v: '\\'.repeat(65536) });
+const started = performance.now();
+slashes.text(run);
+const took = performance.now() - started;
+console.log(JSON.stringify({
+  quote: r.text('{"x":"!\\""}'),
+  percent: r.text('a%20b and pw=20'),
+  rawSlash: r.text('\\p4ss'),
+  overlap: r.text('xab-ab-ab!'),
+  longWins: both.text('x%E5%AF%86%E7%A0%81x'),
+  took,
+}));
+''');
+    // `!"` escaped is not the secret `!\`; `%20` is a space, not `20`.
+    expect(out['quote'], r'{"x":"!\""}');
+    expect(out['percent'], 'a%20b and pw=${'[已隐去的凭据]'}');
+    // `\p` is no JSON escape: the secret after it stands alone.
+    expect(out['rawSlash'], '\\${'[已隐去的凭据]'}');
+    // A rejected match does not hide an overlapping one that stands alone.
+    expect(out['overlap'], 'xab-${'[已隐去的凭据]'}!');
+    // The same text as a long secret is hidden everywhere.
+    expect(out['longWins'], 'x${'[已隐去的凭据]'}x');
+    expect(out['took'] as num, lessThan(1000));
+  }, skip: node ? false : 'node is not on PATH');
+
   test('post-execute: success, failure, value and block decisions', () async {
     final out = await _node(r'''
 const r = new bridge.Redactions();
