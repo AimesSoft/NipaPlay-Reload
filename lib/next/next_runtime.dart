@@ -631,6 +631,7 @@ final class NextRuntime extends ChangeNotifier {
             ? AgentRuntimeKind.codex
             : AgentRuntimeKind.dsh,
         runtimeChanged: _switchChatRuntime,
+        restartHost: () async { await _restartChat(applyStore: false); },
         codex: LabProfile.active || !desktop
             ? null
             : CodexRuntime.desktop(

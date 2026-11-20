@@ -51,6 +51,7 @@ final class HostSettingsService
       this.externalCodexStatusOnly = false,
       this.defaultRuntime = AgentRuntimeKind.codex,
       this.runtimeChanged,
+      this.restartHost,
       this.httpClient = HttpClient.new}) {
     _meshEvents = meshRuntime.hostChanges.listen((_) => notify());
     if (fixedRuntimeDirectory case final directory?) {
@@ -85,6 +86,9 @@ final class HostSettingsService
 
   /// Called after the runtime choice changed: the running host is replaced.
   final Future<void> Function(AgentRuntimeKind, Future<void> Function())? runtimeChanged;
+  /// Restarts the live host on its current runtime, e.g. after the Codex
+  /// account source changes.
+  final Future<void> Function()? restartHost;
   CodexRuntime get _codex => codex ?? (throw UnsupportedError('实验配置沿用外部 Codex'));
   @override
   Future<UiCodexRuntime> codexRuntime() => _codex.state();
@@ -697,8 +701,8 @@ final class HostSettingsService
         await _saveModel(before, value,
             remember: choice.source == UiModelSource.nipaplay);
       });
-    if (restart && chat() != null && runtimeChanged != null) {
-      await runtimeChanged!();
+    if (restart && chat() != null && restartHost != null) {
+      await restartHost!();
     } else {
       await modelSaved();
     }
