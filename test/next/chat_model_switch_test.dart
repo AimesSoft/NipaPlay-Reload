@@ -139,7 +139,7 @@ void main() {
     });
   });
 
-  group('ModelSheet widget & helpers', () {
+  group('ModelMenu widget & helpers', () {
     test('modelLabel and choice helpers preserve provider fields', () {
       const setup = UiModelSetup(
         source: UiModelSource.nipaplay,
@@ -170,7 +170,7 @@ void main() {
     });
 
     testWidgets(
-        'ModelSheet switches recent/listed models and DSH reasoning effort',
+        'ModelMenu switches recent/listed models and DSH reasoning effort',
         (tester) async {
       final host = FakeHostSettings()
         ..runtime = UiAgentRuntimeKind.dsh
@@ -182,7 +182,7 @@ void main() {
 
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-          body: ModelSheet(
+          body: ModelMenu(
             host: host,
             chat: chat,
             onSettings: () => openedSettings++,
@@ -193,15 +193,19 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pump();
 
-      // Recent models include DeepSeek current and OpenRouter previous.
-      expect(find.byKey(const Key('chat.model.recent.0')), findsOneWidget);
-      expect(find.byKey(const Key('chat.model.recent.1')), findsOneWidget);
-      // Provider-listed models deduplicate the already-recent deepseek-flash.
-      expect(find.byKey(const Key('chat.model.listed.deepseek-flash')),
-          findsNothing);
-      expect(find.byKey(const Key('chat.model.listed.deepseek-pro')),
+      // Each service lists its own models; the one in use comes first.
+      expect(find.text('DeepSeek'), findsOneWidget);
+      expect(find.text('OpenRouter'), findsOneWidget);
+      expect(
+          find.byKey(const Key('chat.model.service.DeepSeek.deepseek-flash')),
           findsOneWidget);
-      expect(find.text('这个服务商'), findsNWidgets(2));
+      expect(
+          find.byKey(const Key('chat.model.service.DeepSeek.deepseek-pro')),
+          findsOneWidget);
+      expect(
+          find.byKey(const Key(
+              'chat.model.service.OpenRouter.google/gemini-4-pro')),
+          findsOneWidget);
 
       // Tapping reasoning '高' updates model without closing the sheet.
       await tester.tap(find.text('高'));
@@ -211,7 +215,8 @@ void main() {
       expect(host.saved.last.reasoning, 'high');
 
       // Tapping a listed model switches to it and closes the sheet.
-      await tester.tap(find.byKey(const Key('chat.model.listed.deepseek-pro')));
+      await tester.tap(
+          find.byKey(const Key('chat.model.service.DeepSeek.deepseek-pro')));
       await tester.pump(const Duration(milliseconds: 250));
       await tester.pump();
       expect(host.saved.last.model, 'deepseek-pro');
@@ -219,7 +224,7 @@ void main() {
       expect(closed, 1);
 
       // Tapping settings link calls onSettings.
-      await tester.tap(find.text('添加或修改模型…'));
+      await tester.tap(find.text('管理模型…'));
       await tester.pump();
       expect(openedSettings, 1);
     });

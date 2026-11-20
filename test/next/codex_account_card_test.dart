@@ -50,14 +50,14 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(body: CodexAccountCard(host: host, canLogin: true))));
     await tester.pump();
-    await tester.tap(find.text('使用设备码'));
+    await tester.tap(find.text('用设备码'));
     await tester.pump();
-    expect(find.text('设备码：FIXTURE'), findsOneWidget);
+    expect(find.text('FIXTURE'), findsOneWidget);
     expect(find.text('打开浏览器'), findsOneWidget);
     await tester.tap(find.text('取消'));
     await tester.pump();
     expect(host.canceled, true);
-    expect(find.text('设备码：FIXTURE'), findsNothing);
+    expect(find.text('FIXTURE'), findsNothing);
 
     host.status = {
       'status': 'signedIn',
@@ -72,11 +72,11 @@ void main() {
     };
     host.changes.add(null);
     await tester.pumpAndSettle();
-    expect(find.text('已登录'), findsOneWidget);
     expect(find.text('test@example.invalid'), findsOneWidget);
     expect(find.text('plus'), findsOneWidget);
-    expect(find.text('123 token'), findsOneWidget);
-    expect(find.text('300 分钟窗口 · 已用 42%'), findsOneWidget);
+    expect(find.text('累计用了 123 token'), findsOneWidget);
+    expect(find.text('5 小时'), findsOneWidget);
+    expect(find.textContaining('已用 42%'), findsOneWidget);
   });
 
   testWidgets('existing configuration has no login controls', (tester) async {
@@ -85,8 +85,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(body: CodexAccountCard(host: host, canLogin: false))));
     await tester.pump();
-    expect(find.text('未登录'), findsOneWidget);
-    expect(find.text('登录 ChatGPT'), findsNothing);
-    expect(find.text('使用设备码'), findsNothing);
+    expect(find.text('还没有登录'), findsOneWidget);
+    expect(find.text('登录'), findsNothing);
+    expect(find.text('用设备码'), findsNothing);
   });
 }

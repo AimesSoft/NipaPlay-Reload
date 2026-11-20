@@ -352,6 +352,29 @@ class NextShellController extends ChangeNotifier {
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisible());
   }
 
+  bool _storeOpen = false;
+
+  /// 梨花's store, a page over the sections (from settings › 梨花).
+  void openStore() {
+    final nav = navigatorKey.currentState;
+    if (nav == null || _playing || _storeOpen) return;
+    if (popover != NextPopover.none) {
+      popover = NextPopover.none;
+      notifyListeners();
+    }
+    _storeOpen = true;
+    if (panelOpen.value) _closePanel();
+    final wasScrolled = scrolled.value;
+    final from = section;
+    scrolled.value = false;
+    nav.pushNamed('/store').then((_) {
+      _storeOpen = false;
+      if (section == from) scrolled.value = wasScrolled;
+      _syncVisible();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisible());
+  }
+
   void play(UiWork work, {UiEpisode? episode}) {
     unawaited(services.actions
         .play(work, episode: episode ?? work.next)

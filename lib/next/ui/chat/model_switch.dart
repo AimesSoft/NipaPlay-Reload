@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../ui_data/host_settings.dart';
@@ -13,12 +14,12 @@ import '../widgets/buttons.dart';
 import '../widgets/icons.dart';
 import '../widgets/progress.dart';
 import '../widgets/segmented.dart';
-import '../widgets/sheet.dart';
+import '../widgets/menu.dart';
 
-/// Which model Nipa thinks with, where the conversation is: its name over
-/// the conversation, and a tap away the models set up before, the others
-/// its provider lists, and how hard she thinks. The settings page stays
-/// where a new provider and its key are set up.
+/// Which model answers what is said next, in the input beside the files:
+/// its name as a quiet word, and a tap away a menu that opens upward with
+/// the models used before, the ones the provider lists, and how hard she
+/// thinks. The settings page stays where a provider and its key are set up.
 ///
 /// Only on a device whose own Nipa this is: a device that speaks with the
 /// Nipa of another one does not choose that device's model.
@@ -30,6 +31,8 @@ class ModelSwitch extends StatefulWidget {
 }
 
 class _ModelSwitchState extends State<ModelSwitch> {
+  final _link = LayerLink();
+  final _portal = OverlayPortalController();
   NextHostSettings? _host;
   StreamSubscription<void>? _changes;
   UiModelSetup? _setup;
@@ -72,46 +75,92 @@ class _ModelSwitchState extends State<ModelSwitch> {
       return const SizedBox.shrink();
     }
     final shell = NextShellScope.of(context);
-    return Pressable(
-      key: const Key('chat.model'),
-      semanticLabel: '模型：$name',
-      onTap: () => showNextSheet<void>(
-          width: 440,
-          (context, close) => ModelSheet(
-              host: host,
-              chat: shell.chat,
-              onSettings: () {
-                close();
-                shell.openSettings(section: SettingsSection.nipa);
-              },
-              onClose: close)),
-      builder: (context, hovered) => AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        height: 30,
-        padding: const EdgeInsets.symmetric(horizontal: 11),
-        decoration: BoxDecoration(
-          color: hovered ? const Color(0x14FFFFFF) : const Color(0x0AFFFFFF),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: NextColors.line),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          ConstrainedBox(
-            // A phone's title keeps most of its line.
-            constraints: BoxConstraints(
-                maxWidth: NextLayout.compact(context) ? 104 : 170),
-            child: Text(name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: NextText.sans(12.5,
-                    color: hovered ? NextColors.paper : NextColors.p2)),
+    return CompositedTransformTarget(
+      link: _link,
+      child: OverlayPortal(
+        controller: _portal,
+        overlayChildBuilder: (context) => Stack(children: [
+          Positioned.fill(
+            child: GestureDetector(
+                behavior: HitTestBehavior.opaque, onTap: _portal.hide),
           ),
-          const SizedBox(width: 6),
-          RotatedBox(
-            quarterTurns: 1,
-            child: NextIcon(NextGlyph.chevronRight,
-                size: 9, color: hovered ? NextColors.p2 : NextColors.p4),
+          Positioned(
+            left: 0,
+            top: 0,
+            child: CompositedTransformFollower(
+              link: _link,
+              // The input sits at the bottom: the menu opens upward.
+              targetAnchor: Alignment.topLeft,
+              followerAnchor: Alignment.bottomLeft,
+              offset: const Offset(-4, -10),
+              child: Focus(
+                autofocus: true,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.escape) {
+                    _portal.hide();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOut,
+                  builder: (context, t, child) => Opacity(
+                    opacity: t,
+                    child: Transform.translate(
+                        offset: Offset(0, 6 * (1 - t)), child: child),
+                  ),
+                  child: ModelMenu(
+                    host: host,
+                    chat: shell.chat,
+                    onSettings: () {
+                      _portal.hide();
+                      shell.openSettings(section: SettingsSection.nipa);
+                    },
+                    onClose: _portal.hide,
+                  ),
+                ),
+              ),
+            ),
           ),
         ]),
+        child: Pressable(
+          key: const Key('chat.model'),
+          semanticLabel: '模型：$name',
+          onTap: _portal.toggle,
+          // A quiet word in the input, like the files beside it: what the
+          // next thing said is answered with. No frame until hovered.
+          builder: (context, hovered) => AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: hovered || _portal.isShowing
+                  ? const Color(0x12FFFFFF)
+                  : null,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxWidth: NextLayout.compact(context) ? 96 : 180),
+                child: Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NextText.sans(12.5,
+                        color: hovered ? NextColors.paper : NextColors.p3)),
+              ),
+              const SizedBox(width: 5),
+              RotatedBox(
+                quarterTurns: 3,
+                child: NextIcon(NextGlyph.chevronRight,
+                    size: 8, color: hovered ? NextColors.p2 : NextColors.p4),
+              ),
+            ]),
+          ),
+        ),
       ),
     );
   }
@@ -152,8 +201,12 @@ UiModelChoice currentChoice(UiModelSetup setup,
         reasoning: reasoning ?? setup.reasoning ?? '',
         compat: setup.compat ?? const {});
 
-class ModelSheet extends StatefulWidget {
-  const ModelSheet(
+/// The model menu: the models used before and the ones the provider lists,
+/// each once, the one in use checked; how hard she thinks, when the model
+/// has a choice; whether a pick holds only for the next thing said; and
+/// the way to the settings where providers are set up.
+class ModelMenu extends StatefulWidget {
+  const ModelMenu(
       {super.key,
       required this.host,
       required this.chat,
@@ -165,16 +218,20 @@ class ModelSheet extends StatefulWidget {
   final VoidCallback onClose;
 
   @override
-  State<ModelSheet> createState() => _ModelSheetState();
+  State<ModelMenu> createState() => _ModelMenuState();
 }
 
-class _ModelSheetState extends State<ModelSheet> {
+class _ModelMenuState extends State<ModelMenu> {
   UiModelSetup? _setup;
   UiModelCandidates? _listed;
+  List<UiModelService>? _services;
+  final _byService = <String, UiModelCandidates>{};
   bool _busy = false;
   bool _once = false;
-  UiModelChoice? _pendingChoice;
+  UiModelChoice? _expanded;
   String? _said;
+
+  static String _serviceId(UiModelChoice c) => '${c.provider}|${c.baseUrl}';
 
   @override
   void initState() {
@@ -187,6 +244,28 @@ class _ModelSheetState extends State<ModelSheet> {
       final setup = await widget.host.model();
       if (!mounted) return;
       setState(() => _setup = setup);
+      final host = widget.host;
+      if (host is NextModelServices &&
+          setup.source == UiModelSource.nipaplay) {
+        final services = await (host as NextModelServices).services();
+        if (!mounted) return;
+        setState(() => _services = services);
+        for (final service in services) {
+          unawaited((host as NextModelServices)
+              .modelsOf(service.choice)
+              .then((models) {
+            if (mounted) {
+              setState(() => _byService[_serviceId(service.choice)] = models);
+            }
+          }, onError: (Object error) {
+            if (mounted) {
+              setState(() => _byService[_serviceId(service.choice)] =
+                  UiModelCandidates(UiModelQueryStatus.failed,
+                      reason: callFailure(error)));
+            }
+          }));
+        }
+      }
       final listed = await widget.host.providerModels();
       if (mounted) setState(() => _listed = listed);
     } catch (error) {
@@ -203,7 +282,8 @@ class _ModelSheetState extends State<ModelSheet> {
     try {
       final host = widget.host;
       if (choice.catalog != null && host is NextSessionModelSettings) {
-        await (host as NextSessionModelSettings).setSessionModel(choice, once: _once);
+        await (host as NextSessionModelSettings)
+            .setSessionModel(choice, once: _once);
       } else {
         await host.setModel(choice);
       }
@@ -220,6 +300,9 @@ class _ModelSheetState extends State<ModelSheet> {
     }
   }
 
+  static String _key(UiModelChoice c) =>
+      '${c.provider}|${c.baseUrl}|${c.model}|${(c.api ?? UiModelApi.responses).name}';
+
   static bool _same(UiModelChoice a, UiModelSetup b) =>
       b.source == UiModelSource.nipaplay &&
       a.provider == b.provider &&
@@ -227,224 +310,323 @@ class _ModelSheetState extends State<ModelSheet> {
       a.model == b.model &&
       (a.api ?? UiModelApi.responses) == b.api;
 
+  static String _effort(String effort) => switch (effort) {
+        '' || 'none' => '关',
+        'minimal' => '极低',
+        'low' => '低',
+        'medium' => '中',
+        'high' => '高',
+        'xhigh' => '很高',
+        'max' => '最高',
+        'ultra' => '超高',
+        _ => effort,
+      };
+
+  static String? _origin(UiModelChoice choice) =>
+      switch (choice.candidateOrigin) {
+        UiModelCandidateOrigin.openai => 'OpenAI',
+        UiModelCandidateOrigin.chatgptAccount => 'ChatGPT',
+        UiModelCandidateOrigin.provider => null,
+        UiModelCandidateOrigin.dshProvider => null,
+        null => choice.providerLabel ?? choice.provider,
+      };
+
+  /// A service by its provider's name; by its address too when another
+  /// service has the same name.
+  static String _serviceName(UiModelService service, List<UiModelService> all) {
+    final name = service.choice.provider ?? '';
+    final twins = all.where((s) => s.choice.provider == name).length;
+    if (twins < 2) return name;
+    final host = Uri.tryParse(service.choice.baseUrl ?? '');
+    return '$name · ${host == null ? service.choice.baseUrl : host.hasPort ? '${host.host}:${host.port}' : host.host}';
+  }
+
+  /// A service's models, or its default one while they are read or when
+  /// they cannot be listed.
+  List<Widget> _serviceRows(
+      UiModelSetup setup, UiModelService service, List<UiModelService> services) {
+    final listed = _byService[_serviceId(service.choice)];
+    String? trim(String? url) => url?.replaceFirst(RegExp(r'/$'), '');
+    bool current(UiModelChoice m) =>
+        setup.sessionChoice == null &&
+        setup.source == UiModelSource.nipaplay &&
+        setup.provider == m.provider &&
+        trim(setup.baseUrl) == trim(m.baseUrl) &&
+        setup.model == m.model;
+    final models = [
+      ...(listed?.status == UiModelQueryStatus.succeeded &&
+              listed!.choices.isNotEmpty
+          ? listed.choices
+          : [service.choice])
+    ];
+    // The one in use and the service's default first, then the rest.
+    int rank(UiModelChoice m) =>
+        current(m) ? 0 : m.model == service.choice.model ? 1 : 2;
+    models.sort((a, b) => rank(a).compareTo(rank(b)));
+    return [
+      for (final m in models.take(listed == null ? 1 : 8))
+        _ModelRow(
+            key: Key(services.where((s) => s.choice.provider == service.choice.provider).length > 1
+                ? 'chat.model.service.${service.choice.provider}.${service.choice.baseUrl}.${m.model}'
+                : 'chat.model.service.${service.choice.provider}.${m.model}'),
+            title: m.label ?? m.model ?? '',
+            current: current(m),
+            onTap: current(m) || !service.hasKey
+                ? null
+                // Another model of the service in use keeps its thinking
+                // and wire settings; another service brings its own.
+                : () => _choose(service.current &&
+                        setup.source == UiModelSource.nipaplay
+                    ? currentChoice(setup, model: m.model)
+                    : choiceOf(m.withReasoning(
+                        m.reasoning ?? service.choice.reasoning)))),
+      if (listed == null)
+        const Padding(
+            padding: EdgeInsets.fromLTRB(12, 2, 12, 6),
+            child: Align(
+                alignment: Alignment.centerLeft, child: ThinkingDots())),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final setup = _setup;
-    // Codex speaks Responses only: a Chat Completions model set up for
-    // DeepSeek Harness cannot be picked under it.
+    // Each model once: the same provider, address, model and wire set up
+    // twice is one entry. Codex speaks Responses only.
+    // Two set-ups that would read the same in the menu (the same model
+    // under the same provider) are one row: the most recent.
+    final seen = <String>{};
+    String shown(UiModelChoice c) =>
+        '${c.label ?? c.model}|${c.providerLabel ?? c.provider}';
     final recent = [
       for (final model in setup?.recent ?? const <UiModelChoice>[])
-        if (setup?.runtime != UiAgentRuntimeKind.codex ||
-            model.api != UiModelApi.chat)
+        if ((setup?.runtime != UiAgentRuntimeKind.codex ||
+                model.api != UiModelApi.chat) &&
+            seen.add(_key(model)) &&
+            seen.add(shown(model)))
           model
-    ];
+    ].take(5).toList();
+    final services = _services;
     final others = [
       for (final choice in _listed?.choices ?? const <UiModelChoice>[])
-        if (!recent.any((saved) =>
-            saved.model == choice.model &&
-            saved.provider == choice.provider &&
-            saved.baseUrl == choice.baseUrl &&
-            (saved.api ?? UiModelApi.responses) == choice.api))
+        // With services, each lists its own models; the runtime's catalog
+        // stays here.
+        if ((services == null || choice.catalog != null) &&
+            seen.add(_key(choice)))
           choice
     ];
-    return SheetSurface(
-      padding: const EdgeInsets.fromLTRB(24, 20, 18, 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(children: [
-            Expanded(
-                child: Text('模型',
-                    style: NextText.sans(17, weight: FontWeight.w600))),
-            if (_busy)
-              const Padding(
-                  padding: EdgeInsets.only(right: 8), child: ThinkingDots()),
-            NextIconButton(
-                glyph: NextGlyph.close, label: '关闭', onTap: widget.onClose),
-          ]),
-          const SizedBox(height: 4),
-          Text(widget.chat.running ? '这一轮说完后换用，正在进行的不受影响。' : '从下一句开始换用。',
-              style: NextText.sans(12.5, color: NextColors.p3)),
-          if (_said case final said?) ...[
-            const SizedBox(height: 10),
-            Text(said, style: NextText.sans(12.5, color: NextColors.accent2)),
-          ],
-          if (setup == null)
-            const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: ThinkingDots()))
-          else
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (setup.source == UiModelSource.codex ||
-                          (setup.codexAvailable &&
-                              setup.runtime == UiAgentRuntimeKind.codex)) ...[
-                        const _Heading('这台电脑'),
-                        _Row(
-                            key: const Key('chat.model.codex'),
-                            title: 'Codex 配置',
-                            detail: setup.source == UiModelSource.codex
-                                ? setup.inUse
-                                : null,
-                            current: setup.source == UiModelSource.codex &&
-                                setup.sessionChoice == null,
-                            onTap: setup.source == UiModelSource.codex
-                                ? null
-                                : () => _choose(const UiModelChoice(
-                                    source: UiModelSource.codex))),
-                      ],
-                      if (recent.isNotEmpty) ...[
-                        const _Heading('用过的'),
-                        for (final (i, model) in recent.indexed)
-                          _Row(
-                              key: Key('chat.model.recent.$i'),
-                              title: model.model ?? '',
-                              detail: model.provider,
-                              current: setup.sessionChoice == null &&
-                                  _same(model, setup),
-                              onTap: _same(model, setup)
-                                  ? null
-                                  : () => _choose(choiceOf(model))),
-                      ],
-                      ...[
-                        const _Heading('候选模型'),
-                        if (_listed?.choices.any((choice) => choice.catalog != null) == true)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Segmented<bool>(
-                              value: _once,
-                              options: [for (final (once, label) in const [(false, '从现在起'), (true, '仅下一轮')])
-                                (once, label, (color) => Text(label, style: NextText.sans(12.5, color: color)))],
-                              onChanged: (value) => setState(() => _once = value),
-                            ),
-                          ),
-                        if (_listed == null)
-                          const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 10),
-                              child: ThinkingDots())
-                        else if (_listed!.status !=
-                                UiModelQueryStatus.succeeded ||
-                            others.isEmpty)
-                          Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                  switch (_listed!.status) {
-                                    UiModelQueryStatus.succeeded => '没有列出别的模型',
-                                    UiModelQueryStatus.failed =>
-                                      '候选查询失败：${_listed!.reason}',
-                                    UiModelQueryStatus.unavailable =>
-                                      '候选查询不可用：${_listed!.reason}',
-                                  },
-                                  style: NextText.sans(12.5,
-                                      color: NextColors.p4)))
-                        else
-                          for (final choice in others)
-                            _Row(
-                                key: Key(choice.catalog == null
-                                    ? 'chat.model.listed.${choice.model}'
-                                    : 'chat.model.listed.${choice.catalog!.name}.${choice.provider}.${choice.model}'),
-                                title: choice.label ?? choice.model ?? '',
-                                detail: switch (choice.candidateOrigin) {
-                                  UiModelCandidateOrigin.openai => 'OpenAI',
-                                  UiModelCandidateOrigin.chatgptAccount => 'ChatGPT 账号',
-                                  UiModelCandidateOrigin.provider => '这个服务商',
-                                  UiModelCandidateOrigin.dshProvider => 'DSH 服务商',
-                                  null => choice.providerLabel ?? choice.provider,
-                                },
-                                current: setup.sessionChoice?.catalog == choice.catalog &&
-                                    setup.sessionChoice?.model == choice.model &&
-                                    setup.sessionChoice?.provider == choice.provider,
-                                onTap: () => choice.catalog != null
-                                    ? choice.reasoningLevels.isEmpty
-                                        ? _choose(choice)
-                                        : setState(() => _pendingChoice = choice)
-                                    : _choose(choice.source ==
-                                            setup.source &&
-                                        choice.provider == setup.provider &&
-                                        choice.baseUrl == setup.baseUrl &&
-                                        choice.api == setup.api
-                                    ? currentChoice(setup, model: choice.model)
-                                    : choiceOf(choice))),
-                      ],
-                      if (_pendingChoice case final selected?) ...[
-                        _Heading(selected.label ?? selected.model ?? '思考'),
-                        for (final effort in selected.reasoningLevels)
-                          _Row(title: switch (effort) {
-                            'none' => '关', 'minimal' => '极低', 'low' => '低',
-                            'medium' => '中', 'high' => '高', 'xhigh' => '很高',
-                            'max' => '最高', 'ultra' => '超高', _ => effort,
-                          }, current: effort == selected.reasoning,
-                          onTap: () => _choose(selected.withReasoning(effort))),
-                      ],
-                      if (setup.sessionChoice == null &&
-                          setup.source == UiModelSource.nipaplay &&
-                          setup.runtime == UiAgentRuntimeKind.dsh) ...[
-                        const _Heading('思考'),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Segmented<String>(
-                            value: setup.reasoning ?? '',
-                            options: [
-                              for (final (v, t) in const [
-                                ('', '关'),
-                                ('low', '低'),
-                                ('medium', '中'),
-                                ('high', '高'),
-                              ])
-                                (
-                                  v,
-                                  t,
-                                  (c) => Text(t,
-                                      style: NextText.sans(12.5, color: c))
-                                ),
-                            ],
-                            onChanged: (v) => _choose(
-                                currentChoice(setup, reasoning: v),
-                                close: false),
-                          ),
-                        ),
-                      ],
-                    ]),
-              ),
+    final sessionPicks =
+        _listed?.choices.any((choice) => choice.catalog != null) == true;
+    final dshEffort = setup != null &&
+        setup.sessionChoice == null &&
+        setup.source == UiModelSource.nipaplay &&
+        setup.runtime == UiAgentRuntimeKind.dsh;
+    return MenuPanel(
+      width: 296,
+      children: [
+        if (setup == null)
+          const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(child: ThinkingDots()))
+        else
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 360),
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                if (setup.source == UiModelSource.codex ||
+                    (setup.codexAvailable &&
+                        setup.runtime == UiAgentRuntimeKind.codex)) ...[
+                  const _Label('这台电脑'),
+                  _ModelRow(
+                      key: const Key('chat.model.codex'),
+                      title: 'Codex 配置',
+                      caption: setup.source == UiModelSource.codex
+                          ? setup.inUse
+                          : null,
+                      current: setup.source == UiModelSource.codex &&
+                          setup.sessionChoice == null,
+                      onTap: setup.source == UiModelSource.codex
+                          ? null
+                          : () => _choose(const UiModelChoice(
+                              source: UiModelSource.codex))),
+                ],
+                if (services != null)
+                  for (final service in services) ...[
+                    _Label([
+                      _serviceName(service, services),
+                      if (!service.hasKey) '没有密钥',
+                    ].join(' · ')),
+                    ..._serviceRows(setup, service, services),
+                  ]
+                else if (recent.isNotEmpty) ...[
+                  const _Label('用过的'),
+                  for (final (i, model) in recent.indexed)
+                    _ModelRow(
+                        key: Key('chat.model.recent.$i'),
+                        title: model.label ?? model.model ?? '',
+                        caption: model.providerLabel ?? model.provider,
+                        current: setup.sessionChoice == null &&
+                            _same(model, setup),
+                        onTap: _same(model, setup)
+                            ? null
+                            : () => _choose(choiceOf(model))),
+                ],
+                if (_listed == null)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(child: ThinkingDots()))
+                else if (services != null && others.isEmpty)
+                  const SizedBox.shrink()
+                else if (_listed!.status != UiModelQueryStatus.succeeded)
+                  _Note(switch (_listed!.status) {
+                    UiModelQueryStatus.succeeded => '',
+                    UiModelQueryStatus.failed => '没能列出可用模型：${_listed!.reason}',
+                    UiModelQueryStatus.unavailable =>
+                      '这里列不出可用模型：${_listed!.reason}',
+                  })
+                else if (others.isNotEmpty) ...[
+                  _Label(services != null ? '运行器提供' : '可用'),
+                  for (final choice in others) ...[
+                    _ModelRow(
+                        key: Key(choice.catalog == null
+                            ? 'chat.model.listed.${choice.model}'
+                            : 'chat.model.listed.${choice.catalog!.name}.${choice.provider}.${choice.model}'),
+                        title: choice.label ?? choice.model ?? '',
+                        caption: _origin(choice),
+                        current:
+                            setup.sessionChoice?.catalog == choice.catalog &&
+                                setup.sessionChoice?.model == choice.model &&
+                                setup.sessionChoice?.provider == choice.provider,
+                        open: identical(_expanded, choice),
+                        onTap: () => choice.catalog != null
+                            ? choice.reasoningLevels.isEmpty
+                                ? _choose(choice)
+                                : setState(() => _expanded =
+                                    identical(_expanded, choice) ? null : choice)
+                            : _choose(choice.source == setup.source &&
+                                    choice.provider == setup.provider &&
+                                    choice.baseUrl == setup.baseUrl &&
+                                    choice.api == setup.api
+                                ? currentChoice(setup, model: choice.model)
+                                : choiceOf(choice))),
+                    if (identical(_expanded, choice))
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 2, 8, 8),
+                        child: Wrap(spacing: 6, runSpacing: 6, children: [
+                          for (final effort in choice.reasoningLevels)
+                            _Chip(
+                                label: _effort(effort),
+                                selected: effort == choice.reasoning,
+                                onTap: () =>
+                                    _choose(choice.withReasoning(effort))),
+                        ]),
+                      ),
+                  ],
+                ],
+              ]),
             ),
-          const SizedBox(height: 14),
-          Align(
-            alignment: Alignment.centerLeft,
-            child:
-                NextButton.ghost(label: '添加或修改模型…', onTap: widget.onSettings),
+          ),
+        if (_said case final said?) _Note(said, warn: true),
+        if (dshEffort) ...[
+          const _Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+            child: Row(children: [
+              Text('思考', style: NextText.sans(13, color: NextColors.p2)),
+              const Spacer(),
+              Segmented<String>(
+                value: setup.reasoning ?? '',
+                options: [
+                  for (final v in const ['', 'low', 'medium', 'high'])
+                    (
+                      v,
+                      _effort(v),
+                      (c) => Text(_effort(v),
+                          style: NextText.sans(12, color: c))
+                    ),
+                ],
+                onChanged: (v) =>
+                    _choose(currentChoice(setup, reasoning: v), close: false),
+              ),
+            ]),
           ),
         ],
-      ),
+        if (sessionPicks)
+          _ToggleRow(
+              label: '只用于下一句',
+              value: _once,
+              onChanged: (value) => setState(() => _once = value)),
+        const _Divider(),
+        Row(children: [
+          Expanded(
+            child: MenuItem(
+                label: '管理模型…', onTap: widget.onSettings),
+          ),
+          if (_busy)
+            const Padding(
+                padding: EdgeInsets.only(right: 12), child: ThinkingDots()),
+        ]),
+      ],
     );
   }
 }
 
-class _Heading extends StatelessWidget {
-  const _Heading(this.text);
+class _Label extends StatelessWidget {
+  const _Label(this.text);
   final String text;
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 16, bottom: 6),
-        child: Text(text,
-            style: NextText.sans(12, color: NextColors.p3, letterSpacing: 0.4)),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(text,
+              style: NextText.sans(11.5, color: NextColors.p4, letterSpacing: 0.6)),
+        ),
       );
 }
 
-class _Row extends StatelessWidget {
-  const _Row(
+class _Note extends StatelessWidget {
+  const _Note(this.text, {this.warn = false});
+  final String text;
+  final bool warn;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(text,
+              style: NextText.sans(12,
+                  color: warn ? NextColors.accent2 : NextColors.p3)),
+        ),
+      );
+}
+
+class _Divider extends StatelessWidget {
+  const _Divider();
+
+  @override
+  Widget build(BuildContext context) => Container(
+      height: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      color: NextColors.line);
+}
+
+/// A model: its name, where it comes from in a fainter word on the right,
+/// a check on the one in use.
+class _ModelRow extends StatelessWidget {
+  const _ModelRow(
       {super.key,
       required this.title,
-      this.detail,
+      this.caption,
       this.current = false,
+      this.open = false,
       this.onTap});
   final String title;
-  final String? detail;
+  final String? caption;
   final bool current;
+  final bool open;
   final VoidCallback? onTap;
 
   @override
@@ -453,36 +635,119 @@ class _Row extends StatelessWidget {
         semanticLabel: title,
         pressScale: 0.99,
         builder: (context, hovered) => AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          constraints: const BoxConstraints(minHeight: 42),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          duration: const Duration(milliseconds: 120),
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: hovered && onTap != null ? const Color(0x12FFFFFF) : null,
+            color: (hovered && onTap != null) || open
+                ? const Color(0x14FFFFFF)
+                : const Color(0x00FFFFFF),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(children: [
             Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: NextText.sans(14,
-                            weight:
-                                current ? FontWeight.w600 : FontWeight.w400)),
-                    if (detail case final detail? when detail.isNotEmpty)
-                      Text(detail,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: NextText.sans(12, color: NextColors.p3)),
-                  ]),
+              child: Text(title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: NextText.sans(13.5,
+                      color: current || hovered
+                          ? NextColors.paper
+                          : NextColors.p2)),
             ),
-            if (current)
-              const NextIcon(NextGlyph.check,
-                  size: 14, color: NextColors.accent),
+            if (caption case final caption? when caption.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 10),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 96),
+                  child: Text(caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NextText.sans(11.5, color: NextColors.p4)),
+                ),
+              ),
+            SizedBox(
+              width: 22,
+              child: current
+                  ? const Align(
+                      alignment: Alignment.centerRight,
+                      child: NextIcon(NextGlyph.check,
+                          size: 13, color: NextColors.accent))
+                  : null,
+            ),
           ]),
         ),
       );
 }
+
+class _Chip extends StatelessWidget {
+  const _Chip({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: onTap,
+        semanticLabel: label,
+        builder: (context, hovered) => Container(
+          height: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 11),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? NextColors.accentSoft
+                : hovered
+                    ? const Color(0x14FFFFFF)
+                    : const Color(0x0AFFFFFF),
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: Text(label,
+              style: NextText.sans(12,
+                  color: selected ? NextColors.accent2 : NextColors.p2)),
+        ),
+      );
+}
+
+class _ToggleRow extends StatelessWidget {
+  const _ToggleRow(
+      {required this.label, required this.value, required this.onChanged});
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+        onTap: () => onChanged(!value),
+        semanticLabel: label,
+        builder: (context, hovered) => Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: hovered ? const Color(0x0FFFFFFF) : null,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(children: [
+            Expanded(
+                child: Text(label,
+                    style: NextText.sans(13, color: NextColors.p2))),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              width: 30,
+              height: 18,
+              padding: const EdgeInsets.all(2),
+              alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+              decoration: BoxDecoration(
+                color: value ? NextColors.accent : const Color(0x29F5F1EA),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: const BoxDecoration(
+                      color: NextColors.paper, shape: BoxShape.circle)),
+            ),
+          ]),
+        ),
+      );
+}
+

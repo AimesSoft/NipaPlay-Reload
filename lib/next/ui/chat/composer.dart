@@ -24,6 +24,7 @@ import '../widgets/television_focus.dart';
 import '../widgets/words.dart';
 import 'attach_button.dart';
 import 'input_paste.dart';
+import 'model_switch.dart';
 
 /// Where you talk to Nipa, under the conversation: what this conversation
 /// set going that is still under way, the work it is about, the files
@@ -270,13 +271,13 @@ class _ChatComposerState extends State<ChatComposer>
                                         color: NextColors.p2)))),
                     ])),
               Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                if (attaching) ...[
+                if (attaching)
                   AttachButton(
                       onFiles: chat.attach,
                       enabled: chat.acceptsTyping && chat.question == null,
                       refused: chat.filesRefused),
-                  const SizedBox(width: 4),
-                ],
+                const ModelSwitch(),
+                const SizedBox(width: 2),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 9),

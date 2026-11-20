@@ -171,6 +171,44 @@ void main() {
     expect((await device.keys()).tmdb, false);
   });
 
+  test('several services keep their own keys; the one in use cannot be removed',
+      () async {
+    await settings.setModel(choice('http://127.0.0.1:12345/v1', key: secret));
+    const other = UiModelChoice(
+        source: UiModelSource.nipaplay,
+        provider: 'Other',
+        baseUrl: 'http://127.0.0.1:12346/v1',
+        model: 'other-model',
+        apiKey: 'other-secret-key');
+    await settings.saveService(other);
+    var services = await settings.services();
+    expect(services.map((s) => s.choice.provider), ['DeepSeek', 'Other']);
+    expect(services.every((s) => s.hasKey), true);
+    expect(services.singleWhere((s) => s.current).choice.provider, 'DeepSeek');
+    // The model in use did not move to the service just added.
+    expect((await settings.model()).provider, 'DeepSeek');
+
+    // Switching to it takes its own key, not the current one.
+    await settings.setModel(UiModelChoice(
+        source: UiModelSource.nipaplay,
+        provider: other.provider,
+        baseUrl: other.baseUrl,
+        model: other.model));
+    expect((await settings.model()).hasKey, true);
+    final launch = await settings.launch();
+    expect(launch.environment.values.single, 'other-secret-key');
+
+    services = await settings.services();
+    await expectLater(
+        settings.removeService(
+            services.singleWhere((s) => s.current).choice),
+        throwsStateError);
+    await settings.removeService(
+        services.singleWhere((s) => !s.current).choice);
+    services = await settings.services();
+    expect(services.map((s) => s.choice.provider), ['Other']);
+  });
+
   test('keys stay in vault; null retains only matching provider credentials',
       () async {
     await settings.setModel(choice('http://127.0.0.1:12345/v1', key: secret));

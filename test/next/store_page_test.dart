@@ -4,7 +4,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/capabilities/classic_action.dart';
 import 'package:nipaplay/next/ui/data/gui_calls.dart';
 import 'package:nipaplay/next/ui/data/rika_store.dart';
-import 'package:nipaplay/next/ui/settings/section_store.dart';
+import 'package:nipaplay/next/ui/store/store_page.dart';
 import 'package:nipaplay/next/ui/widgets/sheet.dart';
 
 /// The store's actions as the card calls them, with what was asked.
@@ -89,8 +89,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Material(
         child: Stack(children: [
-          Positioned.fill(
-              child: SingleChildScrollView(child: RikaStoreCard(store: store))),
+          Positioned.fill(child: StorePage(store: store)),
           const Positioned.fill(child: NextSheetLayer()),
         ]),
       ),
@@ -106,7 +105,7 @@ void main() {
     expect(find.text('重启梨花'), findsNothing);
     await tester.tap(find.text('动漫花园'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('说明对应版本 2.0.0'), findsOneWidget);
+    expect(find.textContaining('这份说明对应 2.0.0'), findsOneWidget);
     await tester.tap(find.byKey(const Key('store.details.close')));
     await tester.pumpAndSettle();
 
@@ -122,13 +121,13 @@ void main() {
     await tester.tap(find.byKey(const Key('store.notice.accept')));
     await tester.pumpAndSettle();
     expect(fake.calls, contains('store.install {id: dmhy, version: 1.0.0}'));
-    expect(find.text('卸载'), findsOneWidget);
+    expect(find.text('已安装'), findsOneWidget);
 
     fake.notRun = true;
     await tester.tap(find.text('重启梨花'));
     await tester.pumpAndSettle();
     expect(find.text('重启梨花'), findsOneWidget);
-    expect(find.textContaining('未重启'), findsOneWidget);
+    expect(find.textContaining('没有重启'), findsOneWidget);
     fake.notRun = false;
     await tester.tap(find.text('重启梨花'));
     await tester.pumpAndSettle();
@@ -139,12 +138,12 @@ void main() {
   testWidgets('an npm package is installed only after the warning',
       (tester) async {
     await pumpCard(tester);
-    await tester.enterText(find.byType(EditableText), 'dsh-example');
+    await tester.enterText(find.byType(EditableText).last, 'dsh-example');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('安装').last);
+    await tester.tap(find.text('查看'));
     await tester.pumpAndSettle();
     expect(find.textContaining('没有经过审核'), findsWidgets);
-    expect(find.textContaining('请求：latest · 解析版本：1.0.0'), findsOneWidget);
+    expect(find.text('1.0.0'), findsWidgets);
     expect(find.text('安装为DSH 插件'), findsOneWidget);
     await tester.tap(find.text('安装为技能'));
     await tester.pumpAndSettle();

@@ -286,6 +286,30 @@ enum UiModelQueryStatus { succeeded, failed, unavailable }
 
 enum UiModelCandidateOrigin { openai, chatgptAccount, provider, dshProvider }
 
+/// A model service set up in NipaPlay: its provider, address, wire and
+/// default model ([choice]); whether its key is in the vault; whether the
+/// current model comes from it.
+final class UiModelService {
+  const UiModelService(
+      {required this.choice, required this.hasKey, required this.current});
+  final UiModelChoice choice;
+  final bool hasKey;
+  final bool current;
+}
+
+/// Several model services at once: each keeps its own key, its models are
+/// listed apart, and the model menu picks across them.
+abstract interface class NextModelServices {
+  Future<List<UiModelService>> services();
+
+  /// Adds [service] or, with [replacing], changes that one. A key in
+  /// [UiModelChoice.apiKey] is stored for it; without one the key it had
+  /// stays.
+  Future<void> saveService(UiModelChoice service, {UiModelChoice? replacing});
+  Future<void> removeService(UiModelChoice service);
+  Future<UiModelCandidates> modelsOf(UiModelChoice service);
+}
+
 final class UiModelCandidates {
   const UiModelCandidates(this.status, {this.choices = const [], this.reason});
 
