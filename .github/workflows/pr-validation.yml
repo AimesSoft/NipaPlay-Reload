@@ -1,8 +1,6 @@
 name: PR Validation
 
 on:
-  push:
-    branches: [main, next]
   pull_request:
     types:
       - opened
@@ -15,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pr-validation-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: pr-validation-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
