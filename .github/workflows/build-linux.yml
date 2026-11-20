@@ -3,6 +3,11 @@ name: Build Linux
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      web-artifact-name:
+        description: Same-run embedded Web artifact
+        type: string
+        default: ''
     secrets:
       NIPAPLAY_TMDB_TOKEN:
         description: 'TMDB credential NipaPlay ships with'
@@ -56,6 +61,7 @@ jobs:
           NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
         with:
           app-version: ${{ steps.setup.outputs.version }}
+          web-artifact-name: ${{ inputs.web-artifact-name }}
           arch: amd64
       
       - name: Clean flutter pub cache
@@ -112,6 +118,7 @@ jobs:
           NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
         with:
           app-version: ${{ steps.setup.outputs.version }}
+          web-artifact-name: ${{ inputs.web-artifact-name }}
           arch: arm64
       
       - name: Clean flutter pub cache

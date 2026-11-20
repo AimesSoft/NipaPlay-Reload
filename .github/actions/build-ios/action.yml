@@ -1,6 +1,12 @@
 name: 'Build iOS IPA'
 description: '构建 iOS 应用并生成 IPA 文件'
 inputs:
+  web-artifact-name:
+    description: Same-run embedded Web artifact
+    default: ''
+  configure-only:
+    description: Prepare Flutter and CocoaPods for a signed Xcode archive without building an IPA
+    default: 'false'
   app-version:
     description: '应用版本号'
     required: true
@@ -45,11 +51,9 @@ runs:
         
         echo "设置iOS构建环境完成"
     
-    - name: Build Web and copy assets
-      shell: bash
-      run: |
-        chmod +x build_and_copy_web.sh
-        ./build_and_copy_web.sh
+    - uses: ./.github/actions/setup-web-assets
+      with:
+        artifact-name: ${{ inputs.web-artifact-name }}
     
     - name: Build iOS
       id: build
@@ -58,6 +62,7 @@ runs:
         IPHONEOS_DEPLOYMENT_TARGET: '15.0'
         FLUTTER_XCODE_IPHONEOS_DEPLOYMENT_TARGET: '15.0'
         XCODE_SDK: 'iphoneos'
+        CONFIGURE_ONLY: ${{ inputs.configure-only }}
       run: |
         python3 .github/workflows/scripts/built-in-credentials.py prepare "$RUNNER_TEMP/nipaplay-defines.json"
         defines=("--dart-define-from-file=$RUNNER_TEMP/nipaplay-defines.json")
@@ -87,6 +92,15 @@ runs:
         # 获取系统上实际可用的最高iOS SDK版本
         AVAILABLE_SDK=$(xcodebuild -showsdks | grep iphoneos | tail -1 | awk '{print $NF}')
         echo "系统可用的iOS SDK: $AVAILABLE_SDK"
+
+        if [[ "$CONFIGURE_ONLY" == true ]]; then
+          if [[ -n "$AVAILABLE_SDK" ]]; then
+            defines+=("--dart-define=FLUTTER_XCODE_SDK=$AVAILABLE_SDK")
+          fi
+          flutter build ios --release --config-only --no-codesign --no-pub \
+            --obfuscate --split-debug-info="$PWD/build/symbols-ios" "${defines[@]}"
+          exit 0
+        fi
         
         # --obfuscate + --split-debug-info：Dart 代码混淆 + 分离调试符号（体积↓ + 反逆向）
         # symbol map 由 workflow 的 dart-symbols-* artifact 上传，用于 crash stack 反混淆

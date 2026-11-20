@@ -1,6 +1,9 @@
 name: 'Build Windows Package'
 description: '构建 Windows 应用并生成 ZIP、MSIX 包 和安装程序'
 inputs:
+  web-artifact-name:
+    description: Same-run embedded Web artifact
+    default: ''
   app-version:
     description: '应用版本号'
     required: true
@@ -266,11 +269,9 @@ runs:
           throw "mdk-sdk extraction failed; FindMDK.cmake not found at $findMdk"
         }
 
-    - name: Build Web and copy assets
-      shell: bash
-      run: |
-        chmod +x build_and_copy_web.sh
-        ./build_and_copy_web.sh
+    - uses: ./.github/actions/setup-web-assets
+      with:
+        artifact-name: ${{ inputs.web-artifact-name }}
 
     - name: Refresh Pub dependencies (post-web build)
       shell: bash

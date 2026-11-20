@@ -3,6 +3,10 @@ name: Build macOS
 on:
   workflow_call:
     inputs:
+      web-artifact-name:
+        description: Same-run embedded Web artifact
+        type: string
+        default: ''
       architectures:
         description: 'JSON array of package architectures (include universal for the macOS 15 gate)'
         type: string
@@ -52,7 +56,25 @@ jobs:
       artifact-name: ${{ steps.metadata.outputs.artifact-name }}
       libmpv-cache-key: ${{ steps.libmpv-key.outputs.cache-key }}
       libmpv-sha256: ${{ steps.libmpv-metadata.outputs.archive-sha256 }}
+      build-groups: ${{ steps.architectures.outputs.groups }}
     steps:
+      - name: Group architectures by compilation
+        id: architectures
+        shell: bash
+        env:
+          ARCHITECTURES: ${{ inputs.architectures }}
+        run: |
+          groups=$(jq -ce '
+            if type != "array" or length == 0 then error("Expected a nonempty architecture array") else . end
+            | map(if . == "apple-silicon" or . == "AppleSilicon" then "arm64"
+                  elif . == "intel" or . == "Intel" then "x86_64"
+                  elif . == "universal" or . == "arm64" or . == "x86_64" then .
+                  else error("Unsupported macOS architecture") end)
+            | unique
+            | if index("universal") then [(["universal"] + (. - ["universal"]) | join(" "))] else . end
+          ' <<< "$ARCHITECTURES")
+          echo "groups=$groups" >> "$GITHUB_OUTPUT"
+
       - name: Require release signing credentials
         if: '!inputs.unsigned'
         env:
@@ -303,7 +325,7 @@ jobs:
       fail-fast: false
       max-parallel: 3
       matrix:
-        architecture: ${{ fromJSON(inputs.architectures) }}
+        architecture: ${{ fromJSON(needs.prepare.outputs.build-groups) }}
     env:
       FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
       FVP_DEPS_LATEST: 1
@@ -387,34 +409,83 @@ jobs:
         with:
           app-version: ${{ needs.prepare.outputs.version }}
           build-architectures: ${{ matrix.architecture }}
+          web-artifact-name: ${{ inputs.web-artifact-name }}
           macos-certificate-base64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           macos-certificate-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
           apple-team-id: ${{ secrets.APPLE_TEAM_ID }}
           apple-id: ${{ secrets.APPLE_ID }}
           apple-app-password: ${{ secrets.APPLE_APP_PASSWORD }}
 
-      - name: Upload macOS Artifacts
+      - name: Upload universal macOS artifacts
+        if: startsWith(matrix.architecture, 'universal')
         uses: actions/upload-artifact@v4
         with:
-          name: release-macOS-${{ matrix.architecture }}
+          name: release-macOS-universal
+          overwrite: true
           path: |
-            NipaPlay_*_macOS_*.dmg
-            NipaPlay_*_macOS_*.zip
-            NipaPlay_*_macOS_*.pkg
+            NipaPlay_*_macOS_Universal.dmg
+            NipaPlay_*_macOS_Universal.zip
+            NipaPlay_*_macOS_Universal.pkg
           if-no-files-found: error
           compression-level: 0
 
-      - name: Upload Dart debug symbols
+      - name: Upload arm64 macOS artifacts
+        if: contains(matrix.architecture, 'arm64')
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: dart-symbols-macOS-${{ matrix.architecture }}
-          path: build/symbols-macos/${{ matrix.architecture }}/
+          name: release-macOS-arm64
+          overwrite: true
+          path: |
+            NipaPlay_*_macOS_AppleSilicon.dmg
+            NipaPlay_*_macOS_AppleSilicon.zip
+            NipaPlay_*_macOS_AppleSilicon.pkg
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload x86_64 macOS artifacts
+        if: contains(matrix.architecture, 'x86_64')
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macOS-x86_64
+          overwrite: true
+          path: |
+            NipaPlay_*_macOS_Intel.dmg
+            NipaPlay_*_macOS_Intel.zip
+            NipaPlay_*_macOS_Intel.pkg
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload universal Dart debug symbols
+        uses: actions/upload-artifact@v4
+        if: always() && startsWith(matrix.architecture, 'universal')
+        with:
+          name: dart-symbols-macOS-universal
+          overwrite: true
+          path: build/symbols-macos/universal/
+          if-no-files-found: warn
+
+      - name: Upload arm64 Dart debug symbols
+        uses: actions/upload-artifact@v4
+        if: always() && contains(matrix.architecture, 'arm64')
+        with:
+          name: dart-symbols-macOS-arm64
+          overwrite: true
+          path: build/symbols-macos/arm64/
+          if-no-files-found: warn
+
+      - name: Upload x86_64 Dart debug symbols
+        uses: actions/upload-artifact@v4
+        if: always() && contains(matrix.architecture, 'x86_64')
+        with:
+          name: dart-symbols-macOS-x86_64
+          overwrite: true
+          path: build/symbols-macos/x86_64/
           if-no-files-found: warn
 
   compatibility:
     name: Run packaged app on macOS 15
     needs: build
+    if: contains(fromJSON(inputs.architectures), 'universal')
     uses: ./.github/workflows/smoke-macos.yml
     with:
       unsigned: ${{ inputs.unsigned }}

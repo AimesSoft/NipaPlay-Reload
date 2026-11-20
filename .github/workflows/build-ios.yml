@@ -3,6 +3,10 @@ name: Build iOS
 on:
   workflow_call:
     inputs:
+      web-artifact-name:
+        description: Same-run embedded Web artifact
+        type: string
+        default: ''
       upload-to-app-store:
         description: '是否构建签名 IPA，供上传到 TestFlight 或 GitHub Release 发布成功后上传到 App Store Connect'
         required: false
@@ -59,8 +63,8 @@ jobs:
       version: ${{ steps.setup.outputs.version }}
       artifact-name: release-iOS
       app-store-artifact-name: app-store-iOS
-      app-store-build-number: ${{ steps.app_store_build.outputs.build-number }}
-      app-store-version: ${{ steps.app_store_build.outputs.version }}
+      app-store-build-number: ${{ steps.archive.outputs.build-number }}
+      app-store-version: ${{ steps.archive.outputs.version }}
     env:
       FVP_DEPS_URL: https://github.com/wang-bin/mdk-sdk/releases/latest/download/
       FVP_DEPS_LATEST: 1
@@ -146,18 +150,22 @@ jobs:
         shell: bash
         run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
       
-      - name: Build unsigned iOS IPA
+      - name: Prepare iOS build or build standalone unsigned IPA
         id: unsigned_build
         uses: ./.github/actions/build-ios
         env:
           NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
         with:
           app-version: ${{ steps.setup.outputs.version }}
+          web-artifact-name: ${{ inputs.web-artifact-name }}
+          configure-only: ${{ inputs.upload-to-app-store }}
 
       - name: Upload unsigned iOS Artifacts
+        if: '!inputs.upload-to-app-store'
         uses: actions/upload-artifact@v4
         with:
           name: release-iOS
+          overwrite: true
           path: ${{ steps.unsigned_build.outputs.ipa-path }}
 
       - name: Import iOS distribution certificate
@@ -186,20 +194,19 @@ jobs:
           APP_STORE_CONNECT_API_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY }}
         run: ruby .github/workflows/scripts/ensure-ios-distribution-profile.rb
 
-      - name: Build App Store signed IPA
+      - name: Archive signed iOS app
         if: inputs.upload-to-app-store
-        id: app_store_build
+        id: archive
         shell: bash
         env:
           APP_VERSION: ${{ steps.setup.outputs.version }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           IOS_DISTRIBUTION_PROFILE: ${{ steps.provisioning.outputs.profile-path }}
+          NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
         run: |
           set -euo pipefail
 
           archive_path="$RUNNER_TEMP/NipaPlay.xcarchive"
-          export_path="$RUNNER_TEMP/NipaPlay-AppStore"
-          export_options="$RUNNER_TEMP/ExportOptions-AppStore.plist"
           # Apple accepts numeric marketing versions, not SemVer prerelease labels.
           marketing_version="${APP_VERSION%%[-+]*}"
           if [[ ! "$marketing_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -208,8 +215,7 @@ jobs:
           fi
           build_number="${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
 
-          rm -rf "$archive_path" "$export_path" "$export_options"
-          mkdir -p "$export_path"
+          rm -rf "$archive_path" "$RUNNER_TEMP/ExportOptions-AppStore.plist"
 
           # Archive with the imported distribution identity. Automatic archive
           # signing creates a new development certificate on each fresh runner.
@@ -230,13 +236,64 @@ jobs:
             -quiet
 
           app_path="$archive_path/Products/Applications/Runner.app"
+          python3 .github/workflows/scripts/built-in-credentials.py verify "$app_path/Frameworks/App.framework/App"
           python3 .github/workflows/scripts/verify-ios-agent-assets.py "$app_path"
+          codesign --verify --deep --strict "$app_path"
+          actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Info.plist")"
+          actual_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Info.plist")"
+          if [[ "$actual_version" != "$marketing_version" || "$actual_build" != "$build_number" ]]; then
+            echo "Archived Apple version/build does not match the requested values." >&2
+            exit 1
+          fi
+          {
+            echo "app-path=$app_path"
+            echo "build-number=$build_number"
+            echo "version=$marketing_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Derive unsigned iOS IPA from archive
+        if: inputs.upload-to-app-store
+        id: sideload
+        shell: bash
+        env:
+          APP_PATH: ${{ steps.archive.outputs.app-path }}
+          APP_VERSION: ${{ steps.setup.outputs.version }}
+          NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
+        run: |
+          ipa="build/NipaPlay_${APP_VERSION}_iOS_arm64.ipa"
+          python3 .github/workflows/scripts/apple_payload.py ios \
+            "$APP_PATH" ios/Flutter/Generated.xcconfig "$ipa"
+          python3 .github/workflows/scripts/verify-ios-agent-assets.py "$ipa"
+          binary=$(mktemp)
+          trap 'rm -f "$binary"' EXIT
+          unzip -p "$ipa" Payload/Runner.app/Frameworks/App.framework/App > "$binary"
+          python3 .github/workflows/scripts/built-in-credentials.py verify "$binary"
+          echo "ipa-path=$ipa" >> "$GITHUB_OUTPUT"
+
+      - name: Upload unsigned IPA derived from archive
+        if: inputs.upload-to-app-store
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-iOS
+          overwrite: true
+          path: ${{ steps.sideload.outputs.ipa-path }}
+          if-no-files-found: error
+
+      - name: Export App Store signed IPA
+        if: ${{ !cancelled() && steps.archive.outcome == 'success' }}
+        id: app_store_build
+        shell: bash
+        run: |
+          set -euo pipefail
+          export_path="$RUNNER_TEMP/NipaPlay-AppStore"
+          rm -rf "$export_path"
+          mkdir -p "$export_path"
 
           xcodebuild \
             -exportArchive \
-            -archivePath "$archive_path" \
+            -archivePath "$RUNNER_TEMP/NipaPlay.xcarchive" \
             -exportPath "$export_path" \
-            -exportOptionsPlist "$export_options" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions-AppStore.plist" \
             -quiet
 
           signed_ipa="$(find "$export_path" -maxdepth 1 -type f -name '*.ipa' -print -quit)"
@@ -247,22 +304,14 @@ jobs:
           fi
 
           python3 .github/workflows/scripts/verify-ios-agent-assets.py "$signed_ipa"
-          codesign --verify --deep --strict "$app_path"
-          actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Info.plist")"
-          actual_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Info.plist")"
-          if [[ "$actual_version" != "$marketing_version" || "$actual_build" != "$build_number" ]]; then
-            echo "Archived Apple version/build does not match the requested values." >&2
-            exit 1
-          fi
           echo "ipa-path=$signed_ipa" >> "$GITHUB_OUTPUT"
-          echo "build-number=$build_number" >> "$GITHUB_OUTPUT"
-          echo "version=$marketing_version" >> "$GITHUB_OUTPUT"
 
       - name: Upload signed IPA for post-release App Store publishing
-        if: inputs.upload-to-app-store
+        if: ${{ !cancelled() && steps.app_store_build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: app-store-iOS
+          overwrite: true
           path: ${{ steps.app_store_build.outputs.ipa-path }}
           if-no-files-found: error
           compression-level: 0
@@ -283,5 +332,6 @@ jobs:
         if: always()
         with:
           name: dart-symbols-iOS
+          overwrite: true
           path: build/symbols-ios/
           if-no-files-found: warn
