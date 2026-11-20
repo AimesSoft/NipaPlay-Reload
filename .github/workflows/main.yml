@@ -118,44 +118,12 @@ jobs:
       ALIAS: ${{ secrets.ALIAS }}
       KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-  Build-Web:
-    name: Build shared Web assets
-    needs: Gatekeeper
-    if: ${{ needs.Gatekeeper.outputs.triggered == 'true' && (!inputs.testflight_only || inputs.upload_ios_testflight) }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    outputs:
-      artifact-name: ${{ steps.web.outputs.artifact-name }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: recursive
-      - uses: ./.github/actions/setup-flutter
-      - name: Generate build info json
-        run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
-      - name: Build and archive Web assets
-        id: web
-        shell: bash
-        run: |
-          bash build_and_copy_web.sh
-          test -f assets/web/index.html || test -f assets/web/.gitkeep
-          tar -cf "$RUNNER_TEMP/web.tar" -C assets/web .
-          echo "artifact-name=embedded-web-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.web.outputs.artifact-name }}
-          path: ${{ runner.temp }}/web.tar
-          if-no-files-found: error
-
   Build-iOS:
     name: Build iOS
-    needs: [Gatekeeper, Build-Web]
+    needs: Gatekeeper
     if: ${{ needs.Gatekeeper.outputs.triggered == 'true' && (!inputs.testflight_only || inputs.upload_ios_testflight) }}
     uses: ./.github/workflows/build-ios.yml
     with:
-      web-artifact-name: ${{ needs.Build-Web.outputs.artifact-name }}
       upload-to-app-store: ${{ needs.Gatekeeper.outputs.prerelease != 'true' || (needs.Gatekeeper.outputs.next_preview == 'true' && inputs.upload_ios_testflight) }}
     secrets:
       IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
@@ -168,15 +136,13 @@ jobs:
 
   Build-macOS:
     name: Build macOS
-    needs: [Gatekeeper, Build-Web]
+    needs: Gatekeeper
     if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' }}
     permissions:
       actions: read
       contents: read
       id-token: write
     uses: ./.github/workflows/build-macos.yml
-    with:
-      web-artifact-name: ${{ needs.Build-Web.outputs.artifact-name }}
     secrets:
       MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
       MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -187,21 +153,17 @@ jobs:
 
   Build-Windows:
     name: Build Windows
-    needs: [Gatekeeper, Build-Web]
+    needs: Gatekeeper
     if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' }}
     uses: ./.github/workflows/build-windows.yml
-    with:
-      web-artifact-name: ${{ needs.Build-Web.outputs.artifact-name }}
     secrets:
       NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
   Build-Linux:
     name: Build Linux
-    needs: [Gatekeeper, Build-Web]
+    needs: Gatekeeper
     if: ${{ !inputs.testflight_only && needs.Gatekeeper.outputs.triggered == 'true' }}
     uses: ./.github/workflows/build-linux.yml
-    with:
-      web-artifact-name: ${{ needs.Build-Web.outputs.artifact-name }}
     secrets:
       NIPAPLAY_TMDB_TOKEN: ${{ secrets.NIPAPLAY_TMDB_TOKEN }}
 
