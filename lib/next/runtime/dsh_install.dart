@@ -97,6 +97,10 @@ final class DshInstall {
   File get _webReady => File(p.join(_web.path, 'installed.json'));
   String get _webBin => p.join(_web.path, 'lib', 'node_modules',
       '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+  File get _webPnpm => File(p.join(
+      _web.path, 'lib', 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'));
+  Future<bool> _webInstalled() async => await _webReady.exists() &&
+      await File(_webBin).exists() && await _webPnpm.exists();
   Directory get _downloads => Directory(p.join(root.path, 'downloads'));
   File get _settings => File(p.join(root.path, 'settings.json'));
 
@@ -184,20 +188,24 @@ final class DshInstall {
   /// The runtime to launch, or null while it is not installed.
   Future<DshRuntime?> runtime() async {
     if (!await _ready()) return null;
+    final web = await _webInstalled();
     return DshRuntime(
       node: File(_node).absolute.path,
       bin: File(_bin).absolute.path,
       version: manifest.dsh,
-      webBin: await _webReady.exists() && await File(_webBin).exists()
-          ? File(_webBin).absolute.path
-          : null,
+      webBin: web ? File(_webBin).absolute.path : null,
+      webPackageManager: web ? (
+        entry: _webPnpm.absolute.path,
+        data: Directory(p.join(root.path, 'pnpm')).absolute.path,
+        registry: (await mirrors()).registry ?? manifest.registry,
+      ) : null,
     );
   }
 
   Future<Map<String, Object?>> webState() async => {
         'version': manifest.dsh,
         'installable': webLock != null && await _ready(),
-        'installed': await _webReady.exists(),
+        'installed': await _webInstalled(),
       };
 
   Future<void> installWeb(String version) async {
@@ -205,8 +213,8 @@ final class DshInstall {
       if (version != manifest.dsh || !await _ready() || webLock == null) {
         throw const RuntimeInstallException('请先安装匹配版本的 DeepSeek Harness。');
       }
-      if (await _webReady.exists()) return;
-      if (inUse() && await File(_webBin).exists()) {
+      if (await _webInstalled()) return;
+      if (inUse() && await File(_webBin).exists() && await _webPnpm.exists()) {
         await _webReady.writeAsString('{}', flush: true);
         return;
       }
@@ -265,6 +273,9 @@ final class DshInstall {
         final target = Directory(p.join(lib.path, package.path));
         await target.create(recursive: true);
         await _tar(File(p.join(_downloads.path, package.sha256)), target, strip: 1);
+      }
+      if (!await File(p.join(lib.path, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')).exists()) {
+        throw const RuntimeInstallException('DSH Web 缺少包管理器。');
       }
       await File(p.join(staging.path, 'installed.json')).writeAsString('{}', flush: true);
       _checkCancelled();

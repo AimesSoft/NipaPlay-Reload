@@ -652,6 +652,7 @@ final class NextRuntime extends ChangeNotifier {
         modelSaved: () async {
           if (chat != null || _disposed || !_open) return;
           _operations = _operations.then((_) async {
+            if (chat != null || _disposed || !_open) return;
             if (_endpointStatus case AgentEndpointRunning(:final repository)) {
               await _startChat(repository);
               notifyListeners();
@@ -865,6 +866,7 @@ final class NextRuntime extends ChangeNotifier {
     if (dsh != null) {
       for (final name in const [
         'nipa-app-server.mjs',
+        'nipa-web-launch.mjs',
         'nipa-memory.mjs',
         'persona-prefix.md',
         'persona-suffix.md'

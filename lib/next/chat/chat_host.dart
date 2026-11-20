@@ -497,8 +497,15 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       ])
         if (clean[key] != null) key: redactHarnessText(clean[key]!)
     };
-    _process = await Process.start(
-        runtime.node, [runtime.webBin ?? runtime.bin, '--profile', 'sdk', '--patch', patch.path],
+    final packageManager = runtime.webPackageManager;
+    _process = await Process.start(runtime.node, [
+        if (packageManager != null) '${dshPlugins!.path}/nipa-web-launch.mjs',
+        runtime.webBin ?? runtime.bin,
+        if (packageManager != null) ...[
+          packageManager.entry, packageManager.data, packageManager.registry,
+        ],
+        '--profile', 'sdk', '--patch', patch.path,
+      ],
         workingDirectory: repository.path,
         environment: clean,
         includeParentEnvironment: false);

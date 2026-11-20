@@ -434,6 +434,14 @@
     "url": "vary/-/vary-1.1.2.tgz",
     "bytes": 3772,
     "sha256": "7378860671377a35e7a443ecfdca0745cfd066f595c90d581b827defea246e71"
+   },
+   {
+    "path": "node_modules/pnpm",
+    "name": "pnpm",
+    "version": "10.28.2",
+    "url": "pnpm/-/pnpm-10.28.2.tgz",
+    "bytes": 4197451,
+    "sha256": "afa99b0b4b3d11c1dad2b472f9318ae2c78673829749ded527f89f09071479a7"
    }
   ],
   "windows-x64": [
@@ -868,6 +876,14 @@
     "url": "vary/-/vary-1.1.2.tgz",
     "bytes": 3772,
     "sha256": "7378860671377a35e7a443ecfdca0745cfd066f595c90d581b827defea246e71"
+   },
+   {
+    "path": "node_modules/pnpm",
+    "name": "pnpm",
+    "version": "10.28.2",
+    "url": "pnpm/-/pnpm-10.28.2.tgz",
+    "bytes": 4197451,
+    "sha256": "afa99b0b4b3d11c1dad2b472f9318ae2c78673829749ded527f89f09071479a7"
    }
   ],
   "linux-x64": [
@@ -1302,6 +1318,14 @@
     "url": "vary/-/vary-1.1.2.tgz",
     "bytes": 3772,
     "sha256": "7378860671377a35e7a443ecfdca0745cfd066f595c90d581b827defea246e71"
+   },
+   {
+    "path": "node_modules/pnpm",
+    "name": "pnpm",
+    "version": "10.28.2",
+    "url": "pnpm/-/pnpm-10.28.2.tgz",
+    "bytes": 4197451,
+    "sha256": "afa99b0b4b3d11c1dad2b472f9318ae2c78673829749ded527f89f09071479a7"
    }
   ]
  }

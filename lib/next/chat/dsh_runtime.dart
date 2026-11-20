@@ -119,7 +119,8 @@ final class AgentRuntimeFixed {
 /// [AgentRuntimeFixed] for the environment and lab-file overrides.
 final class DshRuntime {
   const DshRuntime(
-      {required this.node, required this.bin, required this.version, this.webBin});
+      {required this.node, required this.bin, required this.version, this.webBin,
+      this.webPackageManager});
 
   /// Node.js executable that runs DSH.
   final String node;
@@ -127,6 +128,7 @@ final class DshRuntime {
   /// `@deepseek-ai/dsh/lib/bin.js`.
   final String bin;
   final String? webBin;
+  final ({String entry, String data, String registry})? webPackageManager;
 
   /// The installed `@deepseek-ai/dsh` version.
   final String version;

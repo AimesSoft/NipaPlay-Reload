@@ -92,6 +92,21 @@ void main() {
     }
   });
 
+  test('every Web platform pins the same package manager outside the base', () async {
+    final manifest = DshManifest.parse(
+        await File('assets/next/agent/dsh-runtime.json').readAsString());
+    final lock = await File('assets/next/agent/dsh-web.json').readAsString();
+    final platforms = (jsonDecode(lock)['platforms'] as Map).keys.cast<String>();
+    expect(platforms, unorderedEquals(['macos-arm64', 'linux-x64', 'windows-x64']));
+    for (final platform in platforms) {
+      final pnpm = manifest.webPackages(lock, platform).singleWhere((row) => row.name == 'pnpm');
+      expect(pnpm.version, '10.28.2');
+      expect(pnpm.path, 'node_modules/pnpm');
+      expect(pnpm.sha256, 'afa99b0b4b3d11c1dad2b472f9318ae2c78673829749ded527f89f09071479a7');
+      expect(manifest.packagesFor(platform).any((row) => row.name == 'pnpm'), false);
+    }
+  });
+
   group('installation', () {
     late DshInstall install;
     late int changes;
@@ -117,7 +132,7 @@ void main() {
     }
 
     test('Web verifies on demand and publishes only a complete installation', () async {
-      const path = '/fixture-web/-/fixture-web-1.0.0.tgz';
+      const path = '/pnpm/-/pnpm-1.0.0.tgz';
       final entered = Completer<void>();
       final resume = Completer<void>();
       var lockReads = 0;
@@ -131,13 +146,13 @@ void main() {
         return jsonEncode({
           'schema': 1, 'baseSha256': fixture.manifest.digest,
           'platforms': {platform!: [{
-            'path': 'node_modules/fixture-web', 'name': 'fixture-web',
+            'path': 'node_modules/pnpm', 'name': 'pnpm',
             'version': '1.0.0', 'url': path.substring(1),
             'sha256': sha256.convert(payload).toString(), 'bytes': payload.length,
           }]},
         });
       });
-      payload = fixture.served.entries.firstWhere((entry) => entry.key.startsWith('/zod/')).value;
+      payload = fixture.pnpm;
       server.files[path] = List<int>.of(payload)..[0] ^= 1;
       await install.install();
       final base = (await install.runtime())!;
@@ -162,16 +177,21 @@ void main() {
       expect((await install.runtime())!.webBin, isNull);
       expect(install.root.listSync().where((entry) => entry.path.contains('web-pending-')), isEmpty);
 
+      await install.configure(registryMirror: server.base);
       await install.installWeb(base.version);
-      final web = (await install.runtime())!.webBin!;
+      final runtime = (await install.runtime())!;
+      final web = runtime.webBin!;
       expect(await File(web).readAsString(), await File(base.bin).readAsString());
-      final manifest = File('${File(web).parent.parent.parent.parent.path}/fixture-web/index.js');
-      expect(await manifest.readAsString(), 'zod');
+      final manager = runtime.webPackageManager!;
+      expect(await File(manager.entry).readAsString(), '// pnpm entry');
+      expect(manager.registry, server.base);
+      expect(manager.data, '${install.root.absolute.path}/pnpm');
       await install.installWeb(base.version);
       expect(lockReads, 3);
       inUse = true;
       await install.removeWeb();
       expect((await install.runtime())!.webBin, isNull);
+      expect((await install.runtime())!.webPackageManager, isNull);
       expect(await File(web).exists(), true);
       inUse = false;
       await install.cleanRemovedWeb();
@@ -501,11 +521,12 @@ final class _Server {
 
 /// Archives as nodejs.org and npm publish them, and the manifest that pins them.
 final class _Fixture {
-  _Fixture(this.manifest, this.served, this.totalBytes);
+  _Fixture(this.manifest, this.served, this.totalBytes, this.pnpm);
 
   final DshManifest manifest;
   final Map<String, List<int>> served;
   final int totalBytes;
+  final List<int> pnpm;
 
   static _Fixture build(Directory dir, String platform, String base) {
     final work = Directory('${dir.path}/fixture')..createSync(recursive: true);
@@ -598,6 +619,7 @@ final class _Fixture {
     final wanted = manifest.packagesFor(platform);
     final total = nodeBytes.length +
         {for (final p in wanted) p.sha256: p.bytes}.values.fold<int>(0, (a, b) => a + b);
-    return _Fixture(manifest, served, total);
+    return _Fixture(manifest, served, total,
+        tar('package', {'bin/pnpm.cjs': '// pnpm entry'}));
   }
 }

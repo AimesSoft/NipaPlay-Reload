@@ -28,6 +28,8 @@ import argparse, base64, collections, hashlib, json, os, pathlib, re, sys, urlli
 
 REGISTRY = 'https://registry.npmjs.org'
 NODE_VERSION = '24.22.0'
+PNPM_VERSION = '10.28.2'
+PNPM_INTEGRITY = 'QYcvA3rSL3NI47Heu69+hnz9RI8nJtnPdMCPGVB8MdLI56EVJbmD/rwt9kC1Q43uYCPrsfhO1DzC1lTSvDJiZA=='
 # Packages Nipa never loads and that only exist because a provider SDK or an
 # interactive terminal lists them. Anything that *was* loaded stays regardless.
 EXCLUDE = [
@@ -52,6 +54,10 @@ def write_web_lock(base_path, candidate_path, npm_lock_path, cache, out):
     npm_packages = json.loads(pathlib.Path(npm_lock_path).read_text())['packages']
     locked = {entry['resolved']: entry for entry in npm_packages.values()
               if 'resolved' in entry and 'integrity' in entry}
+    archive = f'pnpm-{PNPM_VERSION}.tgz'
+    pnpm = (pathlib.Path(cache) / archive).read_bytes()
+    if base64.b64encode(hashlib.sha512(pnpm).digest()).decode() != PNPM_INTEGRITY:
+        raise ValueError(f'Invalid package manager tarball: {archive}')
     platforms = {}
     for platform, candidates in json.loads(pathlib.Path(candidate_path).read_text()).items():
         if platform not in runtime['platforms']:
@@ -68,6 +74,11 @@ def write_web_lock(base_path, candidate_path, npm_lock_path, cache, out):
                 len(data) != row['bytes'] or hashlib.sha256(data).hexdigest() != row['sha256']):
                 raise ValueError(f"Invalid add-on tarball: {row['path']}")
             platforms[platform].append(row)
+        platforms[platform].append({
+            'path': 'node_modules/pnpm', 'name': 'pnpm', 'version': PNPM_VERSION,
+            'url': f'pnpm/-/{archive}', 'bytes': len(pnpm),
+            'sha256': hashlib.sha256(pnpm).hexdigest(),
+        })
     pathlib.Path(out).write_text(json.dumps({
         'schema': 1, 'baseSha256': hashlib.sha256(base).hexdigest(),
         'platforms': platforms,
