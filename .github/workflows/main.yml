@@ -34,6 +34,9 @@ on:
         type: string
 
 permissions:
+  # build-tvos.yml's push precheck reads the run list; a called workflow
+  # may ask for no more than the caller grants.
+  actions: read
   contents: write
   pull-requests: read
 
