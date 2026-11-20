@@ -148,7 +148,7 @@ void main() {
     }
   });
 
-  group('single subtitle at a time', () {
+  group('subtitle multi-select coexistence', () {
     late Directory dir;
     late File srt;
     // 测试替身无法冒充 Media Kit 适配器，用 .sup 代表由内核渲染、占内核字幕轨的外挂
@@ -159,7 +159,7 @@ void main() {
 
     setUp(() async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
-      dir = await Directory.systemTemp.createTemp('subtitle_single_');
+      dir = await Directory.systemTemp.createTemp('subtitle_multi_');
       srt = File('${dir.path}/movie.zh-Hans.srt');
       ass = File('${dir.path}/movie.sup');
       const content = '1\n00:00:00,000 --> 00:00:01,000\nHello\n';
@@ -174,35 +174,39 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    test('attaching an app-rendered srt turns the embedded track off', () {
+    test('attaching an app-rendered srt keeps the embedded track on', () {
       expect(delegate.activeSubtitleTracks, [0]);
       manager.setExternalSubtitle(srt.path);
       expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
-      expect(delegate.activeSubtitleTracks, isEmpty);
-    });
-
-    test('stacking an srt via the stack also turns the embedded track off',
-        () async {
-      await manager.addExternalSubtitleToStack(srt.path);
-      expect(delegate.activeSubtitleTracks, isEmpty);
-    });
-
-    test('choosing an embedded track detaches the external subtitle', () {
-      manager.setExternalSubtitle(srt.path);
-      manager.selectEmbeddedSubtitleTrack(0);
-      expect(manager.getAllActiveExternalSubtitlePaths(), isEmpty);
+      // 外挂叠层与内核内嵌轨共存，不再清 activeSubtitleTracks
       expect(delegate.activeSubtitleTracks, [0]);
     });
 
-    test('turning subtitles off clears both sides', () {
+    test('stacking an srt via the stack also keeps the embedded track on',
+        () async {
+      await manager.addExternalSubtitleToStack(srt.path);
+      expect(delegate.activeSubtitleTracks, [0]);
+    });
+
+    test('choosing an embedded track keeps the external srt attached', () {
+      manager.setExternalSubtitle(srt.path);
+      manager.selectEmbeddedSubtitleTrack(0);
+      // 内嵌轨由内核渲染、外挂 SRT 由叠层渲染，互不占用画面，选择内嵌不摘外挂
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
+      expect(delegate.activeSubtitleTracks, [0]);
+    });
+
+    test('turning subtitles off clears only the embedded side', () {
       manager.setExternalSubtitle(srt.path);
       manager.selectEmbeddedSubtitleTrack(-1);
-      expect(manager.getAllActiveExternalSubtitlePaths(), isEmpty);
+      // 关闭字幕只关内嵌轨；外挂的移除走菜单的"移除外挂"项。
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
       expect(delegate.activeSubtitleTracks, isEmpty);
 
       delegate.activeSubtitleTracks = [2];
       manager.selectEmbeddedSubtitleTrack(-1);
       expect(delegate.activeSubtitleTracks, isEmpty);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
     });
 
     test('a kernel-rendered external track keeps its existing behavior', () {
