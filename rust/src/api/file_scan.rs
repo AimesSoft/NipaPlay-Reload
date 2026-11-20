@@ -38,9 +38,7 @@ pub fn scan_video_files(folder_path: String) -> Result<RustFileScanSnapshot, Str
     ensure_existing_directory(&root)?;
 
     let mut files = Vec::new();
-    if !is_bdmv_directory(&root) || !has_bdmv_marker(&root) {
-        collect_video_files(&root, &root, &mut files)?;
-    }
+    collect_video_files(&root, &root, &mut files)?;
     files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
 
     println!(
@@ -176,6 +174,7 @@ fn collect_video_files(
     };
 
     let mut directories = Vec::new();
+    let mut has_disc = false;
     for entry_result in entries {
         let entry = match entry_result {
             Ok(entry) => entry,
@@ -191,8 +190,8 @@ fn collect_video_files(
             continue;
         }
         if file_type.is_dir() {
-            let is_disc_structure = is_bdmv_directory(&path) && has_bdmv_marker(&path);
-            directories.push((path, is_disc_structure));
+            has_disc = has_disc || (is_bdmv_directory(&path) && has_bdmv_marker(&path));
+            directories.push(path);
             continue;
         }
         if !file_type.is_file() || !is_video_file(&path) {
@@ -204,13 +203,12 @@ fn collect_video_files(
         }
     }
 
-    let has_disc = directories.iter().any(|(_, is_disc)| *is_disc);
-    for (path, is_disc_structure) in directories {
+    for path in directories {
         let is_disc_sibling = has_disc
             && path.file_name().is_some_and(|name| {
                 name.eq_ignore_ascii_case("CERTIFICATE") || name.eq_ignore_ascii_case("menu")
             });
-        if !is_disc_structure && !is_disc_sibling {
+        if !is_disc_sibling {
             collect_video_files(root, &path, output)?;
         }
     }
@@ -349,6 +347,7 @@ mod tests {
     use super::*;
     use std::fs::{self, File};
     use std::io::Write;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -403,14 +402,11 @@ mod tests {
     }
 
     #[test]
-    fn scan_prunes_only_confirmed_blu_ray_structure() {
+    fn scan_prunes_only_confirmed_blu_ray_sibling_directories() {
         let root = make_temp_dir();
-        let excluded = [
-            "Disc/bDmV/STREAM/clip.mkv",
-            "Disc/CERTIFICATE/deep/extra.mp4",
-            "Disc/Menu/loop.mkv",
-        ];
+        let excluded = ["Disc/CERTIFICATE/deep/extra.mp4", "Disc/Menu/loop.mkv"];
         let kept = [
+            "Disc/bDmV/STREAM/clip.mkv",
             "Disc/movie.mkv",
             "Disc/Extras/menu/other.mp4",
             "Unrelated/BDMV/making-of.mkv",
@@ -428,7 +424,6 @@ mod tests {
             write_file(&path, b"fixture");
         }
         let diff = diff_video_files(path_to_dart_string(&root), Vec::new()).unwrap();
-        let selected_bdmv = scan_video_files(path_to_dart_string(&root.join("Disc/bDmV"))).unwrap();
         fs::remove_dir_all(root).unwrap();
         let mut expected: Vec<_> = kept
             .iter()
@@ -437,20 +432,43 @@ mod tests {
         expected.sort();
         assert_eq!(diff.current_files, expected);
         assert_eq!(diff.new_files, expected);
-        assert!(selected_bdmv.files.is_empty());
+    }
+
+    #[test]
+    fn scan_accepts_confirmed_bdmv_as_root() {
+        let root = make_temp_dir();
+        let bdmv = root.join("BDMV");
+        let stream = bdmv.join("STREAM");
+        fs::create_dir_all(&stream).unwrap();
+        write_file(&bdmv.join("MovieObject.bdmv"), b"fixture");
+        write_file(&stream.join("clip.mkv"), b"fixture");
+
+        let snapshot = scan_video_files(path_to_dart_string(&bdmv)).unwrap();
+        fs::remove_dir_all(root).unwrap();
+        let paths: Vec<_> = snapshot
+            .files
+            .iter()
+            .map(|file| &file.relative_path)
+            .collect();
+        assert_eq!(
+            paths,
+            vec![&path_to_dart_string(&Path::new("STREAM").join("clip.mkv"))]
+        );
     }
 
     fn make_temp_dir() -> PathBuf {
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let dir = std::env::temp_dir().join(format!(
-            "nipaplay_rust_file_scan_test_{}_{}",
+            "nipaplay_rust_file_scan_test_{}_{}_{}",
             std::process::id(),
-            nanos
+            nanos,
+            NEXT_ID.fetch_add(1, Ordering::Relaxed)
         ));
-        fs::create_dir_all(&dir).unwrap();
+        fs::create_dir(&dir).unwrap();
         dir
     }
 

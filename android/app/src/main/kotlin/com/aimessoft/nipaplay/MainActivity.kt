@@ -829,10 +829,7 @@ class MainActivity: FlutterActivity() {
         }
 
         val output = mutableListOf<Map<String, Any>>()
-        val entries = root.listFiles()
-        if (!"BDMV".equals(root.name, ignoreCase = true) || !hasSafBdmvMarker(entries)) {
-            collectSafVideoFiles(entries, "", output)
-        }
+        collectSafVideoFiles(root.listFiles(), "", output)
         return output.sortedBy { it["relativePath"] as String }
     }
 
@@ -849,7 +846,7 @@ class MainActivity: FlutterActivity() {
     ) {
         val directories = mutableListOf<Pair<String, DocumentFile>>()
         val bdmvListings = mutableMapOf<DocumentFile, Array<DocumentFile>>()
-        val structures = mutableSetOf<DocumentFile>()
+        var hasDisc = false
         for (entry in entries) {
             val name = entry.name ?: continue
             val relativePath = "$relativePrefix$name"
@@ -858,8 +855,8 @@ class MainActivity: FlutterActivity() {
                 directories.add(name to entry)
                 if (name.equals("BDMV", ignoreCase = true)) {
                     val listing = entry.listFiles()
-                    if (hasSafBdmvMarker(listing)) structures.add(entry)
-                    else bdmvListings[entry] = listing
+                    bdmvListings[entry] = listing
+                    hasDisc = hasDisc || hasSafBdmvMarker(listing)
                 }
                 continue
             }
@@ -886,9 +883,9 @@ class MainActivity: FlutterActivity() {
         }
 
         for ((name, directory) in directories) {
-            if (directory in structures || (structures.isNotEmpty() &&
+            if (hasDisc &&
                     (name.equals("CERTIFICATE", ignoreCase = true) ||
-                        name.equals("menu", ignoreCase = true)))) continue
+                        name.equals("menu", ignoreCase = true))) continue
             collectSafVideoFiles(
                 bdmvListings[directory] ?: directory.listFiles(),
                 "$relativePrefix$name/",

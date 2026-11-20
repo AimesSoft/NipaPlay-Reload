@@ -8,7 +8,7 @@ Entry dir(String path) => (path: path, directory: true);
 Entry file(String path) => (path: path, directory: false);
 
 void main() {
-  test('排除确认的原盘结构，不进入菜单或证书目录', () async {
+  test('保留原盘视频，只跳过同级菜单和证书目录', () async {
     final tree = <String, List<Entry>>{
       '/': [dir('/Disc'), dir('/Other'), dir('/NotADisc')],
       '/Disc': [
@@ -22,7 +22,7 @@ void main() {
         file('/Disc/bDmV/MovieObject.BDMV'),
         dir('/Disc/bDmV/STREAM')
       ],
-      '/Disc/bDmV/STREAM': [file('/Disc/bDmV/STREAM/clip.mkv')],
+      '/Disc/bDmV/STREAM': [file('/Disc/bDmV/STREAM/00001.m2ts')],
       '/Disc/Menu': [file('/Disc/Menu/loop.mkv')],
       '/Disc/CERTIFICATE': [file('/Disc/CERTIFICATE/extra.mp4')],
       '/Disc/Extras': [dir('/Disc/Extras/menu')],
@@ -54,7 +54,8 @@ void main() {
           nameOf: (entry) => p.posix.basename(entry.path),
           pathOf: (entry) => entry.path,
           isDirectory: (entry) => entry.directory,
-          isVideoFile: (name) => name.endsWith('.mkv') || name.endsWith('.mp4'),
+          isVideoFile: (name) =>
+              ['.mkv', '.mp4', '.m2ts'].contains(p.posix.extension(name)),
           onListError: (error) => fail('$error'),
         );
 
@@ -62,6 +63,7 @@ void main() {
         (await collect('/')).map((entry) => entry.path),
         unorderedEquals([
           '/Disc/movie.mkv',
+          '/Disc/bDmV/STREAM/00001.m2ts',
           '/Disc/Extras/menu/other.mp4',
           '/Other/menu/recipe.mp4',
           '/Other/BDMV/extra.mkv',
@@ -70,8 +72,28 @@ void main() {
         ]));
     expect(visits, isNot(contains('/Disc/Menu')));
     expect(visits, isNot(contains('/Disc/CERTIFICATE')));
-    expect(visits, isNot(contains('/Disc/bDmV/STREAM')));
+    expect(visits.where((path) => path == '/Disc/bDmV'), hasLength(1));
     expect(visits.where((path) => path == '/Other/BDMV'), hasLength(1));
-    expect(await collect('/Disc/bDmV'), isEmpty);
+  });
+
+  test('直接选择确认的 BDMV 时也扫描 STREAM', () async {
+    const root = '/Disc/BDMV';
+    const video = '$root/STREAM/00001.m2ts';
+    final tree = {
+      root: [file('$root/index.bdmv'), dir('$root/STREAM')],
+      '$root/STREAM': [file(video)],
+    };
+
+    final videos = await collectMediaLibraryVideos<Entry>(
+      root,
+      listDirectory: (path) async => tree[path]!,
+      nameOf: (entry) => p.posix.basename(entry.path),
+      pathOf: (entry) => entry.path,
+      isDirectory: (entry) => entry.directory,
+      isVideoFile: (name) => name.endsWith('.m2ts'),
+      onListError: (error) => fail('$error'),
+    );
+
+    expect(videos, [file(video)]);
   });
 }

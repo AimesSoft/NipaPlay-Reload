@@ -1,5 +1,3 @@
-import 'package:path/path.dart' as p;
-
 Future<List<Entry>> collectMediaLibraryVideos<Entry>(
   String root, {
   required Future<List<Entry>> Function(String path) listDirectory,
@@ -28,16 +26,13 @@ Future<List<Entry>> collectMediaLibraryVideos<Entry>(
 
   Future<void> visit(List<Entry> entries) async {
     final bdmvListings = <String, List<Entry>>{};
-    final structures = <String>{};
+    var hasDisc = false;
     for (final entry in entries) {
       if (isDirectory(entry) && nameOf(entry).toLowerCase() == 'bdmv') {
         final path = pathOf(entry);
         final listing = await readEntries(path);
-        if (hasBdmvMarker(listing)) {
-          structures.add(path);
-        } else {
-          bdmvListings[path] = listing;
-        }
+        bdmvListings[path] = listing;
+        hasDisc = hasDisc || hasBdmvMarker(listing);
       }
     }
 
@@ -45,9 +40,7 @@ Future<List<Entry>> collectMediaLibraryVideos<Entry>(
       if (isDirectory(entry)) {
         final path = pathOf(entry);
         final name = nameOf(entry).toLowerCase();
-        if (structures.contains(path) ||
-            (structures.isNotEmpty &&
-                (name == 'certificate' || name == 'menu'))) {
+        if (hasDisc && (name == 'certificate' || name == 'menu')) {
           continue;
         }
         await visit(bdmvListings[path] ?? await readEntries(path));
@@ -57,10 +50,6 @@ Future<List<Entry>> collectMediaLibraryVideos<Entry>(
     }
   }
 
-  final entries = await readEntries(root);
-  if (p.posix.basename(root).toLowerCase() != 'bdmv' ||
-      !hasBdmvMarker(entries)) {
-    await visit(entries);
-  }
+  await visit(await readEntries(root));
   return videos;
 }
