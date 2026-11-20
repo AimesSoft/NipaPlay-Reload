@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/rika_store.dart';
 import '../settings/controls.dart';
 import '../settings/section_accounts.dart' show ConfirmPill;
+import '../shell/phone_dock.dart' show PhoneGlassCircle;
 import '../shell/shell_controller.dart';
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
@@ -238,6 +239,22 @@ class _StorePageState extends State<StorePage> {
         SliverToBoxAdapter(
             child: SizedBox(height: 80 + NextLayout.foot(context))),
       ]),
+      // A phone or a tablet has no Esc, and its sections are at the foot
+      // under this page: back on the bar's row.
+      if (NextLayout.docked(context))
+        Positioned(
+          left: NextLayout.gutter(context) - 6,
+          top: NextLayout.barTop(context),
+          height: NextMetrics.topBar,
+          child: Center(
+            child: PhoneGlassCircle(
+              label: '返回',
+              onTap: () => Navigator.of(context).maybePop(),
+              child: const NextIcon(NextGlyph.chevronLeft,
+                  size: 22, color: NextColors.paper, stroke: 2),
+            ),
+          ),
+        ),
     ]);
   }
 
