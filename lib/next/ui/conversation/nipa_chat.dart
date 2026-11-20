@@ -557,10 +557,13 @@ class NipaChat extends ChangeNotifier {
   Future<void> say(String text) async {
     text = text.trim();
     if (!acceptsTyping) return;
+    // `/name args` may be a DeepSeek Harness command; a path such as
+    // `/Users/me/a.mkv` or a line the harness does not know goes to Nipa.
     if (port case final SlashCommandPort local
-        when local.hasSlashCommands && text.startsWith('/')) {
-      await _sayCommand(local, text);
-      return;
+        when question == null &&
+            local.hasSlashCommands &&
+            _commandLine.hasMatch(text)) {
+      if (await _sayCommand(local, text)) return;
     }
     if (question != null) {
       if (text.isNotEmpty) await answerText(text);
@@ -643,7 +646,11 @@ class NipaChat extends ChangeNotifier {
     await _start(turn);
   }
 
-  Future<void> _sayCommand(SlashCommandPort local, String text) async {
+  static final _commandLine = RegExp(r'^/[A-Za-z][\w:.-]*(\s|$)');
+
+  /// Runs [text] as a harness command; false when the harness has no such
+  /// command, so the caller says it to Nipa instead.
+  Future<bool> _sayCommand(SlashCommandPort local, String text) async {
     final generation = _generation;
     final turn = ChatTurn()
       ..status = 'completed'
@@ -652,20 +659,26 @@ class NipaChat extends ChangeNotifier {
     _notify();
     try {
       final target = await _target();
-      if (_disposed || generation != _generation) return;
+      if (_disposed || generation != _generation) return true;
       if (target == null) throw StateError('会话未就绪。');
       final result = await local.executeSlashCommand(target, text);
-      if (_disposed || generation != _generation) return;
+      if (_disposed || generation != _generation) return true;
+      if (result['kind'] == 'unknown') {
+        turns = [for (final other in turns) if (!identical(other, turn)) other];
+        _notify();
+        return false;
+      }
       final output = result['text'] as String? ?? '';
       if (output.isNotEmpty) turn.parts.add(ReplyPart.command('slash-result', output));
       if (result['kind'] == 'error') turn.status = 'failed';
     } catch (_) {
-      if (_disposed || generation != _generation) return;
+      if (_disposed || generation != _generation) return true;
       turn
         ..status = 'failed'
         ..parts.add(NoticePart('无法执行这条命令。'));
     }
     _notify();
+    return true;
   }
 
   Future<void> _start(ChatTurn turn) async {

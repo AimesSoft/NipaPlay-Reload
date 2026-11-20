@@ -24,18 +24,25 @@ void main() {
     final chat = NipaChat(port: port, data: _EmptyData());
     addTearDown(chat.dispose);
     await chat.say('/ok');
-    await chat.say('/unknown');
+    await chat.say('/failing');
     await chat.say('/throws');
     expect(
-        port.commands, [('t1', '/ok'), ('t1', '/unknown'), ('t1', '/throws')]);
+        port.commands, [('t1', '/ok'), ('t1', '/failing'), ('t1', '/throws')]);
     expect(port.model, isEmpty);
     expect(chat.turns.map((turn) => turn.status),
         ['completed', 'failed', 'failed']);
     expect((chat.turns[0].parts.last as ReplyPart).text, 'command output');
-    expect((chat.turns[1].parts.last as ReplyPart).text, '找不到这条命令。');
+    expect((chat.turns[1].parts.last as ReplyPart).text, 'command failed');
     expect((chat.turns[2].parts.last as NoticePart).text, '无法执行这条命令。');
     await chat.say('ordinary input');
     expect(port.model, ['ordinary input']);
+    // A path is never a command; a line the harness does not know goes to Nipa.
+    await chat.say('/Users/me/a.mkv 这集怎么样');
+    await chat.say('/unknown 你好');
+    expect(port.commands.last, ('t1', '/unknown 你好'));
+    expect(port.commands, hasLength(4));
+    expect(port.model,
+        ['ordinary input', '/Users/me/a.mkv 这集怎么样', '/unknown 你好']);
   });
 
   test('model actions read and write through host settings without endpoints',
@@ -276,7 +283,8 @@ final class _CommandPort extends _IdleChatPort implements SlashCommandPort {
     commands.add((threadId, line));
     return switch (line) {
       '/ok' => {'kind': 'success', 'text': 'command output'},
-      '/unknown' => {'kind': 'error', 'text': '找不到这条命令。'},
+      '/failing' => {'kind': 'error', 'text': 'command failed'},
+      _ when line.startsWith('/unknown') => {'kind': 'unknown', 'text': ''},
       _ => throw StateError('fixture command failed'),
     };
   }

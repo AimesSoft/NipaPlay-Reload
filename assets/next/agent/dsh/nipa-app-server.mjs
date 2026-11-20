@@ -912,7 +912,8 @@ export function apply(ctx, config = {}) {
     runningCommands.add(threadId);
     try {
       const outcome = await ctx.commands.execute(await ensureAgent(threadId), line, [], AbortSignal.timeout(60000));
-      if (!outcome) return { kind: 'error', text: '找不到这条命令。' };
+      // Not a command: the caller sends the line to Nipa as ordinary text.
+      if (!outcome) return { kind: 'unknown', text: '' };
       return { kind: outcome.result.kind, text: outcome.result.text ?? '' };
     } catch {
       throw rpcError(-32603, '无法执行这条命令。');
