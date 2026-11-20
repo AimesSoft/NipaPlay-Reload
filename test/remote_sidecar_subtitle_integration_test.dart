@@ -16,7 +16,7 @@ class _Player extends Fake implements MediaKitPlayerAdapter {
   @override
   bool get supportsExternalSubtitles => true;
   @override
-  List<int> get activeSubtitleTracks => [];
+  List<int> activeSubtitleTracks = [];
   @override
   PlayerMediaInfo get mediaInfo => PlayerMediaInfo(duration: 10000);
   @override
@@ -36,9 +36,15 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = null;
 
-  for (final protocol in [true, false]) {
+  for (final (protocol, extension) in [
+    (true, 'ass'),
+    (false, 'ass'),
+    (true, 'srt')
+  ]) {
+    final simplifiedName = '字幕.SC.$extension';
+    final japaneseName = '別の字幕組.JP.$extension';
     test(
-        'Dandanplay ${protocol ? 'protocol' : 'HTTP'} subtitles switch languages in the player',
+        'Dandanplay ${protocol ? 'protocol' : 'HTTP'} switches differently named $extension tracks',
         () async {
       final directory =
           await Directory.systemTemp.createTemp('dandan_sidecar_');
@@ -55,16 +61,18 @@ void main() {
         } else if (request.uri.path == '/api/v1/subtitle/info/entry') {
           request.response.write(jsonEncode({
             'subtitles': [
-              {'fileName': '字幕.SC.ass'},
-              {'fileName': '字幕.JP.ass'},
+              {'fileName': simplifiedName},
+              {'fileName': japaneseName},
             ]
           }));
         } else if (request.uri.path == '/api/v1/subtitle/file/entry') {
           final name = request.uri.queryParameters['fileName']!;
           downloaded.add(name);
-          request.response.write('[Script Info]\nScriptType: v4.00+\n[Events]\n'
-              'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
-              'Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,$name\n');
+          request.response.write(extension == 'srt'
+              ? '1\n00:00:00,000 --> 00:00:05,000\n$name\n'
+              : '[Script Info]\nScriptType: v4.00+\n[Events]\n'
+                  'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
+                  'Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,$name\n');
         } else {
           request.response.statusCode = HttpStatus.notFound;
         }
@@ -89,27 +97,40 @@ void main() {
           : 'http://127.0.0.1:${server.port}/api/v1/stream/id/entry';
       manager.setCurrentVideoPath(video);
       await manager.autoDetectAndLoadSubtitle(video);
-      expect(downloaded, unorderedEquals(['字幕.SC.ass', '字幕.JP.ass']));
+      expect(downloaded, unorderedEquals([simplifiedName, japaneseName]));
       final prefs = await SharedPreferences.getInstance();
       final key = prefs
           .getKeys()
           .singleWhere((key) => key.startsWith('external_subtitles_'));
       final entries = jsonDecode(prefs.getString(key)!) as List;
-      final simplified =
-          entries.singleWhere((entry) => entry['name'] == '字幕.SC.ass')['path']
-              as String;
+      final simplified = entries.singleWhere(
+          (entry) => entry['name'] == simplifiedName)['path'] as String;
       final japanese =
-          entries.singleWhere((entry) => entry['name'] == '字幕.JP.ass')['path']
+          entries.singleWhere((entry) => entry['name'] == japaneseName)['path']
               as String;
       expect(simplified, isNot(japanese));
+      await manager.preloadSubtitleFile(simplified);
+      await manager.preloadSubtitleFile(japanese);
+      await manager.removeExternalSubtitleFromStack(japanese);
       await manager.addExternalSubtitleToStack(simplified,
-          displayName: '字幕.SC.ass');
-      expect(delegate.selected.last, simplified);
+          displayName: simplifiedName);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [simplified]);
+      if (extension == 'srt') {
+        expect(manager.getCurrentExternalSubtitleTextAt(1000), simplifiedName);
+        await manager.removeExternalSubtitleFromStack(simplified);
+      } else {
+        expect(delegate.selected.last, simplified);
+      }
       await manager.addExternalSubtitleToStack(japanese,
-          displayName: '字幕.JP.ass');
-      expect(delegate.selected.last, japanese);
+          displayName: japaneseName);
+      if (extension == 'srt') {
+        expect(manager.getCurrentExternalSubtitleTextAt(1000), japaneseName);
+        expect(delegate.selected, isEmpty);
+      } else {
+        expect(delegate.selected.last, japanese);
+      }
       expect(manager.getAllActiveExternalSubtitlePaths(), [japanese]);
-      expect(File(japanese).readAsStringSync(), contains('字幕.JP.ass'));
+      expect(File(japanese).readAsStringSync(), contains(japaneseName));
       manager.setCurrentVideoPath('');
       manager.clearExternalSubtitle();
       await Future<void>.delayed(const Duration(milliseconds: 150));
