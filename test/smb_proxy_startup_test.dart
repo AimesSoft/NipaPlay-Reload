@@ -46,6 +46,34 @@ void main() {
     expect(proxy.isRunning, isTrue);
   });
 
+  test('initialize during a stop waits for it and starts a fresh proxy',
+      () async {
+    SharedPreferences.setMockInitialValues({'smb_proxy_port': 0});
+    final proxy = SMBProxyService.instance;
+    addTearDown(proxy.stop);
+    await proxy.initialize();
+
+    final stopping = proxy.stop();
+    // The stop has begun but not finished: the proxy no longer counts as
+    // running, and initialize must not hand the stopping one out again.
+    expect(proxy.isRunning, isFalse);
+    await proxy.initialize();
+    await stopping;
+
+    expect(proxy.isRunning, isTrue);
+    final client =
+        HttpOverrides.runWithHttpOverrides(() => HttpClient(), _RealHttp());
+    try {
+      final response = await (await client
+              .getUrl(Uri.parse('http://127.0.0.1:${proxy.port}/smb/health')))
+          .close();
+      expect(response.statusCode, 200);
+      await response.drain<void>();
+    } finally {
+      client.close(force: true);
+    }
+  });
+
   test('proxy responds on its own isolate while root isolate is blocked',
       () async {
     SharedPreferences.setMockInitialValues({'smb_proxy_port': 0});

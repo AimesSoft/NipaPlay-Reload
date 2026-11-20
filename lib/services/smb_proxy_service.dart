@@ -46,15 +46,17 @@ class SMBProxyService {
   Future<void> initialize() async {
     _diagnostics
         .log('initialize running=$_isRunning pending=${_initializing != null}');
-    if (_isRunning || kIsWeb) {
-      if (_isRunning) unawaited(_diagnostics.probe('initialize-reuse'));
-      return;
-    }
+    if (kIsWeb) return;
+    // A proxy that is stopping must not be handed out again: wait for the
+    // stop, then start a fresh one.
     final stopping = _stopping;
     if (stopping != null) {
       await stopping;
     }
-    if (_isRunning || kIsWeb) return;
+    if (_isRunning) {
+      unawaited(_diagnostics.probe('initialize-reuse'));
+      return;
+    }
     final pending = _initializing ??= _initialize();
     try {
       await pending;
@@ -191,6 +193,9 @@ class SMBProxyService {
 
   Future<void> _stopInternal() async {
     _diagnostics.log('stop-request running=$_isRunning');
+    // Stop counting as running before the first await, so nothing prepares a
+    // connection or builds a URL on a proxy that is going away.
+    _isRunning = false;
     try {
       await _initializing;
     } catch (_) {}
