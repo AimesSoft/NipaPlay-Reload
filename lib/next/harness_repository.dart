@@ -335,7 +335,13 @@ Future<Map<String, Object?>> _applySeed(Directory repository, Directory hooks,
   StreamIterator<String>? lines;
   var changedWorktree = false, completed = false, ownsIndexLock = true;
   try {
-    if (await index.exists()) await index.copy(alternate.path);
+    if (await index.exists()) {
+      await index.copy(alternate.path);
+      // Git trusts an entry's stat data only when it is older than the index
+      // file. A copy with a fresh mtime (Linux) would hide an edit made in
+      // the second the entry was staged; keep the original's time.
+      await alternate.setLastModified(await index.lastModified());
+    }
     transaction = await Process.start(
         'git',
         [
