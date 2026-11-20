@@ -2703,9 +2703,20 @@ final class MeshRuntime implements MeshDeviceSource {
       ? _clockSeconds()
       : DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
+  /// Asks [peer] whether it holds deliveries for this device: only a device
+  /// that answered last time it was tried and was seen by the coordinator
+  /// within a day (a device long gone is not dialled every two minutes).
   void _probeDelivery(String peer) {
     final checked = _deliveryChecked[peer];
-    if (_deliveryPulls.containsKey(peer) ||
+    final lastSeen = _devices
+        .where((d) => d['device_id'] == peer)
+        .map((d) => d['last_seen_at'])
+        .whereType<int>()
+        .firstOrNull;
+    if (_reachability[peer] == false ||
+        lastSeen == null ||
+        DateTime.now().millisecondsSinceEpoch ~/ 1000 - lastSeen > 86400 ||
+        _deliveryPulls.containsKey(peer) ||
         checked != null && DateTime.now().difference(checked) < _deliveryProbeGap) {
       return;
     }
