@@ -310,8 +310,10 @@ void main() {
     var gone = false;
     var agents = <JsonMap>[];
 
+    final removed = <String>{};
     setUp(() async {
       gone = false;
+      removed.clear();
       agents = [
         {
           'deviceId': 'mac',
@@ -329,6 +331,7 @@ void main() {
       peers = NipaPeers(
           root: Directory('${dir.path}/ipad')..createSync(),
           devices: () async => agents,
+          deviceRemoved: removed.contains,
           hostChanges: changed.stream);
       rpc = (peer, method, params) async {
         if (gone) throw meshNotDelivered(peer, 'connect timeout');
@@ -392,6 +395,28 @@ void main() {
           port.startTurn('x', 'hello'),
           throwsA(isA<ChatUnavailable>()
               .having((e) => e.message, 'message', 'MacBook 现在不在。')));
+    });
+
+    test('a removed device is cleared on disk and no longer probed', () async {
+      var probes = 0;
+      gone = true;
+      rpc = (peer, method, params) async {
+        probes++;
+        throw meshNotDelivered(peer, 'connect timeout');
+      };
+      await peers.refresh();
+      await peers.choose('mac');
+      await port.unavailableReason();
+      expect(peers.chosen, 'mac');
+      expect(File('${peers.root.path}/nipa-peer.json').existsSync(), isTrue);
+      final before = probes;
+      removed.add('mac');
+      changed.add(null);
+      await peers.load();
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(peers.chosen, isNull);
+      expect(File('${peers.root.path}/nipa-peer.json').existsSync(), isFalse);
+      expect(probes, before);
     });
 
     test(
