@@ -258,7 +258,10 @@ class _SwitchableViewState extends State<SwitchableView> {
       final cached = _cachedChildren![i];
       return TickerMode(
         enabled: i == safeIndex,
-        child: cached ?? const SizedBox.shrink(),
+        child: ExcludeFocus(
+          excluding: i != safeIndex,
+          child: cached ?? const SizedBox.shrink(),
+        ),
       );
     });
   }

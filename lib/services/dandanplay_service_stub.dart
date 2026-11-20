@@ -67,7 +67,8 @@ class DandanplayService {
     final hasLocalToken = _token != null && _token!.isNotEmpty;
     final usesLoggedInWebProxy =
         _useWebApiProxy && _webApiBaseUrl?.isNotEmpty == true;
-    return !NetworkSettings.isDandanplayServiceUri(Uri.parse(await getApiBaseUrl())) ||
+    return !NetworkSettings.isDandanplayServiceUri(
+            Uri.parse(await getApiBaseUrl())) ||
         (_isLoggedIn && (hasLocalToken || usesLoggedInWebProxy));
   }
 
@@ -83,6 +84,11 @@ class DandanplayService {
     }
     return {'Authorization': 'Bearer $_token'};
   }
+
+  /// 与桌面端同名：浏览器的登录由桌面端同步，这里不续期、不判定失效。
+  static final ValueNotifier<int> loginExpired = ValueNotifier(0);
+
+  static Future<bool> handleTokenRefused(String? authorization) async => false;
 
   static String _maskToken(String? token) {
     if (token == null || token.isEmpty) return '(empty)';
@@ -171,7 +177,7 @@ class DandanplayService {
     return null;
   }
 
-  static Future<void> initialize() async {
+  static Future<void> initialize({bool renewToken = true}) async {
     // 从localStorage加载登录状态
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('dandanplay_app_secret');

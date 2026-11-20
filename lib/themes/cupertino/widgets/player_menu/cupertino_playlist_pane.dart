@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_me
 import 'package:path/path.dart' as p;
 import 'package:nipaplay/services/emby_service.dart';
 import 'package:nipaplay/services/jellyfin_service.dart';
+import 'package:nipaplay/services/media_server_playlist_loader.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_bottom_sheet.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
@@ -98,6 +99,11 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
       } else if (MediaSourceUtils.isWebDavPath(path)) {
         _dataSourceType = 'webdav';
         await _loadWebDavEpisodes(path);
+      } else if (Uri.tryParse(path)?.scheme == 'http' ||
+          Uri.tryParse(path)?.scheme == 'https') {
+        // A standalone stream has no local sibling directory to enumerate.
+        _dataSourceType = 'stream';
+        _episodes = [path];
       } else {
         _dataSourceType = 'filesystem';
         await _loadFileSystemEpisodes(path);
@@ -191,6 +197,9 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
     final matches = SMBService.instance.connections.where((connection) {
       if (connection.host == connName) return true;
       if ('${connection.host}:${connection.port}' == connName) return true;
+      if (connection.wanHost == connName) return true;
+      if ('${connection.wanHost}:${connection.wanPort}' == connName)
+        return true;
       return false;
     }).toList();
     if (matches.length == 1) return matches.first;
@@ -412,9 +421,11 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
     final info = await JellyfinService.instance.getEpisodeDetails(episodeId);
     if (info == null) throw Exception('无法获取 Jellyfin 剧集信息');
 
-    final episodes = await JellyfinService.instance.getSeasonEpisodes(
-      info.seriesId!,
-      info.seasonId!,
+    final episodes = await loadMediaServerPlaylist(
+      currentItem: info,
+      seriesId: info.seriesId,
+      seasonId: info.seasonId,
+      loadSeason: JellyfinService.instance.getSeasonEpisodes,
     );
     if (episodes.isEmpty) throw Exception('该季没有剧集');
 
@@ -445,9 +456,11 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
     final info = await EmbyService.instance.getEpisodeDetails(episodeId);
     if (info == null) throw Exception('无法获取 Emby 剧集信息');
 
-    final episodes = await EmbyService.instance.getSeasonEpisodes(
-      info.seriesId!,
-      info.seasonId!,
+    final episodes = await loadMediaServerPlaylist(
+      currentItem: info,
+      seriesId: info.seriesId,
+      seasonId: info.seasonId,
+      loadSeason: EmbyService.instance.getSeasonEpisodes,
     );
     if (episodes.isEmpty) throw Exception('该季没有剧集');
 
@@ -525,6 +538,8 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         return 'WebDAV';
       case 'smb':
         return 'SMB';
+      case 'stream':
+        return '当前播放 · ${Uri.parse(path).host}';
       default:
         return path;
     }
@@ -546,6 +561,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
       case 'shared_anime':
       case 'webdav':
       case 'smb':
+      case 'stream':
         return CupertinoIcons.cloud;
       default:
         return CupertinoIcons.folder;
@@ -566,6 +582,8 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         return 'WebDAV';
       case 'smb':
         return 'SMB';
+      case 'stream':
+        return '网络串流';
       default:
         return '本地文件';
     }

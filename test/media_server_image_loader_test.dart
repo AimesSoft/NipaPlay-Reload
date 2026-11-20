@@ -83,15 +83,24 @@ void main() {
     final widgetSource = File(
       'lib/themes/nipaplay/widgets/cached_network_image_widget.dart',
     ).readAsStringSync();
+    final cacheSource = File(
+      'lib/utils/image_cache_manager.dart',
+    ).readAsStringSync();
     final detailSource = File(
       'lib/pages/media_server_detail_page.dart',
     ).readAsStringSync();
 
     expect(detailSource, contains('shouldCompress: false'));
+    // The widget loads every image, compressed or not, through one call to
+    // the cache manager, where shouldCompress only decides whether the bytes
+    // stay on disk. The cache manager downloads with the unified loader.
     expect(widgetSource, isNot(contains('http.get(')));
     expect(
-      RegExp('loadNetworkImageBytes').allMatches(widgetSource),
-      hasLength(greaterThanOrEqualTo(2)),
+      RegExp(r'ImageCacheManager\.instance\.loadImage\([^;]*widget\.shouldCompress')
+          .hasMatch(widgetSource),
+      isTrue,
     );
+    expect(cacheSource, isNot(contains('http.get(')));
+    expect(cacheSource, contains('loadNetworkImageBytes('));
   });
 }

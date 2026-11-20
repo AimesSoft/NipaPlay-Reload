@@ -25,32 +25,35 @@ class WindowControlButtons extends StatelessWidget {
     return SizedBox(
       width: totalWidth,
       height: buttonHeight,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _WindowControlIconButton(
-            icon: Icons.remove_rounded,
-            size: 22,
-            tooltip: '最小化',
-            onPressed: onMinimize,
-          ),
-          _WindowControlIconButton(
-            icon: isMaximized
-                ? Icons.filter_none_rounded
-                : Icons.crop_square_rounded,
-            size: isMaximized ? 18 : 22,
-            isFlipped: isMaximized,
-            tooltip: isMaximized ? '还原' : '最大化',
-            onPressed: onMaximizeRestore,
-          ),
-          _WindowControlIconButton(
-            icon: Icons.close_rounded,
-            size: 22,
-            tooltip: '关闭',
-            isCloseButton: true,
-            onPressed: onClose,
-          ),
-        ],
+      // 窗口按钮是指针操作入口，不能抢占播放器方向键/空格的焦点。
+      child: ExcludeFocus(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _WindowControlIconButton(
+              icon: Icons.remove_rounded,
+              size: 22,
+              tooltip: '最小化',
+              onPressed: onMinimize,
+            ),
+            _WindowControlIconButton(
+              icon: isMaximized
+                  ? Icons.filter_none_rounded
+                  : Icons.crop_square_rounded,
+              size: isMaximized ? 18 : 22,
+              isFlipped: isMaximized,
+              tooltip: isMaximized ? '还原' : '最大化',
+              onPressed: onMaximizeRestore,
+            ),
+            _WindowControlIconButton(
+              icon: Icons.close_rounded,
+              size: 22,
+              tooltip: '关闭',
+              isCloseButton: true,
+              onPressed: onClose,
+            ),
+          ],
+        ),
       ),
     );
   }

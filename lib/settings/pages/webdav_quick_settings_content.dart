@@ -425,7 +425,9 @@ class _WebDAVQuickSettingsContentState
             title: connection.name,
             value: connection.name,
             isSelected: connection.name == provider.defaultServerName,
-            description: connection.url,
+            description: connection.wanUrl.trim().isEmpty
+                ? connection.url
+                : '${connection.url} / ${connection.wanUrl}',
           ),
         )
         .toList();

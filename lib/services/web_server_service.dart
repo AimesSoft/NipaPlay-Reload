@@ -23,6 +23,8 @@ class WebServerService {
   bool _autoStart = false;
   bool _ipv6Enabled = false;
   bool _isIpv6Listening = false;
+  bool _lanDiscoveryRunning = false;
+  String? _lanDiscoveryError;
   String? _lastStartErrorMessage;
   final WebApiService _webApiService = WebApiService();
   final NipaPlayLanDiscoveryResponder _lanDiscoveryResponder =
@@ -35,6 +37,13 @@ class WebServerService {
   bool get autoStart => _autoStart;
   bool get ipv6Enabled => _ipv6Enabled;
   String? get lastStartErrorMessage => _lastStartErrorMessage;
+
+  /// UDP 局域网发现应答器（端口 32123）是否正常。
+  /// 为 false 时其他设备的"扫描局域网"无法发现本机，但 HTTP 服务仍可用。
+  bool get lanDiscoveryRunning => _lanDiscoveryRunning;
+
+  /// UDP 发现应答器启动失败的原因（端口占用/系统保留等）。
+  String? get lanDiscoveryError => _lanDiscoveryError;
 
   String _buildHttpUrlForHost(String host, int port) {
     final normalizedHost = host.trim();
@@ -426,13 +435,19 @@ class WebServerService {
       _isRunning = true;
       _lastStartErrorMessage = null;
       print('Remote access server started on port ${_server!.port}');
-      await _lanDiscoveryResponder.start(webPort: _server!.port);
+      final discoveryStarted =
+          await _lanDiscoveryResponder.start(webPort: _server!.port);
+      _lanDiscoveryRunning = discoveryStarted;
+      _lanDiscoveryError =
+          discoveryStarted ? null : _lanDiscoveryResponder.lastStartError;
       await saveSettings();
       return true;
     } catch (e) {
       _isRunning = false;
       _server = null;
       _isIpv6Listening = false;
+      _lanDiscoveryRunning = false;
+      _lanDiscoveryError = null;
       _lastStartErrorMessage = _formatStartError(e);
       await _lanDiscoveryResponder.stop();
       return false;
@@ -445,6 +460,8 @@ class WebServerService {
       _server = null;
       _isRunning = false;
       _isIpv6Listening = false;
+      _lanDiscoveryRunning = false;
+      _lanDiscoveryError = null;
       await _lanDiscoveryResponder.stop();
       print('Remote access server stopped.');
       await saveSettings();

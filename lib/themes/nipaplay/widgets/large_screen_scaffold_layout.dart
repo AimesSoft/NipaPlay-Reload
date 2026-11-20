@@ -69,6 +69,10 @@ class NipaplayLargeScreenScaffoldLayout extends StatefulWidget {
 class _NipaplayLargeScreenScaffoldLayoutState
     extends State<NipaplayLargeScreenScaffoldLayout> {
   late final FocusNode _inputFocusNode;
+  final FocusScopeNode _contentFocusScope = FocusScopeNode(
+    debugLabel: 'nipaplay_large_screen_content',
+  );
+  FocusNode? _lastContentFocus;
   late final ValueNotifier<NipaplayLargeScreenTabPanelCommand?>
       _tabPanelCommand;
   late final ValueNotifier<NipaplayLargeScreenSettingsPanelCommand?>
@@ -94,7 +98,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
     final int actionCount = [
       globals.isTvOS ? null : widget.onToggleLargeScreen,
       widget.onToggleThemeFromOrigin,
-      widget.onOpenSettings,
+      _toggleSettingsPanel,
     ].where((callback) => callback != null).length;
     return widget.tabPage.length + actionCount;
   }
@@ -102,7 +106,10 @@ class _NipaplayLargeScreenScaffoldLayoutState
   @override
   void initState() {
     super.initState();
-    _inputFocusNode = FocusNode(debugLabel: 'nipaplay_large_screen_input');
+    _inputFocusNode = FocusNode(
+      debugLabel: 'nipaplay_large_screen_input',
+      skipTraversal: true,
+    );
     _playerMenuInitialFocusNode = FocusNode(
       debugLabel: 'nipaplay_large_screen_player_menu_initial',
     );
@@ -114,7 +121,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
       if (!mounted) {
         return;
       }
-      _inputFocusNode.requestFocus();
+      _ensureContentFocus();
     });
   }
 
@@ -126,12 +133,17 @@ class _NipaplayLargeScreenScaffoldLayoutState
     _settingsPanelCommand.dispose();
     _tabPanelCommand.dispose();
     _inputFocusNode.dispose();
+    _contentFocusScope.dispose();
     super.dispose();
   }
 
   @override
   void didUpdateWidget(covariant NipaplayLargeScreenScaffoldLayout oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentPageId != widget.currentPageId) {
+      _lastContentFocus = null;
+      _ensureContentFocus();
+    }
     if (_menuItemCount == 0) {
       _focusedMenuIndex = 0;
       return;
@@ -150,6 +162,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
       _closePlayerMenu();
     }
     final bool willOpen = !_isTabPanelVisible;
+    if (willOpen) _rememberContentFocus();
     setState(() {
       _isTabPanelVisible = willOpen;
       if (willOpen) {
@@ -184,6 +197,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
       _closePlayerMenu();
     }
     final willOpen = !_isSettingsPanelVisible;
+    if (willOpen) _rememberContentFocus();
     setState(() {
       _isSettingsPanelVisible = !_isSettingsPanelVisible;
       if (_isSettingsPanelVisible) {
@@ -236,7 +250,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
   }
 
   bool _isPlayerPlaybackContext(VideoPlayerState videoState) {
-    return widget.currentIndex == 1 && videoState.hasVideo;
+    return widget.currentPageId == AppPageIds.video && videoState.hasVideo;
   }
 
   bool get _isMediaLibraryContext {
@@ -295,8 +309,8 @@ class _NipaplayLargeScreenScaffoldLayoutState
     return true;
   }
 
-  bool _handlePlayerInputCommand(VideoPlayerState videoState,
-      NipaplayLargeScreenInputCommand command) {
+  bool _handlePlayerInputCommand(
+      VideoPlayerState videoState, NipaplayLargeScreenInputCommand command) {
     if (defaultTargetPlatform == TargetPlatform.android &&
         command == NipaplayLargeScreenInputCommand.back) {
       return _handlePlayerBackPress();
@@ -335,6 +349,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
     if (!videoState.hasVideo) {
       return;
     }
+    _rememberContentFocus();
     context.read<LargeScreenUiSfxService>().playMenuOpen();
     setState(() {
       _isPlayerMenuVisible = true;
@@ -451,6 +466,16 @@ class _NipaplayLargeScreenScaffoldLayoutState
     _tabPanelCommand.value = NipaplayLargeScreenTabPanelCommand.activateFocused;
   }
 
+  void _enterFocusedMenuPage() {
+    if (_focusedMenuIndex < widget.tabPage.length) {
+      _activateFocusedMenuItem();
+    } else if (_focusedMenuIndex == _menuItemCount - 1) {
+      _toggleSettingsPanel();
+    } else {
+      _closeTabPanel();
+    }
+  }
+
   void _dispatchSettingsPanelCommand(
       NipaplayLargeScreenSettingsPanelCommand command) {
     _settingsPanelCommand.value = null;
@@ -493,10 +518,12 @@ class _NipaplayLargeScreenScaffoldLayoutState
   }
 
   bool _moveContentFocus(TraversalDirection direction) {
-    final focusScope = FocusScope.of(context);
     final focusedNode = FocusManager.instance.primaryFocus;
-    if (focusedNode == null || focusedNode == _inputFocusNode) {
-      final moved = focusScope.nextFocus();
+    if (focusedNode == null ||
+        focusedNode == _inputFocusNode ||
+        focusedNode is FocusScopeNode ||
+        !_contentFocusScope.traversalDescendants.contains(focusedNode)) {
+      final moved = _requestFirstContentFocus();
       if (moved) {
         _ensurePrimaryFocusVisible();
       }
@@ -535,20 +562,53 @@ class _NipaplayLargeScreenScaffoldLayoutState
         null;
   }
 
-  void _ensureContentFocus() {
-    final focusScope = FocusScope.of(context);
-    final focusedNode = FocusManager.instance.primaryFocus;
-    if (focusedNode == null || focusedNode == _inputFocusNode) {
-      focusScope.nextFocus();
+  void _rememberContentFocus() {
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused != null && focused.ancestors.contains(_contentFocusScope)) {
+      _lastContentFocus = focused;
     }
+  }
+
+  bool _requestFirstContentFocus() {
+    final candidates = _contentFocusScope.traversalDescendants
+        .where((node) => node is! FocusScopeNode);
+    final first = ReadingOrderTraversalPolicy()
+        .sortDescendants(candidates, _contentFocusScope)
+        .firstOrNull;
+    first?.requestFocus();
+    return first != null;
+  }
+
+  void _ensureContentFocus() {
+    // Wait until hidden panels have been excluded from the focus tree. Never
+    // steal focus back from a dialog opened by the activated menu item.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _isTabPanelVisible ||
+          _isSettingsPanelVisible ||
+          _isPlayerMenuVisible ||
+          ModalRoute.of(context)?.isCurrent == false) {
+        return;
+      }
+      final previous = _lastContentFocus;
+      if (previous?.context != null &&
+          previous is! FocusScopeNode &&
+          !previous!.skipTraversal &&
+          previous.canRequestFocus &&
+          _contentFocusScope.traversalDescendants.contains(previous)) {
+        previous.requestFocus();
+      } else {
+        _requestFirstContentFocus();
+      }
+      _ensurePrimaryFocusVisible();
+    });
   }
 
   /// 手柄输入绕过 Focus 树，将手柄命令转换为键盘事件并分发给当前
   /// 焦点节点。事件会沿 Focus 树冒泡（模拟 Flutter 的按键分发），
   /// 由对应面板的 onKeyEvent 处理。用于下拉菜单展开时和播放器菜单
   /// 可见时的手柄导航。
-  void _dispatchGamepadToFocusedNode(
-      NipaplayLargeScreenInputCommand command) {
+  void _dispatchGamepadToFocusedNode(NipaplayLargeScreenInputCommand command) {
     final focused = FocusManager.instance.primaryFocus;
     if (focused == null) return;
 
@@ -981,7 +1041,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
         }
       case NipaplayLargeScreenInputCommand.navigateRight:
         if (_isTabPanelVisible) {
-          // 横向菜单布局中暂不处理
+          _enterFocusedMenuPage();
         } else if (isPlayerPlaybackContext && !videoState.showControls) {
           videoState.seekForwardByStep();
         } else {
@@ -1010,6 +1070,14 @@ class _NipaplayLargeScreenScaffoldLayoutState
   // ── 键盘输入 ──────────────────────────────────────────────
 
   KeyEventResult _handleInputKeyEvent(FocusNode node, KeyEvent event) {
+    if (_isTabPanelVisible &&
+        event.logicalKey == LogicalKeyboardKey.tab &&
+        (event is KeyDownEvent || event is KeyRepeatEvent)) {
+      // This menu uses a single focus owner and a selected row. Keep Tab
+      // aligned with the same row that arrows and Select operate on.
+      _moveMenuFocus(HardwareKeyboard.instance.isShiftPressed ? -1 : 1);
+      return KeyEventResult.handled;
+    }
     final videoState = context.read<VideoPlayerState>();
     final isPlayerPlaybackContext = _isPlayerPlaybackContext(videoState);
     if (isPlayerPlaybackContext) {
@@ -1149,6 +1217,7 @@ class _NipaplayLargeScreenScaffoldLayoutState
             : KeyEventResult.ignored;
       case NipaplayLargeScreenInputCommand.navigateRight:
         if (_isTabPanelVisible) {
+          _enterFocusedMenuPage();
           return KeyEventResult.handled;
         }
         if (isPlayerPlaybackContext && !videoState.showControls) {
@@ -1190,7 +1259,8 @@ class _NipaplayLargeScreenScaffoldLayoutState
     final bool videoControlsVisible = context.select<VideoPlayerState, bool>(
       (videoState) => videoState.showControls,
     );
-    final bool usePlayerContextPanel = widget.currentIndex == 1 && hasVideo;
+    final bool usePlayerContextPanel =
+        widget.currentPageId == AppPageIds.video && hasVideo;
     final bool useDarkSystemBars = usePlayerContextPanel || widget.isDarkMode;
     final bool showPanelBackdrop =
         _isTabPanelVisible || _isSettingsPanelVisible || _isPlayerMenuVisible;
@@ -1198,7 +1268,10 @@ class _NipaplayLargeScreenScaffoldLayoutState
         !usePlayerContextPanel || videoControlsVisible || showPanelBackdrop;
 
     Widget buildSystemBar(Widget child) {
-      final bar = IgnorePointer(ignoring: !showSystemBars, child: child);
+      final bar = ExcludeFocus(
+        excluding: !showSystemBars || showPanelBackdrop,
+        child: IgnorePointer(ignoring: !showSystemBars, child: child),
+      );
       // TV bars stay opaque while sliding in/out, without a retained opacity
       // layer that can lose their text and icons on older television GPUs.
       if (globals.isTelevision) return bar;
@@ -1227,7 +1300,13 @@ class _NipaplayLargeScreenScaffoldLayoutState
                 onMenuPressed: () {
                   _handlePlayerMenuPress(context.read<VideoPlayerState>());
                 },
-                child: widget.content,
+                child: ExcludeFocus(
+                  excluding: showPanelBackdrop,
+                  child: FocusScope(
+                    node: _contentFocusScope,
+                    child: widget.content,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1268,26 +1347,29 @@ class _NipaplayLargeScreenScaffoldLayoutState
             bottom: 0,
             child: IgnorePointer(
               ignoring: !_isTabPanelVisible,
-              child: NipaplayLargeScreenTabPanel(
-                currentIndex: widget.currentIndex,
-                isDarkMode: widget.isDarkMode,
-                tabPage: widget.tabPage,
-                tabController: widget.tabController,
-                focusedIndex: _focusedMenuIndex,
-                commandNotifier: _tabPanelCommand,
-                onFocusedIndexChanged: (index) {
-                  if (_focusedMenuIndex == index) {
-                    return;
-                  }
-                  setState(() {
-                    _focusedMenuIndex = index;
-                  });
-                },
-                onTabActivated: _closeTabPanel,
-                onToggleLargeScreen:
-                    globals.isTvOS ? null : widget.onToggleLargeScreen,
-                onToggleThemeFromOrigin: widget.onToggleThemeFromOrigin,
-                onOpenSettings: _toggleSettingsPanel,
+              child: ExcludeFocus(
+                excluding: !_isTabPanelVisible,
+                child: NipaplayLargeScreenTabPanel(
+                  currentIndex: widget.currentIndex,
+                  isDarkMode: widget.isDarkMode,
+                  tabPage: widget.tabPage,
+                  tabController: widget.tabController,
+                  focusedIndex: _focusedMenuIndex,
+                  commandNotifier: _tabPanelCommand,
+                  onFocusedIndexChanged: (index) {
+                    if (_focusedMenuIndex == index) {
+                      return;
+                    }
+                    setState(() {
+                      _focusedMenuIndex = index;
+                    });
+                  },
+                  onTabActivated: _closeTabPanel,
+                  onToggleLargeScreen:
+                      globals.isTvOS ? null : widget.onToggleLargeScreen,
+                  onToggleThemeFromOrigin: widget.onToggleThemeFromOrigin,
+                  onOpenSettings: _toggleSettingsPanel,
+                ),
               ),
             ),
           ),
@@ -1301,31 +1383,34 @@ class _NipaplayLargeScreenScaffoldLayoutState
             bottom: 0,
             child: IgnorePointer(
               ignoring: !_isSettingsPanelVisible,
-              child: SizedBox(
-                width: kNipaplayLargeScreenSettingsPanelWidth,
-                child: NipaplayLargeScreenSettingsPanel(
-                  isDarkMode: widget.isDarkMode,
-                  focusedIndex: _focusedSettingsIndex,
-                  commandNotifier: _settingsPanelCommand,
-                  onFocusedIndexChanged: (index) {
-                    if (_focusedSettingsIndex == index) {
-                      return;
-                    }
-                    setState(() {
-                      _focusedSettingsIndex = _clampSettingsIndex(index);
-                    });
-                  },
-                  onEntryCountChanged: (count) {
-                    if (_settingsEntryCount == count) {
-                      return;
-                    }
-                    setState(() {
-                      _settingsEntryCount = count;
-                      _focusedSettingsIndex =
-                          _clampSettingsIndex(_focusedSettingsIndex);
-                    });
-                  },
-                  onRequestClose: _closeSettingsPanel,
+              child: ExcludeFocus(
+                excluding: !_isSettingsPanelVisible,
+                child: SizedBox(
+                  width: kNipaplayLargeScreenSettingsPanelWidth,
+                  child: NipaplayLargeScreenSettingsPanel(
+                    isDarkMode: widget.isDarkMode,
+                    focusedIndex: _focusedSettingsIndex,
+                    commandNotifier: _settingsPanelCommand,
+                    onFocusedIndexChanged: (index) {
+                      if (_focusedSettingsIndex == index) {
+                        return;
+                      }
+                      setState(() {
+                        _focusedSettingsIndex = _clampSettingsIndex(index);
+                      });
+                    },
+                    onEntryCountChanged: (count) {
+                      if (_settingsEntryCount == count) {
+                        return;
+                      }
+                      setState(() {
+                        _settingsEntryCount = count;
+                        _focusedSettingsIndex =
+                            _clampSettingsIndex(_focusedSettingsIndex);
+                      });
+                    },
+                    onRequestClose: _closeSettingsPanel,
+                  ),
                 ),
               ),
             ),
@@ -1345,7 +1430,8 @@ class _NipaplayLargeScreenScaffoldLayoutState
                 child: NipaplayLargeScreenPlayerMenuPanel(
                   initialFocusNode: _playerMenuInitialFocusNode,
                   onExitPlayback: () {
-                    unawaited(_exitPlaybackFromPlayerMenu());
+                    unawaited(_exitPlaybackFromPlayerMenu(
+                        returnToMediaLibrary: true));
                   },
                   onSendDanmaku: () {
                     unawaited(_sendDanmakuFromPlayerMenu());
@@ -1395,8 +1481,9 @@ class _NipaplayLargeScreenScaffoldLayoutState
     );
     // System/predictive BACK bypasses Focus; the root route must advertise
     // that playback and open panels consume it instead of exiting Android.
-    final handlesAndroidBack = defaultTargetPlatform == TargetPlatform.android &&
-        (usePlayerContextPanel || showPanelBackdrop || _isExitingPlayback);
+    final handlesAndroidBack =
+        defaultTargetPlatform == TargetPlatform.android &&
+            (usePlayerContextPanel || showPanelBackdrop || _isExitingPlayback);
     return PopScope<Object?>(
       canPop: !handlesAndroidBack,
       onPopInvokedWithResult: (didPop, _) {

@@ -15,6 +15,7 @@ import 'package:nipaplay/services/dandanplay_remote_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/utils/player_event_log.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
+import 'package:nipaplay/utils/webdav_http_auth.dart';
 import 'package:nipaplay/utils/storage_service.dart';
 import 'package:nipaplay/utils/subtitle_file_utils.dart';
 
@@ -387,8 +388,9 @@ class RemoteSubtitleService {
       {required bool forceRefresh, File? cachedSub}) async {
     final storage = await StorageService.getAppStorageDirectory();
     final hash = sha1.convert(utf8.encode(_sourceKey(idx))).toString();
+    final readable = _readableCacheFileName(idx.name, hash, '');
     final root =
-        Directory(p.join(storage.path, 'remote_subtitles', '$hash-vobsub'));
+        Directory(p.join(storage.path, 'remote_subtitles', '$readable-vobsub'));
     await root.create(recursive: true);
     final manifest = File(p.join(root.path, 'current'));
     Future<String> pairDigest(File index, File bitmap) async {
@@ -503,7 +505,10 @@ class RemoteSubtitleService {
     final hash = sha1.convert(utf8.encode(cacheKey)).toString();
     // Source identity belongs in the path; equal filenames from different
     // directories must never overwrite a saved video's subtitle mapping.
-    final target = File(p.join(cacheDir.path, '$hash$extension'));
+    final target = File(p.join(
+      cacheDir.path,
+      _readableCacheFileName(candidate.name, hash, extension),
+    ));
 
     if (!forceRefresh && await target.exists()) {
       final size = await target.length();
@@ -573,6 +578,19 @@ class RemoteSubtitleService {
   }
 
   static const String _displayNamePrefsKey = 'remote_subtitle_display_names_v1';
+
+  /// 可读缓存文件名：原名清洗文件系统非法字符并截断，短哈希保证不同源
+  /// 同名不冲突（完整哈希仍是缓存键）。iOS「文件」App 直接展示该物理名，
+  /// 纯哈希名对用户毫无可读性（用户反馈）。
+  String _readableCacheFileName(
+      String originalName, String hash, String extension) {
+    var base = p.setExtension(originalName, '').trim();
+    base = base.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), '_').trim();
+    if (base.isEmpty) base = 'subtitle';
+    if (base.length > 80) base = base.substring(0, 80);
+    final shortHash = hash.length >= 8 ? hash.substring(0, 8) : hash;
+    return '$base-$shortHash$extension';
+  }
 
   /// 远程字幕缓存路径 → 原始文件名 的持久化注册表。
   /// 缓存文件名是哈希，跨进程/跨平台（iOS/Windows）读取列表时都要用
@@ -1547,6 +1565,9 @@ class RemoteSubtitleService {
             .getConnectionByIdOrName(stablePath.connectionName);
     if (connection == null) return const [];
 
+    final effectiveConnection = SMBService.instance.effectiveConnection(
+      connection,
+    );
     final smbPath =
         stablePath?.relativePath ?? _normalizeSmbPathFromUri(smbUri);
     if (smbPath.isEmpty || smbPath == '/') return const [];
@@ -1568,7 +1589,7 @@ class RemoteSubtitleService {
       if (!isVobSubPairCompleteInNames(entry.name, smbNames)) continue;
       candidates.add(
         SmbRemoteSubtitleCandidate(
-          connection: connection,
+          connection: effectiveConnection,
           smbPath: entry.path,
           name: entry.name,
           extension: ext,
@@ -1593,15 +1614,20 @@ class RemoteSubtitleService {
 
     WebDAVConnection? matched;
     for (final conn in WebDAVService.instance.connections) {
-      final baseUri = Uri.tryParse(conn.url.trim());
-      if (baseUri == null || baseUri.scheme.isEmpty || baseUri.host.isEmpty) {
-        continue;
+      // 内网与公网地址都参与匹配。
+      for (final base in [conn.url, conn.wanUrl]) {
+        if (base.trim().isEmpty) continue;
+        final baseUri = Uri.tryParse(base.trim());
+        if (baseUri == null || baseUri.scheme.isEmpty || baseUri.host.isEmpty) {
+          continue;
+        }
+        if (baseUri.scheme != uri.scheme) continue;
+        if (baseUri.host != uri.host) continue;
+        if (_effectivePort(baseUri) != _effectivePort(uri)) continue;
+        matched = conn;
+        break;
       }
-      if (baseUri.scheme != uri.scheme) continue;
-      if (baseUri.host != uri.host) continue;
-      if (_effectivePort(baseUri) != _effectivePort(uri)) continue;
-      matched = conn;
-      break;
+      if (matched != null) break;
     }
 
     String username = '';
@@ -1720,10 +1746,13 @@ class RemoteSubtitleService {
 
     SMBConnection? matched;
     for (final conn in SMBService.instance.connections) {
-      if (conn.host.trim().toLowerCase() != host.toLowerCase()) {
-        continue;
-      }
-      if (conn.port != port) continue;
+      final matchesLan =
+          conn.host.trim().toLowerCase() == host.toLowerCase() &&
+              conn.port == port;
+      final matchesWan =
+          conn.wanHost.trim().toLowerCase() == host.toLowerCase() &&
+              conn.wanPort == port;
+      if (!matchesLan && !matchesWan) continue;
       if (username.isNotEmpty && conn.username != username) continue;
       matched = conn;
       break;
@@ -1767,6 +1796,9 @@ class RemoteSubtitleService {
     final connection = SMBService.instance.getConnection(parsed.connName);
     if (connection == null) return const [];
 
+    final effectiveConnection = SMBService.instance.effectiveConnection(
+      connection,
+    );
     final directory = _posixDirname(parsed.smbPath);
     final entries =
         await SMBService.instance.listDirectoryAll(connection, directory);
@@ -1784,7 +1816,7 @@ class RemoteSubtitleService {
       if (!isVobSubPairCompleteInNames(entry.name, smbNames)) continue;
       candidates.add(
         SmbRemoteSubtitleCandidate(
-          connection: connection,
+          connection: effectiveConnection,
           smbPath: entry.path,
           name: entry.name,
           extension: ext,
@@ -1800,38 +1832,35 @@ class RemoteSubtitleService {
       WebDavRemoteSubtitleCandidate candidate, File destination) async {
     final rawUrl = WebDAVService.instance
         .getFileUrl(candidate.connection, candidate.remotePath);
-    final rawUri = Uri.parse(rawUrl);
-    final sanitized = rawUri.replace(userInfo: '');
 
-    final headers = <String, String>{
-      'user-agent': 'NipaPlay',
-      'accept': '*/*',
-    };
+    final auth = WebDavChallengeAuth(
+      username: candidate.connection.username,
+      password: candidate.connection.password,
+    );
 
-    final hasAuth = candidate.connection.username.isNotEmpty ||
-        candidate.connection.password.isNotEmpty;
-    if (hasAuth) {
-      final credentials =
-          '${candidate.connection.username}:${candidate.connection.password}';
-      headers['authorization'] =
-          'Basic ${base64Encode(utf8.encode(credentials))}';
-    }
-
+    // 认证头不能放进 BaseOptions：Dio 会把默认头合并到每一跳，跨源重定向
+    // 时就会把凭证带给目标主机。认证与重定向都由 webDavAuthenticatedGet 处理。
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(milliseconds: 15000),
         receiveTimeout: const Duration(milliseconds: 45000),
         sendTimeout: const Duration(milliseconds: 15000),
-        followRedirects: true,
-        responseType: ResponseType.bytes,
-        headers: headers,
       ),
     );
 
-    final resp = await dio.get<List<int>>(sanitized.toString());
+    final resp = await webDavAuthenticatedGet(
+      dio,
+      Uri.parse(rawUrl),
+      auth,
+      headers: const {'user-agent': 'NipaPlay', 'accept': '*/*'},
+    );
+
     final status = resp.statusCode ?? 0;
     if (status != 200 && status != 206) {
-      throw Exception('WebDAV 下载失败 (HTTP $status)');
+      final message = status == 401 || status == 403
+          ? 'WebDAV 服务器拒绝了提供的用户名或密码 (HTTP $status)'
+          : 'WebDAV 下载失败 (HTTP $status)';
+      throw Exception(message);
     }
     final data = resp.data;
     if (data == null || data.isEmpty) {

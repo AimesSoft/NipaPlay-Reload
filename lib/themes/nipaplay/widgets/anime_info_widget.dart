@@ -117,6 +117,9 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
       decoration: TextDecoration.none,
     );
 
+    // The texts sit inside this padding, so they get maxInfoWidth less it.
+    const horizontalPadding = 8.0;
+    final maxTextWidth = math.max(0.0, maxInfoWidth - horizontalPadding * 2);
     const titleGap = 8.0;
     final hasEpisode = episodeTitle != null && episodeTitle != displayTitle;
     String? episodeText;
@@ -130,7 +133,7 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
         context: context,
         text: episodeTitle!,
         style: episodeStyle,
-        maxWidth: maxInfoWidth * episodeWidthCapFactor,
+        maxWidth: math.min(maxInfoWidth * episodeWidthCapFactor, maxTextWidth),
       );
       if (fittedEpisodeText.isNotEmpty) {
         episodeText = fittedEpisodeText;
@@ -147,10 +150,10 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
             24.0,
             math.min(
               maxInfoWidth * titleWidthCapFactor,
-              maxInfoWidth - episodeWidth - titleGap,
+              maxTextWidth - episodeWidth - titleGap,
             ),
           )
-        : maxInfoWidth;
+        : maxTextWidth;
     final fittedTitleText = _fitTextToWidth(
       context: context,
       text: displayTitle,
@@ -176,7 +179,10 @@ class _AnimeInfoWidgetState extends State<AnimeInfoWidget> {
             widget.videoState.setControlsHovered(false);
           },
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            padding: const EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: 6,
+            ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.start,

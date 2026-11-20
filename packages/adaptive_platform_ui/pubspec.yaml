@@ -29,6 +29,10 @@ flutter:
     platforms:
       ios:
         pluginClass: AdaptivePlatformUiPlugin
+      macos:
+        pluginClass: AdaptivePlatformUiPlugin
+      tvos:
+        pluginClass: AdaptivePlatformUiPlugin
       android:
         package: com.berkaycatak.adaptive_platform_ui
         pluginClass: AdaptivePlatformUiPlugin

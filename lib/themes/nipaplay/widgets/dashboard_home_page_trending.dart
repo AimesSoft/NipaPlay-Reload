@@ -59,6 +59,7 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
         _trendingLoadingKeys.remove(key);
         if (_currentTrendingQuery.cacheKey == key) {
           _trendingError = null;
+          _trendingLoginRequired = false;
         }
       });
       _resetTrendingScroll();
@@ -68,6 +69,7 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
       _updateTrendingState(() {
         _trendingLoadingKeys.remove(key);
         if (_currentTrendingQuery.cacheKey == key) {
+          _trendingLoginRequired = error is http.DandanplayLoginRequired;
           _trendingError = error is http.DandanplayLoginRequired
               ? '登录弹弹play账号后查看排行榜'
               : '排行榜加载失败';
@@ -583,6 +585,11 @@ extension _DashboardHomePageTrending on _DashboardHomePageState {
   }
 
   Widget _buildTrendingErrorState() {
+    if (_trendingLoginRequired) {
+      return DandanplayLoginRequiredView(
+        onSignedIn: _handleManualRefresh,
+      );
+    }
     return Container(
       height: 116,
       margin: const EdgeInsets.symmetric(horizontal: 16),

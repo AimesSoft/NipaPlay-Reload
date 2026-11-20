@@ -20,6 +20,9 @@ class SettingsKeys {
   static const String showPlayerMenuQuickControls =
       'show_player_menu_quick_controls';
 
+  static const String enableMediaDetailLiquidGlass =
+      'enable_media_detail_liquid_glass';
+
   static const String showMediaLibraryNewBadge = 'show_media_library_new_badge';
 
   // =========================== 外部播放器相关设置 ============================
@@ -58,12 +61,6 @@ class SettingsKeys {
   static const String labsShowRemoteAccessQrCode =
       'labs_show_remote_access_qr_code';
 
-  static const String labsEnableErikaPlayerKernel =
-      'labs_enable_erika_player_kernel';
-
-  static const String labsEnableImmersiveAnimeDetail =
-      'labs_enable_immersive_anime_detail';
-
   static const String danmakuEnableNextPlusPlusEngine =
       'labs_enable_next_plus_plus_engine';
 
@@ -88,7 +85,8 @@ class SettingsKeys {
   static const String downloaderAutoScanCompletedTasks =
       'downloader_auto_scan_completed_tasks';
 
-  static const String downloaderVerifiedScannedCompletedTaskKeys = 'downloader_verified_scanned_completed_task_keys';
+  static const String downloaderVerifiedScannedCompletedTaskKeys =
+      'downloader_verified_scanned_completed_task_keys';
   static const String downloaderAutoScannedCompletedTaskKeys =
       'downloader_auto_scanned_completed_task_keys';
 

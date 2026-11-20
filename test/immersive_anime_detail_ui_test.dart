@@ -1,13 +1,14 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart' as native;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/apple_native_media_control.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
-import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/models/bangumi_model.dart';
-import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/services/bangumi_service.dart';
 import 'package:nipaplay/services/full_backup_service.dart';
 import 'package:nipaplay/services/incremental_sync_repository.dart';
@@ -23,39 +24,75 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('immersive anime detail lab switch defaults to disabled', () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{});
-    final provider = LabsSettingsProvider();
-    await provider.ready;
-
-    expect(provider.enableImmersiveAnimeDetail, isFalse);
-
-    await provider.setEnableImmersiveAnimeDetail(true);
-    final prefs = await SharedPreferences.getInstance();
-    expect(
-      prefs.getBool(SettingsKeys.labsEnableImmersiveAnimeDetail),
-      isTrue,
-    );
-  });
-
-  test('immersive anime detail lab switch is restored before route decisions',
-      () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{
-      SettingsKeys.labsEnableImmersiveAnimeDetail: true,
+  test('native media detail glass follows the OS capability bridge', () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const capabilities = MethodChannel('nipaplay/native_media_controls');
+    addTearDown(() async {
+      messenger.setMockMethodCallHandler(capabilities, null);
+      await AppleNativeMediaControl.initialize();
+      native.PlatformInfo.clearPlatformOverride();
     });
-
-    final restartedProvider = LabsSettingsProvider();
-    await restartedProvider.ready;
-
-    expect(restartedProvider.isLoaded, isTrue);
-    expect(restartedProvider.enableImmersiveAnimeDetail, isTrue);
+    for (final version in [18, 25, 26, 27]) {
+      native.PlatformInfo.setPlatformOverride(
+        native.PlatformOverride.ios,
+        iosVersion: version,
+      );
+      messenger.setMockMethodCallHandler(
+          capabilities, (_) async => version >= 26);
+      await AppleNativeMediaControl.initialize();
+      expect(AdaptiveMediaDetailActionButton.supportsNativeLiquidGlass,
+          version >= 26);
+    }
+    for (final platform in [
+      native.PlatformOverride.android,
+      native.PlatformOverride.macos,
+      native.PlatformOverride.web
+    ]) {
+      native.PlatformInfo.setPlatformOverride(platform, iosVersion: 26);
+      messenger.setMockMethodCallHandler(capabilities, (_) async => false);
+      await AppleNativeMediaControl.initialize();
+      expect(
+          AdaptiveMediaDetailActionButton.supportsNativeLiquidGlass, isFalse);
+    }
   });
 
-  test('media detail actions do not claim simulated native glass support', () {
-    expect(
-      AdaptiveMediaDetailActionButton.supportsNativeLiquidGlass,
-      isFalse,
-    );
+  testWidgets('native media detail action keeps subtitle and disabled state',
+      (tester) async {
+    native.PlatformInfo.setPlatformOverride(native.PlatformOverride.ios,
+        iosVersion: 26);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const capabilities = MethodChannel('nipaplay/native_media_controls');
+    messenger.setMockMethodCallHandler(capabilities, (_) async => true);
+    messenger.setMockMethodCallHandler(
+        SystemChannels.platform_views, (_) async => null);
+    await AppleNativeMediaControl.initialize();
+    addTearDown(() async {
+      messenger.setMockMethodCallHandler(capabilities, null);
+      await AppleNativeMediaControl.initialize();
+      messenger.setMockMethodCallHandler(SystemChannels.platform_views, null);
+      native.PlatformInfo.clearPlatformOverride();
+    });
+    await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+            body: Wrap(children: [
+      AdaptiveMediaDetailActionButton(
+        icon: Icons.play_arrow,
+        label: '继续观看',
+        detail: '第 3 话 12:30 / 24:00',
+        emphasis: MediaDetailActionEmphasis.primary,
+        onPressed: null,
+      ),
+    ]))));
+    final button = tester
+        .widget<AppleNativeMediaControl>(find.byType(AppleNativeMediaControl));
+    expect(button.primary, isTrue);
+    expect(button.onPressed, isNull);
+    expect(button.detail, '第 3 话 12:30 / 24:00');
+    expect(find.byType(UiKitView), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
   });
 
   test('detail-rich poster region moves cover display centre upward', () async {
@@ -409,7 +446,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
-    expect(find.byType(ScaleTransition), findsWidgets);
+    expect(find.byType(ClipPath), findsWidgets);
     expect(find.text('媒体详情'), findsOneWidget);
     await tester.pumpAndSettle();
 
@@ -527,7 +564,9 @@ void main() {
           )
           .height);
       previewLines.add(tester.widget<Text>(find.text(description)).maxLines!);
-      titleTops.add(tester.getTopLeft(find.text('自适应标题')).dy);
+      titleTops.add(tester
+          .getTopLeft(find.byKey(const ValueKey('immersive-hero-title')))
+          .dy);
       expect(find.text('查看更多'), findsOneWidget);
       expect(find.byKey(const ValueKey('immersive-description-scroll')),
           findsNothing);
@@ -672,7 +711,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('魔法少女小圆'), findsOneWidget);
+      expect(find.text('魔法少女小圆'), findsNWidgets(2));
       expect(find.text('开始观看'), findsOneWidget);
       expect(find.text('剧集轨道'), findsOneWidget);
       if (size.height > size.width) {

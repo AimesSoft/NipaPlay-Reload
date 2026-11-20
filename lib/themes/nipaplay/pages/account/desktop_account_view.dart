@@ -366,7 +366,7 @@ class _DesktopBangumiAccountSection extends StatelessWidget {
               action: AccountActionViewModel(
                 id: 'token-help',
                 label: BangumiAccountViewModel.tokenHelpLabel,
-                onPressed: data.onOpenNipaplayHelp,
+                onPressed: data.onOpenTokenPage,
                 role: AccountActionRole.plain,
               ),
               compact: true,

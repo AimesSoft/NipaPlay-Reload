@@ -14,6 +14,8 @@ public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
             NativeOverlayManager.shared.handle(call, result: result)
         }
 
+        registerMediaDetailControls(with: registrar)
+
         // Initialize iOS 26+ Native Tab Bar Manager
         if #available(iOS 26.0, *) {
             iOS26NativeTabBarManager.shared.setup(messenger: registrar.messenger())

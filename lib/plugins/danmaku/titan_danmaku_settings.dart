@@ -23,6 +23,7 @@ class TitanDanmakuSettings {
     this.density = 1.0,
     this.duration = 4.5,
     this.limit = 300,
+    this.trackGap = 0.0,
     this.preventShade = false,
     this.offsetTop = 3,
     this.offsetBottom = 0,
@@ -78,6 +79,7 @@ class TitanDanmakuSettings {
   final double density;
   final double duration;
   final int limit;
+  final double trackGap;
   final bool preventShade;
   final int offsetTop;
   final int offsetBottom;
@@ -109,6 +111,7 @@ class TitanDanmakuSettings {
     double? density,
     double? duration,
     int? limit,
+    double? trackGap,
     bool? preventShade,
     int? offsetTop,
     int? offsetBottom,
@@ -127,6 +130,7 @@ class TitanDanmakuSettings {
       density: (density ?? this.density).clamp(0.1, 1.0).toDouble(),
       duration: (duration ?? this.duration).clamp(2.0, 12.0).toDouble(),
       limit: (limit ?? this.limit).clamp(0, 5000),
+      trackGap: (trackGap ?? this.trackGap).clamp(0.0, 0.5).toDouble(),
       preventShade: preventShade ?? this.preventShade,
       offsetTop: (offsetTop ?? this.offsetTop).clamp(-1000, 1000),
       offsetBottom: (offsetBottom ?? this.offsetBottom).clamp(-1000, 1000),
@@ -148,6 +152,7 @@ class TitanDanmakuSettings {
         'density': density,
         'duration': duration,
         'limit': limit,
+        'trackGap': trackGap,
         'preventShade': preventShade,
         'offsetTop': offsetTop,
         'offsetBottom': offsetBottom,
@@ -170,6 +175,7 @@ class TitanDanmakuSettings {
       density: _asDouble(json['density']),
       duration: _asDouble(json['duration']),
       limit: _asInt(json['limit']),
+      trackGap: _asDouble(json['trackGap']),
       preventShade: _asBool(json['preventShade']),
       offsetTop: schemaVersion < persistenceSchemaVersion
           ? defaults.offsetTop

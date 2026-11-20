@@ -1,0 +1,370 @@
+{
+  "meta": {
+    "generated_at": "2026-10-11T16:12:50.614174Z",
+    "generator": "test/webdav_perf_baseline_test.dart (flutter test, Windows host)",
+    "service_under_test": "lib/services/webdav_service.dart",
+    "client_stack": "webdav_client 1.2.2 (dio) + legacy http fallback",
+    "mock_server": "dart:io HttpServer, loopback, PROPFIND/OPTIONS, PROPFIND 延迟 60ms",
+    "targets": {
+      "dir_listing_http_requests_max": 1,
+      "duplicate_requests_on_dir_switch_max": 0,
+      "dir_render_latency_ms_max": 500,
+      "playback_start_latency_ms_max": 2000,
+      "memory_growth": "no sustained growth during playback"
+    }
+  },
+  "scenarios": [
+    {
+      "id": "add_connection",
+      "description": "首次添加连接（含服务端连通性验证 BFS 首选 URL）",
+      "target": "request_count <= 3（1×OPTIONS 探测 + 1×PROPFIND 根目录）",
+      "request_count": 2,
+      "requests": [
+        {
+          "method": "OPTIONS",
+          "path": "/",
+          "depth": "0",
+          "at_ms": 70
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/",
+          "depth": "1",
+          "at_ms": 112
+        }
+      ],
+      "elapsed_ms": 294
+    },
+    {
+      "id": "list_root_cold",
+      "description": "冷态进入根目录（缓存未命中）",
+      "target": "request_count == 1（仅 1 次 PROPFIND Depth:1）；elapsed_ms < 500（本地 mock 骨架）",
+      "request_count": 1,
+      "requests": [
+        {
+          "method": "PROPFIND",
+          "path": "/",
+          "depth": "1",
+          "at_ms": 326
+        }
+      ],
+      "elapsed_ms": 84,
+      "result_count": 4
+    },
+    {
+      "id": "list_root_warm",
+      "description": "热态再次进入根目录（2 分钟缓存内）",
+      "target": "request_count == 0（缓存命中，0 次网络请求）",
+      "request_count": 0,
+      "requests": [],
+      "elapsed_ms": 0,
+      "result_count": 4
+    },
+    {
+      "id": "browse_down_two_levels",
+      "description": "浏览下钻：/ → /Series/ → /Series/Season 1/",
+      "target": "request_count == 2（每个新目录恰 1 次 PROPFIND）",
+      "request_count": 2,
+      "requests": [
+        {
+          "method": "PROPFIND",
+          "path": "/Series/",
+          "depth": "1",
+          "at_ms": 408
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Series/Season%201/",
+          "depth": "1",
+          "at_ms": 481
+        }
+      ],
+      "elapsed_ms": 147
+    },
+    {
+      "id": "browse_back_revisit",
+      "description": "回访已浏览目录：Season 1 → /Series/ → /（模拟返回键）",
+      "target": "request_count == 0（切换/返回目录零重复请求）",
+      "request_count": 0,
+      "requests": [],
+      "elapsed_ms": 0
+    },
+    {
+      "id": "list_filtered_warm",
+      "description": "带过滤的目录列表（listDirectory，视频/文件夹过滤）热态",
+      "target": "request_count == 0（过滤不触发网络）",
+      "request_count": 0,
+      "requests": [],
+      "elapsed_ms": 0
+    },
+    {
+      "id": "list_force_refresh",
+      "description": "用户手动刷新（forceRefresh，绕过缓存）",
+      "target": "request_count == 1（显式刷新恰 1 次 PROPFIND）",
+      "request_count": 1,
+      "requests": [
+        {
+          "method": "PROPFIND",
+          "path": "/",
+          "depth": "1",
+          "at_ms": 555
+        }
+      ],
+      "elapsed_ms": 72,
+      "result_count": 4
+    },
+    {
+      "id": "search_serial",
+      "description": "全局搜索 needle（串行 maxConcurrency=1，基线对照）",
+      "target": "结果数 == 10；每目录恰 1 次请求",
+      "request_count": 15,
+      "requests": [
+        {
+          "method": "PROPFIND",
+          "path": "/",
+          "depth": "1",
+          "at_ms": 634
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Series/",
+          "depth": "1",
+          "at_ms": 711
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Movies/",
+          "depth": "1",
+          "at_ms": 783
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/",
+          "depth": "1",
+          "at_ms": 855
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Series/Season%201/",
+          "depth": "1",
+          "at_ms": 936
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir0/",
+          "depth": "1",
+          "at_ms": 1009
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir1/",
+          "depth": "1",
+          "at_ms": 1080
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir2/",
+          "depth": "1",
+          "at_ms": 1152
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir3/",
+          "depth": "1",
+          "at_ms": 1225
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir4/",
+          "depth": "1",
+          "at_ms": 1296
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir5/",
+          "depth": "1",
+          "at_ms": 1369
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir6/",
+          "depth": "1",
+          "at_ms": 1440
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir7/",
+          "depth": "1",
+          "at_ms": 1512
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir8/",
+          "depth": "1",
+          "at_ms": 1582
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir9/",
+          "depth": "1",
+          "at_ms": 1651
+        }
+      ],
+      "elapsed_ms": 1099,
+      "result_count": 10
+    },
+    {
+      "id": "search_parallel",
+      "description": "全局搜索 needle（有界并发 maxConcurrency=3，优化后）",
+      "target": "结果集与串行一致；请求集合与串行一致；elapsed_ms < search_serial",
+      "request_count": 15,
+      "requests": [
+        {
+          "method": "PROPFIND",
+          "path": "/",
+          "depth": "1",
+          "at_ms": 1728
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Series/",
+          "depth": "1",
+          "at_ms": 1800
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Movies/",
+          "depth": "1",
+          "at_ms": 1854
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/",
+          "depth": "1",
+          "at_ms": 1855
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Series/Season%201/",
+          "depth": "1",
+          "at_ms": 1904
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir0/",
+          "depth": "1",
+          "at_ms": 1958
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir1/",
+          "depth": "1",
+          "at_ms": 1958
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir2/",
+          "depth": "1",
+          "at_ms": 2007
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir3/",
+          "depth": "1",
+          "at_ms": 2061
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir4/",
+          "depth": "1",
+          "at_ms": 2061
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir5/",
+          "depth": "1",
+          "at_ms": 2110
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir6/",
+          "depth": "1",
+          "at_ms": 2166
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir7/",
+          "depth": "1",
+          "at_ms": 2167
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir8/",
+          "depth": "1",
+          "at_ms": 2214
+        },
+        {
+          "method": "PROPFIND",
+          "path": "/Bench/Dir9/",
+          "depth": "1",
+          "at_ms": 2266
+        }
+      ],
+      "elapsed_ms": 615,
+      "result_count": 10
+    }
+  ],
+  "verdicts": {
+    "dir_listing_single_propfind": {
+      "target": 1,
+      "actual": 1,
+      "pass": true
+    },
+    "repeat_dir_switch_duplicate_requests": {
+      "target": 0,
+      "actual": 0,
+      "pass": true
+    },
+    "dir_load_latency_local_mock_ms": {
+      "target": 500,
+      "actual": 84,
+      "pass": true,
+      "caveat": "本地 mock 服务器（含 60ms 模拟延迟），仅代表协议往返+解析骨架耗时，不代表真实广域网场景"
+    },
+    "search_results_identical": {
+      "target": "并发搜索结果集 == 串行搜索结果集",
+      "actual": true,
+      "pass": true
+    },
+    "search_request_pattern_identical": {
+      "target": "并发请求集合 == 串行请求集合（协议行为不变，逐目录恰好一次）",
+      "actual": true,
+      "pass": true
+    },
+    "search_speedup": {
+      "target": "并发耗时 < 串行耗时（重叠在途往返，全局速率仍受 requestIntervalMs 约束）",
+      "actual": {
+        "serial_ms": 1099,
+        "parallel_ms": 615
+      },
+      "pass": true
+    }
+  },
+  "unverified": [
+    {
+      "metric": "playback_start_latency_ms",
+      "target": 2000,
+      "reason": "需真实播放链路（WebDAV 源 + 播放器 UI 起播）。当前环境无 Android/iOS 测试设备（用户声明\"没有测试平台\"，MuMu 模拟器被明确禁用），Windows 真实 WebDAV 源端到端起播未自动化。"
+    },
+    {
+      "metric": "memory_growth_during_playback",
+      "target": "无持续上涨",
+      "reason": "同上，需真机长稳观测（DevTools memory / HapRay）。本轮未采集。"
+    },
+    {
+      "metric": "dir_render_latency_real_network",
+      "target": 500,
+      "reason": "本基线的 elapsed_ms 采自本地 loopback mock（含 60ms 模拟延迟），不含真实广域网/NAS 高延迟；真实网络时延未测量。"
+    }
+  ]
+}

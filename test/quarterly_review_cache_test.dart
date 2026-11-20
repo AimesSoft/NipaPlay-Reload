@@ -244,10 +244,20 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     var cache = QuarterlyReviewCache.forTesting();
     addTearDown(() => cache.dispose());
-    final season = QuarterlyReviewCache.visibleReviewSeason(DateTime.now()) ??
-        DateTime(DateTime.now().year,
-            QuarterlyReviewCache.seasonMonth(DateTime.now()));
-    final probeAt = DateTime(season.year, season.month + 2, 28, 12);
+    DateTime reviewSeasonAt(DateTime date) =>
+        QuarterlyReviewCache.visibleReviewSeason(date) ??
+        DateTime(date.year, QuarterlyReviewCache.seasonMonth(date));
+    // recordCollection stamps checkedAt with the wall clock, so probe on the
+    // real current day. A probe time weeks ahead would make the collections
+    // recorded below already look due for their 14-day refresh.
+    final today = DateTime.now();
+    var probeAt = DateTime(today.year, today.month, today.day, 12);
+    // The next-day probes must still see the same review season.
+    if (reviewSeasonAt(probeAt.add(const Duration(days: 1))) !=
+        reviewSeasonAt(probeAt)) {
+      probeAt = probeAt.subtract(const Duration(days: 1));
+    }
+    final season = reviewSeasonAt(probeAt);
     final ids = <int>{};
     for (var i = 0; i < 25; i++) {
       final id = 820000 + i;

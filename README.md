@@ -14,6 +14,7 @@
 ![GitHub downloads](https://img.shields.io/github/downloads/aimessoft/nipaplay-reload/total?style=flat-square&color=green)
 ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20%7C%20tvOS%20%7C%20HarmonyOS-lightgrey?style=flat-square)
 ![License](https://img.shields.io/github/license/aimessoft/nipaplay-reload?style=flat-square)
+[![NipaPlay Next 技术报告 DOI](https://img.shields.io/badge/报告_DOI-10.5281%2Fzenodo.24364872-blue?style=flat-square)](https://doi.org/10.5281/zenodo.24364872)
 
 <br>
 
@@ -144,6 +145,62 @@ yay -S nipaplay-reload
 ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 ```
 
+
+## NipaPlay Next · Developer Preview
+
+> [!CAUTION]
+> **⚠️ 高风险实验性软件 · 仅供具备相关技术经验的用户测试**
+>
+> NipaPlay Next 2.0 是一项探索 Agentic Software 的
+> 实验性项目，目前不面向普通用户。
+>
+> Next 引入具有完整用户级系统权限的 AI Agent。
+> 启用后，Agent 可以在当前账户权限范围内：
+>
+> - 读取、修改、覆盖和删除媒体库之外的文件；
+> - 执行程序、访问网络及使用已有账号登录状态；
+> - 通过 Mesh 调用其他设备的能力，并在额外授权后执行远程程序。
+>
+> Agent 可能因模型误判、软件缺陷或外部恶意内容作出错误操作。
+> **这些操作可能造成不可恢复的数据丢失、隐私泄露或其他损失，
+> 且不一定每次执行前都会要求用户确认。**
+>
+> **我们强烈建议仅在隔离的测试环境中使用，
+> 不要在存有唯一重要数据的主力电脑或生产环境中启用。**
+>
+> 如果你不具备必要的系统管理和数据恢复能力，
+> 请使用稳定的 **NipaPlay Classic**。
+
+### 关于 NipaPlay Next
+
+NipaPlay Next 探索一种不同的软件交互方式：
+
+用户通过自然语言表达意图，AI Agent 根据实际环境
+查询信息、选择工具并执行操作，执行结果直接呈现在
+媒体库、播放器、书架和其他图形界面中。
+
+Next 还引入个人 Git Harness、跨设备 Mesh、
+可扩展的 Agent 工具及持久任务系统。
+
+这是一次关于 Agentic Native Software 的公开实验，
+其行为、可靠性和安全边界仍在持续研究和验证中。
+
+### 研究与引用
+
+技术报告《Mechanism in the Host, Judgment in the Agent》以 NipaPlay Next 为例，记录了播放器如何与梨花分工，以及梨花在识别媒体文件、匹配剧集和维护媒体库时的实际表现。
+
+[研究站](https://aimes-soft.com/research/) · [报告全文与 BibTeX 引用](https://aimes-soft.com/research/tr-2026-01/) · [DOI 10.5281/zenodo.24364872](https://doi.org/10.5281/zenodo.24364872)
+
+### 参与开发者预览
+
+当前版本为 **2.0.0-alpha.5 · Developer Preview**。Alpha 5 为手机重新设计界面和横竖屏播放器，新增 Apple TV 版本，多段对话可以同时进行并在设备间共享，梨花可以追番并按她写的规则自动下载新集，页面静止时不再持续绘制；Next 不再接入外部媒体服务器，语音输入可以使用自配的云端识别服务，并合入鸿蒙设备的 Next 适配。
+
+- [Alpha 5 下载与发行说明](https://github.com/AimesSoft/NipaPlay-Reload/releases/tag/v2.0.0-alpha.5)
+- [Next 使用文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md)：从安装、配置梨花到第一次使用，以及日常使用、进阶和排障
+- [下载与开启 Next](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/install.md) · [配置梨花](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/setup-nipa.md)
+- [常见问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/faq.md) · [已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/known-issues.md)
+- [开发者文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/development/README.md)
+
 ## 功能列表
 
 ### 播放体验
@@ -227,7 +284,7 @@ ebuild gentoo/media-video/nipaplay-bin/nipaplay-bin-1.8.11.ebuild merge
 ### 鸣谢
 
 感谢以下贡献者和支持者：
-EmoSakura, Mr.果仁, 姬田诗乃, 微光, 大祥老师, 卡拜, JMT, 无之将, 博易伯伯, 千葉あおい, Kean, SKYWOW, 爱跑步的男孩, Bassman, 银蓝_Yl, 小石絹代
+EmoSakura, Mr.果仁, 姬田诗乃, 微光, 大祥老师, 卡拜, JMT, 无之将, 博易伯伯, 千葉あおい, Kean, SKYWOW, 爱跑步的男孩, Bassman, 银蓝_Yl, 小石絹代, 泉こなた
 
 ### 看板娘 
 

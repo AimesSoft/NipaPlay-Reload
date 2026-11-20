@@ -4,6 +4,7 @@
 
 #include "mdk/Player.h"
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -36,9 +37,17 @@ public:
     Player(int64_t handle)
         : mdk::Player(reinterpret_cast<mdkPlayerAPI*>(handle)) {}
     const shared_ptr<CallbackState> callbacks = make_shared<CallbackState>();
+    // Surface wrappers reset the shared native player's callbacks on destruction.
+    // Keep the existing Dart port and subscriptions when that surface is replaced.
+    function<void()> attach;
+    // Serializes the first registration with rearms from the OHOS platform thread.
+    mutex attachMtx;
 };
 
 static unordered_map<int64_t, shared_ptr<Player>> players;
+// Ports are registered and unregistered on the Dart thread, while OHOS rearms
+// players from the platform thread when a surface is released.
+static mutex playersMtx;
 
 // global callbacks
 static int gCallbackTypes = 0;
@@ -102,11 +111,12 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
         return;
     }
     auto player = make_shared<Player>(handle);
-    players[handle] = player;
     const auto tid = this_thread::get_id();
 
     auto wp = weak_ptr<CallbackState>(player->callbacks);
-    player->onEvent([=](const mdk::MediaEvent& e){
+    auto* raw = player.get();
+    player->attach = [=]{
+    raw->onEvent([=](const mdk::MediaEvent& e){
         auto sp = wp.lock();
         if (!sp)
             return false;
@@ -155,7 +165,7 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
         return false;
     });
 
-    player->onStateChanged([=](mdk::State s){
+    raw->onStateChanged([=](mdk::State s){
         auto sp = wp.lock();
         if (!sp)
             return;
@@ -212,7 +222,7 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
         });
     });
 
-    player->onMediaStatus([=](mdk::MediaStatus oldValue, mdk::MediaStatus newValue){
+    raw->onMediaStatus([=](mdk::MediaStatus oldValue, mdk::MediaStatus newValue){
         auto sp = wp.lock();
         if (!sp)
             return false;
@@ -268,7 +278,7 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
         return p->data[type].mediaStatus.ret;
     });
 
-    player->onSubtitleText([=](double start, double end, const std::vector<std::string>& texts){
+    raw->onSubtitleText([=](double start, double end, const std::vector<std::string>& texts){
         auto sp = wp.lock();
         if (!sp)
             return;
@@ -333,7 +343,37 @@ FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, in
             return;
         }
     });
+    };
+    // Hold the attach lock across publishing and the first registration so an
+    // OHOS rearm cannot interleave with it.
+    lock_guard attachLock(player->attachMtx);
+    {
+        lock_guard lock(playersMtx);
+        players[handle] = player;
+    }
+    player->attach();
+}
 
+FVP_EXPORT void MdkCallbacksRearm(int64_t handle)
+{
+    shared_ptr<Player> player;
+    {
+        lock_guard lock(playersMtx);
+        const auto it = players.find(handle);
+        if (it == players.cend()) {
+            return;
+        }
+        player = it->second;
+    }
+    lock_guard lock(player->attachMtx);
+    if (!player->attach) {
+        return;
+    }
+    // onEvent/onMediaStatus add listeners. Drop whatever the surface wrapper's
+    // reset left behind so a rearm never delivers an event twice.
+    player->onEvent(nullptr);
+    player->onMediaStatus(nullptr);
+    player->attach();
 }
 
 FVP_EXPORT void MdkCallbacksUnregisterPort(int64_t handle)
@@ -343,12 +383,17 @@ FVP_EXPORT void MdkCallbacksUnregisterPort(int64_t handle)
         return;
     }
 
-    const auto it = players.find(handle);
-    if (it == players.cend()) {
-        return;
+    shared_ptr<Player> sp;
+    {
+        lock_guard lock(playersMtx);
+        const auto it = players.find(handle);
+        if (it == players.cend()) {
+            return;
+        }
+        sp = it->second;
+        players.erase(it);
     }
 
-    auto sp = it->second;
     // Wakeups alone do not satisfy the callback wait predicate. Clear every
     // type (including prepare/seek/snapshot) before closing the Dart port.
     sp->callbacks->callbackTypes.store(0);
@@ -356,8 +401,6 @@ FVP_EXPORT void MdkCallbacksUnregisterPort(int64_t handle)
         unique_lock lock(sp->callbacks->mtx[i]);
         sp->callbacks->cv[i].notify_all();
     }
-
-    players.erase(it);
 }
 
 FVP_EXPORT void MdkCallbacksRegisterType(int64_t handle, int type, bool reply)
@@ -526,6 +569,15 @@ FVP_EXPORT bool MdkSnapshot(int64_t handle, int64_t texId, int w, int h, void* p
     if (it == players.cend()) {
         return false;
     }
+#if defined(__ANDROID__) || defined(__OHOS__)
+    auto* const surface = MdkGetPlayerVid(texId);
+#ifdef __OHOS__
+    // There is no default renderer on OHOS before a native surface is attached.
+    // Reject the request rather than leave Dart waiting for an absent renderer.
+    if (!surface)
+        return false;
+#endif
+#endif
     const auto postCObject = reinterpret_cast<bool(*)(Dart_Port, Dart_CObject*)>(post_c_object);
     auto sp = it->second;
     Player::SnapshotRequest req{
@@ -544,8 +596,8 @@ FVP_EXPORT bool MdkSnapshot(int64_t handle, int64_t texId, int w, int h, void* p
             .value = {
                 .as_typed_data = {
                     .type = Dart_TypedData_kUint8,
-                    .length = ret->stride * ret->height,
-                    .values = ret->data,
+                    .length = ret ? ret->stride * ret->height : 0,
+                    .values = ret ? ret->data : nullptr,
                 },
             }
         };
@@ -565,8 +617,8 @@ FVP_EXPORT bool MdkSnapshot(int64_t handle, int64_t texId, int w, int h, void* p
         }
         return {};
     }
-#ifdef __ANDROID__
-        , MdkGetPlayerVid(texId)
+#if defined(__ANDROID__) || defined(__OHOS__)
+        , surface
 #endif
     );
     return true;

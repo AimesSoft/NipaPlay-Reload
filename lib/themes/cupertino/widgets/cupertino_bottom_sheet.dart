@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
@@ -199,7 +200,7 @@ class CupertinoBottomSheet extends StatelessWidget {
     required String? effectiveTitle,
     required bool showBackButton,
   }) {
-    final screenHeight = MediaQuery.of(context).size.height;
+    final screenHeight = MediaQuery.sizeOf(context).height;
     final double effectiveHeightRatio = heightRatio.clamp(0.0, 1.0).toDouble();
     final double maxHeight = screenHeight * effectiveHeightRatio;
     final hasTitle = effectiveTitle != null && effectiveTitle.isNotEmpty;
@@ -266,7 +267,6 @@ class CupertinoBottomSheet extends StatelessWidget {
                       context,
                       effectiveTitle,
                       showBackButton: showBackButton,
-                      opacity: pageController.titleOpacity,
                     ),
                   if (showBackButton)
                     Positioned(
@@ -343,15 +343,16 @@ class CupertinoBottomSheet extends StatelessWidget {
     BuildContext context,
     String effectiveTitle, {
     required bool showBackButton,
-    required double opacity,
   }) {
     return Positioned(
       top: 0,
       left: showBackButton ? 64 : 0,
       right: showCloseButton ? 64 : 0,
       child: IgnorePointer(
-        child: Opacity(
-          opacity: opacity.clamp(0.0, 1.0),
+        child: ValueListenableBuilder<double>(
+          valueListenable: pageController.titleOpacityListenable,
+          builder: (context, opacity, child) =>
+              Opacity(opacity: opacity, child: child),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: Text(
@@ -559,19 +560,19 @@ class CupertinoBottomSheetPageController extends ChangeNotifier {
 
   String _title;
   bool _canPop = false;
-  double _titleOpacity = 1;
+  final ValueNotifier<double> _titleOpacity = ValueNotifier(1);
   bool _disposed = false;
 
   String get title => _title;
   bool get canPop => _canPop;
-  double get titleOpacity => _titleOpacity;
+  double get titleOpacity => _titleOpacity.value;
+  ValueListenable<double> get titleOpacityListenable => _titleOpacity;
 
   void setTitleOpacity(double opacity) {
     if (_disposed) return;
     final nextOpacity = opacity.clamp(0.0, 1.0).toDouble();
-    if ((nextOpacity - _titleOpacity).abs() < 0.001) return;
-    _titleOpacity = nextOpacity;
-    notifyListeners();
+    if ((nextOpacity - _titleOpacity.value).abs() < 0.001) return;
+    _titleOpacity.value = nextOpacity;
   }
 
   Future<void> maybePop() async {
@@ -617,13 +618,14 @@ class CupertinoBottomSheetPageController extends ChangeNotifier {
     if (nextTitle == _title && nextCanPop == _canPop) return;
     _title = nextTitle;
     _canPop = nextCanPop;
-    _titleOpacity = 1;
+    _titleOpacity.value = 1;
     notifyListeners();
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _titleOpacity.dispose();
     super.dispose();
   }
 }

@@ -423,7 +423,20 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
   }
 
   // 获取视频播放位置（支持iOS容器路径修复和进度回退）
-  Future<int> _getVideoPosition(String path) async {
+  Future<int> _getVideoPosition(
+    String path, {
+    bool restartCompleted = true,
+  }) async {
+    if (restartCompleted) {
+      final history =
+          await WatchHistoryDatabase.instance.getHistoryByFilePath(path);
+      final position = historyResumePosition(
+        path: path,
+        canonicalHistory: history,
+        initialHistory: _initialHistoryItem,
+      );
+      if (position != null) return position;
+    }
     await PlaybackPositionStore.instance.flush();
     final prefs = await SharedPreferences.getInstance();
     final positions = prefs.getString(_videoPositionsKey) ?? '{}';
@@ -432,7 +445,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
 
     // 1. 直接查找原路径
     int position = positionMap[path] ?? 0;
-    if (position > 0) {
+    if (positionMap.containsKey(path) && position >= 0) {
       return position;
     }
 
@@ -455,6 +468,7 @@ extension VideoPlayerStateInitialization on VideoPlayerState {
         try {
           final historyByEpisode = await WatchHistoryDatabase.instance
               .getHistoryByEpisode(_animeId!, _episodeId!);
+          if (restartCompleted && historyByEpisode?.isCompleted == true) return 0;
           if (historyByEpisode != null && historyByEpisode.lastPosition > 0) {
             debugPrint('通过视频识别回退查找到播放进度: ${historyByEpisode.lastPosition} ms');
             debugPrint(

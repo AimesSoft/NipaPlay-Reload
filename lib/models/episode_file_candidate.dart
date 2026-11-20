@@ -75,6 +75,7 @@ class EpisodeFileCandidate {
     final sameFile =
         MediaIdentityResolver.samePath(history.filePath, requested.videoPath);
     return PlayableItem(
+      mediaLibraryScope: requested.mediaLibraryScope,
       videoPath: history.filePath,
       title: history.animeName,
       subtitle: history.episodeTitle,

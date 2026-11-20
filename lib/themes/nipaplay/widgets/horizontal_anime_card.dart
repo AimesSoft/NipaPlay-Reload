@@ -1,3 +1,4 @@
+import 'package:nipaplay/themes/nipaplay/widgets/media_detail_poster.dart';
 import 'package:flutter/material.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
@@ -31,12 +32,14 @@ class HorizontalAnimeCard extends StatelessWidget {
   final String? badgeText;
   final bool showNewBadge;
   final VoidCallback onTap;
+  final Object? posterHeroTag;
 
   const HorizontalAnimeCard({
     super.key,
     required this.imageUrl,
     required this.title,
     required this.onTap,
+    this.posterHeroTag,
     this.rating,
     this.source,
     this.summary,
@@ -66,12 +69,14 @@ class HorizontalAnimeCard extends StatelessWidget {
             ],
           ),
           clipBehavior: Clip.hardEdge,
-          child: CachedNetworkImageWidget(
-            imageUrl: imageUrl,
-            fit: BoxFit.cover,
-            loadMode: CachedImageLoadMode.legacy,
-            memCacheWidth: 200,
-          ),
+          child: MediaDetailPosterHero(
+              tag: posterHeroTag,
+              child: CachedNetworkImageWidget(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                loadMode: CachedImageLoadMode.legacy,
+                memCacheWidth: 200,
+              )),
         ),
         if (badgeText != null && badgeText!.isNotEmpty)
           Positioned(

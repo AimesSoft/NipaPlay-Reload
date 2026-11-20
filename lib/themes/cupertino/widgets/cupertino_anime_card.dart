@@ -1,7 +1,8 @@
+import 'package:nipaplay/themes/nipaplay/widgets/media_detail_poster.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_imports.dart';
 import 'package:intl/intl.dart';
 import 'package:nipaplay/media_library/adaptive_media_library_primitives.dart';
-import 'package:nipaplay/widgets/media_server_network_image.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 
 /// Cupertino风格的番剧卡片控件
 /// 专门用于显示共享媒体库中的番剧信息
@@ -20,6 +21,7 @@ class CupertinoAnimeCard extends StatelessWidget {
 
   /// 点击回调
   final VoidCallback onTap;
+  final Object? posterHeroTag;
 
   /// 是否显示加载指示器
   final bool isLoading;
@@ -43,12 +45,19 @@ class CupertinoAnimeCard extends StatelessWidget {
     required this.episodeLabel,
     this.lastWatchTime,
     required this.onTap,
+    this.posterHeroTag,
     this.isLoading = false,
     this.sourceLabel,
     this.rating,
     this.summary,
     this.showNewBadge = false,
   });
+
+  static const double _padding = 12;
+  static const double _posterHeight = 168;
+
+  /// Fixed card height: the poster plus the card padding.
+  static const double height = _posterHeight + _padding * 2;
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +85,7 @@ class CupertinoAnimeCard extends StatelessWidget {
     return GestureDetector(
       onTap: isLoading ? null : onTap,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(_padding),
         decoration: BoxDecoration(
           color: resolvedCardColor,
           borderRadius: BorderRadius.circular(20),
@@ -101,11 +110,13 @@ class CupertinoAnimeCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 child: SizedBox(
                   width: 120,
-                  height: 168,
+                  height: _posterHeight,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      _buildPosterImage(context),
+                      MediaDetailPosterHero(
+                          tag: posterHeroTag,
+                          child: _buildPosterImage(context)),
                       if (showNewBadge) const MediaLibraryNewBadge(),
                     ],
                   ),
@@ -116,7 +127,7 @@ class CupertinoAnimeCard extends StatelessWidget {
             // 右侧：文字信息
             Expanded(
               child: SizedBox(
-                height: 168, // 与封面高度对齐
+                height: _posterHeight, // 与封面高度对齐
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -286,12 +297,14 @@ class CupertinoAnimeCard extends StatelessWidget {
       );
     }
 
-    return MediaServerAwareNetworkImage(
-      imageUrl!,
+    return CachedNetworkImageWidget(
+      imageUrl: imageUrl!,
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
-      errorBuilder: (context, error, stackTrace) {
+      memCacheWidth: 400,
+      fadeDuration: Duration.zero,
+      errorBuilder: (context, error) {
         return Container(
           color: placeholderColor,
           child: const Center(
@@ -303,10 +316,7 @@ class CupertinoAnimeCard extends StatelessWidget {
           ),
         );
       },
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) {
-          return child;
-        }
+      placeholderBuilder: (context) {
         return Container(
           color: placeholderColor,
           child: Center(

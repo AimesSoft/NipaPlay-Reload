@@ -5,6 +5,7 @@
 .dart-tool/
 .packages
 build/
+.flatpak-builder/
 # Generated locally from a platform dependency profile (HarmonyOS or Linux).
 /pubspec_overrides.yaml
 # If you're building an application, you may want to check-in your pubspec.lock

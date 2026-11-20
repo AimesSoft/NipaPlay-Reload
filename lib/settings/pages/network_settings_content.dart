@@ -611,14 +611,14 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
           ),
         ],
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           text: context.l10n.cancel,
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
         ),
         HoverScaleTextButton(
           text: context.l10n.save,
-          onPressed: () => Navigator.of(context).pop(inputValue.trim()),
+          onPressed: () => Navigator.of(dialogContext).pop(inputValue.trim()),
         ),
       ],
     );
@@ -630,8 +630,8 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
     required String initialValue,
   }) async {
     final colorScheme = Theme.of(context).colorScheme;
-    final controller = TextEditingController(text: initialValue);
-    final result = await BlurDialog.show<String>(
+    var inputValue = initialValue;
+    return BlurDialog.show<String>(
       context: context,
       title: title,
       contentWidget: Column(
@@ -648,38 +648,40 @@ class _NetworkSettingsContentState extends State<NetworkSettingsContent> {
           const SizedBox(height: 12),
           TvOSRemoteTextInputControl(
             title: title,
-            child: TextField(
-              controller: controller,
-              keyboardType: TextInputType.url,
-              autocorrect: false,
-              enableSuggestions: false,
-              cursorColor: AppAccentColors.current,
-              decoration: InputDecoration(
-                hintText: 'https://example.com',
-                hintStyle: TextStyle(
-                  color: colorScheme.onSurface.withValues(alpha: 0.38),
+            child: Material(
+              type: MaterialType.transparency,
+              child: TextFormField(
+                initialValue: inputValue,
+                onChanged: (value) => inputValue = value,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                enableSuggestions: false,
+                cursorColor: AppAccentColors.current,
+                decoration: InputDecoration(
+                  hintText: 'https://example.com',
+                  hintStyle: TextStyle(
+                    color: colorScheme.onSurface.withValues(alpha: 0.38),
+                  ),
                 ),
+                style: TextStyle(color: colorScheme.onSurface),
               ),
-              style: TextStyle(color: colorScheme.onSurface),
             ),
           ),
         ],
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           text: context.l10n.cancel,
           idleColor: colorScheme.onSurface.withValues(alpha: 0.7),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
         ),
         HoverScaleTextButton(
           text: context.l10n.useThisServer,
           idleColor: colorScheme.onSurface,
-          onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+          onPressed: () => Navigator.of(dialogContext).pop(inputValue.trim()),
         ),
       ],
     );
-    controller.dispose();
-    return result;
   }
 
   Future<String?> _showUserAgentInputDialog() async {

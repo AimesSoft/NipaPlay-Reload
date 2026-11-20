@@ -20,6 +20,7 @@
 
 FVP_EXPORT void MdkCallbacksRegisterPort(int64_t handle, void* post_c_object, int64_t send_port);
 FVP_EXPORT void MdkCallbacksUnregisterPort(int64_t handle);
+FVP_EXPORT void MdkCallbacksRearm(int64_t handle); // callbacks cleared by another wrapper of the same native player
 FVP_EXPORT void MdkCallbacksRegisterType(int64_t handle, int type, bool reply);
 FVP_EXPORT void MdkCallbacksUnregisterType(int64_t handle, int type);
 FVP_EXPORT void MdkCallbacksReplyType(int64_t handle, int type, const void* data);
