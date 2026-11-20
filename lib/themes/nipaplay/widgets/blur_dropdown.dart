@@ -524,6 +524,33 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
     final safeRight = (right < 10.0) ? 10.0 : right;
     final left = position.dx;
 
+    // 菜单宽度按最长项文本实测自适应：旧逻辑 maxWidth 兜底是触发控件
+    // 宽度的 1.5 倍（如设置页的窄 chip），"ArtCNN C4F16 DS" 这类长档位
+    // 名会被压成三行换行。改为测出最长项 + 水平 padding，钳制在可用
+    // 空间内，所有项同宽单行。
+    double longestTitleWidth = 0;
+    final titleStyle = getTitleTextStyle(context);
+    for (final item in widget.items) {
+      final painter = TextPainter(
+        text: TextSpan(text: item.title, style: titleStyle),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      if (painter.width > longestTitleWidth) {
+        longestTitleWidth = painter.width;
+      }
+      painter.dispose();
+    }
+    final availableWidth = screenWidth - left - safeRight;
+    final double maxAllowed =
+        availableWidth > 100 ? availableWidth : size.width * 1.5;
+    double desiredMenuWidth = widget.menuWidth ?? 0;
+    if (desiredMenuWidth <= 0) {
+      desiredMenuWidth = longestTitleWidth + 32; // 项内 horizontal padding 16*2
+      if (desiredMenuWidth < size.width) desiredMenuWidth = size.width;
+      if (desiredMenuWidth > maxAllowed) desiredMenuWidth = maxAllowed;
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final Color borderColor = isDark
         ? Colors.white.withValues(alpha: 0.1)
@@ -573,12 +600,9 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                   child: GestureDetector(
                     onTap: () {},
                     child: Container(
+                      width: desiredMenuWidth,
                       constraints: BoxConstraints(
-                        minWidth: widget.menuWidth ?? 0,
-                        maxWidth: widget.menuWidth ??
-                            (screenWidth - left - safeRight > 100
-                                ? screenWidth - left - safeRight
-                                : size.width * 1.5),
+                        maxWidth: desiredMenuWidth,
                         maxHeight: screenHeight - top - 10,
                       ),
                       decoration: BoxDecoration(
@@ -646,6 +670,8 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                                 ),
                                 child: Text(
                                   item.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: item.enabled
                                       ? getTitleTextStyle(context)
                                       : getTitleTextStyle(context).copyWith(
