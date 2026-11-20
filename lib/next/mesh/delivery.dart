@@ -35,6 +35,47 @@ void attachMeshDelivery(MeshRuntime mesh, Followups followups) {
   };
   followups.deliverRemote =
       (peer, row) => mesh.rpc(peer, 'mesh/delivery', {'row': row});
+  followups.remoteDeviceFact = mesh.deviceDeliveryFact;
+  mesh.rosterChanges.listen((_) => followups.remoteRosterChanged());
+  mesh.hasDelivery = followups.hasRemoteDelivery;
+  mesh.deliveryRequest = (peer, method, params) async {
+    if (method == 'mesh/delivery/pull') {
+      return {'rows': await followups.pullRemoteDeliveries(peer)};
+    }
+    final id = params['id'];
+    final receipt = params['receipt'];
+    final own = mesh.identity?.deviceId;
+    if (id is! String ||
+        receipt is! JsonMap ||
+        receipt['accepted'] != true ||
+        receipt['id'] is! String ||
+        (own != null && receipt['id'] != 'followup-mesh-$own-$id')) {
+      throw const FormatException('Invalid delivery ACK.');
+    }
+    await followups.acknowledgeRemoteDelivery(
+        peer, id, {'id': receipt['id'], 'accepted': true});
+    return {'accepted': true};
+  };
+  mesh.pullDelivery = (peer) async {
+    while (true) {
+      final result = await mesh.rpc(peer, 'mesh/delivery/pull', const {},
+          ungated: true);
+      final rows = (result['rows'] as List).cast<JsonMap>();
+      if (rows.isEmpty) return;
+      for (final row in rows) {
+        final JsonMap receipt;
+        try {
+          receipt = await mesh.receiveDelivery!(peer, {'row': row});
+        } on FormatException {
+          continue;
+        }
+        if (receipt['accepted'] == true) {
+          await mesh.rpc(peer, 'mesh/delivery/ack',
+              {'id': row['id'], 'receipt': receipt}, ungated: true);
+        }
+      }
+    }
+  };
   mesh.receiveDelivery = (peer, payload) async {
     if (payload['row'] is! JsonMap) {
       throw const FormatException('Invalid delivery.');

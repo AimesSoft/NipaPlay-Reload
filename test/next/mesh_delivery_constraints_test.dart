@@ -59,6 +59,118 @@ void main() {
         'invocationId': 'original-invocation',
         'returnTicket': 'issued-ticket'
       };
+
+  Future<void> outbox(String id, String peer) async {
+    final row = {
+      'id': id,
+      'invocationId': id,
+      'state': 'ready',
+      'remoteDeviceId': peer,
+      'condition': {'kind': 'wake'},
+      'trigger': <String, Object?>{},
+      'title': 'Wake',
+      'instruction': 'Wake',
+      'repository': root.path,
+      'createdAt': DateTime.now().toUtc().toIso8601String(),
+    };
+    await store.database.insert('followups', {
+      'id': id, 'state': 'ready', 'snapshot': jsonEncode(row),
+    });
+  }
+
+  test('failed push is pulled once, scoped to the recipient and serialized with retry', () async {
+    await outbox('one', 'mac');
+    var pushes = 0;
+    followups.deliverRemote = (_, __) async {
+      pushes++;
+      throw const Failure(FailureCode.unavailable, 'cannot connect to target');
+    };
+    await followups.sweep();
+    final source = (await followups.list()).single;
+    expect(source['remoteAttempts'], 1);
+    expect(source['remoteRetryAt'], isNotNull);
+    expect(await mesh.hasDelivery!('mac'), isTrue);
+    expect(await mesh.hasDelivery!('other'), isFalse);
+    expect(await mesh.deliveryRequest!('other', 'mesh/delivery/pull', {
+      'deviceId': 'mac',
+    }), {'rows': []});
+    await mesh.deliveryRequest!('other', 'mesh/delivery/ack', {
+      'id': 'one',
+      'receipt': {'id': 'followup-mesh-workstation-one', 'accepted': true},
+    });
+    expect((await followups.list()).single['state'], 'ready');
+
+    final box = await mesh.deliveryRequest!('mac', 'mesh/delivery/pull', {});
+    final delivered = (box['rows'] as List).single as JsonMap;
+    final retryable = {...source, 'remoteRetryAt': '2000-01-01T00:00:00Z'};
+    await store.database.update('followups', {'snapshot': jsonEncode(retryable)},
+        where: 'id=?', whereArgs: ['one']);
+    final destRoot = await root.createTemp('destination-');
+    final destStore = await SqliteJobStore.open(destRoot, factory: databaseFactoryFfi);
+    final destEngine = TaskEngine(store: destStore, ownerDeviceId: 'mac', executors: []);
+    await destEngine.start();
+    final dest = Followups(destStore.database, destEngine, HeadlessRepository(destRoot.path));
+    final destMesh = MeshRuntime(root: destRoot, vault: _Vault(), token: () async => null)
+      ..hostConfiguration = {'roles': ['agent']};
+    attachMeshDelivery(destMesh, dest);
+    try {
+      final receipts = await Future.wait([
+        destMesh.receiveDelivery!('workstation', {'row': delivered}),
+        destMesh.receiveDelivery!('workstation', {'row': delivered}),
+      ]);
+      expect(receipts.first, receipts.last);
+      expect((await dest.list()).where((row) => row['sourceFollowupId'] == 'one'), hasLength(1));
+      expect(await destStore.database.query('followup_events',
+          where: "type='followup.received'"), hasLength(1));
+      final ack = {'id': 'one', 'receipt': receipts.first};
+      await Future.wait([
+        followups.sweep(),
+        mesh.deliveryRequest!('mac', 'mesh/delivery/ack', ack),
+        mesh.deliveryRequest!('mac', 'mesh/delivery/ack', ack),
+      ]);
+      await followups.sweep();
+      final done = (await followups.list()).single;
+      expect(pushes, 1);
+      expect(done['state'], 'completed');
+      expect(done['remoteReceipt'], receipts.first);
+      expect(done['remoteAttempts'], isNull);
+      expect(done['remoteRetryAt'], isNull);
+      expect(await mesh.hasDelivery!('mac'), isFalse);
+      expect(await store.database.query('followup_events',
+          where: "type='followup.forwarded'"), hasLength(1));
+    } finally {
+      await destMesh.close();
+      await dest.close();
+      await destEngine.close();
+      await destRoot.delete(recursive: true);
+    }
+  });
+
+  for (final reason in ['目标设备已撤销', '目标设备已不在账号设备名单中', '目标设备已 7 天未上线']) {
+    test('roster failure is terminal and manually retryable: $reason', () async {
+      await outbox('one', 'mac');
+      followups.remoteDeviceFact = (_) => (failure: reason, staleAt: null);
+      var pushes = 0;
+      followups.deliverRemote = (_, __) async {
+        pushes++;
+        return {'accepted': true};
+      };
+      await followups.sweep();
+      await followups.sweep();
+      final failed = (await followups.list()).single;
+      expect(failed['state'], 'execution_failed');
+      expect(failed['reason'], reason);
+      expect(pushes, 0);
+      expect(await store.database.query('followup_events',
+          where: "type='followup.execution_failed'"), hasLength(1));
+      followups.remoteDeviceFact = (_) => (failure: null, staleAt: null);
+      final retried = await followups.retry('one', Invocation(origin: 'test'));
+      expect(retried['state'], 'ready');
+      await followups.sweep();
+      expect(pushes, 1);
+      expect((await followups.list()).single['state'], 'completed');
+    });
+  }
   JsonMap file(Job job, int index) => {
         'jobId': job.jobId,
         'index': index,

@@ -31,10 +31,26 @@ final class _Vault implements CredentialVault {
 // Simulate only the TLS transport. Coordinator HTTP and runtime state machines
 // are real; no app, certificates, or native rebuild is needed for this test.
 final class _Transport extends RustLibApi {
-  final incoming = Completer<MeshIncoming>();
+  final incoming = StreamController<MeshIncoming>();
+  late final events = StreamIterator(incoming.stream);
+  final replies = <BigInt, Completer<JsonMap>>{};
   var peerPort = 2000;
   var starts = 0;
   var calls = 0;
+  var nextId = 0;
+  bool peerHasDelivery = false;
+
+  Future<JsonMap> request(JsonMap frame, {String peer = 'peer'}) {
+    final id = BigInt.from(++nextId);
+    final reply = replies[id] = Completer<JsonMap>();
+    incoming.add(MeshIncoming(requestId: id, deviceId: peer, body: jsonEncode(frame)));
+    return reply.future.timeout(const Duration(seconds: 2));
+  }
+
+  Future<MeshIncoming> next() async {
+    if (!await events.moveNext()) throw StateError('stopped');
+    return events.current;
+  }
   @override
   dynamic noSuchMethod(Invocation invocation) {
     final args = invocation.namedArguments;
@@ -53,12 +69,14 @@ final class _Transport extends RustLibApi {
       case #crateApiMeshMeshPort:
         return Future<int>.value(1000);
       case #crateApiMeshMeshNext:
-        return incoming.future;
+        return next();
+      case #crateApiMeshMeshRespond:
+        replies.remove(args[#requestId])!.complete(jsonDecode(args[#body] as String) as JsonMap);
+        return Future<void>.value();
       case #crateApiMeshMeshUpdateDevices:
         return Future<void>.value();
       case #crateApiMeshMeshStop:
-        if (!incoming.isCompleted)
-          incoming.completeError(StateError('stopped'));
+        unawaited(incoming.close());
         return Future<void>.value();
       case #crateApiMeshMeshSend:
         calls++;
@@ -67,8 +85,10 @@ final class _Transport extends RustLibApi {
               const SocketException('connect: refused'));
         }
         final frame = jsonDecode(args[#body] as String) as Map;
-        return Future<String>.value(
-            jsonEncode({'jsonrpc': '2.0', 'id': frame['id'], 'result': {}}));
+        return Future<String>.value(jsonEncode({
+          'jsonrpc': '2.0', 'id': frame['id'], 'result': {},
+          if (frame['method'] == 'mesh/presence') 'deliveryPending': peerHasDelivery,
+        }));
     }
     return super.noSuchMethod(invocation);
   }
@@ -106,6 +126,8 @@ void main() {
     }));
     await File('${root.path}/mesh-devices.json')
         .writeAsString(jsonEncode(roster));
+    final replay = File('${root.path}/mesh-replay.jsonl');
+    await replay.writeAsString('{"keys":["unfinished');
     var reportsFail = true;
     var queriesFail = false;
     var advertisedPort = 2000;
@@ -191,6 +213,71 @@ void main() {
       final count = queryCount;
       expect((await runtime.refreshDiscovery())['refreshRequested'], isFalse);
       expect(queryCount, count, reason: 'repeated clicks are throttled');
+
+      expect(await replay.readAsString(), isEmpty);
+      final reads = <String>[];
+      runtime.chatRequest = (method, params, peer) async {
+        expect(peer, 'peer');
+        reads.add(method);
+        return {};
+      };
+      var sequence = 0;
+      JsonMap frame(String method, [JsonMap params = const {}]) {
+        final id = '${'a' * 24}${++sequence}';
+        return {
+          'jsonrpc': '2.0', 'id': id, 'method': method, 'params': params,
+          'mesh': {'invocationId': id, 'nonce': 'nonce_$id',
+            'deadline': DateTime.now().millisecondsSinceEpoch + 60000},
+        };
+      }
+      runtime.hasDelivery = (peer) async => peer == 'peer';
+      for (final method in ['mesh/chat/state', 'mesh/chat/threads',
+        'mesh/chat/read', 'mesh/chat/events']) {
+        final read = frame(method);
+        final first = await transport.request(read);
+        expect(first['result'], isNotNull);
+        if (method == 'mesh/chat/events' || method == 'mesh/chat/state') {
+          expect(first['deliveryPending'], true);
+        }
+        expect((await transport.request(read))['result'], isNotNull);
+      }
+      expect(reads, hasLength(8));
+      expect(await replay.readAsString(), isEmpty);
+      runtime.deliveryRequest = (peer, method, params) async {
+        expect(peer, 'peer');
+        expect(method, 'mesh/delivery/pull');
+        expect(params['deviceId'], 'someone else');
+        return {'rows': []};
+      };
+      final pull = frame('mesh/delivery/pull', {'deviceId': 'someone else'});
+      expect((await transport.request(pull))['result'], {'rows': []});
+      final replayed = await transport.request(pull);
+      expect((replayed['error'] as Map)['data']['details']['reason'], 'replayed_invocation');
+      expect(await replay.readAsLines(), hasLength(1));
+
+      final pulled = Completer<String>();
+      runtime.pullDelivery = (peer) async => pulled.complete(peer);
+      await runtime.rpc('peer', 'mesh/presence', const {});
+      expect(pulled.isCompleted, isFalse);
+      transport.peerHasDelivery = true;
+      await runtime.rpc('peer', 'mesh/presence', const {});
+      expect(await pulled.future, 'peer');
+
+      final devices = roster['devices'] as List<Map<String, Object?>>;
+      final peer = devices.last;
+      expect(runtime.deviceDeliveryFact('peer').failure, isNull);
+      peer['last_seen_at'] = DateTime.now().subtract(const Duration(days: 8)).millisecondsSinceEpoch ~/ 1000;
+      await runtime.refreshDevices();
+      expect(runtime.deviceDeliveryFact('peer').failure, '目标设备已 7 天未上线');
+      expect(runtime.deviceRemoved('peer'), isFalse);
+      peer['revoked'] = true;
+      await runtime.refreshDevices();
+      expect(runtime.deviceDeliveryFact('peer').failure, '目标设备已撤销');
+      expect(runtime.deviceRemoved('peer'), isTrue);
+      devices.removeLast();
+      await runtime.refreshDevices();
+      expect(runtime.deviceDeliveryFact('peer').failure, '目标设备已不在账号设备名单中');
+      expect(runtime.deviceRemoved('peer'), isTrue);
       await runtime.stop();
       final stoppedReports = reports;
       await Future<void>.delayed(const Duration(milliseconds: 100));

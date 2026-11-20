@@ -98,6 +98,8 @@ final class MeshChatPort implements ChatPort, ChatFileStaging {
 
   void _choiceChanged() {
     if (_peer == _servedBy && _up) return;
+    _again?.cancel();
+    _again = null;
     _generation++;
     _up = false;
     _asked = false;
@@ -147,7 +149,7 @@ final class MeshChatPort implements ChatPort, ChatFileStaging {
       unawaited(peers.refresh());
       _startListening();
     } on Failure catch (failure) {
-      if (_disposed) return;
+      if (_disposed || peer != _peer) return;
       _gone(failure);
     }
   }
@@ -230,10 +232,12 @@ final class MeshChatPort implements ChatPort, ChatFileStaging {
             'waitSeconds': 25,
           });
         } on Failure catch (failure) {
-          if (!_disposed && generation == _generation) _gone(failure);
+          if (!_disposed && generation == _generation && peer == _peer) {
+            _gone(failure);
+          }
           return;
         }
-        if (_disposed || generation != _generation) return;
+        if (_disposed || generation != _generation || peer != _peer) return;
         _epoch = answer['epoch'] as String?;
         _sequence = (answer['sequence'] as int?) ?? _sequence;
         if (answer['reset'] == true) {

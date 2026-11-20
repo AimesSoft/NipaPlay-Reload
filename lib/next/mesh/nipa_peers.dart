@@ -40,8 +40,15 @@ final class NipaPeers {
   NipaPeers(
       {required this.root,
       required this.devices,
-      required Stream<void> hostChanges}) {
-    hostChanges.listen((_) => _notify());
+      required Stream<void> hostChanges,
+      this.deviceRemoved}) {
+    _hostChanges = hostChanges.listen((_) {
+      unawaited(_change(() async {
+        await _load();
+        await _clearRemoved();
+        _notify();
+      }));
+    });
   }
 
   /// Where this device keeps its own choice.
@@ -49,7 +56,10 @@ final class NipaPeers {
 
   /// The other devices and whether Nipa runs on each (`MeshRuntime.agentDevices`).
   final Future<List<JsonMap>> Function() devices;
+  final bool Function(String)? deviceRemoved;
+  late final StreamSubscription<void> _hostChanges;
   final _changes = StreamController<void>.broadcast();
+  Future<void> _changesInFlight = Future.value();
 
   /// Fires when the choice, or what is known of the devices, changes.
   Stream<void> get changes => _changes.stream;
@@ -60,7 +70,18 @@ final class NipaPeers {
   List<NipaPeer> _peers = const [];
 
   /// Read once before the first use.
-  Future<void> load() async {
+  Future<void> load() => _change(() async {
+        await _load();
+        await _clearRemoved();
+      });
+
+  Future<void> _change(Future<void> Function() change) {
+    final result = _changesInFlight.then((_) => change());
+    _changesInFlight = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
+  Future<void> _load() async {
     if (_loaded) return;
     _loaded = true;
     try {
@@ -78,21 +99,34 @@ final class NipaPeers {
   }
 
   /// The device chosen, or null while none is.
-  String? get chosen => _chosen;
+  String? get chosen {
+    final id = _chosen;
+    return id != null && deviceRemoved?.call(id) != true ? id : null;
+  }
 
   /// Devices that run Nipa, as last read by [refresh], plus the chosen one
   /// even when it does not.
   List<NipaPeer> get peers => _peers;
 
   NipaPeer? get chosenPeer =>
-      _peers.where((peer) => peer.id == _chosen).firstOrNull;
+      _peers.where((peer) => peer.id == chosen).firstOrNull;
 
   /// The chosen device's name as last known, even once it is gone.
   String? _chosenName;
-  String? get chosenName => chosenPeer?.name ?? _chosenName;
+  String? get chosenName => chosen == null ? null : chosenPeer?.name ?? _chosenName;
 
-  Future<void> choose(String? deviceId) async {
-    await load();
+  Future<void> choose(String? deviceId) => _change(() async {
+    await _load();
+    await _writeChoice(deviceId != null && deviceRemoved?.call(deviceId) == true
+        ? null : deviceId);
+  });
+
+  Future<void> _clearRemoved() async {
+    final id = _chosen;
+    if (id != null && deviceRemoved?.call(id) == true) await _writeChoice(null);
+  }
+
+  Future<void> _writeChoice(String? deviceId) async {
     _chosen = deviceId;
     _chosenName = _peers.where((p) => p.id == deviceId).firstOrNull?.name;
     await TelevisionStorage.save(
@@ -148,5 +182,9 @@ final class NipaPeers {
     if (!_changes.isClosed) _changes.add(null);
   }
 
-  Future<void> close() => _changes.close();
+  Future<void> close() async {
+    await _hostChanges.cancel();
+    await _changesInFlight;
+    await _changes.close();
+  }
 }

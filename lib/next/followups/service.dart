@@ -90,6 +90,13 @@ final class Followups {
   void Function()? eventCommitted;
   String? Function()? agentDevice;
   Future<JsonMap> Function(String, JsonMap)? _deliverRemote;
+  ({String? failure, DateTime? staleAt}) Function(String)? remoteDeviceFact;
+  final _pullUntil = <String, DateTime>{};
+  final _pushing = <String, ({String id, Future<void> done})>{};
+
+  void remoteRosterChanged() {
+    if (_started) _schedule();
+  }
   Future<JsonMap> Function(String, JsonMap)? get deliverRemote =>
       _deliverRemote;
 
@@ -504,6 +511,11 @@ final class Followups {
           throw const Failure(FailureCode.conflict,
               'Delivery already began; a followup cannot interrupt its turn.');
         }
+        if (_pushing[row['remoteDeviceId']]?.id == id ||
+            (_pullUntil[id]?.isAfter(DateTime.now()) ?? false)) {
+          throw const Failure(FailureCode.conflict,
+              'Delivery already began; a followup cannot interrupt its turn.');
+        }
         await _save(row, 'cancelled', 'cancelled',
             origin: invocation.origin,
             invocationId: invocation.id,
@@ -524,12 +536,14 @@ final class Followups {
         throw const Failure(FailureCode.conflict,
             'Only a followup waiting to be delivered again, or one whose delivery failed, can be retried.');
       }
-      if (row['remoteDeviceId'] != null) {
+      if (row['remoteDeviceId'] != null && row['state'] != 'execution_failed') {
         throw const Failure(FailureCode.conflict,
             'This followup is delivered on another device; retry it there.');
       }
       row
         ..remove('retryAt')
+        ..remove('remoteAttempts')
+        ..remove('remoteRetryAt')
         ..['turnId'] = null
         ..['turnStatus'] = null
         ..['retries'] = (row['retries'] as int? ?? 0) + 1;
@@ -626,9 +640,103 @@ final class Followups {
           where: 'id=?', whereArgs: [row['id']]);
       if (record) await _event(tx, row, event, origin, invocationId);
     });
+    if (state != 'ready') _pullUntil.remove(row['id']);
   }
 
-  Future<void> sweep() => _serial(_sweep);
+  Future<void> sweep() async {
+    final writes = await _serial(() async {
+      await _sweep();
+      return [for (final push in _pushing.values) push.done];
+    });
+    await Future.wait(writes);
+  }
+
+  Future<List<JsonMap>> _remoteOutbox(String peer, {int? limit}) => _read(
+        database.query('followups',
+            where: "state='ready' AND json_extract(snapshot, '\$.remoteDeviceId')=? "
+                "AND json_extract(snapshot, '\$.remoteSealed')=1",
+            columns: ['snapshot'], whereArgs: [peer], orderBy: 'rowid', limit: limit),
+      );
+
+  Future<bool> hasRemoteDelivery(String peer) async => !_closed &&
+      remoteDeviceFact?.call(peer).failure == null &&
+      (await _remoteOutbox(peer, limit: 1)).isNotEmpty;
+
+  Future<List<JsonMap>> pullRemoteDeliveries(String peer) => _serial(() async {
+        if (_closed || remoteDeviceFact?.call(peer).failure != null) return [];
+        final now = DateTime.now().toUtc();
+        _pullUntil.removeWhere((_, until) => !now.isBefore(until));
+        final rows = <JsonMap>[];
+        var bytes = 0;
+        for (final row in await _remoteOutbox(peer)) {
+          final id = row['id'] as String;
+          if (_pullUntil.containsKey(id) || _pushing[peer]?.id == id) continue;
+          final size = utf8.encode(jsonEncode(row)).length;
+          if (rows.isNotEmpty && bytes + size > 256 * 1024) break;
+          _pullUntil[id] = now.add(const Duration(minutes: 1));
+          rows.add(row);
+          bytes += size;
+          if (rows.length == 8) break;
+        }
+        return rows;
+      });
+
+  Future<void> acknowledgeRemoteDelivery(String peer, String id, JsonMap receipt) =>
+      _serial(() async {
+        if (_closed) return;
+        final rows = await database.query('followups', where: 'id=? AND state=?',
+            whereArgs: [id, 'ready']);
+        if (rows.isEmpty) return;
+        final row = jsonDecode(rows.single['snapshot'] as String) as JsonMap;
+        if (row['remoteDeviceId'] != peer || row['remoteSealed'] != true) return;
+        await _forwarded(row, receipt);
+      });
+
+  Future<void> _forwarded(JsonMap row, JsonMap receipt) async {
+    row
+      ..remove('remoteAttempts')
+      ..remove('remoteRetryAt')
+      ..['remoteReceipt'] = receipt
+      ..['dispatchedAt'] = DateTime.now().toUtc().toIso8601String()
+      ..['deliveryState'] = 'forwarded';
+    await _save(row, 'completed', 'forwarded',
+        reason: 'Destination durably accepted this delivery; its conversation state is owned there.');
+  }
+
+  void _pushRemote(String peer, JsonMap row,
+      Future<JsonMap> Function(String, JsonMap) deliver) {
+    final id = row['id'] as String;
+    final done = Future<void>(() async {
+      JsonMap? receipt;
+      Failure? failure;
+      try {
+        receipt = await deliver(peer, row);
+      } on Failure catch (error) {
+        failure = error;
+      }
+      await _serial(() async {
+        final current = await _get(id);
+        if (current['state'] != 'ready') return;
+        if (receipt != null) {
+          await _forwarded(current, receipt);
+          return;
+        }
+        final attempts = (current['remoteAttempts'] as int? ?? 0) + 1;
+        final wait = Duration(seconds: min(30 * pow(2, attempts - 1), 1800).toInt());
+        current['remoteAttempts'] = attempts;
+        current['remoteRetryAt'] = DateTime.now().toUtc().add(wait).toIso8601String();
+        await _save(current, 'ready', 'pending',
+            reason: failure!.message, record: attempts == 1);
+      });
+    }).whenComplete(() {
+      _pushing.remove(peer);
+      if (_started) _schedule();
+    });
+    _pushing[peer] = (id: id, done: done);
+    unawaited(done.catchError((Object error, StackTrace stack) {
+      Zone.current.handleUncaughtError(error, stack);
+    }));
+  }
 
   Future<void> _sweep() async {
     _sweeps++;
@@ -814,6 +922,18 @@ final class Followups {
         return host != null && targetThread != null && host.busyFor(targetThread);
       }
       if (row['state'] == 'ready') {
+        if (row['remoteDeviceId'] case final String peer) {
+          if (_pushing[peer]?.id == row['id']) continue;
+          final fact = remoteDeviceFact?.call(peer);
+          if (fact?.failure case final String reason) {
+            row
+              ..remove('remoteAttempts')
+              ..remove('remoteRetryAt');
+            await _save(row, 'execution_failed', 'execution_failed', reason: reason);
+            continue;
+          }
+          if (fact?.staleAt case final DateTime staleAt) _until(staleAt);
+        }
         if (row['automatic'] == 'folderRequest' &&
             await inboxPreference('library.organizeAddedFolders', true) != true) {
           await _save(row, 'cancelled', 'cancelled', reason: 'Folder organization disabled before dispatch.');
@@ -823,7 +943,7 @@ final class Followups {
           continue;
         }
         if (_taskReturn(row)) {
-          await _filterDownloadReturn(row);
+          if (row['remoteSealed'] != true) await _filterDownloadReturn(row);
           if (row['state'] == 'cancelled') continue;
           final due = DateTime.parse(row['deliverAfter'] as String);
           if (DateTime.now().toUtc().isBefore(due)) {
@@ -837,6 +957,15 @@ final class Followups {
           }
         }
         if (row['remoteDeviceId'] case final String peer) {
+          final id = row['id'] as String;
+          final pullUntil = _pullUntil[id];
+          if (pullUntil != null) {
+            if (DateTime.now().toUtc().isBefore(pullUntil)) {
+              _until(pullUntil);
+              continue;
+            }
+            _pullUntil.remove(id);
+          }
           final retryAt = row['remoteRetryAt'] as String?;
           if (retryAt != null &&
               DateTime.now().toUtc().isBefore(DateTime.parse(retryAt))) {
@@ -844,35 +973,12 @@ final class Followups {
             continue;
           }
           final deliver = _deliverRemote;
-          if (deliver == null) continue;
-          try {
-            if (row['remoteSealed'] != true) {
-              row['remoteSealed'] = true;
-              await _save(row, 'ready', 'sealed');
-            }
-            row['remoteReceipt'] = await deliver(peer, row);
-            row
-              ..remove('remoteAttempts')
-              ..remove('remoteRetryAt');
-            row['dispatchedAt'] = DateTime.now().toUtc().toIso8601String();
-            row['deliveryState'] = 'forwarded';
-            await _save(row, 'completed', 'forwarded',
-                reason:
-                    'Destination durably accepted this delivery; its conversation state is owned there.');
-          } on Failure catch (error) {
-            // An unreachable device is tried again less and less often (30 s,
-            // doubling, at most 30 min); only the first failure of a run is
-            // recorded as an event, the retries update the row.
-            final attempts = (row['remoteAttempts'] as int? ?? 0) + 1;
-            final wait = Duration(
-                seconds: min(30 * pow(2, attempts - 1), 1800).toInt());
-            final retry = DateTime.now().toUtc().add(wait);
-            row['remoteAttempts'] = attempts;
-            row['remoteRetryAt'] = retry.toIso8601String();
-            _until(retry);
-            await _save(row, 'ready', 'pending',
-                reason: error.message, record: attempts == 1);
+          if (deliver == null || _closed) continue;
+          if (row['remoteSealed'] != true) {
+            row['remoteSealed'] = true;
+            await _save(row, 'ready', 'sealed');
           }
+          if (!_pushing.containsKey(peer)) _pushRemote(peer, row, deliver);
           continue;
         }
         if (row['retryAt'] case final String retryAt
@@ -1150,6 +1256,7 @@ final class Followups {
     _wake?.cancel();
     _wake = null;
     await _operations;
+    await Future.wait(_pushing.values.map((push) => push.done).toList());
   }
 
   Future<void> close() async {
@@ -1158,6 +1265,7 @@ final class Followups {
     await _jobs.cancel();
     await _chatEvents?.cancel();
     await _operations;
+    await Future.wait(_pushing.values.map((push) => push.done).toList());
     _wake?.cancel();
     _host = null;
     await _inboxChanges.close();
@@ -1290,4 +1398,3 @@ final class _Slice {
     _clock.reset();
   }
 }
-

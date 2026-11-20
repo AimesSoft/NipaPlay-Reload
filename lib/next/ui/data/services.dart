@@ -141,6 +141,7 @@ final class NextUiServices {
     final peers = NextBody.bodyOnly ? NipaPeers(
             root: core.mesh.root,
             devices: core.mesh.agentDevices,
+            deviceRemoved: core.mesh.deviceRemoved,
             hostChanges: core.mesh.hostChanges) : null;
     return NextUiServices(
       data: data,
@@ -164,6 +165,7 @@ final class NextUiServices {
       calls: GuiCalls(() => runtime.harnessReady, changes: changes),
       onDispose: () {
         detach();
+        unawaited(peers?.close());
         settings.dispose();
       },
     );
