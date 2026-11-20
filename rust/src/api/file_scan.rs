@@ -38,7 +38,9 @@ pub fn scan_video_files(folder_path: String) -> Result<RustFileScanSnapshot, Str
     ensure_existing_directory(&root)?;
 
     let mut files = Vec::new();
-    collect_video_files(&root, &root, &mut files)?;
+    if !is_bdmv_directory(&root) || !has_bdmv_marker(&root) {
+        collect_video_files(&root, &root, &mut files)?;
+    }
     files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
 
     println!(
@@ -142,6 +144,22 @@ fn ensure_existing_directory(path: &Path) -> Result<(), String> {
     }
 }
 
+fn is_bdmv_directory(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case("BDMV"))
+}
+
+fn has_bdmv_marker(path: &Path) -> bool {
+    fs::read_dir(path).is_ok_and(|entries| {
+        entries.filter_map(Result::ok).any(|entry| {
+            let name = entry.file_name();
+            (name.eq_ignore_ascii_case("index.bdmv")
+                || name.eq_ignore_ascii_case("MovieObject.bdmv"))
+                && entry.file_type().is_ok_and(|kind| kind.is_file())
+        })
+    })
+}
+
 fn collect_video_files(
     root: &Path,
     current: &Path,
@@ -157,6 +175,7 @@ fn collect_video_files(
         }
     };
 
+    let mut directories = Vec::new();
     for entry_result in entries {
         let entry = match entry_result {
             Ok(entry) => entry,
@@ -172,7 +191,8 @@ fn collect_video_files(
             continue;
         }
         if file_type.is_dir() {
-            collect_video_files(root, &path, output)?;
+            let is_disc_structure = is_bdmv_directory(&path) && has_bdmv_marker(&path);
+            directories.push((path, is_disc_structure));
             continue;
         }
         if !file_type.is_file() || !is_video_file(&path) {
@@ -181,6 +201,17 @@ fn collect_video_files(
 
         if let Some(scan_entry) = make_scan_entry(root, &path) {
             output.push(scan_entry);
+        }
+    }
+
+    let has_disc = directories.iter().any(|(_, is_disc)| *is_disc);
+    for (path, is_disc_structure) in directories {
+        let is_disc_sibling = has_disc
+            && path.file_name().is_some_and(|name| {
+                name.eq_ignore_ascii_case("CERTIFICATE") || name.eq_ignore_ascii_case("menu")
+            });
+        if !is_disc_structure && !is_disc_sibling {
+            collect_video_files(root, &path, output)?;
         }
     }
 
@@ -369,6 +400,44 @@ mod tests {
         assert_eq!(diff.deleted_files, vec!["deleted.mp4"]);
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scan_prunes_only_confirmed_blu_ray_structure() {
+        let root = make_temp_dir();
+        let excluded = [
+            "Disc/bDmV/STREAM/clip.mkv",
+            "Disc/CERTIFICATE/deep/extra.mp4",
+            "Disc/Menu/loop.mkv",
+        ];
+        let kept = [
+            "Disc/movie.mkv",
+            "Disc/Extras/menu/other.mp4",
+            "Unrelated/BDMV/making-of.mkv",
+            "Unrelated/CERTIFICATE/award.mkv",
+            "Unrelated/menu/recipe.mp4",
+            "NotADisc/menu/video.mp4",
+        ];
+        for relative in excluded.into_iter().chain(kept).chain([
+            "Disc/bDmV/INDEX.BDMV",
+            "Unrelated/BDMV/index.bdmv/not-a-file.txt",
+            "NotADisc/BDMV",
+        ]) {
+            let path = root.join(relative);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            write_file(&path, b"fixture");
+        }
+        let diff = diff_video_files(path_to_dart_string(&root), Vec::new()).unwrap();
+        let selected_bdmv = scan_video_files(path_to_dart_string(&root.join("Disc/bDmV"))).unwrap();
+        fs::remove_dir_all(root).unwrap();
+        let mut expected: Vec<_> = kept
+            .iter()
+            .map(|relative| path_to_dart_string(&relative.split('/').collect::<PathBuf>()))
+            .collect();
+        expected.sort();
+        assert_eq!(diff.current_files, expected);
+        assert_eq!(diff.new_files, expected);
+        assert!(selected_bdmv.files.is_empty());
     }
 
     fn make_temp_dir() -> PathBuf {
