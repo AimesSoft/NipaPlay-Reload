@@ -57,7 +57,8 @@ void main() {
     store = RikaStore(
         root: Directory(p.join(temp.path, 'store')),
         fetch: StoreFetch(HttpClient.new),
-        listSources: () => storeListSources({'NIPAPLAY_STORE_INDEX': list.path}),
+        listSources: () =>
+            storeListSources({'NIPAPLAY_STORE_INDEX': list.path}),
         registries: () async => ['http://127.0.0.1:9'],
         provided: () async => null);
     restarts = 0;
@@ -87,53 +88,52 @@ void main() {
     expect(value(await call('store.readme', {'id': 'dmhy'}))['readme'],
         contains('动漫花园'));
 
-    final installed =
-        value(await call('store.install', {'id': 'dmhy', 'version': '1.1.0'},
-            origin: 'agent:x'));
+    final installed = value(await call(
+        'store.install', {'id': 'dmhy', 'version': '1.1.0'},
+        origin: 'agent:x'));
     expect((installed['installed'] as Map)['version'], '1.1.0');
     expect(installed['takesEffect'], contains('next'));
     final after = value(await call('store.list', {}));
     expect(((after['official'] as List).single as Map)['installedVersion'],
         '1.1.0');
 
-    value(await call('store.enable', {'id': 'dmhy', 'enabled': false}));
+    await store.hostFacts();
+    final started = value(await call('store.list', {}, origin: 'agent:x'));
+    expect(started['loadedAtLastStart'], [
+      {'id': 'dmhy', 'version': '1.1.0', 'kind': 'skill'}
+    ]);
+    value(await call('store.enable', {'id': 'dmhy', 'enabled': false},
+        origin: 'agent:x'));
     expect((await store.installed()).single.enabled, isFalse);
-    value(await call('store.remove', {'id': 'dmhy'}));
+    expect(value(await call('store.list', {}))['loadedAtLastStart'],
+        started['loadedAtLastStart']);
+    value(await call('store.remove', {'id': 'dmhy'}, origin: 'agent:x'));
     expect(await store.installed(), isEmpty);
   });
 
-  test('only the person installs an npm package or restarts 梨花', () async {
-    final npm = await call('store.install', {'npm': 'some-plugin'},
-        origin: 'agent:x');
-    expect((npm as Failed).failure.message, contains('Only the person'));
-    // Over Mesh is not the person at this device (another device's agent
-    // arrives that way too).
-    final remote = await call('store.install', {'npm': 'some-plugin'},
-        origin: 'mesh:phone');
-    expect((remote as Failed).failure.message, contains('Only the person'));
-    expect(((await call('store.apply', {}, origin: 'mesh:phone')) as Failed)
-        .failure
-        .message, contains('ask the person'));
-    final apply = await call('store.apply', {}, origin: 'agent:x');
-    expect((apply as Failed).failure.message, contains('ask the person'));
-    expect(restarts, 0);
-    value(await call('store.apply', {}));
+  test('agent reaches the npm registry and can restart 梨花', () async {
+    final npm =
+        await call('store.install', {'npm': 'some-plugin'}, origin: 'agent:x');
+    expect((npm as Failed).failure.code, FailureCode.unavailable);
+    expect(value(await call('store.apply', {}, origin: 'agent:x')),
+        {'restarted': true});
     expect(restarts, 1);
-    // From the person, the request goes to npm (unreachable here).
-    final tried = await call('store.install', {'npm': 'some-plugin'});
-    expect((tried as Failed).failure.code, FailureCode.unavailable);
+    expect(value(await call('store.apply', {})), {'restarted': true});
+    expect(restarts, 2);
   });
 
   test('exactly one of id or npm', () async {
     expect((await call('store.install', {})) is Failed, isTrue);
-    expect(
-        (await call('store.install', {'id': 'dmhy', 'npm': 'x'})) is Failed,
+    expect((await call('store.install', {'id': 'dmhy', 'npm': 'x'})) is Failed,
         isTrue);
     final changed =
         await call('store.install', {'id': 'dmhy', 'version': '1.0.0'});
     expect((changed as Failed).failure.code, FailureCode.conflict);
     // An official item without the version the person was told of.
-    expect(((await call('store.install', {'id': 'dmhy'})) as Failed).failure.message,
+    expect(
+        ((await call('store.install', {'id': 'dmhy'})) as Failed)
+            .failure
+            .message,
         contains('version'));
     final missing =
         await call('store.install', {'id': 'nothing', 'version': '1.0.0'});

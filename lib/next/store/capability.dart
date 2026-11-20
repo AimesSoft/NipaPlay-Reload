@@ -7,10 +7,21 @@ import 'store_index.dart';
 
 const _output = ObjectSchema({}, additionalProperties: true);
 const _id = StringSchema(minLength: 1, maxLength: 64);
+const storeAppliedEvent = 'store.applied';
+const storeAppliedObject = 'local';
 
-/// The person, at this device's interface: not the agent, nor anything
-/// arriving over Mesh (another device's agent included).
-bool _person(Invocation invocation) => invocation.origin == 'gui';
+JsonMap storeAppliedFacts() {
+  final now = DateTime.now().toUtc();
+  return {
+    'eventId': '$storeAppliedEvent-${now.microsecondsSinceEpoch}',
+    'event': storeAppliedEvent,
+    'objectId': storeAppliedObject,
+    'occurredAt': now.toIso8601String(),
+    'revision': null,
+    'changedFields': <String>[],
+    'facts': {'restarted': true},
+  };
+}
 
 Future<T> _failures<T>(Future<T> Function() action) async {
   try {
@@ -24,10 +35,7 @@ Future<T> _failures<T>(Future<T> Function() action) async {
   }
 }
 
-/// 梨花's store as actions: the official list and what is installed, read
-/// by anyone; installing from the list by anyone; installing an npm package
-/// nobody reviewed only by the person; and [restart], when given, so what
-/// changed takes effect.
+/// 梨花's store as actions, with an optional conversation-host restart.
 final class StoreCapability implements Capability {
   StoreCapability(this.store, {Future<void> Function()? restart})
       : actions = [
@@ -37,10 +45,11 @@ final class StoreCapability implements Capability {
                   title: '梨花的商店',
                   effect: Effect.read,
                   description:
-                      'The official list of skills (instructions and scripts you run) and DSH plugins (model providers) in 梨花\'s store, and what this host has installed, with installed version, enabled state and whether the list has a newer version. Official items are reviewed and pinned; items from npm are not reviewed. refresh re-reads the list now (otherwise at most every 10 minutes). Installed changes take effect when the conversation host next starts.',
+                      'Official and installed skills and DSH plugins, with versions, enablement, updates and notices. loadedAtLastStart records skills added to the prompt and plugins passed to DSH, not a plugin health check; notLoadedAtLastStart gives reasons items were left out. refresh re-reads the official list now. Installed changes take effect when the conversation host next starts.',
                   input: ObjectSchema({'refresh': BooleanSchema()}),
                   output: _output),
-              (input, _) => _failures(() => _list(store, input['refresh'] == true))),
+              (input, _) =>
+                  _failures(() => _list(store, input['refresh'] == true))),
           ClassicAction(
               const ActionSpec(
                   id: 'store.readme',
@@ -64,13 +73,13 @@ final class StoreCapability implements Capability {
                   title: '从商店安装',
                   effect: Effect.write,
                   description:
-                      'Install or update an item of the official list (id), or an npm package (npm: "name" or "name@version"). An npm package is not reviewed: only the person may install one, from this device\'s store UI (or, headless, the host\'s --store-install-npm). An official item needs its version from store.list, the one whose notices the person was told; a newer listing is a conflict. Plugins load only with the DSH runtime. Install only what the person asked for, after telling them the item\'s notices (store.list). Takes effect when the conversation host next starts.',
+                      'Install or update only what the user asked for. Before installing, tell the user the official item\'s notices or that the npm package is unreviewed and runs with their account permissions, including file reads/writes and network access. An official item requires the id and version whose notices were disclosed; a changed version is a conflict. The npm field accepts name or name@version. Plugins load only with DSH. Changes take effect on conversation-host start.',
                   input: ObjectSchema({
                     'id': _id,
                     'version': StringSchema(minLength: 1, maxLength: 64),
                     'npm': StringSchema(minLength: 1, maxLength: 260),
                   }),
-                  output: _output), (input, invocation) {
+                  output: _output), (input, _) {
             final id = input['id'] as String?, npm = input['npm'] as String?;
             final version = input['version'] as String?;
             if ((id == null) == (npm == null)) {
@@ -80,10 +89,6 @@ final class StoreCapability implements Capability {
             if (id != null && version == null) {
               throw const Failure(FailureCode.invalidInput,
                   'Give the version from store.list whose notices the person was told.');
-            }
-            if (npm != null && !_person(invocation)) {
-              throw const Failure(FailureCode.invalidInput,
-                  'Only the person may install an npm package nobody reviewed; tell them where to do it (设置 › 梨花 › 扩展, or nipaplay-headless --store-install-npm).');
             }
             return _failures(() async {
               final installed = npm != null
@@ -129,13 +134,9 @@ final class StoreCapability implements Capability {
                     title: '重启梨花使扩展生效',
                     effect: Effect.write,
                     description:
-                        'Restart the conversation host so installed, removed or switched items take effect. Ends any turn in progress; only the person may ask for it.',
+                        'Immediately restart the conversation host to apply extension changes. Ends active turns (including the caller, which may not receive the result) and running conversation helpers. Saved conversations, followup records and schedules survive; followups delivered into an interrupted turn may be interrupted too. A successful restart emits the durable followup event store.applied with objectId local. store.list reports extension selection and omissions at startup.',
                     input: ObjectSchema({}),
-                    output: _output), (input, invocation) async {
-              if (!_person(invocation)) {
-                throw const Failure(FailureCode.invalidInput,
-                    'Restarting ends your own turn; ask the person to apply it from the store.');
-              }
+                    output: _output), (input, _) async {
               await restart();
               return {'restarted': true};
             }),
@@ -188,9 +189,14 @@ Future<JsonMap> _list(RikaStore store, bool refresh) async {
     ],
     'installed': [
       for (final i in installed.values)
-        {...item(i.item), 'enabled': i.enabled, 'installedAt': i.at.toIso8601String()}
+        {
+          ...item(i.item),
+          'enabled': i.enabled,
+          'installedAt': i.at.toIso8601String()
+        }
     ],
     if (store.listProblem != null) 'listProblem': store.listProblem,
+    if (store.loadedAtLastStart case final loaded?) 'loadedAtLastStart': loaded,
     if (store.notLoaded.isNotEmpty) 'notLoadedAtLastStart': store.notLoaded,
     if (store.unreadable.isNotEmpty) 'unreadable': store.unreadable,
   };

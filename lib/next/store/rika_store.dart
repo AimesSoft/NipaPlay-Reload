@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:nipa_harness/nipa_harness.dart' show JsonMap;
 import 'package:path/path.dart' as p;
 
 import 'npm_package.dart';
@@ -24,7 +25,8 @@ final class InstalledItem {
 
   static InstalledItem parse(Map raw) => InstalledItem(
       StoreItem.parse(raw,
-          origin: raw['origin'] == 'npm' ? StoreOrigin.npm : StoreOrigin.official),
+          origin:
+              raw['origin'] == 'npm' ? StoreOrigin.npm : StoreOrigin.official),
       enabled: raw['enabled'] != false,
       at: DateTime.tryParse(raw['installedAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true));
@@ -84,18 +86,15 @@ final class RikaStore {
   String? _listProblem;
   Future<void> _operations = Future.value();
 
-  /// What decides what DSH loads (the plugins and the record of what is
-  /// installed and on): tools naming them are refused (#1119), so Nipa
-  /// cannot install for herself what only the person may. Skills stay
-  /// open: she reads and runs them.
-  List<String> get protectedPaths => [_plugins.path, _installedFile.path];
-
   Directory get _skills => Directory(p.join(root.path, 'skills'));
   Directory get _plugins => Directory(p.join(root.path, 'plugins'));
   File get _installedFile => File(p.join(root.path, 'installed.json'));
   File get _listCache => File(p.join(root.path, 'index.json'));
 
-  /// The plugins the last host start left out, and why.
+  List<JsonMap>? get loadedAtLastStart => _loadedAtLastStart;
+  List<JsonMap>? _loadedAtLastStart;
+
+  /// The extensions the last host start left out, and why.
   Map<String, String> get notLoaded => Map.unmodifiable(_notLoaded);
   Map<String, String> _notLoaded = const {};
 
@@ -114,9 +113,10 @@ final class RikaStore {
       return _list!;
     }
     try {
-      final text = await fetch.text([
-        for (final base in listSources()) base.resolve('index.json')
-      ], maxBytes: 4 << 20, headers: {'accept': 'application/json'});
+      final text = await fetch.text(
+          [for (final base in listSources()) base.resolve('index.json')],
+          maxBytes: 4 << 20,
+          headers: {'accept': 'application/json'});
       final list = StoreIndex.parse(text);
       _list = list;
       _listAt = now;
@@ -125,9 +125,10 @@ final class RikaStore {
       await _write(_listCache, text);
       return list;
     } on Object catch (error) {
-      _listProblem = error is StoreFetchException || error is StoreFormatException
-          ? '$error'
-          : '官方列表读取失败：$error';
+      _listProblem =
+          error is StoreFetchException || error is StoreFormatException
+              ? '$error'
+              : '官方列表读取失败：$error';
       if (_list != null) return _list!;
       if (await _listCache.exists()) {
         try {
@@ -146,9 +147,7 @@ final class RikaStore {
     if (readme == null) return null;
     return utf8.decode(await fetch.bytes(
         [for (final base in listSources()) base.resolve(readme.url)],
-        sha256Hex: readme.sha256,
-        size: readme.bytes,
-        maxBytes: maxFileBytes));
+        sha256Hex: readme.sha256, size: readme.bytes, maxBytes: maxFileBytes));
   }
 
   /// What is installed. A record this version cannot read is left out (and
@@ -239,17 +238,16 @@ final class RikaStore {
         final item = list.items.where((i) => i.id == id).firstOrNull ??
             (throw StoreFormatException('官方列表里没有 $id'));
         if (item.version != version) {
-          throw StoreChanged(
-              '「${item.name}」刚更新到 ${item.version}，请看过新版的说明后再安装');
+          throw StoreChanged('「${item.name}」刚更新到 ${item.version}，请看过新版的说明后再安装');
         }
         return _install(item, null);
       });
 
   /// Installs the npm package [spec] (`name` or `name@version`), unreviewed.
   Future<InstalledItem> installNpm(String spec) => _serial(() async {
-        final resolution = await NpmPackages(fetch,
-                registries: await registries())
-            .resolve(spec, provided: await provided?.call());
+        final resolution =
+            await NpmPackages(fetch, registries: await registries())
+                .resolve(spec, provided: await provided?.call());
         final existing = (await installed())
             .where((i) => i.item.id == resolution.item.id)
             .firstOrNull;
@@ -281,7 +279,8 @@ final class RikaStore {
                 sha256Hex: file.sha256,
                 size: file.bytes,
                 maxBytes: maxFileBytes);
-            await writePackageFiles({file.path: Uint8List.fromList(bytes)}, staging);
+            await writePackageFiles(
+                {file.path: Uint8List.fromList(bytes)}, staging);
           }
         }
       } else {
@@ -301,8 +300,8 @@ final class RikaStore {
         for (final row in item.dsh) {
           final package =
               item.packages.firstWhere((pkg) => pkg.name == row.package);
-          await _entry(Directory(
-              p.joinAll([staging.path, ...package.path.split('/')])));
+          await _entry(
+              Directory(p.joinAll([staging.path, ...package.path.split('/')])));
         }
       }
     } catch (_) {
@@ -334,7 +333,9 @@ final class RikaStore {
     }
     // Installed: the old copy going is housekeeping, retried next time.
     if (hadOld) {
-      await old.delete(recursive: true).then<void>((_) {}, onError: (Object _) {});
+      await old
+          .delete(recursive: true)
+          .then<void>((_) {}, onError: (Object _) {});
     }
     _changes.add(null);
     return installed_;
@@ -381,9 +382,12 @@ final class RikaStore {
       final raw = jsonDecode(await manifest.readAsString());
       if (raw is Map) {
         Object? exported = raw['exports'];
-        if (exported is Map && exported.containsKey('.')) exported = exported['.'];
+        if (exported is Map && exported.containsKey('.'))
+          exported = exported['.'];
         if (exported is Map) {
-          exported = exported['import'] ?? exported['node'] ?? exported['default'] ??
+          exported = exported['import'] ??
+              exported['node'] ??
+              exported['default'] ??
               exported['require'];
           if (exported is Map) exported = exported['default'];
         }
@@ -397,7 +401,10 @@ final class RikaStore {
     relative ??= 'index.js';
     final candidates = [
       relative,
-      if (p.extension(relative).isEmpty) ...['$relative.js', '$relative/index.js'],
+      if (p.extension(relative).isEmpty) ...[
+        '$relative.js',
+        '$relative/index.js'
+      ],
     ];
     for (final candidate in candidates) {
       final file = File(p.normalize(p.join(package.path, candidate)));
@@ -413,31 +420,39 @@ final class RikaStore {
   /// loads no plugins).
   ///
   /// Not queued behind installs: a host starting never waits on a download.
-  Future<StoreHostFacts> hostFacts({Directory? runtimeModules}) =>
-      (() async {
+  Future<StoreHostFacts> hostFacts({Directory? runtimeModules}) => (() async {
         final items = [
           for (final i in await installed())
             if (i.enabled) i.item
         ];
-        final skills = [
-          for (final item in items)
-            if (item.kind == StoreKind.skill) item
-        ];
+        final skills = <StoreItem>[];
+        final loaded = <JsonMap>[];
         final rows = <Map<String, Object?>>[];
         final skipped = <String, String>{};
         for (final item in items) {
-          if (item.kind != StoreKind.plugin) continue;
+          if (item.kind == StoreKind.skill) {
+            if (!await File(p.join(_skills.path, item.id, 'SKILL.md'))
+                .exists()) {
+              skipped[item.id] = '找不到 SKILL.md';
+              continue;
+            }
+            skills.add(item);
+            loaded.add(_startupItem(item));
+            continue;
+          }
           if (runtimeModules == null) {
             skipped[item.id] = '插件只在 DeepSeek Harness 运行环境下加载';
             continue;
           }
           try {
             rows.addAll(await _pluginRows(item, runtimeModules));
+            loaded.add(_startupItem(item));
           } on Object catch (error) {
             skipped[item.id] = '$error';
           }
         }
         _notLoaded = skipped;
+        _loadedAtLastStart = List.unmodifiable(loaded);
         return (
           instructions: skills.isEmpty ? '' : _skillsSection(skills),
           dshPlugins: rows,
@@ -445,12 +460,19 @@ final class RikaStore {
         );
       })();
 
+  JsonMap _startupItem(StoreItem item) => Map.unmodifiable({
+        'id': item.id,
+        'version': item.version,
+        'kind': item.kind.name,
+      });
+
   Future<List<Map<String, Object?>>> _pluginRows(
       StoreItem item, Directory runtimeModules) async {
     final folder = Directory(p.join(_plugins.path, item.id));
     final modules = Directory(p.join(folder.path, 'node_modules'));
     for (final peer in item.peers) {
-      final target = Directory(p.joinAll([runtimeModules.path, ...peer.split('/')]));
+      final target =
+          Directory(p.joinAll([runtimeModules.path, ...peer.split('/')]));
       if (!await target.exists()) {
         throw StoreFormatException('运行环境里没有它需要的 $peer');
       }

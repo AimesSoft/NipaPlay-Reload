@@ -6,6 +6,8 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
 
 import '../store/rika_store.dart';
+import '../store/capability.dart'
+    show storeAppliedEvent, storeAppliedObject, storeAppliedFacts;
 
 import '../agent_endpoint.dart';
 import '../chat/chat_host.dart';
@@ -169,14 +171,22 @@ final class HeadlessNipa {
   /// reaches it at its next turn).
   /// Stops a running host and brings Nipa up again, so what the store
   /// changed takes effect.
-  Future<void> restart() {
+  Future<void> restart() async {
     final next = _chain.then((_) async {
+      final selected = host?.threadId;
       await _stopHost('Restarting for store changes.');
-      await _reconcile();
+      await _reconcile(resumeThreadId: selected);
     }).catchError((Object error, StackTrace stack) {
       _fail('Nipa could not be brought up: ${redactHarnessText('$error')}');
     });
-    return _chain = next;
+    _chain = next;
+    await next;
+    if (host == null) {
+      throw Failure(FailureCode.unavailable,
+          _reason ?? 'The conversation host did not restart.');
+    }
+    await followups.hookEvent(
+        storeAppliedEvent, storeAppliedObject, storeAppliedFacts());
   }
 
   Future<void> reload() {
@@ -236,7 +246,7 @@ final class HeadlessNipa {
 
   void _fail(String reason) => _set(HeadlessNipaState.failed, reason);
 
-  Future<void> _reconcile() async {
+  Future<void> _reconcile({String? resumeThreadId}) async {
     if (_closed) return;
     _enabled = await HeadlessAgentSwitch.enabled(root);
     if (!_enabled) {
@@ -302,10 +312,10 @@ final class HeadlessNipa {
       _set(HeadlessNipaState.missing, reason, missing: missing);
       return;
     }
-    await _startHost(runtime!);
+    await _startHost(runtime!, resumeThreadId: resumeThreadId);
   }
 
-  Future<void> _startHost(DshRuntime runtime) async {
+  Future<void> _startHost(DshRuntime runtime, {String? resumeThreadId}) async {
     _set(HeadlessNipaState.starting, 'Nipa is starting.');
     final plugins =
         await Directory('${root.path}/agent/dsh').create(recursive: true);
@@ -330,10 +340,7 @@ final class HeadlessNipa {
         // from her shell alike.
         environment: {'NIPAPLAY_ENDPOINT_FILE': endpoint.credentialFile.path},
         // The vault is plain files of this user; her tools may not name it.
-        protectedPaths: [
-          p.join(root.path, 'vault'),
-          ...?store?.protectedPaths,
-        ]);
+        protectedPaths: [p.join(root.path, 'vault')]);
     _host = host;
     jobOrigins.threadFor = host.threadForOrigin;
     memory.recent = (current) async {
@@ -364,7 +371,11 @@ final class HeadlessNipa {
     }));
     try {
       await host.start();
-      await host.getMainSession();
+      if (resumeThreadId == null) {
+        await host.getMainSession();
+      } else {
+        await host.resumeThread(resumeThreadId);
+      }
       await followups.attach(host);
       if (_closed) return;
       _ready = true;

@@ -42,7 +42,8 @@ Future<(HttpServer, String)> _registry(
         await request.response.close();
         return;
       }
-      if (path == NpmPackages.tarballPath(name, manifest['version'] as String)) {
+      if (path ==
+          NpmPackages.tarballPath(name, manifest['version'] as String)) {
         request.response.add(tarball);
         await request.response.close();
         return;
@@ -103,7 +104,8 @@ void main() {
       File(p.join(list.path, 'index.json'))
           .writeAsString(jsonEncode({'version': 1, 'items': items}));
 
-  Future<Map<String, Object?>> skill(String id, Map<String, String> files) async {
+  Future<Map<String, Object?>> skill(
+      String id, Map<String, String> files) async {
     final entries = <Map<String, Object?>>[];
     for (final MapEntry(:key, :value) in files.entries) {
       final file = File(p.join(list.path, 'skills', id, key));
@@ -141,7 +143,8 @@ void main() {
       final installed = await store.installOfficial('dmhy', version: '1.0.0');
       expect(installed.item.reviewed, isTrue);
       final folder = p.join(temp.path, 'store', 'skills', 'dmhy');
-      expect(await File(p.join(folder, 'dmhy.py')).readAsString(), 'print("ok")');
+      expect(
+          await File(p.join(folder, 'dmhy.py')).readAsString(), 'print("ok")');
       final facts = await store.hostFacts();
       expect(facts.instructions, contains('动漫花园（官方）'));
       expect(facts.instructions, contains(p.join(folder, 'SKILL.md')));
@@ -177,7 +180,12 @@ void main() {
             'version': '1.0.0',
             'description': 'x',
             'files': [
-              {'path': path, 'url': 'skills/x/a', 'sha256': 'a' * 64, 'bytes': 1}
+              {
+                'path': path,
+                'url': 'skills/x/a',
+                'sha256': 'a' * 64,
+                'bytes': 1
+              }
             ]
           };
       for (final path in ['../escape', '/abs', 'a/../../b', 'C:\\x']) {
@@ -203,7 +211,8 @@ void main() {
   });
 
   group('npm packages', () {
-    test('a DSH plugin installs, links the runtime packages it shares, and '
+    test(
+        'a DSH plugin installs, links the runtime packages it shares, and '
         'is loaded by its own patch row', () async {
       final tarball = _tgz({
         'package.json': jsonEncode({
@@ -213,7 +222,8 @@ void main() {
             '.': {'default': './lib/index.js'}
           }
         }),
-        'lib/index.js': "import '@deepseek-ai/cordis'; export const name = 'x';",
+        'lib/index.js':
+            "import '@deepseek-ai/cordis'; export const name = 'x';",
         'cordis.patch.yml':
             '- insert:\n    - id: llm-example\n      name: dsh-example\n',
       });
@@ -241,8 +251,8 @@ void main() {
       expect(row['name'], p.join(modules, 'dsh-example', 'lib', 'index.js'));
       for (final peer in ['@deepseek-ai/cordis', '@deepseek-ai/schemastery']) {
         final link = Link(p.joinAll([modules, ...peer.split('/')]));
-        expect(await link.target(),
-            p.joinAll([runtime.path, ...peer.split('/')]),
+        expect(
+            await link.target(), p.joinAll([runtime.path, ...peer.split('/')]),
             reason: peer);
       }
       // Under Codex no plugin loads; it says why.
@@ -263,7 +273,8 @@ void main() {
       final installed = await store.installNpm('rika-skill-x@1.0.0');
       expect(installed.item.kind, StoreKind.skill);
       expect(installed.item.files.map((f) => f.path), ['SKILL.md', 'x.py']);
-      expect((await store.hostFacts()).instructions, contains('rika-skill-x（未审核）'));
+      expect((await store.hostFacts()).instructions,
+          contains('rika-skill-x（未审核）'));
     });
 
     Future<Object?> refusal(Map<String, String> files,
@@ -273,8 +284,10 @@ void main() {
       await server?.close(force: true);
       (server, registry) = await _registry({
         'bad-plugin': (
-          _manifest('bad-plugin', tarball,
-              extra: {'keywords': ['dsh-plugin'], ...extra}),
+          _manifest('bad-plugin', tarball, extra: {
+            'keywords': ['dsh-plugin'],
+            ...extra
+          }),
           tarball
         ),
       });
@@ -314,7 +327,8 @@ void main() {
             ArchiveFile.bytes('package/../../escape.js', utf8.encode('x'))
           ]),
           contains('不安全'));
-      expect(await refusal({'package.json': '{"name":"bad-plugin"}'},
+      expect(
+          await refusal({'package.json': '{"name":"bad-plugin"}'},
               extra: {'keywords': <String>[]}),
           contains('SKILL.md'));
       expect(await store.installed(), isEmpty);
@@ -325,12 +339,14 @@ void main() {
       (server, registry) = await _registry({
         'bad-plugin': (
           _manifest('bad-plugin', _tgz({...plain, 'index.js': 'other'}),
-              extra: {'keywords': ['dsh-plugin']}),
+              extra: {
+                'keywords': ['dsh-plugin']
+              }),
           tarball
         ),
       });
-      await expectLater(store.installNpm('bad-plugin'),
-          throwsA(isA<StoreFetchException>()));
+      await expectLater(
+          store.installNpm('bad-plugin'), throwsA(isA<StoreFetchException>()));
     });
 
     test('links and symlinks in a tarball are never written', () {
@@ -354,10 +370,8 @@ void main() {
 
   group('review of #1129', () {
     test('an archive that expands without end is stopped at the limit', () {
-      final bomb = GZipEncoder().encodeBytes(TarEncoder().encodeBytes(
-          Archive()
-            ..add(ArchiveFile.bytes(
-                'package/zeros.bin', Uint8List(4 << 20)))));
+      final bomb = GZipEncoder().encodeBytes(TarEncoder().encodeBytes(Archive()
+        ..add(ArchiveFile.bytes('package/zeros.bin', Uint8List(4 << 20)))));
       expect(bomb.length, lessThan(64 << 10));
       expect(
           () => readPackageTarball(bomb, maxBytes: 1 << 20),
@@ -365,7 +379,8 @@ void main() {
               .having((e) => e.message, 'message', '软件包过大')));
     });
 
-    test('a plugin named nipa-… without a patch loads as the store item, '
+    test(
+        'a plugin named nipa-… without a patch loads as the store item, '
         'and a record nobody can read hides nothing else', () async {
       final tarball = _tgz({
         'package.json': '{"name":"nipa-evil","main":"index.js"}',
@@ -386,8 +401,8 @@ void main() {
       final raw = jsonDecode(await file.readAsString()) as Map;
       (raw['items'] as List).add({'id': 'broken', 'kind': 'theme'});
       await file.writeAsString(jsonEncode(raw));
-      expect((await store.installed()).map((i) => i.item.id),
-          ['npm-nipa-evil']);
+      expect(
+          (await store.installed()).map((i) => i.item.id), ['npm-nipa-evil']);
       expect(store.unreadable.keys, ['broken']);
       // Saving keeps it; removing it drops it.
       await store.setEnabled('npm-nipa-evil', false);
@@ -421,14 +436,14 @@ void main() {
       expect((await store.installed()).single.item.version, '1.0.0');
     });
 
-    test('an error reply that never ends does not hold the store, and a '
+    test(
+        'an error reply that never ends does not hold the store, and a '
         'starting host does not wait on an install', () async {
       final hanging = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() => hanging.close(force: true));
       hanging.listen((request) {
-        request.response.statusCode = request.uri.path.contains('-/')
-            ? 200
-            : 500;
+        request.response.statusCode =
+            request.uri.path.contains('-/') ? 200 : 500;
         request.response.bufferOutput = false;
         request.response.add(List.filled(64, 1));
         // Never closed.
@@ -436,15 +451,14 @@ void main() {
       registry = 'http://127.0.0.1:${hanging.port}';
       final watch = Stopwatch()..start();
       await expectLater(
-          StoreFetch(HttpClient.new).bytes(
-              [Uri.parse('$registry/x/latest')], maxBytes: 1 << 20),
+          StoreFetch(HttpClient.new)
+              .bytes([Uri.parse('$registry/x/latest')], maxBytes: 1 << 20),
           throwsA(isA<StoreFetchException>()));
       expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
 
       // An install stuck in a download, and a host starting meanwhile.
-      unawaited(store
-          .installNpm('stuck')
-          .then<void>((_) {}, onError: (Object _) {}));
+      unawaited(
+          store.installNpm('stuck').then<void>((_) {}, onError: (Object _) {}));
       await Future<void>.delayed(const Duration(milliseconds: 200));
       final facts = await store
           .hostFacts(runtimeModules: runtime)
@@ -459,9 +473,9 @@ void main() {
       ]);
       await store.installOfficial('dmhy', version: '1.0.0');
       // Something in the old copy that this account cannot delete.
-      final stuck = await Directory(
-              p.join(temp.path, 'store', 'skills', 'dmhy', 'stuck'))
-          .create();
+      final stuck =
+          await Directory(p.join(temp.path, 'store', 'skills', 'dmhy', 'stuck'))
+              .create();
       await File(p.join(stuck.path, 'x')).writeAsString('x');
       await Process.run('chmod', ['555', stuck.path]);
       addTearDown(() async {
@@ -505,10 +519,12 @@ void main() {
       expect(await store.installed(), isEmpty);
       expect((await store.installOfficial('dmhy', version: '1.0.0')).item.id,
           'dmhy');
-      expect(store.protectedPaths, [
-        p.join(temp.path, 'store', 'plugins'),
-        p.join(temp.path, 'store', 'installed.json'),
-      ]);
+      await File(p.join(temp.path, 'store', 'skills', 'dmhy', 'SKILL.md'))
+          .delete();
+      final facts = await store.hostFacts();
+      expect(facts.instructions, isEmpty);
+      expect(facts.skipped, {'dmhy': '找不到 SKILL.md'});
+      expect(store.loadedAtLastStart, isEmpty);
     });
   });
 }
