@@ -125,11 +125,15 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
     );
   }
 
-  List<Widget> _codexRows() {
-    if (_codex.isEmpty) return const [];
+  List<Widget> _codexRows(List<UiStoreItem> official) {
+    if (_codex.isEmpty && official.isEmpty) return const [];
     final writable = _codex['writable'] == true;
+    final officialPluginIds = {
+      for (final item in official) '${item.id}@nipaplay-${item.id}',
+    };
     return [
       const _Heading('Codex 插件'),
+      for (final item in official) _row(item),
       if (writable)
         SettingsRow(title: '添加插件市场', subtitle: _errors['codex-market'] ?? '第三方市场未审核。',
           below: Row(children: [
@@ -142,7 +146,8 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
           ])),
       for (final market in (_codex['marketplaces'] as List? ?? const []).whereType<Map>())
         for (final plugin in (market['plugins'] as List? ?? const []).whereType<Map>())
-          if (writable || plugin['installed'] == true)
+          if (!officialPluginIds.contains(plugin['id']) &&
+              (writable || plugin['installed'] == true))
             SettingsRow(
               title: (plugin['interface'] as Map?)?['displayName'] as String? ?? plugin['name'] as String,
               subtitle: _errors[plugin['id']] ?? (plugin['installed'] == true ? '已安装' : null),
@@ -309,8 +314,13 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
   Widget build(BuildContext context) {
     final store = _store;
     final groups = <String, List<UiStoreItem>>{};
+    final codex = <UiStoreItem>[];
     for (final item in store?.official ?? const <UiStoreItem>[]) {
-      groups.putIfAbsent(item.category, () => []).add(item);
+      if (item.kind == 'codexPlugin') {
+        codex.add(item);
+      } else {
+        groups.putIfAbsent(item.category, () => []).add(item);
+      }
     }
     return SettingsCard(title: '扩展', children: [
       SettingsRow(
@@ -344,7 +354,7 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
           for (final plugin in store.webPlugins)
             SettingsRow(title: plugin['name'] as String, subtitle: plugin['version'] as String?),
         ],
-        ..._codexRows(),
+        ..._codexRows(codex),
         if (store.listProblem != null)
           SettingsRow(
               title: store.official.isEmpty ? '没能取到官方列表' : '官方列表可能不是最新的',

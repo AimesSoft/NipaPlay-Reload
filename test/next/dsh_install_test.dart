@@ -10,6 +10,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/next/runtime/dsh_install.dart';
 import 'package:nipaplay/next/runtime/dsh_manifest.dart';
+import 'package:nipaplay/next/runtime/runtime_install_exception.dart';
 import 'package:nipaplay/next/ui_data/host_settings.dart';
 
 /// The runtime NipaPlay fetches for DeepSeek Harness: Node.js from nodejs.org
@@ -96,7 +97,7 @@ void main() {
     late int changes;
     late _Fixture fixture;
 
-    DshInstall make({bool Function()? inUse, DshFallback? fallback, bool verifySignature = false}) {
+    DshInstall make({bool Function()? inUse, DshFallback? fallback, bool verifySignature = false, Future<String> Function()? webLock}) {
       fixture = _Fixture.build(dir, platform!, server.base);
       server.files
         ..clear()
@@ -110,9 +111,73 @@ void main() {
           httpClient: HttpClient.new,
           inUse: inUse ?? () => false,
           verifySignature: verifySignature,
+          webLock: webLock,
           fallback: fallback ?? DshFallback.npmmirror,
           concurrency: 3);
     }
+
+    test('Web verifies on demand and publishes only a complete installation', () async {
+      const path = '/fixture-web/-/fixture-web-1.0.0.tgz';
+      final entered = Completer<void>();
+      final resume = Completer<void>();
+      var lockReads = 0;
+      late List<int> payload;
+      var inUse = false;
+      make(inUse: () => inUse, webLock: () async {
+        if (++lockReads == 2) {
+          entered.complete();
+          await resume.future;
+        }
+        return jsonEncode({
+          'schema': 1, 'baseSha256': fixture.manifest.digest,
+          'platforms': {platform!: [{
+            'path': 'node_modules/fixture-web', 'name': 'fixture-web',
+            'version': '1.0.0', 'url': path.substring(1),
+            'sha256': sha256.convert(payload).toString(), 'bytes': payload.length,
+          }]},
+        });
+      });
+      payload = fixture.served.entries.firstWhere((entry) => entry.key.startsWith('/zod/')).value;
+      server.files[path] = List<int>.of(payload)..[0] ^= 1;
+      await install.install();
+      final base = (await install.runtime())!;
+      expect(lockReads, 0);
+      expect(server.requests, isNot(contains(path)));
+      expect(base.webBin, isNull);
+      await expectLater(install.installWeb(base.version), throwsA(
+          isA<RuntimeInstallException>().having((error) => error.message, 'message', contains('SHA-256'))));
+      expect((await install.webState())['installed'], false);
+      expect((await install.runtime())!.bin, base.bin);
+
+      server.files[path] = payload;
+      final installing = install.installWeb(base.version);
+      final refused = expectLater(installing, throwsA(
+          isA<RuntimeInstallException>().having((error) => error.message, 'message', contains('已取消'))));
+      await entered.future;
+      expect((await install.runtime())!.webBin, isNull);
+      final cancelled = install.cancel();
+      resume.complete();
+      await cancelled;
+      await refused;
+      expect((await install.runtime())!.webBin, isNull);
+      expect(install.root.listSync().where((entry) => entry.path.contains('web-pending-')), isEmpty);
+
+      await install.installWeb(base.version);
+      final web = (await install.runtime())!.webBin!;
+      expect(await File(web).readAsString(), await File(base.bin).readAsString());
+      final manifest = File('${File(web).parent.parent.parent.parent.path}/fixture-web/index.js');
+      expect(await manifest.readAsString(), 'zod');
+      await install.installWeb(base.version);
+      expect(lockReads, 3);
+      inUse = true;
+      await install.removeWeb();
+      expect((await install.runtime())!.webBin, isNull);
+      expect(await File(web).exists(), true);
+      inUse = false;
+      await install.cleanRemovedWeb();
+      expect(await File(web).exists(), false);
+      expect(await File(base.bin).exists(), true);
+    }, skip: skip);
 
     test('downloads, verifies, unpacks, and appears in one rename', () async {
       make();

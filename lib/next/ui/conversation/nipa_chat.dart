@@ -557,7 +557,7 @@ class NipaChat extends ChangeNotifier {
   Future<void> say(String text) async {
     text = text.trim();
     if (!acceptsTyping) return;
-    if (port case final ChatHostPort local
+    if (port case final SlashCommandPort local
         when local.hasSlashCommands && text.startsWith('/')) {
       await _sayCommand(local, text);
       return;
@@ -643,7 +643,7 @@ class NipaChat extends ChangeNotifier {
     await _start(turn);
   }
 
-  Future<void> _sayCommand(ChatHostPort local, String text) async {
+  Future<void> _sayCommand(SlashCommandPort local, String text) async {
     final generation = _generation;
     final turn = ChatTurn()
       ..status = 'completed'

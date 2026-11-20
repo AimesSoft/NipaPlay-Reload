@@ -1265,8 +1265,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     return result;
   }
 
-  bool get canManageCodexPlugins => dsh == null &&
-      (_launch?.home != null || labRoot != null);
+  bool get canManageCodexPlugins => dsh == null && _launch?.home != null;
 
   Future<ChatMessage> extensionRequest(String method, ChatMessage params) async {
     const reads = {'plugin/list', 'account/read', 'nipa/plugins/list'};

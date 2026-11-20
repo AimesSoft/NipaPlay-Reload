@@ -267,8 +267,11 @@ final class DshInstall {
         await _tar(File(p.join(_downloads.path, package.sha256)), target, strip: 1);
       }
       await File(p.join(staging.path, 'installed.json')).writeAsString('{}', flush: true);
+      _checkCancelled();
       if (await _web.exists()) await _web.delete(recursive: true);
       await staging.rename(_web.path);
+    } on _Cancelled {
+      throw const RuntimeInstallException('已取消 DSH Web 安装。');
     } finally {
       _client?.close(force: true);
       _client = null;
@@ -692,7 +695,11 @@ final class DshInstall {
   Future<void> cancel() async {
     _cancelled = true;
     _client?.close(force: true);
-    await _installing;
+    if (_webOperation) {
+      await _installing?.then<void>((_) {}, onError: (Object _) {});
+    } else {
+      await _installing;
+    }
   }
 
   Future<void> remove() async {

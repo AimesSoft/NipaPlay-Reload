@@ -85,10 +85,17 @@ abstract interface class ChatFileStaging {
   Future<List<String>> stage(List<String> paths);
 }
 
+abstract interface class SlashCommandPort {
+  bool get hasSlashCommands;
+  Future<ChatEvent> executeSlashCommand(String threadId, String line);
+}
+
 /// The production port over the embedded Codex host.
-final class ChatHostPort implements ChatPort {
+final class ChatHostPort implements ChatPort, SlashCommandPort {
+  @override
   bool get hasSlashCommands => _current?.dsh != null;
 
+  @override
   Future<ChatEvent> executeSlashCommand(String threadId, String line) async {
     final host = _current;
     if (host?.dsh == null) throw StateError('DeepSeek Harness 未运行。');
