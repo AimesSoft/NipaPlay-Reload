@@ -18,6 +18,7 @@ import 'followups/migration.dart';
 import 'ui_data/migration.dart';
 import 'ui_data/library_index.dart';
 import 'chat/session_store.dart';
+import 'chat/handover.dart';
 import 'media/file_identity_merge.dart';
 import 'media/work_merge_migration.dart';
 import 'media/presentation_store.dart';
@@ -61,6 +62,7 @@ const _migrations = [
   migrateExternalSources,
   migrateSubscriptions,
   purgeUnshownActivityInvocations,
+  migrateHandover,
 ];
 
 /// Gives back the space a large deletion left as free pages (the rows

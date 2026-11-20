@@ -368,7 +368,10 @@ void main() {
         codex: codex,
         fixedRuntime: () async => fixed,
         defaultRuntime: AgentRuntimeKind.dsh,
-        runtimeChanged: () async => runtimeChanges++);
+        runtimeChanged: (_, save) async {
+          await save();
+          runtimeChanges++;
+        });
 
     setUp(() {
       runtimeChanges = 0;

@@ -121,8 +121,14 @@ final class ChatHostPort implements ChatPort {
       _questionSub = host.userInputRequests.listen(_questions.add);
     }
     _display.add({
-      'method': _wasAvailable ? 'host/available' : 'host/error',
-      'params': const {},
+      'method': !_wasAvailable
+          ? 'host/error'
+          : host?.handoverThreadId != null
+              ? 'host/handover'
+              : 'host/available',
+      'params': {
+        if (host?.handoverThreadId case final id?) 'threadId': id,
+      },
     });
   }
 

@@ -11,6 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { appendHandover, validateHandover } from './nipa-handover.mjs';
 
 export const name = 'nipa-app-server';
 export const inject = ['agents', 'sessions'];
@@ -659,6 +660,7 @@ export function apply(ctx, config = {}) {
   const holds = new Map();
   const activations = new Set();
   const jobCalls = new Map();
+  const importing = new Set();
   let wire;
 
   const liveFor = (id) => {
@@ -727,7 +729,7 @@ export function apply(ctx, config = {}) {
 
   async function threadWithHistory(id, includeTurns = true) {
     const { header, events, isLive } = await readEvents(id);
-    const turns = includeTurns ? historyTurns(id, events, header?.cwd ?? defaultCwd, isLive && ctx.agents.get(id) !== undefined) : [];
+    const turns = includeTurns ? historyTurns(id, events, header?.cwd ?? defaultCwd, isLive && ctx.agents.get(id) !== undefined).slice(meta.get(id)?.importedTurns ?? 0) : [];
     // A held subagent turn reads as running until its end is reported.
     const held = holds.get(id)?.turnId;
     for (const turn of turns) {
@@ -771,7 +773,8 @@ export function apply(ctx, config = {}) {
     const cwd = params?.cwd ?? defaultCwd;
     const now = Date.now();
     const chat = hostChat(params);
-    meta.update(id, { createdAt: now, updatedAt: now, cwd, ...(chat ? { chat } : {}) });
+    meta.update(id, { createdAt: now, updatedAt: now, cwd, ...(chat ? { chat } : {}),
+      ...(params?.config?.['nipaplay.handover'] === true ? { staging: true } : {}) });
     const handle = await ctx.agents.create({ sessionId: id, meta: { cwd }, agentOptions });
     handles.set(id, handle);
     const thread = threadObject(id, handle.agent.session.header, []);
@@ -795,6 +798,7 @@ export function apply(ctx, config = {}) {
     const cwd = typeof params.cwd === 'string' ? params.cwd : undefined;
     const rows = [];
     for (const { header } of snapshots) {
+      if (meta.get(String(header.id))?.staging || meta.get(String(header.id))?.archived) continue;
       const child = header.parentSession !== undefined;
       if (child ? !wantChildren : !wantRoots) continue;
       if (cwd && header.cwd && header.cwd !== cwd && realCwd(header.cwd) !== realCwd(cwd)) continue;
@@ -809,6 +813,9 @@ export function apply(ctx, config = {}) {
 
   async function startTurn(params) {
     const id = String(params?.threadId ?? '');
+    if (meta.get(id)?.staging || meta.get(id)?.archived || importing.has(id)) {
+      throw rpcError(-32600, 'Conversation is not ready');
+    }
     const agent = await ensureAgent(id);
     const message = userMessage(params.input);
     // The turn exists once DSH claims this message from the agent's inbox.
@@ -867,6 +874,15 @@ export function apply(ctx, config = {}) {
     // Nipa's memory arrives through the nipa-memory plugin, not Codex hooks.
     'hooks/list': async (params) => ({ data: (params?.cwds ?? []).map((cwd) => ({ cwd, hooks: [], errors: [], warnings: [] })) }),
     'thread/start': startThread,
+    'thread/inject_items': injectItems,
+    'thread/archive': async ({ threadId }) => {
+      meta.update(threadId, { archived: true });
+      meta.flush();
+      const handle = handles.get(threadId);
+      handles.delete(threadId);
+      await handle?.dispose();
+      return {};
+    },
     'thread/resume': resumeThread,
     'thread/read': async (params) => ({ thread: await threadWithHistory(String(params?.threadId ?? ''), params?.includeTurns !== false) }),
     'thread/list': listThreads,
@@ -880,6 +896,33 @@ export function apply(ctx, config = {}) {
     'turn/steer': async (params) => steerTurn(params),
     'turn/interrupt': async (params) => interruptTurn(params),
   };
+
+  async function injectItems({ threadId, turns }) {
+    const agent = ctx.agents.get(threadId);
+    if (!agent || !meta.get(threadId)?.staging || importing.has(threadId) || agent.status === 'running') {
+      throw rpcError(-32600, 'A new idle conversation is required');
+    }
+    importing.add(threadId);
+    try {
+      const batch = validateHandover(turns);
+      const session = agent.session;
+      const preflight = new session.constructor(session.id, undefined, session.header);
+      appendHandover(preflight, batch, provider, model);
+      const persistence = ctx.get('sessionPersistence');
+      if (!persistence) throw new Error('Conversation persistence unavailable');
+      appendHandover(session, batch, provider, model);
+      await persistence.flush();
+      const handle = handles.get(threadId);
+      handles.delete(threadId);
+      await handle.dispose();
+      await ensureAgent(threadId);
+      meta.update(threadId, { importedTurns: batch.length, staging: false });
+      meta.flush();
+      return {};
+    } finally {
+      importing.delete(threadId);
+    }
+  }
 
   async function onMessage({ id, method, params }) {
     if (method === 'nipa/redact' && (id === undefined || id === null)) {
@@ -962,6 +1005,7 @@ export function apply(ctx, config = {}) {
 
   function onSessionEvent(session, event) {
     const threadId = String(session.id);
+    if (importing.has(threadId)) return;
     const state = liveFor(threadId);
     const data = event.data ?? {};
     switch (event.type) {
@@ -994,6 +1038,12 @@ export function apply(ctx, config = {}) {
         break;
       }
       case 'assistant/message': {
+        const content = (data.message?.content ?? [])
+          .filter((block) => block.type !== 'reasoning' && block.type !== 'tool-call')
+          .map((block) => block.type === 'text' ? { type: 'output_text', text: block.text } : { type: 'omitted' });
+        if (content.length) notify('rawResponseItem/completed', {
+          threadId, turnId: turnIdOf(threadId, data.turn), item: { type: 'message', role: 'assistant', content },
+        });
         // Streamed blocks were completed live; a message without live frames
         // in this process is reported whole.
         const key = `${data.turn}:${data.step}`;
@@ -1017,6 +1067,9 @@ export function apply(ctx, config = {}) {
       }
       case 'tool/call': {
         const turnId = turnIdOf(threadId, data.turn);
+        notify('rawResponseItem/completed', { threadId, turnId, item: {
+          type: 'function_call', call_id: String(data.callId), name: data.name, arguments: data.arguments,
+        } });
         const item = toolItem(threadId, data, session.header?.cwd ?? defaultCwd);
         state.calls.set(String(data.callId), { item, turn: data.turn, startedAt: event.time });
         itemStarted(threadId, turnId, item);
@@ -1036,6 +1089,11 @@ export function apply(ctx, config = {}) {
         const callId = String(data.message?.toolCallId ?? data.message?.source?.callId ?? '');
         const call = state.calls.get(callId);
         if (!call) break;
+        notify('rawResponseItem/completed', { threadId, turnId: turnIdOf(threadId, data.turn), item: {
+          type: 'function_call_output', call_id: callId, failed: data.message?.isError === true,
+          output: (data.message?.content ?? []).map((block) => block.type === 'text'
+            ? { type: 'text', text: block.text } : { type: 'omitted' }),
+        } });
         state.calls.delete(callId);
         itemCompleted(threadId, turnIdOf(threadId, data.turn), completeToolItem(call.item, data, call.startedAt, event.time));
         break;
