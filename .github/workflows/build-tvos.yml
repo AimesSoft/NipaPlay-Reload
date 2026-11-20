@@ -1,6 +1,8 @@
 name: Build tvOS
 
 on:
+  push:
+    branches: [main, next]
   workflow_dispatch:
     inputs:
       upload-to-app-store:
@@ -58,23 +60,6 @@ on:
         description: Apple 数字版本号
         value: ${{ jobs.build.outputs.app-store-version }}
   pull_request:
-    paths:
-      - '.flutter-version-tvos'
-      - '.github/workflows/build-tvos.yml'
-      - '.github/workflows/scripts/configure-ios-distribution.py'
-      - '.github/workflows/scripts/ensure-ios-distribution-profile.rb'
-      - 'lib/**'
-      - 'packages/**'
-      - 'pubspec.yaml'
-      - 'pubspec.lock'
-      - 'pubspec_overrides.tvos.yaml'
-      - 'third_party/**'
-      - 'tool/**'
-      - 'tvos/**'
-      - 'rust/tvos/**'
-      - 'rust/src/api/mesh.rs'
-      - 'rust/src/mesh/**'
-      - 'rust_builder/tvos/**'
 
 permissions:
   contents: read
@@ -85,8 +70,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect tvOS build inputs
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    outputs:
+      build: ${{ steps.diff.outputs.build }}
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Compare merged tree with PR base
+        id: diff
+        shell: bash
+        run: bash .github/workflows/scripts/detect-tvos-changes.sh
+
   build:
     name: Build tvOS package
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.build != 'false') }}
     runs-on: macos-26
     timeout-minutes: 120
     env:

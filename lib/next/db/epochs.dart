@@ -57,6 +57,9 @@ const notCatalogueTables = [
   'activity_backfill',
   'harness_sessions',
   'harness_discoveries',
+  // Conversation records kept for switching runtimes, read on demand.
+  'conversation_turns',
+  'conversation_prefixes',
   'body_changes',
   'db_commits',
   'db_operations',

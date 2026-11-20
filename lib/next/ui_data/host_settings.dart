@@ -214,6 +214,7 @@ abstract interface class NextHostSettings {
 enum UiModelSource {
   /// The Codex configuration already on this computer (`~/.codex`).
   codex,
+  chatgpt,
 
   /// A provider set up here; its key is kept in NipaPlay's vault.
   nipaplay,
@@ -234,8 +235,11 @@ final class UiModelSetup {
     this.compat,
     this.runtime = UiAgentRuntimeKind.codex,
     this.recent = const [],
+    this.sessionChoice,
+    this.nextTurnChoice,
   });
   final UiModelSource source;
+  final UiModelChoice? sessionChoice, nextTurnChoice;
 
   /// The providers and models set up here before, most recent first (the
   /// current one among them); their keys stay in the vault, so picking one
@@ -280,6 +284,8 @@ enum UiModelApi { responses, chat }
 
 enum UiModelQueryStatus { succeeded, failed, unavailable }
 
+enum UiModelCandidateOrigin { openai, chatgptAccount, provider, dshProvider }
+
 final class UiModelCandidates {
   const UiModelCandidates(this.status, {this.choices = const [], this.reason});
 
@@ -298,6 +304,11 @@ final class UiModelChoice {
     this.api,
     this.reasoning,
     this.compat,
+    this.catalog,
+    this.label,
+    this.providerLabel,
+    this.candidateOrigin,
+    this.reasoningLevels = const [],
   });
   final UiModelSource source;
   final UiModelApi? api;
@@ -307,6 +318,29 @@ final class UiModelChoice {
   final String? baseUrl;
   final String? model;
   final String? apiKey;
+  final UiAgentRuntimeKind? catalog;
+  final String? label, providerLabel;
+  final UiModelCandidateOrigin? candidateOrigin;
+  final List<String> reasoningLevels;
+
+  UiModelChoice withReasoning(String? value) => UiModelChoice(
+      source: source, provider: provider, baseUrl: baseUrl, model: model,
+      api: api, reasoning: value, compat: compat, catalog: catalog,
+      label: label, providerLabel: providerLabel, candidateOrigin: candidateOrigin,
+      reasoningLevels: reasoningLevels);
+}
+
+abstract interface class NextSessionModelSettings {
+  Future<void> setSessionModel(UiModelChoice choice, {bool once = false});
+}
+
+typedef UiCodexLogin = ({Uri url, String? code});
+
+abstract interface class NextCodexAccountSettings {
+  Future<Map<String, Object?>> codexAccount();
+  Future<UiCodexLogin> startCodexLogin({required bool deviceCode});
+  Future<void> cancelCodexLogin();
+  Stream<void> get codexAccountChanges;
 }
 
 final class UiModelCheck {

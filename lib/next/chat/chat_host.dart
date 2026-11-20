@@ -6,6 +6,7 @@ import 'dart:math';
 
 import 'package:nipaplay/security/credential_vault.dart' show CredentialRef;
 import 'package:nipaplay/security/secret_redactor.dart';
+import 'package:crypto/crypto.dart';
 
 import '../agent_endpoint.dart';
 import 'turn_boundaries.dart';
@@ -14,13 +15,19 @@ import 'chat_line_reader.dart';
 import 'delegation_chat.dart';
 import 'guest_chat.dart';
 import 'dsh_runtime.dart';
+import 'dsh_web.dart';
 import 'liveness.dart';
 import 'memory_stale.dart';
 import 'session_store.dart';
+import 'handover.dart' as handover;
 import 'turn_process_store.dart';
 import '../memory/service.dart';
 import 'model_launch.dart';
 import '../store/rika_store.dart' show StoreHostFacts;
+import '../ui_data/host_settings.dart';
+
+part 'session_models.dart';
+part 'codex_account.dart';
 
 typedef ChatMessage = Map<String, dynamic>;
 
@@ -87,6 +94,8 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   final Directory repository;
   final Directory? labRoot;
   final SessionStore? sessions;
+  late final handover.ConversationHistory? _conversation =
+      sessions == null ? null : handover.ConversationHistory(sessions!.database);
   final HarnessMemory? memory;
   final String? codexExecutable;
   final Future<ModelLaunch> Function()? modelLaunch;
@@ -116,25 +125,13 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       return await read(
               runtimeModules: runtime == null
                   ? null
-                  : File(runtime.bin).parent.parent.parent.parent)
+                  : File(runtime.webBin ?? runtime.bin).parent.parent.parent.parent)
           .timeout(const Duration(seconds: 10));
     } catch (error) {
       stderr.writeln('[NextChat] store extensions not added: '
           '${redactHarnessText('$error')}');
       return null;
     }
-  }
-
-  /// The base instructions, with the installed skills after them.
-  Future<File?> _instructions() async {
-    final base = baseInstructions;
-    if (base == null) return null;
-    final extra = (await _extensionFacts(null))?.instructions ?? '';
-    if (extra.isEmpty) return base;
-    final file = File('${base.parent.path}/nipa-base+store.md');
-    await file.writeAsString('${(await base.readAsString()).trimRight()}\n\n$extra\n',
-        flush: true);
-    return file;
   }
 
   /// Values the host adds to the runtime's environment (DSH only), e.g. the
@@ -174,6 +171,11 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   final _loaded = <String>{};
   Future<void> _rolloutWrites = Future.value();
   ChatMessage _modelDefaults = {};
+  bool _hasOpenAiRoute = false;
+  final _nextModels = <String, UiModelChoice>{};
+  String? _codexLoginId;
+  String? _codexLoginState;
+  final _accountRequests = <int>{};
   File get _rolloutFile =>
       File('${endpoint.seedRepository.parent.path}/chat-rollouts.json');
   @override
@@ -206,17 +208,20 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   Stream<ChatMessage> get events => _events.stream;
 
   /// Reasoning is combined into at most one update per 100 ms per item.
-  Stream<ChatMessage> get display => _display.stream.where((message) =>
+  Stream<ChatMessage> get display => threadDisplay.where((message) =>
       !const {'host/liveness', 'host/reasoning'}.contains(message['method']) ||
       message['params']['threadId'] == threadId);
 
   /// Every thread, including background helpers. All thread-local host messages
   /// carry params.threadId; the legacy display selects foreground host updates.
   @override
-  Stream<ChatMessage> get threadDisplay => _display.stream;
+  Stream<ChatMessage> get threadDisplay => _display.stream.where(
+      (message) => message['method'] != 'host/slashCommandResult');
+  Stream<ChatMessage> get localThreadDisplay => _display.stream;
   @override
   Stream<ChatMessage> get userInputRequests => _questions.stream;
   final _pending = <int, Completer<ChatMessage>>{};
+  final _privateRequests = <int>{};
   final _requestThreads = <int, String>{};
   final _inputRequests = <Object, ChatMessage>{};
   final _reasoning = <String, StringBuffer>{};
@@ -231,6 +236,13 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   Future<void>? _closeFuture;
   int _nextId = 0;
   String? threadId;
+  String? handoverThreadId;
+
+  void reportHandoverFailure() {
+    if (!_closing) {
+      _display.add({'method': 'host/handoverFailed', 'params': const {}});
+    }
+  }
   @override
   String? model, provider;
   ChatMessage? thread;
@@ -315,9 +327,10 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
             '-c',
             'model_provider=${jsonEncode(_launch!.provider)}',
           ],
+          if (_launch?.providerOverride case final override?) ...['-c', override],
           '-c',
           await _trustOverride(),
-          if (await _instructions() case final file?) ...[
+          if (baseInstructions case final file?) ...[
             '-c',
             'model_instructions_file=${jsonEncode(file.path)}'
           ],
@@ -456,6 +469,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
           if (store?.instructions.isNotEmpty == true) store!.instructions,
         ].join('\n\n'),
         storePlugins: store?.dshPlugins ?? const [],
+        webPlugins: runtime.webBin == null ? const [] : await dshWebRows(runtime.webBin!),
         harness: repository.path,
         version: runtime.version,
         protectedPaths: protectedPaths,
@@ -503,16 +517,42 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       ])
         if (clean[key] != null) key: redactHarnessText(clean[key]!)
     };
-    _process = await Process.start(
-        runtime.node, [runtime.bin, '--profile', 'sdk', '--patch', patch.path],
+    final packageManager = runtime.webPackageManager;
+    _process = await Process.start(runtime.node, [
+        if (packageManager != null) '${dshPlugins!.path}/nipa-web-launch.mjs',
+        runtime.webBin ?? runtime.bin,
+        if (packageManager != null) ...[
+          packageManager.entry, packageManager.data, packageManager.registry,
+        ],
+        '--profile', 'sdk', '--patch', patch.path,
+      ],
         workingDirectory: repository.path,
         environment: clean,
         includeParentEnvironment: false);
   }
 
+  Uri? _dshWebUri;
+  Uri? get dshWebUri => available ? _dshWebUri : null;
+
   Future<void> _startServer() async {
+    final runtime = dsh;
+    if (runtime?.webBin == null) return _startTransport(runtime);
+    try {
+      await _startTransport(runtime);
+      if (_dshWebUri == null) throw StateError('DSH Web did not start');
+    } catch (_) {
+      await _stopTransport();
+      _transportClosed = false;
+      await _startTransport(DshRuntime(
+        node: runtime!.node, bin: runtime.bin, version: runtime.version,
+      ));
+    }
+  }
+
+  Future<void> _startTransport(DshRuntime? runtime) async {
     if (_process != null) throw StateError('Chat server already started.');
-    if (dsh case final runtime?) {
+    _hasOpenAiRoute = false;
+    if (runtime != null) {
       await _launchDsh(runtime);
     } else if (Platform.isWindows) {
       await _launchWindows();
@@ -566,6 +606,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
           '${modelLaunch != null || probe ? '-c features.shell_snapshot=false ' : ''}'
           '${_launch?.model != null ? '-c "\$6" -c "\$7" ' : ''}'
           '${baseInstructions != null ? '-c "\$8" ' : ''}'
+          '${_launch?.providerOverride != null ? '-c "\$9" ' : ''}'
           r'-c "shell_environment_policy.set.NIPAPLAY_CHAT=\"$1\""';
       _process = await Process.start(
           shell,
@@ -586,7 +627,8 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
             await _trustOverride(),
             'model=${jsonEncode(_launch?.model)}',
             'model_provider=${jsonEncode(_launch?.provider)}',
-            'model_instructions_file=${jsonEncode((await _instructions())?.path)}',
+            'model_instructions_file=${jsonEncode(baseInstructions?.path)}',
+            _launch?.providerOverride ?? '',
           ],
           workingDirectory: repository.path,
           environment: _launch?.home == null ? inherited : clean,
@@ -608,8 +650,21 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     await _request('initialize', {
       'clientInfo': {'name': 'nipaplay', 'title': 'NipaPlay', 'version': '0.1'},
       'capabilities': {'experimentalApi': modelLaunch != null}
-    });
+    }).timeout(const Duration(seconds: 30));
     _send({'method': 'initialized', 'params': {}});
+    if (dsh == null && extensions != null) {
+      final facts = await _extensionFacts(null);
+      if (facts != null) {
+        try {
+          await _request('skills/extraRoots/set', {
+            'extraRoots': facts.codexSkillRoots,
+          }).timeout(const Duration(seconds: 10));
+        } on Object catch (error) {
+          stderr.writeln('[NextChat] Codex skills were not registered: '
+              '${redactHarnessText('$error')}');
+        }
+      }
+    }
     if (dsh != null) {
       // What is known so far, then each value as it is learned.
       _send({
@@ -624,8 +679,14 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     if (modelLaunch != null) {
       final configuration = await _request('config/read', {});
       final config = configuration['config'] as Map;
+      final defaultProvider =
+          _launch?.provider ?? config['model_provider'] ?? 'openai';
+      _hasOpenAiRoute = dsh == null &&
+          defaultProvider == 'openai' &&
+          _officialModelEndpoint(config['openai_base_url'], 'api.openai.com') &&
+          _officialModelEndpoint(config['chatgpt_base_url'], 'chatgpt.com');
       String? defaultModel = _launch?.model ?? config['model'] as String?;
-      if (defaultModel == null) {
+      if (defaultModel == null && _hasOpenAiRoute) {
         final models = await _request('model/list', {});
         defaultModel = (models['data'] as List)
             .cast<Map>()
@@ -633,8 +694,9 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       }
       _modelDefaults = {
         'model': defaultModel,
-        'modelProvider':
-            _launch?.provider ?? config['model_provider'] ?? 'openai',
+        'modelProvider': defaultProvider,
+        if (config['model_reasoning_effort'] case final String effort)
+          'effort': effort,
       };
     }
   }
@@ -678,6 +740,9 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   }
 
   Future<void> _stopTransport() async {
+    _codexLoginId = null;
+    _codexLoginState = null;
+    _dshWebUri = null;
     _restarting = true;
     _clock?.cancel();
     _flush?.cancel();
@@ -720,6 +785,14 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
         final decoded = line.decoded!;
         final wireMethod = decoded['method'] as String? ?? '';
         final wireParams = decoded['params'] as Map?;
+        if (wireMethod == 'nipa/webReady' && dsh?.webBin != null) {
+          final uri = Uri.tryParse(wireParams?['url'] as String? ?? '');
+          if (uri != null && uri.scheme == 'http' && uri.host == '127.0.0.1' &&
+              uri.hasPort && uri.userInfo.isEmpty && uri.hasQuery) {
+            _dshWebUri = uri;
+          }
+          continue;
+        }
         // A stream delta is redacted by protectChatDelta below (together with
         // the held tail); the reader left its text out of the message.
         final message = line.redacted ?? decoded;
@@ -737,6 +810,13 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
         }
         final eventThread = wireParams?['threadId'] as String? ??
             _requestThreads[message['id']];
+        if (!probe && eventThread != null &&
+            (eventThread == threadId || eventThread == mainThreadId)) {
+          if (message['params'] case final Map params) {
+            _conversation?.observe(wireMethod, eventThread, params);
+          }
+        }
+        if (wireMethod == 'rawResponseItem/completed') continue;
         if (eventThread != null) {
           if (wireMethod == 'turn/completed') {
             unawaited(memory
@@ -802,10 +882,16 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
             }
           }
         }
-        _events.add(message);
         final id = message['id'];
+        final private = id is int && _privateRequests.remove(id);
+        if (wireMethod == 'account/login/completed' || wireMethod == 'account/updated' || wireMethod == 'account/rateLimits/updated') {
+          _accountNotification(wireMethod, message['params']);
+        } else if (!private && !_accountRequests.contains(id)) {
+          _events.add(message);
+        }
         if (id is int &&
             (message.containsKey('result') || message.containsKey('error'))) {
+          _accountRequests.remove(id);
           final pending = _pending.remove(id);
           _requestThreads.remove(id);
           if (pending != null) {
@@ -856,6 +942,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
         completer.completeError(StateError('app-server connection closed'));
       }
       _pending.clear();
+      _privateRequests.clear();
       _requestThreads.clear();
       _flushReasoning();
     }
@@ -962,7 +1049,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       final id = params['threadId'] as String;
       params = {
         ...params,
-        ..._modelDefaults,
+        ..._threadModelDefaults,
         if (_rollouts[id] != null) 'path': _rollouts[id]
       };
     }
@@ -971,8 +1058,10 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       throw StateError('Chat server is not running');
     }
     final id = ++_nextId;
+    if (method.startsWith('account/')) _accountRequests.add(id);
     final result = Completer<ChatMessage>();
     _pending[id] = result;
+    if (method == 'nipa/commands/execute') _privateRequests.add(id);
     if (params['threadId'] case final String target) {
       _requestThreads[id] = target;
     }
@@ -1000,13 +1089,71 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   }
 
   ChatMessage get _common => {
-        ..._modelDefaults,
+        ..._threadModelDefaults,
         'cwd': repository.path,
         'sandbox': 'danger-full-access',
         'approvalPolicy': 'never'
       };
   Future<ChatMessage> startThread() =>
       _control(() => _select('thread/start', _common));
+
+  Future<void> handoverTo(
+      Future<void> Function(handover.HandoverPayload?) accept) =>
+      _control(() async {
+        if (busy) throw StateError('请等当前对话结束后再切换');
+        final id = threadId;
+        final history = _conversation;
+        if (id == null || history == null) return accept(null);
+        final native = await _readNativeThread(id);
+        final turns = (native['turns'] as List).cast<Map>();
+        if (turns.any((turn) => turn['status'] == 'inProgress')) {
+          throw StateError('请等当前对话结束后再切换');
+        }
+        await accept(await history.prepare(id, turns));
+      });
+
+  Future<void> receiveHandover(handover.HandoverPayload payload,
+      Future<void> Function() saveRuntime) async {
+    String? id;
+    const timeout = Duration(seconds: 20);
+    try {
+      final response = await _request('thread/start', {
+        ..._common,
+        if (dsh == null) 'experimentalRawEvents': true,
+        'config': {
+          ...await _projectHookConfig(),
+          if (dsh != null) 'nipaplay.handover': true,
+        },
+      }).timeout(timeout);
+      final fresh = _public(Map<String, dynamic>.from(response['thread'] as Map));
+      id = fresh['id'] as String;
+      await _request('thread/name/set', {
+        'threadId': id, 'name': 'NipaPlay 主会话',
+      }).timeout(timeout);
+      if (payload.context.isNotEmpty || dsh != null) {
+        await _request('thread/inject_items', {
+          'threadId': id,
+          if (dsh == null) 'items': payload.responses.toList(),
+          if (dsh != null) 'turns': payload.context,
+        }).timeout(timeout);
+      }
+      await _conversation!.promote(_sessionKey, id, payload, saveRuntime);
+      thread = fresh;
+      threadId = mainThreadId = id;
+      handoverThreadId = id;
+      _freshThreads[id] = fresh;
+      model = response['model'] as String;
+      provider = response['modelProvider'] as String;
+    } catch (_) {
+      if (id != null && available) {
+        try {
+          await _request('thread/archive', {'threadId': id})
+              .timeout(const Duration(seconds: 3));
+        } catch (_) {}
+      }
+      rethrow;
+    }
+  }
 
   /// The NIPAPLAY_CHAT value whose calls the endpoint attributes to [origin].
   String _chatFor(String origin) => origin.startsWith('harness_cli:helper:')
@@ -1104,10 +1251,19 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     _freshThreads.remove(id);
     try {
       final change = await memory?.changesFor(id);
-      return _public(await _request('turn/start', {
+      final selected = _nextModels[id] ?? await _savedModel(id);
+      final response = _public(await _request('turn/start', {
         'threadId': id,
+        ..._turnModelParams(selected),
         'input': _input(change == null ? text : '$text\n\n$change')
       }));
+      _nextModels.remove(id);
+      if (id == threadId) {
+        model = selected?.model ?? _modelDefaults['model'] as String? ?? model;
+        provider = selected?.provider ?? _modelDefaults['modelProvider'] as String? ?? provider;
+        _events.add({'method': 'host/modelChanged', 'params': header});
+      }
+      return response;
     } catch (error) {
       live.status = 'startFailed';
       live.endedAt = DateTime.now();
@@ -1160,6 +1316,8 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     final origin = selectedId == null ? null : threadOrigins[selectedId];
     final response = await _request(method, {
       ...params,
+      if (method == 'thread/start' && dsh == null && modelLaunch != null)
+        'experimentalRawEvents': true,
       'config': {
         ...await _projectHookConfig(),
         if (origin != null)
@@ -1208,6 +1366,35 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   List<ChatMessage> _input(String text) => [
         {'type': 'text', 'text': text}
       ];
+
+  Future<ChatMessage> dshCommands(String id) async =>
+      _public(await _request('nipa/commands/list', {'threadId': id}));
+
+  Future<ChatMessage> runDshCommand(String id, String line,
+      {bool showInChat = false}) async {
+    final result = await _request('nipa/commands/execute', {
+      'threadId': id,
+      'line': line,
+    });
+    if (showInChat && !_display.isClosed) {
+      _display.add({
+        'method': 'host/slashCommandResult',
+        'params': {'threadId': id, 'kind': result['kind'], 'text': result['text']},
+      });
+    }
+    return result;
+  }
+
+  bool get canManageCodexPlugins => dsh == null && _launch?.home != null;
+
+  Future<ChatMessage> extensionRequest(String method, ChatMessage params) async {
+    const reads = {'plugin/list', 'account/read', 'nipa/plugins/list'};
+    const writes = {'marketplace/add', 'marketplace/remove', 'plugin/install', 'plugin/uninstall'};
+    if (!reads.contains(method) && !(writes.contains(method) && canManageCodexPlugins)) {
+      throw StateError('已有配置模式不修改插件。');
+    }
+    return _public(await _request(method, params));
+  }
   Future<ChatMessage> startTurn(String text) =>
       _control(() => _startTurn(text));
   Future<ChatMessage> _startTurn(String text) async {
@@ -1230,6 +1417,20 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   /// into the turns; without it the items are the runtime's own.
   @override
   Future<ChatMessage> readThread(String id, {bool withProcess = true}) async {
+    final native = await _readNativeThread(id);
+    final prefix = await _conversation?.prefix(id);
+    final history = prefix == null || prefix.isEmpty ? native : {
+      ...native,
+      'turns': [
+        ...await handover.projectHandover(prefix),
+        ...native['turns'] as List,
+      ],
+    };
+    if (withProcess) await restoreProcess(id, history);
+    return history;
+  }
+
+  Future<ChatMessage> _readNativeThread(String id) async {
     if (modelLaunch != null &&
         !_loaded.contains(id) &&
         _rollouts.containsKey(id)) {
@@ -1243,9 +1444,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     if (_freshThreads[id] case final fresh?) return fresh;
     final result =
         await _request('thread/read', {'threadId': id, 'includeTurns': true});
-    final history = Map<String, dynamic>.from(result['thread'] as Map);
-    if (withProcess) await restoreProcess(id, history);
-    return history;
+    return Map<String, dynamic>.from(result['thread'] as Map);
   }
 
   /// Puts NipaPlay's saved display copy of the process back into the turns
@@ -1400,7 +1599,8 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     }
     try {
       await _processes?.flush();
-    } on FileSystemException {
+      await _conversation?.flush();
+    } catch (_) {
       // Facts that could not be written stay in memory until the next start.
     }
     await _events.close();

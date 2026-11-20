@@ -174,8 +174,9 @@ void main() {
     await db.setVersion(27);
     await db.close();
     db = await openNextDatabase(root, factory: databaseFactoryFfi);
-    // 28 is the activity cleanup released after subscriptions (#1114).
-    expect(await db.getVersion(), 29);
+    // 28 is the activity cleanup released after subscriptions (#1114); 29 and
+    // 30 add tables for later features.
+    expect(await db.getVersion(), 30);
     expect((await db.query('media_entities')).single['id'], 'work-old');
     final store = SubscriptionStore(db);
     await store.put(declaration());

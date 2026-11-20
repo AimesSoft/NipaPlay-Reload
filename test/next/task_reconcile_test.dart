@@ -26,11 +26,17 @@ void main() {
   });
   Future<String> refresh() async {
     final result = await f.service.submit('media.metadata.refresh', {
-      'ref': {'provider': 'tmdb', 'objectType': 'movie', 'externalId': '9301', 'scope': ''},
+      'ref': {
+        'provider': 'tmdb',
+        'objectType': 'movie',
+        'externalId': '9301',
+        'scope': ''
+      },
       'language': 'zh-CN',
     });
     return result.jobId;
   }
+
   Future<Job> terminal(String id) async {
     final end = DateTime.now().add(const Duration(seconds: 8));
     while (DateTime.now().isBefore(end)) {
@@ -40,23 +46,77 @@ void main() {
     }
     fail('Task did not finish');
   }
-  test('one failed probe does not prevent indexing other files; scan reports failure', () async {
+
+  test('partial scan reports all failed paths and confirmed disc structure',
+      () async {
     BodySignals.emit = null;
-    await File('${f.media.path}/bad.mkv').writeAsString('bad');
-    await File('${f.media.path}/good.mkv').writeAsString('good');
+    final root = await f.media.resolveSymbolicLinks();
+    final disc = '$root/Disc';
+    final marker = File('$disc/BDMV/MovieObject.bdmv');
+    await marker.create(recursive: true);
+    for (var index = 0; index < 11; index++) {
+      final clip = File('$disc/menu/nested/bad-$index.mkv');
+      await clip.create(recursive: true);
+    }
+    final good = File('$disc/CERTIFICATE/good.mkv');
+    await good.create(recursive: true);
+    await good.writeAsString('good');
+    final ordinary = File('$root/ordinary/menu/bad.mkv');
+    await ordinary.create(recursive: true);
+    await Directory('$root/ordinary/BDMV/index.bdmv')
+        .create(recursive: true);
     f.durationProbe = (path) async {
-      if (path.endsWith('bad.mkv')) throw const Failure(FailureCode.unavailable, 'probe fixture failure');
+      if (path.contains('/menu/'))
+        throw const Failure(FailureCode.unavailable, 'probe fixture failure');
       return 1000;
     };
     final job = await f.service.submit('media.scan', {'root': f.media.path});
     final done = await terminal(job.jobId);
-    expect(done.state, JobState.failed);
-    expect(done.receipt!.details['indexed'], 1);
-    expect(done.receipt!.details['failedProbes'], 1);
-    expect((done.receipt!.details['probeErrors'] as List).single['error']['message'], 'probe fixture failure');
+    expect(done.state, JobState.succeeded);
+    expect(done.error, isNull);
+    final details = done.receipt!.details;
+    expect(details['outcome'], 'partial');
+    expect(details['indexed'], 1);
+    expect(details['failedProbes'], 12);
+    final errors = (details['probeErrors'] as List).cast<Map>();
+    expect(errors, hasLength(12));
+    final menuErrors = errors.where((error) => error['disc'] != null);
+    expect(menuErrors, hasLength(11));
+    expect(menuErrors.first['disc'], {
+      'kind': 'bluray',
+      'root': disc,
+      'directory': '$disc/menu',
+      'markers': [marker.path],
+    });
+    expect(
+        errors.singleWhere((error) => error['path'] == ordinary.path)['disc'],
+        isNull);
+    expect(errors.first['message'], 'probe fixture failure');
+    expect(errors.first['code'], isA<String>());
+    expect((details['discFiles'] as List).single['disc']['directory'],
+        '$disc/CERTIFICATE');
   });
+  for (final outcome in ['success', 'failure']) {
+    test('scan reports $outcome when no files are indexed', () async {
+      BodySignals.emit = null;
+      if (outcome == 'failure') {
+        await File('${f.media.path}/bad.mkv').writeAsString('bad');
+      }
+      f.durationProbe = (_) async =>
+          throw const Failure(FailureCode.unavailable, 'probe fixture failure');
+      final job = await f.service.submit('media.scan', {'root': f.media.path});
+      final done = await terminal(job.jobId);
+      expect(done.state,
+          outcome == 'failure' ? JobState.failed : JobState.succeeded);
+      expect(done.receipt!.details['outcome'], outcome);
+      expect(done.receipt!.details['indexed'], 0);
+      expect(
+          done.receipt!.details['failedProbes'], outcome == 'failure' ? 1 : 0);
+    });
+  }
   for (final cancel in [false, true]) {
-    test('reconcile committed movie with blocked notification, cancel=$cancel', () async {
+    test('reconcile committed movie with blocked notification, cancel=$cancel',
+        () async {
       final id = await refresh();
       await entered.future;
       final info = await f.call('task.get', {'jobId': id});
@@ -83,7 +143,8 @@ void main() {
     expect(done.details['notificationError'], 'notification_timeout');
     expect(done.receipt!.details['refreshed'], true);
   });
-  test('unfinished fetch cannot reconcile; cancellation prevents late writes', () async {
+  test('unfinished fetch cannot reconcile; cancellation prevents late writes',
+      () async {
     final fetched = Completer<void>();
     final release = Completer<void>();
     f.tmdb.entered = fetched;

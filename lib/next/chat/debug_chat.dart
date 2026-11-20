@@ -10,15 +10,24 @@ import 'package:nipa_harness/nipa_harness.dart' show Invocation;
 import 'chat_host.dart';
 
 /// VM-service-only lab driver. Absent from the harness catalog and release builds.
-void installDebugChat(ChatHost? Function() current) {
+void installDebugChat(ChatHost? Function() current,
+    {Future<void> Function(String)? switchRuntime}) {
   registerExtension('ext.nipaplay.chat', (_, params) async {
     try {
       final host = current();
       if (host == null) throw StateError('Chat host not running');
       final Object? result;
       switch (params['op']) {
+        case 'dshWeb':
+          return ServiceExtensionResponse.result(
+              jsonEncode({'url': host.dshWebUri?.toString()}));
+        case 'dshCommand':
+          result = await host.runDshCommand(params['threadId']!, params['line']!);
         case 'start':
           result = await host.startThread();
+        case 'switchRuntime':
+          await switchRuntime!(params['kind']!);
+          result = {'switched': true};
         case 'main':
           result = await host.getMainSession();
         case 'sessions':

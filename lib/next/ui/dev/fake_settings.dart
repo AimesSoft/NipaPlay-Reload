@@ -1097,6 +1097,7 @@ final class FakeHostSettings
     return UiModelCandidates(UiModelQueryStatus.succeeded, choices: [
       for (final model in models)
         UiModelChoice(source: _current.source, model: model,
+            candidateOrigin: UiModelCandidateOrigin.provider,
             provider: _current.provider, baseUrl: _current.baseUrl,
             api: _current.api ?? dshApi, reasoning: dshReasoning,
             compat: _current.compat)

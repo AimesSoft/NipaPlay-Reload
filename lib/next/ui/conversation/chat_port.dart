@@ -85,8 +85,23 @@ abstract interface class ChatFileStaging {
   Future<List<String>> stage(List<String> paths);
 }
 
+abstract interface class SlashCommandPort {
+  bool get hasSlashCommands;
+  Future<ChatEvent> executeSlashCommand(String threadId, String line);
+}
+
 /// The production port over the embedded Codex host.
-final class ChatHostPort implements ChatPort {
+final class ChatHostPort implements ChatPort, SlashCommandPort {
+  @override
+  bool get hasSlashCommands => _current?.dsh != null;
+
+  @override
+  Future<ChatEvent> executeSlashCommand(String threadId, String line) async {
+    final host = _current;
+    if (host?.dsh == null) throw StateError('DeepSeek Harness 未运行。');
+    return host!.runDshCommand(threadId, line);
+  }
+
   ChatHostPort(this.runtime) {
     runtime.addListener(_attach);
     _attach();
@@ -117,12 +132,18 @@ final class ChatHostPort implements ChatPort {
     _wasAvailable = host?.available ?? false;
     if (host != null) {
       // Every session's events; the host's own ones name their thread.
-      _displaySub = host.threadDisplay.listen(_display.add);
+      _displaySub = host.localThreadDisplay.listen(_display.add);
       _questionSub = host.userInputRequests.listen(_questions.add);
     }
     _display.add({
-      'method': _wasAvailable ? 'host/available' : 'host/error',
-      'params': const {},
+      'method': !_wasAvailable
+          ? 'host/error'
+          : host?.handoverThreadId != null
+              ? 'host/handover'
+              : 'host/available',
+      'params': {
+        if (host?.handoverThreadId case final id?) 'threadId': id,
+      },
     });
   }
 

@@ -28,6 +28,8 @@ final class HostSettingsService
         NextHostSettings,
         NextHostDeviceSettings,
         NextHostRuntimeSettings,
+        NextSessionModelSettings,
+        NextCodexAccountSettings,
         NextHostDshConfigSettings {
   HostSettingsService(
       {required this.root,
@@ -46,8 +48,10 @@ final class HostSettingsService
       this.dsh,
       this.fixedRuntime,
       this.fixedRuntimeDirectory,
+      this.externalCodexStatusOnly = false,
       this.defaultRuntime = AgentRuntimeKind.codex,
       this.runtimeChanged,
+      this.restartHost,
       this.httpClient = HttpClient.new}) {
     _meshEvents = meshRuntime.hostChanges.listen((_) => notify());
     if (fixedRuntimeDirectory case final directory?) {
@@ -65,6 +69,10 @@ final class HostSettingsService
   }
   final Directory root, codexHome;
   final CodexRuntime? codex;
+  /// With the user's own Codex config, the account is read through a
+  /// write-protected `codex login status`, never signed in or out here.
+  /// Conversations still run on that config.
+  final bool externalCodexStatusOnly;
 
   /// The Node.js and DeepSeek Harness NipaPlay fetches for itself.
   final DshInstall? dsh;
@@ -80,7 +88,10 @@ final class HostSettingsService
   final AgentRuntimeKind defaultRuntime;
 
   /// Called after the runtime choice changed: the running host is replaced.
-  final Future<void> Function()? runtimeChanged;
+  final Future<void> Function(AgentRuntimeKind, Future<void> Function())? runtimeChanged;
+  /// Restarts the live host on its current runtime, e.g. after the Codex
+  /// account source changes.
+  final Future<void> Function()? restartHost;
   CodexRuntime get _codex => codex ?? (throw UnsupportedError('实验配置沿用外部 Codex'));
   @override
   Future<UiCodexRuntime> codexRuntime() => _codex.state();
@@ -149,18 +160,34 @@ final class HostSettingsService
   }
 
   @override
-  Future<void> setAgentRuntime(UiAgentRuntimeKind kind) => _write(() async {
-        if ((await _fixed()).kind != null) throw StateError('运行器由启动环境决定');
-        if (kind == UiAgentRuntimeKind.codex && codex == null) {
-          throw UnsupportedError('此宿主没有 Codex');
-        }
-        final before = await _read('runtime.json');
-        final value = <String, Object?>{...before, 'runtime': kind.name};
-        await _save('runtime.json', value);
-        _record('runtime', before, value);
-        _checkProblem = null;
-        notify();
-      }).then((_) => runtimeChanged?.call());
+  Future<void> setAgentRuntime(UiAgentRuntimeKind kind) async {
+    final target = AgentRuntimeKind.values.byName(kind.name);
+    if ((await _fixed()).kind != null) throw StateError('运行器由启动环境决定');
+    if (kind == UiAgentRuntimeKind.codex && codex == null && fixedRuntimeDirectory == null) {
+      throw UnsupportedError('此宿主没有 Codex');
+    }
+    if (await effectiveRuntime() == target) return;
+    final before = await _read('runtime.json');
+    final value = <String, Object?>{...before, 'runtime': kind.name};
+    var saved = false;
+    Future<void> save() async {
+      await _save('runtime.json', value);
+      saved = true;
+    }
+    try {
+      if (runtimeChanged case final change?) {
+        await change(target, save);
+      } else {
+        await save();
+      }
+    } catch (_) {
+      if (saved) await _save('runtime.json', before);
+      rethrow;
+    }
+    _record('runtime', before, value);
+    _checkProblem = null;
+    notify();
+  }
 
   DshInstall get _dsh => dsh ?? (throw UnsupportedError('此宿主不下载运行环境'));
   @override
@@ -283,7 +310,9 @@ final class HostSettingsService
           .toString());
   CredentialRef _key(JsonMap value) => modelKey(root, value);
   UiModelSource _source(JsonMap value, [AgentRuntimeKind? runtime]) =>
-      runtime == AgentRuntimeKind.dsh ||
+      runtime != AgentRuntimeKind.dsh && value['source'] == 'chatgpt'
+          ? UiModelSource.chatgpt
+          : runtime == AgentRuntimeKind.dsh ||
               value['source'] == 'nipaplay' ||
               (value['source'] == null && codex != null)
           ? UiModelSource.nipaplay
@@ -328,7 +357,7 @@ final class HostSettingsService
     final key = source == UiModelSource.nipaplay ? await _secret(value) : null;
     final host = chat();
     final api = value['api'] == 'chat' ? UiModelApi.chat : UiModelApi.responses;
-    final missing = source == UiModelSource.codex
+    final missing = source == UiModelSource.chatgpt ? null : source == UiModelSource.codex
         ? exists
             ? null
             : '这台电脑还没有 Codex 配置'
@@ -354,6 +383,8 @@ final class HostSettingsService
           }
         : null;
     return UiModelSetup(
+        sessionChoice: await host?.sessionModel(),
+        nextTurnChoice: host?.nextTurnModel,
         recent: await _recent(value),
         source: source,
         runtime: UiAgentRuntimeKind.values.byName(runtime.name),
@@ -433,11 +464,132 @@ final class HostSettingsService
 
   @override
   Future<UiModelCandidates> providerModels() async {
+    final pendingWrites = _writes;
+    await pendingWrites;
+    final AgentRuntimeKind runtimeKind;
+    final JsonMap value;
+    try {
+      runtimeKind = await effectiveRuntime();
+      value = await _read('model.json');
+    } on Object {
+      return const UiModelCandidates(UiModelQueryStatus.failed,
+          reason: '无法读取模型配置');
+    }
+    final live = chat();
+    final source = _source(value, runtimeKind);
+    final configured = _endpointModels(value, source);
+    List<UiModelChoice>? runtime;
+    var runtimeFailed = false;
+    if (live != null && live.available &&
+        (runtimeKind == AgentRuntimeKind.dsh ||
+            (source != UiModelSource.nipaplay &&
+                (value['revision'] as int? ?? 0) == live.activeModelRevision))) {
+      try {
+        runtime = await live.runtimeModels();
+      } catch (_) {
+        runtimeFailed = true;
+      }
+    }
+    final endpoint = await configured;
+    if (await effectiveRuntime() != runtimeKind ||
+        !identical(pendingWrites, _writes)) {
+      return const UiModelCandidates(UiModelQueryStatus.unavailable,
+          reason: '模型配置已更改');
+    }
+    if (!identical(live, chat())) return endpoint;
+    if (runtime != null) {
+      return UiModelCandidates(UiModelQueryStatus.succeeded,
+          choices: [...runtime, ...endpoint.choices]);
+    }
+    if (runtimeFailed && endpoint.status != UiModelQueryStatus.succeeded) {
+      return UiModelCandidates(UiModelQueryStatus.failed,
+          choices: endpoint.choices, reason: '无法读取运行器的模型目录');
+    }
+    return endpoint;
+  }
+
+  @override
+  Future<void> setSessionModel(UiModelChoice choice, {bool once = false}) async {
+    final live = chat();
+    if (live == null || !live.available) throw StateError('运行器未连接');
+    await live.selectSessionModel(choice, once: once);
+    notify();
+  }
+
+  @override
+  Future<JsonMap> codexAccount() async {
+    await _writes;
+    final runtime = await effectiveRuntime();
+    final source = _source(await _read('model.json'), runtime);
+    if (runtime == AgentRuntimeKind.codex && source == UiModelSource.codex &&
+        externalCodexStatusOnly) {
+      return _externalCodexAccount();
+    }
+    final host = chat();
+    if (runtime != AgentRuntimeKind.codex || host == null || !host.available) {
+      return {'status': 'unavailable', 'readOnly': source != UiModelSource.chatgpt};
+    }
+    return host.accountStatus(readOnly: source != UiModelSource.chatgpt);
+  }
+
+  Future<JsonMap> _externalCodexAccount() async {
+    const unavailable = {'status': 'unavailable', 'readOnly': true};
+    if (!await codexHome.exists()) return {'status': 'signedOut', 'readOnly': true};
+    Process? process;
+    try {
+      final executable = (await codex?.state())?.executable ??
+          (Platform.isWindows ? 'codex.exe' : 'codex');
+      final path = await codexHome.resolveSymbolicLinks();
+      final arguments = [executable, 'login', 'status'];
+      process = await Process.start(
+        Platform.isMacOS ? '/usr/bin/sandbox-exec' : executable,
+        Platform.isMacOS ? [
+          '-p', '(version 1) (allow default) (deny file-write* (subpath ${jsonEncode(path)}))',
+          ...arguments,
+        ] : arguments.skip(1).toList(),
+        environment: {'CODEX_HOME': path},
+      );
+      final (exitCode, stdout, stderr) = await (
+        process.exitCode,
+        process.stdout.transform(utf8.decoder).join(),
+        process.stderr.transform(utf8.decoder).join(),
+      ).wait.timeout(const Duration(seconds: 10));
+      final status = '$stdout\n$stderr';
+      if (exitCode == 0) {
+        return {'status': 'signedIn', 'readOnly': true,
+          if (status.contains('Logged in using ChatGPT')) 'type': 'chatgpt'};
+      }
+      return status.contains('Not logged in')
+          ? {'status': 'signedOut', 'readOnly': true} : unavailable;
+    } on Object {
+      return unavailable;
+    } finally {
+      process?.kill();
+    }
+  }
+
+  @override
+  Future<UiCodexLogin> startCodexLogin({required bool deviceCode}) async {
+    await _writes;
+    final host = chat();
+    if (_source(await _read('model.json'), await effectiveRuntime()) != UiModelSource.chatgpt ||
+        host == null || !host.available) {
+      throw StateError('请先选择 ChatGPT 订阅');
+    }
+    return host.beginCodexLogin(deviceCode: deviceCode);
+  }
+
+  @override
+  Future<void> cancelCodexLogin() async => await chat()?.cancelCodexLogin();
+
+  @override
+  Stream<void> get codexAccountChanges => changes;
+
+  Future<UiModelCandidates> _endpointModels(
+      JsonMap value, UiModelSource source) async {
     HttpClient? client;
     try {
-      await _writes;
-      final value = await _read('model.json');
-      if (_source(value, await effectiveRuntime()) != UiModelSource.nipaplay) {
+      if (source != UiModelSource.nipaplay) {
         return const UiModelCandidates(UiModelQueryStatus.unavailable,
             reason: '当前配置没有候选查询入口');
       }
@@ -462,6 +614,7 @@ final class HostSettingsService
         for (final model in models)
           UiModelChoice(
               source: UiModelSource.nipaplay,
+              candidateOrigin: UiModelCandidateOrigin.provider,
               model: model,
               provider: value['provider'] as String?,
               baseUrl: address.toString(),
@@ -496,12 +649,19 @@ final class HostSettingsService
   }
 
   @override
-  Future<void> setModel(UiModelChoice choice) => _write(() async {
+  Future<void> setModel(UiModelChoice choice) async {
+    var restart = false;
+    await _write(() async {
         if (choice.apiKey case final key?) {
           SecretRedactor.remember(
               const CredentialRef('next_model', 'input'), key);
         }
         final before = await _read('model.json');
+        final runtime = await effectiveRuntime();
+        final previous = _source(before, runtime);
+        restart = runtime == AgentRuntimeKind.codex && previous != choice.source &&
+            (previous == UiModelSource.chatgpt || choice.source == UiModelSource.chatgpt ||
+             externalCodexStatusOnly);
         final value = <String, Object?>{
           ...before,
           'source': choice.source.name,
@@ -541,7 +701,13 @@ final class HostSettingsService
         }
         await _saveModel(before, value,
             remember: choice.source == UiModelSource.nipaplay);
-      }).then((_) => modelSaved());
+      });
+    if (restart && chat() != null && restartHost != null) {
+      await restartHost!();
+    } else {
+      await modelSaved();
+    }
+  }
 
   @override
   Future<void> setModelReasoning(String reasoning) => _write(() async {
@@ -579,8 +745,8 @@ final class HostSettingsService
     // The live host reads this snapshot only at the next turn boundary.
   }
 
-  Future<ModelLaunch> launch() async {
-    if (await effectiveRuntime() == AgentRuntimeKind.dsh) return _dshLaunch();
+  Future<ModelLaunch> launch({AgentRuntimeKind? runtime}) async {
+    if ((runtime ?? await effectiveRuntime()) == AgentRuntimeKind.dsh) return _dshLaunch();
     // Installation can outlast a settings edit. Read the selected model only
     // after it completes so first-use input takes effect on this launch.
     final executable = await codex?.executable();
@@ -589,6 +755,19 @@ final class HostSettingsService
     final revision = value['revision'] as int? ?? 0;
     if (_source(value) == UiModelSource.codex) {
       return ModelLaunch(revision: revision, executable: executable);
+    }
+    if (_source(value) == UiModelSource.chatgpt) {
+      final home = Directory('${root.path}/codex-chatgpt');
+      return ModelLaunch(revision: revision, executable: executable, home: home,
+        prepare: () async {
+          await home.create(recursive: true);
+          if (await File('${home.path}/config.toml').exists()) return;
+          final staging = File('${home.path}/config.toml.pending');
+          await staging.writeAsString(
+            'cli_auth_credentials_store = "${Platform.isLinux ? 'auto' : 'keyring'}"\n'
+            '[features]\nshell_snapshot = false\n', flush: true);
+          await staging.rename('${home.path}/config.toml');
+        });
     }
     final key = await _secret(value);
     if (key == null || key.isEmpty) throw StateError('请先填写密钥');
@@ -602,19 +781,20 @@ final class HostSettingsService
         home: home,
         model: model,
         provider: 'nipaplay',
+        providerOverride: 'model_providers.nipaplay={name=${jsonEncode(provider)}, '
+            'base_url=${jsonEncode(url.toString())}, wire_api="responses", '
+            'env_key="NIPAPLAY_MODEL_API_KEY", requires_openai_auth=false}',
         environment: {'NIPAPLAY_MODEL_API_KEY': key},
         prepare: () async {
           await home.create(recursive: true);
+          if (await File('${home.path}/config.toml').exists()) return;
           final config = File('${home.path}/config.toml.pending');
           // JSON string syntax is a subset of TOML basic string syntax here.
           await config.writeAsString(
               'model = ${jsonEncode(model)}\n'
               'model_provider = "nipaplay"\n'
-              'cli_auth_credentials_store = "ephemeral"\n'
+              'cli_auth_credentials_store = "${Platform.isLinux ? 'auto' : 'keyring'}"\n'
               '[features]\nshell_snapshot = false\n'
-              '[model_providers.nipaplay]\nname = ${jsonEncode(provider)}\n'
-              'base_url = ${jsonEncode(url.toString())}\nwire_api = "responses"\n'
-              'env_key = "NIPAPLAY_MODEL_API_KEY"\nrequires_openai_auth = false\n'
               '[shell_environment_policy]\nexclude = ["NIPAPLAY_MODEL_API_KEY"]\n'
               '[projects.${jsonEncode(repository())}]\ntrust_level = "trusted"\n',
               flush: true);
@@ -734,8 +914,11 @@ final class HostSettingsService
     final value = await _read('model.json');
     final watch = Stopwatch()..start();
     UiModelCheck result;
-    if (_source(value, await effectiveRuntime()) == UiModelSource.codex) {
-      result = await checkCodex();
+    final source = _source(value, await effectiveRuntime());
+    if (source != UiModelSource.nipaplay) {
+      result = source == UiModelSource.chatgpt
+          ? const UiModelCheck(ok: false, message: '请查看 Codex 账号状态')
+          : await checkCodex();
     } else {
       final key = await _secret(value);
       if (key == null || key.isEmpty) {
@@ -970,13 +1153,25 @@ final class LabModelVault implements CredentialVault {
 }
 
 /// The settings page can subscribe before the application core is ready.
-final class PendingHostSettings implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings {
+final class PendingHostSettings implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings, NextSessionModelSettings, NextCodexAccountSettings {
   PendingHostSettings(this.ready) {
     ready.then((value) {
       _subscription = value.changes.listen((_) => _changes.add(null));
     });
   }
   final Future<NextHostSettings> ready;
+  @override
+  Future<JsonMap> codexAccount() async => ((await ready) as NextCodexAccountSettings).codexAccount();
+  @override
+  Future<UiCodexLogin> startCodexLogin({required bool deviceCode}) async =>
+    ((await ready) as NextCodexAccountSettings).startCodexLogin(deviceCode: deviceCode);
+  @override
+  Future<void> cancelCodexLogin() async => ((await ready) as NextCodexAccountSettings).cancelCodexLogin();
+  @override
+  Stream<void> get codexAccountChanges => changes;
+  @override
+  Future<void> setSessionModel(UiModelChoice choice, {bool once = false}) async =>
+      ((await ready) as NextSessionModelSettings).setSessionModel(choice, once: once);
   @override
   Future<UiCodexRuntime> codexRuntime() async => (await ready).runtimeSettings.codexRuntime();
   @override

@@ -62,6 +62,13 @@
             "userOverridesPreserved": null,
             "projectionVerified": null,
             "indexed": null,
+            "outcome": null,
+            "failedProbes": null,
+            "probeErrors": null,
+            "probeErrorsOmitted": null,
+            "discFiles": null,
+            "discFilesOmitted": null,
+            "unreadableDirectories": null,
             "files": null
           },
           "cancellation": null
@@ -157,6 +164,13 @@
             "userOverridesPreserved": null,
             "projectionVerified": null,
             "indexed": null,
+            "outcome": null,
+            "failedProbes": null,
+            "probeErrors": null,
+            "probeErrorsOmitted": null,
+            "discFiles": null,
+            "discFilesOmitted": null,
+            "unreadableDirectories": null,
             "files": null
           },
           "cancellation": null

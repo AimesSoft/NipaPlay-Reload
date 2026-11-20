@@ -37,6 +37,7 @@ final class InstalledItem {
 /// the plugins left out (with why) for this runtime.
 typedef StoreHostFacts = ({
   String instructions,
+  List<String> codexSkillRoots,
   List<Map<String, Object?>> dshPlugins,
   Map<String, String> skipped,
 });
@@ -88,6 +89,7 @@ final class RikaStore {
 
   Directory get _skills => Directory(p.join(root.path, 'skills'));
   Directory get _plugins => Directory(p.join(root.path, 'plugins'));
+  Directory codexMarketplace(String id) => Directory(p.absolute(_plugins.path, id));
   File get _installedFile => File(p.join(root.path, 'installed.json'));
   File get _listCache => File(p.join(root.path, 'index.json'));
 
@@ -234,7 +236,9 @@ final class RikaStore {
 
   /// Installs (or updates to) the official item [id] at [version], the one
   /// whose notices the person read; a list that moved on is [StoreChanged].
-  Future<InstalledItem> installOfficial(String id, {required String version}) =>
+  Future<InstalledItem> installOfficial(String id, {required String version,
+      Future<void> Function(StoreItem)? beforeCodex,
+      Future<void> Function(StoreItem)? activateCodex}) =>
       _serial(() async {
         final list = await officialList(refresh: true);
         final item = list.items.where((i) => i.id == id).firstOrNull ??
@@ -242,7 +246,13 @@ final class RikaStore {
         if (item.version != version) {
           throw StoreChanged('「${item.name}」刚更新到 ${item.version}，请看过新版的说明后再安装');
         }
-        return _install(item, null);
+        if (item.kind == StoreKind.codexPlugin) {
+          if (beforeCodex == null || activateCodex == null) {
+            throw const StoreFormatException('Codex 插件需要 NipaPlay 管理的 Codex。');
+          }
+          await beforeCodex(item);
+        }
+        return _install(item, null, activateCodex: activateCodex);
       });
 
   Future<NpmResolution> resolveNpm(String spec,
@@ -290,7 +300,8 @@ final class RikaStore {
   }
 
   Future<InstalledItem> _install(
-      StoreItem item, Map<String, Uint8List>? npmFiles) async {
+      StoreItem item, Map<String, Uint8List>? npmFiles,
+      {Future<void> Function(StoreItem)? activateCodex}) async {
     // What is saved must read back: checked before anything is written.
     StoreItem.parse(item.toJson(), origin: item.origin);
     final items = await installed();
@@ -304,11 +315,14 @@ final class RikaStore {
     if (await staging.exists()) await staging.delete(recursive: true);
     await staging.create(recursive: true);
     try {
-      if (item.kind == StoreKind.skill) {
+      if (item.kind != StoreKind.plugin) {
+        final target = item.kind == StoreKind.codexPlugin
+            ? await Directory(p.join(staging.path, 'plugin')).create()
+            : staging;
         if (npmFiles != null) {
           await writePackageFiles({
             for (final f in item.files) f.path: npmFiles[f.path]!,
-          }, staging);
+          }, target);
         } else {
           for (final file in item.files) {
             final bytes = await fetch.bytes(
@@ -317,9 +331,10 @@ final class RikaStore {
                 size: file.bytes,
                 maxBytes: maxFileBytes);
             await writePackageFiles(
-                {file.path: Uint8List.fromList(bytes)}, staging);
+                {file.path: Uint8List.fromList(bytes)}, target);
           }
         }
+        if (item.kind == StoreKind.codexPlugin) await _codexManifest(item, staging, target);
       } else {
         final registries = await this.registries();
         for (final package in item.packages) {
@@ -354,6 +369,7 @@ final class RikaStore {
     if (hadOld) await folder.rename(old.path);
     try {
       await staging.rename(folder.path);
+      if (item.kind == StoreKind.codexPlugin) await activateCodex!(item);
       await _save([
         for (final i in items)
           if (i.item.id != item.id) i,
@@ -385,6 +401,25 @@ final class RikaStore {
     return installed_;
   }
 
+  Future<void> _codexManifest(StoreItem item, Directory market, Directory plugin) async {
+    final info = await File(p.join(plugin.path, '.codex-plugin', 'plugin.json')).readAsString();
+    final metadata = jsonDecode(info);
+    if (metadata is! Map || metadata['name'] != item.id || metadata['version'] != item.version) {
+      throw const StoreFormatException('Codex 插件名称或版本与商店不符。');
+    }
+    final manifest = File(p.join(market.path, '.agents', 'plugins', 'marketplace.json'));
+    await manifest.parent.create(recursive: true);
+    await manifest.writeAsString(jsonEncode({
+      'name': 'nipaplay-${item.id}',
+      'plugins': [{
+        'name': item.id,
+        'source': {'source': 'local', 'path': './plugin'},
+        'policy': {'installation': 'AVAILABLE', 'authentication': 'ON_INSTALL'},
+        'category': 'Utilities',
+      }],
+    }), flush: true);
+  }
+
   Future<void> remove(String id) => _serial(() async {
         if (!storeId(id)) throw StoreFormatException('没有安装 $id');
         final items = await installed();
@@ -413,6 +448,9 @@ final class RikaStore {
         final items = await installed();
         final item = items.where((i) => i.item.id == id).firstOrNull ??
             (throw StoreFormatException('没有安装 $id'));
+        if (item.item.kind == StoreKind.codexPlugin) {
+          throw const StoreFormatException('Codex 插件由 Codex 管理启用状态。');
+        }
         final changed = InstalledItem(item.item, enabled: enabled, at: item.at);
         await _save([
           for (final i in items) i.item.id == id ? changed : i,
@@ -461,6 +499,7 @@ final class RikaStore {
             loaded.add(_startupItem(item));
             continue;
           }
+          if (item.kind == StoreKind.codexPlugin) continue;
           if (runtimeModules == null) {
             skipped[item.id] = '插件只在 DeepSeek Harness 运行环境下加载';
             continue;
@@ -476,6 +515,9 @@ final class RikaStore {
         _loadedAtLastStart = List.unmodifiable(loaded);
         return (
           instructions: skills.isEmpty ? '' : _skillsSection(skills),
+          codexSkillRoots: [
+            for (final skill in skills) p.absolute(_skills.path, skill.id),
+          ],
           dshPlugins: rows,
           skipped: skipped,
         );

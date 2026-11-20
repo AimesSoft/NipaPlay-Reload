@@ -181,7 +181,7 @@ void main() {
     expect(launch.environment.values.single == secret, true);
     final config =
         await File('${launch.home!.path}/config.toml').readAsString();
-    expect(config, contains('env_key = "NIPAPLAY_MODEL_API_KEY"'));
+    expect(launch.providerOverride, contains('env_key="NIPAPLAY_MODEL_API_KEY"'));
     expect(config, contains('trust_level = "trusted"'));
     await settings.setModel(choice('http://localhost:12346/v1'));
     expect((await settings.model()).hasKey, false);
@@ -205,8 +205,7 @@ void main() {
     expect((await settings.model()).provider, '自定义');
     expect((await settings.model()).hasKey, true);
     expect(await file.readAsString(), saved);
-    expect(await File('${launch.home!.path}/config.toml').readAsString(),
-      contains('base_url = "https://custom.example/prefix"'));
+    expect(launch.providerOverride, contains('base_url="https://custom.example/prefix"'));
     expect(launch.environment.values.single, secret);
     await scanSecrets([saved]);
   });
@@ -368,7 +367,10 @@ void main() {
         codex: codex,
         fixedRuntime: () async => fixed,
         defaultRuntime: AgentRuntimeKind.dsh,
-        runtimeChanged: () async => runtimeChanges++);
+        runtimeChanged: (_, save) async {
+          await save();
+          runtimeChanges++;
+        });
 
     setUp(() {
       runtimeChanges = 0;

@@ -11,9 +11,12 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { appendHandover, validateHandover } from './nipa-handover.mjs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 export const name = 'nipa-app-server';
-export const inject = ['agents', 'sessions'];
+export const inject = ['agents', 'sessions', 'llm', 'commands'];
 
 /** Message sources that are context, not something said in the conversation. */
 const HIDDEN_SOURCES = new Set(['runtime-context', 'agent-instructions', 'compact-checkpoint', 'tool-registry']);
@@ -620,6 +623,27 @@ export function namesProtectedPath(args, protectedPaths) {
 
 export function apply(ctx, config = {}) {
   const provider = String(config.provider ?? 'nipaplay');
+  let catalog;
+  ctx.on('llm/adapters-updated', () => {
+    catalog = undefined;
+    notify('nipa/modelsChanged', {});
+  });
+  async function readCatalog() {
+    const failures = [];
+    const routes = await Promise.all(ctx.llm.listProviders().map(async (route) => {
+      try {
+        return (await ctx.llm.listModels(route.id)).map((entry) => ({
+          model: entry.id, displayName: entry.name ?? entry.id,
+          provider: route.id, providerName: route.name, isDefault: route.id === provider && entry.id === model,
+        }));
+      } catch {
+        failures.push(route.id);
+        return [];
+      }
+    }));
+    return { data: routes.flat(), failures, nextCursor: null };
+  }
+  const selections = new WeakMap();
   const model = String(config.model ?? '');
   const agentOptions = {
     provider, model,
@@ -659,6 +683,7 @@ export function apply(ctx, config = {}) {
   const holds = new Map();
   const activations = new Set();
   const jobCalls = new Map();
+  const importing = new Set();
   let wire;
 
   const liveFor = (id) => {
@@ -727,7 +752,7 @@ export function apply(ctx, config = {}) {
 
   async function threadWithHistory(id, includeTurns = true) {
     const { header, events, isLive } = await readEvents(id);
-    const turns = includeTurns ? historyTurns(id, events, header?.cwd ?? defaultCwd, isLive && ctx.agents.get(id) !== undefined) : [];
+    const turns = includeTurns ? historyTurns(id, events, header?.cwd ?? defaultCwd, isLive && ctx.agents.get(id) !== undefined).slice(meta.get(id)?.importedTurns ?? 0) : [];
     // A held subagent turn reads as running until its end is reported.
     const held = holds.get(id)?.turnId;
     for (const turn of turns) {
@@ -771,7 +796,8 @@ export function apply(ctx, config = {}) {
     const cwd = params?.cwd ?? defaultCwd;
     const now = Date.now();
     const chat = hostChat(params);
-    meta.update(id, { createdAt: now, updatedAt: now, cwd, ...(chat ? { chat } : {}) });
+    meta.update(id, { createdAt: now, updatedAt: now, cwd, ...(chat ? { chat } : {}),
+      ...(params?.config?.['nipaplay.handover'] === true ? { staging: true } : {}) });
     const handle = await ctx.agents.create({ sessionId: id, meta: { cwd }, agentOptions });
     handles.set(id, handle);
     const thread = threadObject(id, handle.agent.session.header, []);
@@ -795,6 +821,7 @@ export function apply(ctx, config = {}) {
     const cwd = typeof params.cwd === 'string' ? params.cwd : undefined;
     const rows = [];
     for (const { header } of snapshots) {
+      if (meta.get(String(header.id))?.staging || meta.get(String(header.id))?.archived) continue;
       const child = header.parentSession !== undefined;
       if (child ? !wantChildren : !wantRoots) continue;
       if (cwd && header.cwd && header.cwd !== cwd && realCwd(header.cwd) !== realCwd(cwd)) continue;
@@ -809,7 +836,32 @@ export function apply(ctx, config = {}) {
 
   async function startTurn(params) {
     const id = String(params?.threadId ?? '');
+    if (meta.get(id)?.staging || meta.get(id)?.archived || importing.has(id)) {
+      throw rpcError(-32600, 'Conversation is not ready');
+    }
     const agent = await ensureAgent(id);
+    const selected = { provider: params.modelProvider ?? provider, model: params.model ?? model };
+    const changed = selected.provider !== provider || selected.model !== model;
+    if (changed) {
+      const listed = await (catalog ??= readCatalog());
+      if (!listed.data.some((entry) => entry.provider === selected.provider && entry.model === selected.model)) {
+        throw rpcError(-32602, 'Selected model is not in the provider catalog.');
+      }
+    } else if (config.reasoningEffort != null) {
+      selected.reasoningEffort = config.reasoningEffort;
+    }
+    if (changed || selections.has(agent)) {
+      if (currentTurnId(id) !== null) throw rpcError(-32600, 'Model selection requires an idle agent.');
+      let selection = selections.get(agent);
+      if (!selection) {
+        const require = createRequire(pathToFileURL(process.argv[1]));
+        const { installModelSelection } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-agent')).href);
+        selection = { current: selected };
+        installModelSelection(agent.ctx, selection);
+        selections.set(agent, selection);
+      }
+      selection.current = selected;
+    }
     const message = userMessage(params.input);
     // The turn exists once DSH claims this message from the agent's inbox.
     const claimed = new Promise((resolve, reject) => claims.set(message.id, { resolve, reject }));
@@ -851,9 +903,47 @@ export function apply(ctx, config = {}) {
     return {};
   }
 
+  const runningCommands = new Set();
+  async function executeCommand({ threadId, line }) {
+    if (typeof line !== 'string' || !line.startsWith('/') || line.length > 8192) {
+      throw rpcError(-32602, 'Invalid slash command.');
+    }
+    if (runningCommands.has(threadId)) throw rpcError(-32600, 'A command is already running.');
+    runningCommands.add(threadId);
+    try {
+      const outcome = await ctx.commands.execute(await ensureAgent(threadId), line, [], AbortSignal.timeout(60000));
+      // Not a command: the caller sends the line to Nipa as ordinary text.
+      if (!outcome) return { kind: 'unknown', text: '' };
+      return { kind: outcome.result.kind, text: outcome.result.text ?? '' };
+    } catch {
+      throw rpcError(-32603, '无法执行这条命令。');
+    } finally {
+      runningCommands.delete(threadId);
+    }
+  }
+
   const handlers = {
+    'nipa/plugins/list': async () => {
+      const bundles = await ctx.get('pluginManager')?.listBundles();
+      return { plugins: (bundles ?? []).filter(bundle => bundle.removable).map(bundle => ({
+        name: bundle.name, version: bundle.version, enabled: bundle.enabled,
+      })) };
+    },
+    'nipa/commands/list': async ({ threadId }) => ({
+      commands: ctx.commands.list(await ensureAgent(threadId)),
+    }),
+    'nipa/commands/execute': executeCommand,
     initialize: async () => {
       await ctx.get('loader')?.await?.();
+      try {
+        const server = ctx.get('webServer');
+        const connection = ctx.get('connection');
+        if (server && connection) {
+          notify('nipa/webReady', { url: connection.authenticatedUrl(server.getOrigin()) });
+        }
+      } catch {
+        // Web is optional; SDK chat can still initialize.
+      }
       return { userAgent: `nipaplay-dsh/${version}`, codexHome: home, platformFamily: process.platform, platformOs: process.platform };
     },
     'config/read': async () => ({ config: { model, model_provider: provider, model_reasoning_effort: config.reasoningEffort ?? null }, origins: {}, layers: null }),
@@ -864,9 +954,19 @@ export function apply(ctx, config = {}) {
       }],
       nextCursor: null,
     }),
+    'nipa/model/list': async () => (catalog = readCatalog()),
     // Nipa's memory arrives through the nipa-memory plugin, not Codex hooks.
     'hooks/list': async (params) => ({ data: (params?.cwds ?? []).map((cwd) => ({ cwd, hooks: [], errors: [], warnings: [] })) }),
     'thread/start': startThread,
+    'thread/inject_items': injectItems,
+    'thread/archive': async ({ threadId }) => {
+      meta.update(threadId, { archived: true });
+      meta.flush();
+      const handle = handles.get(threadId);
+      handles.delete(threadId);
+      await handle?.dispose();
+      return {};
+    },
     'thread/resume': resumeThread,
     'thread/read': async (params) => ({ thread: await threadWithHistory(String(params?.threadId ?? ''), params?.includeTurns !== false) }),
     'thread/list': listThreads,
@@ -880,6 +980,33 @@ export function apply(ctx, config = {}) {
     'turn/steer': async (params) => steerTurn(params),
     'turn/interrupt': async (params) => interruptTurn(params),
   };
+
+  async function injectItems({ threadId, turns }) {
+    const agent = ctx.agents.get(threadId);
+    if (!agent || !meta.get(threadId)?.staging || importing.has(threadId) || agent.status === 'running') {
+      throw rpcError(-32600, 'A new idle conversation is required');
+    }
+    importing.add(threadId);
+    try {
+      const batch = validateHandover(turns);
+      const session = agent.session;
+      const preflight = new session.constructor(session.id, undefined, session.header);
+      appendHandover(preflight, batch, provider, model);
+      const persistence = ctx.get('sessionPersistence');
+      if (!persistence) throw new Error('Conversation persistence unavailable');
+      appendHandover(session, batch, provider, model);
+      await persistence.flush();
+      const handle = handles.get(threadId);
+      handles.delete(threadId);
+      await handle.dispose();
+      await ensureAgent(threadId);
+      meta.update(threadId, { importedTurns: batch.length, staging: false });
+      meta.flush();
+      return {};
+    } finally {
+      importing.delete(threadId);
+    }
+  }
 
   async function onMessage({ id, method, params }) {
     if (method === 'nipa/redact' && (id === undefined || id === null)) {
@@ -962,6 +1089,7 @@ export function apply(ctx, config = {}) {
 
   function onSessionEvent(session, event) {
     const threadId = String(session.id);
+    if (importing.has(threadId)) return;
     const state = liveFor(threadId);
     const data = event.data ?? {};
     switch (event.type) {
@@ -994,6 +1122,12 @@ export function apply(ctx, config = {}) {
         break;
       }
       case 'assistant/message': {
+        const content = (data.message?.content ?? [])
+          .filter((block) => block.type !== 'reasoning' && block.type !== 'tool-call')
+          .map((block) => block.type === 'text' ? { type: 'output_text', text: block.text } : { type: 'omitted' });
+        if (content.length) notify('rawResponseItem/completed', {
+          threadId, turnId: turnIdOf(threadId, data.turn), item: { type: 'message', role: 'assistant', content },
+        });
         // Streamed blocks were completed live; a message without live frames
         // in this process is reported whole.
         const key = `${data.turn}:${data.step}`;
@@ -1017,6 +1151,9 @@ export function apply(ctx, config = {}) {
       }
       case 'tool/call': {
         const turnId = turnIdOf(threadId, data.turn);
+        notify('rawResponseItem/completed', { threadId, turnId, item: {
+          type: 'function_call', call_id: String(data.callId), name: data.name, arguments: data.arguments,
+        } });
         const item = toolItem(threadId, data, session.header?.cwd ?? defaultCwd);
         state.calls.set(String(data.callId), { item, turn: data.turn, startedAt: event.time });
         itemStarted(threadId, turnId, item);
@@ -1036,6 +1173,11 @@ export function apply(ctx, config = {}) {
         const callId = String(data.message?.toolCallId ?? data.message?.source?.callId ?? '');
         const call = state.calls.get(callId);
         if (!call) break;
+        notify('rawResponseItem/completed', { threadId, turnId: turnIdOf(threadId, data.turn), item: {
+          type: 'function_call_output', call_id: callId, failed: data.message?.isError === true,
+          output: (data.message?.content ?? []).map((block) => block.type === 'text'
+            ? { type: 'text', text: block.text } : { type: 'omitted' }),
+        } });
         state.calls.delete(callId);
         itemCompleted(threadId, turnIdOf(threadId, data.turn), completeToolItem(call.item, data, call.startedAt, event.time));
         break;

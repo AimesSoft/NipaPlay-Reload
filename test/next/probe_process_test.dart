@@ -14,23 +14,31 @@ void main() {
     probe.executable = file.path;
     probe.library = file.path;
   }
+
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('probe-test-');
     probe = MediaProbeProcess(timeout: const Duration(seconds: 1));
   });
-  tearDown(() async { await probe.close(); await dir.delete(recursive: true); });
-  test('timeout kills child; next file can be probed and technical facts survive', () async {
+  tearDown(() async {
+    await probe.close();
+    await dir.delete(recursive: true);
+  });
+  test(
+      'timeout kills child; next file can be probed and technical facts survive',
+      () async {
     await executable('exec sleep 60');
     await expectLater(probe.run('stuck.mkv'), throwsA(isA<Failure>()));
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(probe.status()['active'], isEmpty);
     expect((probe.status()['recent'] as List).single['reason'], 'timeout');
-    await executable('echo \'{"container":{"ok":true,"value":{"mediaOpen":true,"format":"matroska"}},"tracks":{"ok":true,"value":[{"id":2,"kind":2,"codec":"subrip","language":"chi"}]},"events":[{"ok":true,"value":{"durationMicros":1250000}}]}\'');
+    await executable(
+        'echo \'{"container":{"ok":true,"value":{"mediaOpen":true,"format":"matroska"}},"tracks":{"ok":true,"value":[{"id":2,"kind":2,"codec":"subrip","language":"chi"}]},"events":[{"ok":true,"value":{"durationMicros":1250000}}]}\'');
     final facts = await probe.run('healthy.mkv');
     expect(facts['durationMs'], 1250);
     expect((facts['subtitles'] as List).single['streamIndex'], 2);
   }, skip: Platform.isWindows);
-  test('operator cancels only owned ID; failure keeps original stderr', () async {
+  test('operator cancels only owned ID; failure keeps original stderr',
+      () async {
     probe = MediaProbeProcess(timeout: const Duration(seconds: 5));
     await executable('exec sleep 60');
     final running = expectLater(probe.run('slow.mkv'), throwsA(isA<Failure>()));
@@ -41,15 +49,25 @@ void main() {
     expect((await probe.cancel(id))['terminated'], true);
     await running;
     await expectLater(probe.cancel('unowned'), throwsA(isA<Failure>()));
-    await executable('echo "Invalid data found when processing input" >&2\nexit 1');
-    await expectLater(probe.run('bad.mkv'), throwsA(isA<Failure>().having(
-      (e) => e.message, 'original error', contains('Invalid data found'))));
+    await executable(
+        'echo "Invalid data found when processing input" >&2\nexit 3');
+    await expectLater(
+        probe.run('bad.mkv'),
+        throwsA(isA<Failure>()
+            .having((e) => e.message, 'original error',
+                contains('Invalid data found'))
+            .having((e) => e.details['state'], 'state', 'failed')
+            .having((e) => e.details['exitCode'], 'exit code', 3)));
+    expect((probe.status()['recent'] as List).first['exitCode'], 3);
   }, skip: Platform.isWindows);
-  test('task stop signal terminates probe without indexing late results', () async {
+  test('task stop signal terminates probe without indexing late results',
+      () async {
     probe = MediaProbeProcess(timeout: const Duration(seconds: 5));
     await executable('exec sleep 60');
     final stop = Completer<void>();
-    final running = expectLater(probe.run('cancel.mkv', stopRequested: stop.future), throwsA(isA<Failure>()));
+    final running = expectLater(
+        probe.run('cancel.mkv', stopRequested: stop.future),
+        throwsA(isA<Failure>()));
     while ((probe.status()['active'] as List).isEmpty) {
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }

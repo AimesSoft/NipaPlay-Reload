@@ -137,6 +137,28 @@ final _receiptDetails = ObjectSchema({
       _bool('Whether persistent metadata edits were preserved.'),
   'projectionVerified': _bool('Whether Classic projection readback passed.'),
   'indexed': _int('Number of indexed files.'),
+  'outcome': _text('Scan outcome: success, partial or failure.'),
+  'failedProbes': _int('Number of files whose probe failed.'),
+  'probeErrors': ArraySchema(
+      ObjectSchema({
+        'path': _locator,
+        'code': _text('Failure code.'),
+        'message': _text('Probe failure, at most 512 characters.'),
+        'disc': ObjectSchema({}, additionalProperties: true, nullable: true),
+      }),
+      nullable: true,
+      description: 'The first 200 files whose probe failed.'),
+  'probeErrorsOmitted': _int('Probe failures beyond the listed ones.'),
+  'discFiles': ArraySchema(
+      ObjectSchema({
+        'path': _locator,
+        'disc': ObjectSchema({}, additionalProperties: true, nullable: true),
+      }),
+      nullable: true,
+      description: 'The first 200 indexed files inside a disc structure.'),
+  'discFilesOmitted': _int('Indexed disc-structure files beyond the listed ones.'),
+  'unreadableDirectories':
+      ObjectSchema({}, additionalProperties: true, nullable: true),
   'files': ArraySchema(
       ObjectSchema({
         'relativePath': _text('Output-relative path.'),

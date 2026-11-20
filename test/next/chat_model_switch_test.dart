@@ -10,6 +10,7 @@ import 'package:nipaplay/next/settings/model_capability.dart';
 import 'package:nipaplay/next/settings/responses_probe.dart';
 import 'package:nipaplay/next/ui/chat/model_switch.dart';
 import 'package:nipaplay/next/ui/conversation/chat_port.dart';
+import 'package:nipaplay/next/ui/conversation/chat_turn.dart';
 import 'package:nipaplay/next/ui/conversation/nipa_chat.dart';
 import 'package:nipaplay/next/ui/dev/fake_settings.dart';
 import 'package:nipaplay/next/ui_data/host_settings.dart';
@@ -18,13 +19,39 @@ import 'package:nipaplay/next/ui_data/ui_data.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('slash commands never reach the model, even on failure', () async {
+    final port = _CommandPort();
+    final chat = NipaChat(port: port, data: _EmptyData());
+    addTearDown(chat.dispose);
+    await chat.say('/ok');
+    await chat.say('/failing');
+    await chat.say('/throws');
+    expect(
+        port.commands, [('t1', '/ok'), ('t1', '/failing'), ('t1', '/throws')]);
+    expect(port.model, isEmpty);
+    expect(chat.turns.map((turn) => turn.status),
+        ['completed', 'failed', 'failed']);
+    expect((chat.turns[0].parts.last as ReplyPart).text, 'command output');
+    expect((chat.turns[1].parts.last as ReplyPart).text, 'command failed');
+    expect((chat.turns[2].parts.last as NoticePart).text, '无法执行这条命令。');
+    await chat.say('ordinary input');
+    expect(port.model, ['ordinary input']);
+    // A path is never a command; a line the harness does not know goes to Nipa.
+    await chat.say('/Users/me/a.mkv 这集怎么样');
+    await chat.say('/unknown 你好');
+    expect(port.commands.last, ('t1', '/unknown 你好'));
+    expect(port.commands, hasLength(4));
+    expect(port.model,
+        ['ordinary input', '/Users/me/a.mkv 这集怎么样', '/unknown 你好']);
+  });
+
   test('model actions read and write through host settings without endpoints',
       () async {
     final host = FakeHostSettings()..runtime = UiAgentRuntimeKind.dsh;
     final harness = Harness([ChatModelCapability(host)]);
     Future<JsonMap> invoke(String operation, [JsonMap input = const {}]) async {
-      final result = await harness.invokeJson(
-          'chat.model.$operation', input, harness_api.Invocation(origin: 'test'));
+      final result = await harness.invokeJson('chat.model.$operation', input,
+          harness_api.Invocation(origin: 'test'));
       expect(result, isA<Completed<JsonEncodable>>());
       return (result as Completed<JsonEncodable>).value.toJson() as JsonMap;
     }
@@ -39,6 +66,7 @@ void main() {
         .singleWhere((choice) => choice['model'] == 'deepseek-pro');
     expect(choice.containsKey('baseUrl'), isFalse);
     expect(choice.containsKey('apiKey'), isFalse);
+    expect(choice['candidateOrigin'], 'provider');
     final saved = await invoke(
         'set', {'choiceId': choice['choiceId'], 'reasoning': 'off'});
     expect(saved['appliesAt'], 'nextTurn');
@@ -173,6 +201,7 @@ void main() {
           findsNothing);
       expect(find.byKey(const Key('chat.model.listed.deepseek-pro')),
           findsOneWidget);
+      expect(find.text('这个服务商'), findsNWidgets(2));
 
       // Tapping reasoning '高' updates model without closing the sheet.
       await tester.tap(find.text('高'));
@@ -232,6 +261,33 @@ final class _IdleChatPort implements ChatPort {
       Object requestId, Map<String, List<String>> answers) async {}
   @override
   void dispose() {}
+}
+
+final class _CommandPort extends _IdleChatPort implements SlashCommandPort {
+  final commands = <(String, String)>[];
+  final model = <String>[];
+  @override
+  bool get hasSlashCommands => true;
+  @override
+  Future<String?> mainThread() async => 't1';
+  @override
+  Future<ChatEvent?> startTurn(String threadId, String text) async {
+    model.add(text);
+    return const {
+      'turn': {'id': 'turn-fixture', 'status': 'inProgress'}
+    };
+  }
+
+  @override
+  Future<ChatEvent> executeSlashCommand(String threadId, String line) async {
+    commands.add((threadId, line));
+    return switch (line) {
+      '/ok' => {'kind': 'success', 'text': 'command output'},
+      '/failing' => {'kind': 'error', 'text': 'command failed'},
+      _ when line.startsWith('/unknown') => {'kind': 'unknown', 'text': ''},
+      _ => throw StateError('fixture command failed'),
+    };
+  }
 }
 
 final class _EmptyData implements NextUiData {

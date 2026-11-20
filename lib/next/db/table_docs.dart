@@ -192,6 +192,10 @@ const dbTableDocs = <String, DbTableDoc>{
       reason: '会话映射；改它会让对话断开或串线。用 chat.session.* 操作。'),
   'harness_discoveries': DbTableDoc(DbAccess.read, 'Nipa 报告的发现记录（activity 的来源）。',
       reason: '审计记录，用 followup.discover 追加。'),
+  'conversation_turns': DbTableDoc(DbAccess.read, '每轮对话的完整记录，切换运行器时交给新运行器。',
+      reason: '对话记录；改它会让交接出的对话与原对话不一致。'),
+  'conversation_prefixes': DbTableDoc(DbAccess.read, '交接进来的对话在新运行器里的前序记录。',
+      reason: '对话记录；改它会让交接出的对话与原对话不一致。'),
 
   // ── 只读：审计与历史 ────────────────────────────────────────────────
   'body_changes': DbTableDoc(DbAccess.read,

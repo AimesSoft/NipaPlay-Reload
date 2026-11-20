@@ -88,8 +88,8 @@ for k in rows:
     if k.startswith('danmaku.') and (not rows[k][0][1]):
         rows[k][0][1] = '弹幕 ' + k.split('.')[-1].replace('_', ' ') + '；来源及副作用见目标契约'
 import hashlib
-BASELINE_HASHES = {'lib/next/settings/model_capability.dart': '9a9cf6a192ec5abe9860ab652975f127b28614cbccfd1f32334ea4139b28bf92', 'lib/next/mesh/chat_attachment.dart': '98c373bfc3fc985b1d1e47ff5ce18e4a554defb52fdefe02b9e00a87e4532712', 
- 'lib/next/store/capability.dart': '8946a8a0b934ec01963d79e8313019e5033a9be3fe2bf9a65fdce5aaa55da6ca',
+BASELINE_HASHES = {'lib/next/store/runtime_extensions.dart': '4be923ed0a5a4583a1af100a1483206db779569657e0f9c8810f21c29652dffd', 'lib/next/settings/model_capability.dart': '5d223d24bcc24d257db4148b7581d2c8a9d5b0d8dbc4436847d54a7b6974936d', 'lib/next/mesh/chat_attachment.dart': '98c373bfc3fc985b1d1e47ff5ce18e4a554defb52fdefe02b9e00a87e4532712',
+ 'lib/next/store/capability.dart': 'fbc72c052868b049590ab34afeabb2178c4d5ebb3b931c059638d9bb69208a8b',
  'lib/next/voice/capability.dart': '635811717bf4e74b5540aaf660b7a128e575fe5a1c4a3f89329361b43027f6b1',
  'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': 'ee236b7f41cc2c4d46b23d603f2d2347e14a7082e9ce7fe8b674f754bd4d0de3',
  'lib/next/knowledge/capability.dart': '705ef8725a060aa20504794279f0b433e14288663ee024d17e33477dd9b3c400',
@@ -128,7 +128,7 @@ BASELINE_HASHES = {'lib/next/settings/model_capability.dart': '9a9cf6a192ec5abe9
  'lib/next/media/catalog_capability.dart': 'fb4729d8a35c862346496c23283f132e7c26ecd9e5383f72a674d8b0ffa06ec0',
  'lib/next/media/file_indexing.dart': 'e1d72b823f8923988d451024d2a4899711d9ce4372d958b83b91fa278d89a16d',
  'lib/next/media/management.dart': '65d945b4e79e4e38a82c64bfa93dd89b3d97e69f6132ebdc7588b24341dca6b7',
- 'lib/next/media/media_capability.dart': '5c4e624b3a08929ed0bee3798b91d587aca479462d02ffd898fdacfba28c7a8e',
+ 'lib/next/media/media_capability.dart': '7ac40fe8c64994a72c7691a3b4c4a747fecf4a892ad1c867dd4fb25b99c556d8',
  'lib/next/media/work_merge.dart': '0c2f996d0a7f9ecb7858ecf01b96be470ffda37b2dcdb16980b76f9d6a2566f9',
  'lib/next/media_sources/capability.dart': '43b535710ac28c50bfd962e9db62dead59d150a902956b83a2dfa7225d2a99e3',
  'lib/next/media_sources/sync.dart': '24ecd6ca762da36152605b16967680bf44cb4e5e16c7638d4ec5d22a26aa1056',
@@ -139,8 +139,8 @@ BASELINE_HASHES = {'lib/next/settings/model_capability.dart': '9a9cf6a192ec5abe9
  'lib/next/mesh/library_capability.dart': 'd9999630399b9aff79bb10f2f14ff2a902b80c572dc6f30edf8ec2f330b37240',
  'lib/next/mesh/runtime.dart': 'c8c9b9694ef899f2080ef15e5b0cd2e2b2751abf0f654dd08cfcf6c669360dd7',
  'lib/next/network/capability.dart': '0b12d2f9e1b415cc986e124d016767a5d230d0178a3e19f22fbb8d15481109d8',
- 'lib/next/next_core.dart': '016d8da60c4571e7b74eceb0bf900e2096b351a3843dd67a31436fa32587f63f',
- 'lib/next/next_runtime.dart': '769238aab213166125899385c422880001c2e6bb6fa9f51abf4ae0122def279b',
+ 'lib/next/next_core.dart': '9c5160f8d4a4f7ddb6c42630b93a1e453b9832ffed8a96ed99d1628d5fc7db46',
+ 'lib/next/next_runtime.dart': 'baae5c5681dcf62ed52042a7e67feb039cabf980c04dc310821e99b1bbf6e2f1',
  'lib/next/player/features/local_operations.dart': '6e1d4e008ebf23f0f62c11abace5e1c10eb355675607d2ee26929b80f362e5b0',
  'lib/next/player/features/operation_specs.dart': '514a6c5049507ee3513bffeb4532d760d03d8f4154a93f00ee680c8af1e3d35a',
  'lib/next/player/ports/session_ports.dart': '4cf2d88a57dc8e3939b12237e23e243ec728cfa5587c5b2e20e3c48db275da9e',

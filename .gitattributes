@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Their SHA-256 pins each other; keep the bytes identical on Windows checkouts.
+assets/next/agent/dsh-runtime.json text eol=lf
+assets/next/agent/dsh-web.json text eol=lf

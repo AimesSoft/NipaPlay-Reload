@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'package:nipaplay/services/file_association_service.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -97,6 +98,7 @@ import 'harness_location.dart';
 import 'harness_hooks.dart';
 import 'harness_repository.dart';
 import 'chat/chat_host.dart';
+import 'chat/handover.dart';
 import 'chat/dsh_runtime.dart';
 import 'memory/recent.dart';
 import 'work_detail_bridge.dart';
@@ -597,6 +599,10 @@ final class NextRuntime extends ChangeNotifier {
               : 47811,
     );
     core.programs.credentialFile = _endpoint.credentialFile;
+    core.extensionChat = () => chat;
+    core.extensionInstaller = () => _hostSettings?.dsh;
+    core.extensionOpenUrl =
+        (url) => launchUrl(url, mode: LaunchMode.externalApplication);
     final desktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
     final labRoot = LabProfile.active ? Directory(LabProfile.root) : null;
     _hostSettings = HostSettingsService(
@@ -607,6 +613,7 @@ final class NextRuntime extends ChangeNotifier {
                 root: Directory('${root.path}/dsh-runtime'),
                 manifest: DshManifest.parse(await rootBundle
                     .loadString('assets/next/agent/dsh-runtime.json')),
+                webLock: () => rootBundle.loadString('assets/next/agent/dsh-web.json'),
                 platform: DshManifest.hostPlatform(),
                 notify: () => _hostSettings?.notify(),
                 inUse: () => chat?.available == true,
@@ -620,12 +627,14 @@ final class NextRuntime extends ChangeNotifier {
         fixedRuntime: () =>
             AgentRuntimeFixed.readAsync(Platform.environment, labRoot: labRoot),
         fixedRuntimeDirectory: labRoot,
+        externalCodexStatusOnly: !LabProfile.active,
         // A lab profile prepared for Codex keeps using it until told otherwise.
         defaultRuntime: labRoot != null &&
                 File('${labRoot.path}/codex-home/config.toml').existsSync()
             ? AgentRuntimeKind.codex
             : AgentRuntimeKind.dsh,
-        runtimeChanged: () async { await _restartChat(); },
+        runtimeChanged: _switchChatRuntime,
+        restartHost: () async { await _restartChat(applyStore: false); },
         codex: LabProfile.active || !desktop
             ? null
             : CodexRuntime.desktop(
@@ -649,6 +658,7 @@ final class NextRuntime extends ChangeNotifier {
         modelSaved: () async {
           if (chat != null || _disposed || !_open) return;
           _operations = _operations.then((_) async {
+            if (chat != null || _disposed || !_open) return;
             if (_endpointStatus case AgentEndpointRunning(:final repository)) {
               await _startChat(repository);
               notifyListeners();
@@ -658,7 +668,10 @@ final class NextRuntime extends ChangeNotifier {
         });
     _hostReady.complete(_hostSettings);
     if (_disposed) return;
-    if (kDebugMode && LabProfile.active) installDebugChat(() => chat);
+    if (kDebugMode && LabProfile.active) {
+      installDebugChat(() => chat, switchRuntime: (kind) => _hostSettings!
+          .setAgentRuntime(UiAgentRuntimeKind.values.byName(kind)));
+    }
     if (kDebugMode && LabProfile.active) installDebugHostSettings(hostSettings);
     if (kDebugMode && LabProfile.active) {
       installDebugUiData(ServiceProvider.nextCore);
@@ -821,30 +834,16 @@ final class NextRuntime extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _startChat(Directory repository, {String? resumeThreadId}) async {
-    chatError = null;
-    await _hostEvents?.cancel();
-    await _activityEvents?.cancel();
+  Future<ChatHost> _createChat(Directory repository,
+      {AgentRuntimeKind? runtime}) async {
     final labRoot = LabProfile.active ? Directory(LabProfile.root) : null;
     DshRuntime? dsh;
-    try {
-      await _hostSettings!.validateFixedRuntime();
-      if (await _hostSettings!.effectiveRuntime() == AgentRuntimeKind.dsh) {
-        dsh = await _hostSettings!.dshLaunchRuntime();
-        if (dsh == null) {
-          chatError = 'The runtime is not installed.';
-          // Nothing to start until the runtime is there; settings say so.
-          await ServiceProvider.nextCore.followups
-              .attach(null, reason: 'The runtime is not installed.');
-          _hostSettings!.notify();
-          return;
-        }
+    await _hostSettings!.validateFixedRuntime();
+    if ((runtime ?? await _hostSettings!.effectiveRuntime()) == AgentRuntimeKind.dsh) {
+      dsh = await _hostSettings!.dshLaunchRuntime();
+      if (dsh == null) {
+        throw StateError('运行环境尚未安装');
       }
-    } on StateError catch (error) {
-      chatError = redactHarnessText(error.message);
-      await ServiceProvider.nextCore.followups.attach(null, reason: chatError);
-      _hostSettings!.notify();
-      return;
     }
     // NipaPlay's, not the harness's: written from the build on every start.
     final agent = '${ServiceProvider.nextCore.root.path}/agent';
@@ -862,6 +861,8 @@ final class NextRuntime extends ChangeNotifier {
     if (dsh != null) {
       for (final name in const [
         'nipa-app-server.mjs',
+        'nipa-handover.mjs',
+        'nipa-web-launch.mjs',
         'nipa-memory.mjs',
         'persona-prefix.md',
         'persona-suffix.md'
@@ -869,17 +870,24 @@ final class NextRuntime extends ChangeNotifier {
         await install('assets/next/agent/dsh/$name', 'dsh/$name');
       }
     }
-    final host = chat = ChatHost(
+    return ChatHost(
         endpoint: _endpoint,
         repository: repository,
         memory: ServiceProvider.nextCore.memory,
         sessions: ServiceProvider.nextCore.sessions,
-        modelLaunch: _hostSettings!.launch,
+        modelLaunch: () => _hostSettings!.launch(runtime: runtime),
         labRoot: labRoot,
         baseInstructions: base,
         dsh: dsh,
         dshPlugins: dsh == null ? null : Directory('$agent/dsh'),
         extensions: ServiceProvider.nextCore.store.hostFacts);
+  }
+
+  Future<void> _publishChat(ChatHost host) async {
+    await _hostEvents?.cancel();
+    await _activityEvents?.cancel();
+    chat = host;
+    chatError = null;
     final core = ServiceProvider.nextCore;
     core.restartAgent = () => _restartChat(applyStore: true);
     core.jobOrigins.threadFor = host.threadForOrigin;
@@ -904,23 +912,33 @@ final class NextRuntime extends ChangeNotifier {
     _activityEvents =
         core.activityChanges.stream.listen((_) => host.memoryChanged());
     _hostEvents = host.events.listen((event) {
-      if (const {'host/modelChanged', 'host/error', 'turn/completed', 'error'}
+      if (const {'host/modelChanged', 'host/accountChanged', 'nipa/modelsChanged', 'host/error', 'turn/completed', 'error'}
           .contains(event['method'])) {
         _hostSettings!.notify();
       }
     });
     if (kDebugMode && LabProfile.active) recordDebugChat(host);
+    await core.followups.attach(host);
+    _hostSettings!.notify();
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _startChat(Directory repository, {String? resumeThreadId}) async {
+    ChatHost? host;
     try {
+      host = await _createChat(repository);
       await host.start();
       if (resumeThreadId == null) {
         await host.getMainSession();
       } else {
         await host.resumeThread(resumeThreadId);
       }
-      await ServiceProvider.nextCore.followups.attach(host);
+      await _publishChat(host);
     } catch (error) {
-      chatError = redactHarnessText(error.toString());
-      await host.close();
+      // A StateError carries a sentence for the person; no "Bad state:" prefix.
+      chatError = redactHarnessText(
+          error is StateError ? error.message : error.toString());
+      await host?.close();
       chat = null;
       await ServiceProvider.nextCore.followups.attach(null, reason: chatError);
     }
@@ -928,8 +946,49 @@ final class NextRuntime extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  /// The runtime was switched: the running host goes, the other one starts.
-  Future<StoreApplyResult> _restartChat({bool applyStore = false}) async {
+  Future<void> _switchChatRuntime(AgentRuntimeKind runtime,
+      Future<void> Function() saveRuntime) {
+    final operation = _operations.then((_) async {
+      final endpoint = _endpointStatus;
+      if (_disposed || !_open || endpoint is! AgentEndpointRunning) {
+        throw StateError('对话服务尚未就绪');
+      }
+      final source = chat;
+      Future<void> accept(HandoverPayload? payload) async {
+        final target = await _createChat(endpoint.repository, runtime: runtime);
+        try {
+          await target.start().timeout(const Duration(seconds: 30));
+          if (payload != null) {
+            await target.receiveHandover(payload, saveRuntime);
+          } else {
+            await target.getMainSession();
+            await saveRuntime();
+          }
+        } catch (_) {
+          await target.close();
+          rethrow;
+        }
+        await _publishChat(target);
+        await source?.close();
+      }
+
+      if (source?.available == true) {
+        if ((source!.dsh != null) == (runtime == AgentRuntimeKind.dsh)) return;
+        try {
+          await source.handoverTo(accept);
+        } catch (_) {
+          source.reportHandoverFailure();
+          rethrow;
+        }
+      } else {
+        await accept(null);
+      }
+    });
+    _operations = operation.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return operation;
+  }
+
+  Future<StoreApplyResult> _restartChat({required bool applyStore}) async {
     if (_disposed || !_open) {
       return const StoreApplyResult.notRun('The host is closed.');
     }
@@ -953,6 +1012,7 @@ final class NextRuntime extends ChangeNotifier {
                 : 'The Nipa runtime changed.');
         await chat?.close();
         chat = null;
+        await _hostSettings?.dsh?.cleanRemovedWeb();
         chatError = null;
         await _startChat(endpoint.repository, resumeThreadId: selected);
         if (!_disposed) notifyListeners();

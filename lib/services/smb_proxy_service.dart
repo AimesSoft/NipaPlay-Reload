@@ -25,7 +25,7 @@ class SMBProxyService {
 
   // The listener itself is observed inside the proxy isolate; this instance
   // logs root-side lifecycle and probes the proxy over loopback.
-  final _diagnostics = RemoteProxyDiagnostics('SMB');
+  late final _diagnostics = RemoteProxyDiagnostics('SMB', onResume: _onResume);
   Isolate? _isolate;
   ReceivePort? _receivePort;
   StreamSubscription<dynamic>? _receiveSubscription;
@@ -43,21 +43,34 @@ class SMBProxyService {
       <int, Completer<Object?>>{};
   VoidCallback? _smbListener;
 
+  @visibleForTesting
+  Future<void> closeListenerForTesting() async {
+    await _sendControlWithAck({'op': 'test_close_listener'});
+  }
+
   Future<void> initialize() async {
     _diagnostics
         .log('initialize running=$_isRunning pending=${_initializing != null}');
     if (kIsWeb) return;
     // A proxy that is stopping must not be handed out again: wait for the
-    // stop, then start a fresh one.
-    final stopping = _stopping;
-    if (stopping != null) {
-      await stopping;
+    // stop, then start a fresh one. A stop that begins while this call waits
+    // on a shared start or health probe is waited for as well.
+    do {
+      while (_stopping != null) {
+        await _stopping;
+      }
+      await _ensureListener('initialize-reuse');
+    } while (_stopping != null);
+  }
+
+  Future<void> _onResume() async {
+    if (_stopping == null && _isRunning) {
+      await _ensureListener('lifecycle-resumed');
     }
-    if (_isRunning) {
-      unawaited(_diagnostics.probe('initialize-reuse'));
-      return;
-    }
-    final pending = _initializing ??= _initialize();
+  }
+
+  Future<void> _ensureListener(String reason) async {
+    final pending = _initializing ??= _initialize(reason);
     try {
       await pending;
     } finally {
@@ -65,9 +78,14 @@ class SMBProxyService {
     }
   }
 
-  Future<void> _initialize() async {
-    if (kIsWeb || _isRunning) {
-      return;
+  Future<void> _initialize(String reason) async {
+    if (_isRunning) {
+      final unavailable = await _diagnostics.probe(reason);
+      if (_stopping != null) return;
+      if (_isRunning) {
+        if (unavailable) await _rebindListener(reason);
+        return;
+      }
     }
 
     await SMBService.instance.initialize();
@@ -86,11 +104,14 @@ class SMBProxyService {
     addPort(_defaultPort);
     addPort(0);
 
+    final healthToken = RemoteProxyDiagnostics.newHealthToken();
     final receivePort = ReceivePort();
     final startCompleter = Completer<({int port, SendPort controlPort})>();
+    startCompleter.future.ignore();
 
     _receivePort = receivePort;
     _receiveSubscription = receivePort.listen((message) {
+      if (!identical(_receivePort, receivePort)) return;
       if (message == null) {
         if (!startCompleter.isCompleted) {
           startCompleter.completeError(
@@ -141,11 +162,12 @@ class SMBProxyService {
     });
 
     try {
-      _isolate = await Isolate.spawn<_SmbProxyStartupArgs>(
+      final isolate = await Isolate.spawn<_SmbProxyStartupArgs>(
         _smbProxyIsolateMain,
         _SmbProxyStartupArgs(
           mainPort: receivePort.sendPort,
           portsToTry: portsToTry,
+          healthToken: healthToken,
           initialConnections: _buildConnectionSnapshots(),
           useNativeSmb2: Smb2NativeService.instance.isSupported,
         ),
@@ -153,25 +175,68 @@ class SMBProxyService {
         debugName: 'SMBProxyServer',
       );
 
+      _isolate = isolate;
       final started = await startCompleter.future;
+      if (!identical(_receivePort, receivePort)) {
+        throw StateError('SMBProxyService isolate exited during startup');
+      }
       _port = started.port;
       _controlPort = started.controlPort;
       _isRunning = true;
-      _diagnostics.attach(_port);
+      _diagnostics.attach(_port, healthToken: healthToken);
 
       final listener = _syncConnectionsSnapshot;
       _smbListener = listener;
       SMBService.instance.addConnectionListener(listener);
 
-      try {
-        await prefs.setInt(_portKey, _port);
-      } catch (error) {
-        debugPrint('SMB proxy port preference could not be saved: $error');
-      }
+      _syncConnectionsSnapshot();
+      await _savePort(prefs);
     } catch (e) {
       await _cleanupRootIsolateState(killIsolate: true);
       if (e is StateError) rethrow;
       throw StateError('SMBProxyService failed to start: $e');
+    }
+  }
+
+  Future<void> _rebindListener(String reason) async {
+    final previousPort = _port;
+    final controlPort = _controlPort;
+    _diagnostics.log('heal-start reason=$reason');
+    _isRunning = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedPort = prefs.getInt(_portKey);
+      final result = await _sendControlWithAck({
+        'op': 'rebind_listener',
+        'ports': <int>{
+          previousPort,
+          if (savedPort != null && savedPort != 0) savedPort,
+          _defaultPort,
+          0
+        }.toList(),
+      }).timeout(_stopTimeout);
+      if (result is! (int, String) || !identical(_controlPort, controlPort)) {
+        throw StateError('SMBProxyService failed to rebind listener');
+      }
+      final (port, healthToken) = result;
+      _port = port;
+      _diagnostics.attach(port, healthToken: healthToken);
+      _isRunning = _stopping == null;
+      await _savePort(prefs);
+      _diagnostics.log('heal-complete previousPort=$previousPort');
+    } catch (error) {
+      _diagnostics
+          .log('heal-failed ${RemoteProxyDiagnostics.errorSummary(error)}');
+      await _stopProxy();
+      rethrow;
+    }
+  }
+
+  Future<void> _savePort(SharedPreferences prefs) async {
+    try {
+      await prefs.setInt(_portKey, _port);
+    } catch (error) {
+      debugPrint('SMB proxy port preference could not be saved: $error');
     }
   }
 
@@ -200,6 +265,11 @@ class SMBProxyService {
       await _initializing;
     } catch (_) {}
 
+    await _stopProxy();
+    _diagnostics.log('stop-complete');
+  }
+
+  Future<void> _stopProxy() async {
     final controlPort = _controlPort;
     _isRunning = false;
     _port = 0;
@@ -211,7 +281,6 @@ class SMBProxyService {
     }
 
     await _cleanupRootIsolateState(killIsolate: true);
-    _diagnostics.log('stop-complete');
   }
 
   Future<void> _cleanupRootIsolateState({required bool killIsolate}) async {
@@ -224,6 +293,7 @@ class SMBProxyService {
     _controlPort = null;
     _isRunning = false;
     _port = 0;
+    _diagnostics.detach();
 
     for (final completer in _pendingControl.values) {
       if (!completer.isCompleted) {
@@ -234,10 +304,6 @@ class SMBProxyService {
 
     final subscription = _receiveSubscription;
     _receiveSubscription = null;
-    if (subscription != null) {
-      await subscription.cancel();
-    }
-
     final receivePort = _receivePort;
     _receivePort = null;
     receivePort?.close();
@@ -247,10 +313,10 @@ class SMBProxyService {
     if (killIsolate && isolate != null) {
       isolate.kill(priority: Isolate.immediate);
     }
+    await subscription?.cancel();
   }
 
   void _handleUnexpectedIsolateExit() {
-    if (_stopping != null) return;
     if (_isolate == null && _receivePort == null) return;
     unawaited(_cleanupRootIsolateState(killIsolate: false));
   }
@@ -270,7 +336,7 @@ class SMBProxyService {
   }
 
   String buildStreamUrl(SMBConnection connection, String smbPath) {
-    if (!_isRunning) {
+    if (!_isRunning || _stopping != null) {
       throw StateError(
           'SMB proxy must be initialized before building a stream URL');
     }
@@ -307,7 +373,7 @@ class SMBProxyService {
 
   void _syncConnectionsSnapshot() {
     final controlPort = _controlPort;
-    if (!_isRunning || controlPort == null) return;
+    if (controlPort == null || _stopping != null) return;
     controlPort.send({
       'op': 'replace_connections',
       'connections': _buildConnectionSnapshots(),
@@ -388,12 +454,14 @@ class SMBProxyService {
 class _SmbProxyStartupArgs {
   final SendPort mainPort;
   final List<int> portsToTry;
+  final String healthToken;
   final List<Map<String, Object?>> initialConnections;
   final bool useNativeSmb2;
 
   const _SmbProxyStartupArgs({
     required this.mainPort,
     required this.portsToTry,
+    required this.healthToken,
     required this.initialConnections,
     required this.useNativeSmb2,
   });
@@ -474,7 +542,7 @@ void _smbProxyIsolateMain(_SmbProxyStartupArgs args) {
     useNativeSmb2: args.useNativeSmb2,
   );
   state.replaceConnections(args.initialConnections);
-  unawaited(state.start(args.portsToTry));
+  unawaited(state.start(args.portsToTry, args.healthToken));
 }
 
 class _SmbProxyIsolateState {
@@ -498,37 +566,55 @@ class _SmbProxyIsolateState {
   HttpServer? _server;
   bool _stopped = false;
 
-  Future<void> start(List<int> portsToTry) async {
+  Future<void> start(List<int> portsToTry, String healthToken) async {
     _controlPort.listen((message) {
       if (message is! Map) return;
       unawaited(_handleControlMessage(message));
     });
 
+    try {
+      final port = await _bind(portsToTry, healthToken);
+      mainPort.send({
+        'type': 'started',
+        'port': port,
+        'controlPort': _controlPort.sendPort,
+      });
+    } catch (error) {
+      _controlPort.close();
+      mainPort.send({'type': 'start_error', 'error': error.toString()});
+    }
+  }
+
+  Future<int> _bind(List<int> portsToTry, String healthToken) async {
     // Register HEAD explicitly before GET so shelf_router does not shadow it
     // with the synthetic body-stripping GET wrapper that forces Content-Length: 0.
     final router = Router()
       ..add('HEAD', '/smb/stream', _handleStreamHead)
       ..add('GET', '/smb/stream', _handleStream)
-      ..get('/smb/health', (Request request) => Response.ok('ok'));
+      ..get(
+          '/smb/health',
+          (Request request) => Response.ok('ok', headers: {
+                RemoteProxyDiagnostics.healthHeader: healthToken,
+              }));
 
     final handler = _diagnostics.wrap(const Pipeline().addHandler(router.call));
 
     Object? lastError;
     for (final candidatePort in portsToTry) {
+      if (_stopped) throw StateError('SMBProxyService stopped during bind');
       try {
         _diagnostics.log('bind-attempt candidatePort=$candidatePort');
         final server = await HttpServer.bind(
           InternetAddress.loopbackIPv4,
           candidatePort,
         );
+        if (_stopped) {
+          await server.close(force: true);
+          throw StateError('SMBProxyService stopped during bind');
+        }
         _server = server;
         shelf_io.serveRequests(_diagnostics.observe(server), handler);
-        mainPort.send({
-          'type': 'started',
-          'port': server.port,
-          'controlPort': _controlPort.sendPort,
-        });
-        return;
+        return server.port;
       } catch (e) {
         _diagnostics.log(
             'bind-failed candidatePort=$candidatePort ${RemoteProxyDiagnostics.errorSummary(e)}');
@@ -536,11 +622,7 @@ class _SmbProxyIsolateState {
       }
     }
 
-    _controlPort.close();
-    mainPort.send({
-      'type': 'start_error',
-      'error': lastError?.toString() ?? 'Unable to bind loopback port',
-    });
+    throw StateError('Unable to bind loopback port: $lastError');
   }
 
   Future<void> _handleControlMessage(Map<dynamic, dynamic> message) async {
@@ -584,6 +666,28 @@ class _SmbProxyIsolateState {
           StateError(message['error']?.toString() ?? 'Credential lookup failed'),
         );
       }
+      return;
+    }
+
+    if (op == 'rebind_listener' && id is int) {
+      (int, String)? result;
+      try {
+        await _server?.close(force: true);
+        _server = null;
+        final healthToken = RemoteProxyDiagnostics.newHealthToken();
+        final port = await _bind(message['ports'] as List<int>, healthToken);
+        result = (port, healthToken);
+      } catch (error) {
+        _diagnostics
+            .log('rebind-failed ${RemoteProxyDiagnostics.errorSummary(error)}');
+      }
+      mainPort.send({'type': 'ack', 'id': id, 'result': result});
+      return;
+    }
+
+    if (op == 'test_close_listener' && id is int) {
+      await _server?.close(force: true);
+      mainPort.send({'type': 'ack', 'id': id});
       return;
     }
 

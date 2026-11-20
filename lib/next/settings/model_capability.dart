@@ -25,7 +25,7 @@ final class ChatModelCapability implements Capability {
                   id: 'chat.model.candidates',
                   title: '查询候选模型',
                   description:
-                      'List model choices from candidate sources. succeeded with no choices, failed, and unavailable are distinct; failures include a sanitized reason.',
+                      'List model choices with candidateOrigin facts: openai, chatgptAccount, provider, or dshProvider. The Codex catalog is not proof of model access. succeeded with no choices, failed, and unavailable are distinct; failures include a sanitized reason.',
                   effect: Effect.read,
                   input: ObjectSchema({}),
                   output: _facts), (_, __) async {
@@ -41,15 +41,27 @@ final class ChatModelCapability implements Capability {
                   id: 'chat.model.set',
                   title: '切换模型或思考强度',
                   description:
-                      'Save a choiceId from chat.model.status or chat.model.candidates, or change only reasoning on the current choice. The saved setting is read at the next turn boundary; active turns are not interrupted. A save is not a provider connectivity check.',
+                      'Choose a model or supported reasoning level. Runtime choices are scoped to the current conversation; once affects only the next turn. Active turns are not interrupted. A choice does not test provider connectivity.',
                   effect: Effect.write,
                   input: ObjectSchema({
                     'choiceId': StringSchema(minLength: 1),
-                    'reasoning':
-                        StringSchema(values: ['off', 'low', 'medium', 'high']),
+                    'reasoning': StringSchema(minLength: 1),
+                    'scope': StringSchema(values: ['session', 'once']),
                   }),
                   output: _facts),
               (input, _) => _set(host, input)),
+          ClassicAction(
+              const ActionSpec(
+                  id: 'chat.codex.account.status',
+                  title: '读取 Codex 账号状态',
+                  description:
+                      'Read Codex sign-in status and available subscription, limits and usage facts. Existing Codex configuration is status-only. No credential or authorization material is returned.',
+                  effect: Effect.read,
+                  input: ObjectSchema({}),
+                  output: _facts),
+              (_, __) async => host is NextCodexAccountSettings
+                  ? (host as NextCodexAccountSettings).codexAccount()
+                  : {'status': 'unavailable'}),
         ];
 
   static const _facts = ObjectSchema({}, additionalProperties: true);
@@ -61,11 +73,12 @@ final class ChatModelCapability implements Capability {
       text == null ? null : SecretRedactor.text(text);
 
   static String _id(UiModelChoice choice) =>
-      choice.source == UiModelSource.codex
+      choice.source == UiModelSource.codex && choice.catalog == null
           ? 'codex'
           : sha256
               .convert(utf8.encode(jsonEncode([
                 choice.source.name,
+                if (choice.catalog != null) choice.catalog!.name,
                 choice.provider,
                 choice.baseUrl,
                 choice.api?.name,
@@ -76,6 +89,13 @@ final class ChatModelCapability implements Capability {
   static JsonMap _choice(UiModelChoice choice) => {
         'choiceId': _id(choice),
         'source': choice.source.name,
+        if (choice.candidateOrigin != null)
+          'candidateOrigin': choice.candidateOrigin!.name,
+        if (choice.catalog != null) 'catalog': choice.catalog!.name,
+        if (choice.providerLabel != null)
+          'providerName': _safe(choice.providerLabel),
+        if (choice.label != null) 'displayName': _safe(choice.label),
+        if (choice.catalog != null) 'reasoningLevels': choice.reasoningLevels,
         'model': _safe(choice.model),
         'provider': _safe(choice.provider),
         'api': choice.api?.name,
@@ -107,34 +127,46 @@ final class ChatModelCapability implements Capability {
 
   static JsonMap _status(UiModelSetup setup) => {
         'runtime': setup.runtime.name,
-        'configured': _choice(setup.source == UiModelSource.codex
-            ? const UiModelChoice(source: UiModelSource.codex)
-            : _current(setup)),
+        'configured': _choice(setup.sessionChoice ??
+            (setup.source == UiModelSource.codex
+                ? const UiModelChoice(source: UiModelSource.codex)
+                : _current(setup))),
+        if (setup.nextTurnChoice case final choice?)
+          'nextTurn': _choice(choice),
         'inUse': _safe(setup.inUse),
         'recent': _recent(setup).map(_choice).toList(),
         'codexChoiceAvailable':
             setup.codexAvailable && setup.runtime == UiAgentRuntimeKind.codex,
-        'reasoningLevels': _reasoning(setup, _current(setup))
-            ? ['off', 'low', 'medium', 'high']
-            : [],
+        'reasoningLevels': setup.sessionChoice?.reasoningLevels ??
+            (_reasoning(setup, _current(setup))
+                ? ['off', 'low', 'medium', 'high']
+                : []),
         'appliesAt': 'nextTurn',
       };
 
   static Future<JsonMap> _set(NextHostSettings host, JsonMap input) async {
     final id = input['choiceId'] as String?;
     final reasoning = input['reasoning'] as String?;
+    final once = input['scope'] == 'once';
     if (id == null && reasoning == null) {
       throw const Failure(
           FailureCode.invalidInput, 'Supply choiceId or reasoning.');
     }
-    if (id == null) {
+    final setup = await host.model();
+    if (id == null && setup.sessionChoice == null) {
+      if (once || !const ['off', 'low', 'medium', 'high'].contains(reasoning)) {
+        throw const Failure(
+            FailureCode.invalidInput, 'Unsupported reasoning or scope.');
+      }
       await host.setModelReasoning(reasoning == 'off' ? '' : reasoning!);
       return {'saved': true, ..._status(await host.model())};
     }
-    final setup = await host.model();
     final current = _current(setup);
     UiModelChoice? choice;
-    if (id == _id(current)) {
+    if (setup.sessionChoice case final selected?
+        when id == null || id == _id(selected)) {
+      choice = selected;
+    } else if (id == _id(current)) {
       choice = current;
     } else if (id == 'codex' &&
         setup.codexAvailable &&
@@ -153,6 +185,22 @@ final class ChatModelCapability implements Capability {
     if (choice == null || !_compatible(setup, choice)) {
       throw const Failure(FailureCode.invalidInput,
           'Model choice is not available in this runtime.');
+    }
+    if (choice.catalog != null && host is NextSessionModelSettings) {
+      if (reasoning != null && !choice.reasoningLevels.contains(reasoning)) {
+        throw const Failure(
+            FailureCode.invalidInput, 'Unsupported reasoning for this model.');
+      }
+      await (host as NextSessionModelSettings).setSessionModel(
+          choice.withReasoning(reasoning ?? choice.reasoning),
+          once: once);
+      return {'saved': !once, ..._status(await host.model())};
+    }
+    if (once ||
+        (reasoning != null &&
+            !const ['off', 'low', 'medium', 'high'].contains(reasoning))) {
+      throw const Failure(
+          FailureCode.invalidInput, 'Unsupported reasoning or scope.');
     }
     if (reasoning != null && !_reasoning(setup, choice)) {
       throw const Failure(FailureCode.invalidInput,
