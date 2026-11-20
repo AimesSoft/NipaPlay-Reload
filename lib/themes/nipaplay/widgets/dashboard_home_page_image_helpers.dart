@@ -1,7 +1,60 @@
 part of dashboard_home_page;
 
+/// 首页高清封面解析的会话级缓存。
+///
+/// 镜像服务器（自定义 Bangumi API）普遍延迟高、并发受限：首页每个推荐位、
+/// 每次重建都会调 [DashboardHomePageImageHelpers._getHighQualityImage]，
+/// 旧实现不记忆结果，每次都重复“HEAD 镜像(最长 5s) → 拿 Location”，
+/// 表现为缩略图加载缓慢、滚动后不继续加载甚至失败。这里按 key 记忆成功
+/// 结果；失败按 TTL 记忆负结果，同一时刻并发的重复请求共享同一个 Future。
+/// key 里带 Bangumi 服务器地址，切换镜像后自然失效，不会串到旧服务器的结果。
+final Map<String, String> _hqBangumiImageMemo = {};
+final Map<String, DateTime> _hqBangumiImageFailedAt = {};
+final Map<String, Future<String?>> _hqBangumiImageInflight = {};
+
+/// 镜像 HEAD 失败后的负结果记忆时长：太短会在慢镜像上反复重试，太长则
+/// 镜像短暂恢复后迟迟用不上。10 分钟是折中。
+const Duration _hqBangumiImageNegativeTtl = Duration(minutes: 10);
+
+/// 确定性失败（镜像明确回答了“没有这张图”），与超时/网络抖动区分开：
+/// 只有前者才值得记负结果，后者下次重建仍应重试。
+class _BangumiImageUnavailable implements Exception {
+  const _BangumiImageUnavailable();
+}
+
 extension DashboardHomePageImageHelpers on _DashboardHomePageState {
   Future<String?> _getHighQualityImage(
+      int animeId, BangumiAnime animeDetail) async {
+    try {
+      // 会话内按 animeId 记忆整条解析链的结论（含回退到弹弹play 封面），
+      // 推荐区多个调用点与多次重建共享同一次解析。
+      final memoKey = 'anime:$animeId';
+      final memo = _hqBangumiImageMemo[memoKey];
+      if (memo != null) return memo;
+
+      final pending = _hqBangumiImageInflight[memoKey];
+      if (pending != null) return pending;
+
+      final future = _resolveHighQualityImage(animeId, animeDetail);
+      _hqBangumiImageInflight[memoKey] = future;
+      try {
+        final result = await future;
+        if (result != null && result.isNotEmpty) {
+          _hqBangumiImageMemo[memoKey] = result;
+        }
+        return result;
+      } finally {
+        if (identical(_hqBangumiImageInflight[memoKey], future)) {
+          _hqBangumiImageInflight.remove(memoKey);
+        }
+      }
+    } catch (_) {
+      // 出错时回退到弹弹play的图片
+      return animeDetail.imageUrl;
+    }
+  }
+
+  Future<String?> _resolveHighQualityImage(
       int animeId, BangumiAnime animeDetail) async {
     try {
       // 优先尝试本地缓存中的 bangumiId/bangumiUrl，避免再请求弹弹play
@@ -104,12 +157,48 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
     }
   }
 
-  // 从Bangumi API获取高清图片
+  // 从Bangumi API获取高清图片（带会话级去重与负缓存）
   Future<String?> _getBangumiHighQualityImage(String bangumiId) async {
+    final bangumiServer = await NetworkSettings.getBangumiServer();
+    final key = '$bangumiServer|$bangumiId';
+
+    final memo = _hqBangumiImageMemo[key];
+    if (memo != null) return memo;
+
+    final failedAt = _hqBangumiImageFailedAt[key];
+    if (failedAt != null &&
+        DateTime.now().difference(failedAt) < _hqBangumiImageNegativeTtl) {
+      return null;
+    }
+
+    final pending = _hqBangumiImageInflight[key];
+    if (pending != null) return pending;
+
+    final future = _resolveBangumiHighQualityImage(bangumiServer, bangumiId);
+    _hqBangumiImageInflight[key] = future;
+    try {
+      final result = await future;
+      if (result != null && result.isNotEmpty) {
+        _hqBangumiImageMemo[key] = result;
+        _hqBangumiImageFailedAt.remove(key);
+      }
+      return result;
+    } on _BangumiImageUnavailable {
+      // 确定性失败才记负结果；超时/网络异常静默返回 null，下次重建重试。
+      _hqBangumiImageFailedAt[key] = DateTime.now();
+      return null;
+    } finally {
+      if (identical(_hqBangumiImageInflight[key], future)) {
+        _hqBangumiImageInflight.remove(key);
+      }
+    }
+  }
+
+  Future<String?> _resolveBangumiHighQualityImage(
+      String bangumiServer, String bangumiId) async {
     try {
       // 使用Bangumi API的图片接口获取large尺寸的图片
       // GET /v0/subjects/{subject_id}/image?type=large
-      final bangumiServer = await NetworkSettings.getBangumiServer();
       final String imageApiUrl =
           '$bangumiServer/v0/subjects/$bangumiId/image?type=large';
 
@@ -126,13 +215,21 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
         if (location != null && location.isNotEmpty) {
           return location;
         }
+        throw const _BangumiImageUnavailable();
       } else if (response.statusCode == 200) {
         // 有些情况下可能直接返回200
         return imageApiUrl;
       }
 
+      // 镜像明确回答了“没有这个端点/这张图”：确定性失败。
+      throw const _BangumiImageUnavailable();
+    } on _BangumiImageUnavailable {
+      rethrow;
+    } on TimeoutException {
+      // 慢镜像抖动：不记负结果，下次重建仍可重试。
       return null;
     } catch (_) {
+      // 网络异常同样不记负结果。
       return null;
     }
   }
