@@ -172,9 +172,15 @@ class _CodexAccountCardState extends State<CodexAccountCard> {
                         _problem ??
                             (_account['loginState'] == 'failed'
                                 ? '没有完成授权'
-                                : status == 'signedIn'
-                                    ? '梨花用这个账号的套餐对话'
-                                    : '登录后，梨花用你的 ChatGPT 套餐对话'),
+                                : !widget.canLogin
+                                    // Another Codex configuration's account,
+                                    // shown and never changed here.
+                                    ? status == 'signedIn'
+                                        ? '这台电脑的 Codex 配置登录的账号'
+                                        : '这台电脑的 Codex 配置没有登录 ChatGPT'
+                                    : status == 'signedIn'
+                                        ? '梨花用这个账号的套餐对话'
+                                        : '登录后，梨花用你的 ChatGPT 套餐对话'),
                         style: NextText.sans(12.5,
                             color: _problem != null
                                 ? NextColors.accent2
@@ -247,7 +253,13 @@ class _CodexAccountCardState extends State<CodexAccountCard> {
               Text('暂时读不到额度',
                   style: NextText.sans(12.5, color: NextColors.p4)),
             for (final (name, window) in limits) _Limit(
-                label: name ?? _window(window['windowDurationMins']),
+                // Each limit has a short and a long window; the window says
+                // which, the name only which limit when there are several.
+                label: [
+                  if (name != null && limits.map((l) => l.$1).toSet().length > 1)
+                    name,
+                  _window(window['windowDurationMins']),
+                ].join(' · '),
                 used: (window['usedPercent'] as num?)?.toDouble(),
                 resets: _resets(window['resetsAt'])),
           ],
@@ -314,3 +326,4 @@ class _Limit extends StatelessWidget {
     );
   }
 }
+
