@@ -925,7 +925,9 @@ final class NextRuntime extends ChangeNotifier {
       }
       await _publishChat(host);
     } catch (error) {
-      chatError = redactHarnessText(error.toString());
+      // A StateError carries a sentence for the person; no "Bad state:" prefix.
+      chatError = redactHarnessText(
+          error is StateError ? error.message : error.toString());
       await host?.close();
       chat = null;
       await ServiceProvider.nextCore.followups.attach(null, reason: chatError);
