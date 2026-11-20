@@ -510,9 +510,25 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
             ),
           ]),
         ),
+        // A tablet has no Esc and keeps its sections at the foot, under
+        // this page: back sits on the bar's row, as on a phone.
+        if (NextLayout.docked(context))
+          Positioned(
+            left: NextMetrics.gutter - 6,
+            top: NextLayout.barTop(context),
+            height: NextMetrics.topBar,
+            child: Center(child: _back(context)),
+          ),
       ]),
     );
   }
+
+  static Widget _back(BuildContext context) => PhoneGlassCircle(
+        label: '返回',
+        onTap: () => Navigator.of(context).maybePop(),
+        child: const NextIcon(NextGlyph.chevronLeft,
+            size: 22, color: NextColors.paper, stroke: 2),
+      );
 
   // —— 调试 ——
 
