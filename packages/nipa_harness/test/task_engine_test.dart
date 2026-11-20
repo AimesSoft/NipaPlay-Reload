@@ -294,7 +294,7 @@ void main() {
     final harness = Harness([TaskCapability(engine)]);
     final job = await engine.submit(type: 'test', title: 'Actions');
     expect(harness.catalog.map((s) => s.id),
-        ['task.cancel', 'task.get', 'task.list', 'task.wait']);
+        ['task.cancel', 'task.get', 'task.list', 'task.reconcile', 'task.wait']);
     for (final call in <String, JsonMap>{
       'task.get': {'jobId': job.jobId},
       'task.wait': {'jobId': job.jobId, 'timeoutMs': 0},
