@@ -477,6 +477,13 @@ class MediaSourceUtils {
         .buildStreamUrl(connection, parsed.relativePath);
   }
 
+  /// 同 [resolveSmbPathToUrl]，但会先确保 SMB 连接配置已加载、本地代理已启动，
+  /// 并把已解析的凭据同步到代理 isolate。
+  static Future<String?> resolveSmbPathToUrlInitialized(String filePath) async {
+    await prepareRemotePath(filePath);
+    return resolveSmbPathToUrl(filePath);
+  }
+
   /// Resolve stable remote-library paths while leaving regular URLs alone.
   static Future<void> prepareRemotePath(String filePath) async {
     if (isNewWebDavPath(filePath)) {
@@ -487,6 +494,18 @@ class MediaSourceUtils {
         if (webDavNeedsAuthProxy(resolved.connection)) {
           await WebDAVProxyService.instance.initialize();
         }
+      }
+      return;
+    }
+    if (isNewSmbPath(filePath)) {
+      await SMBService.instance.initialize();
+      await SMBProxyService.instance.initialize();
+      final parsed = parseSmbPath(filePath);
+      if (parsed == null) return;
+      final connection =
+          SMBService.instance.getConnectionByIdOrName(parsed.connectionName);
+      if (connection != null) {
+        await SMBProxyService.instance.prepareConnection(connection);
       }
     }
   }

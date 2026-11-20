@@ -449,7 +449,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           );
     } else if (MediaSourceUtils.isNewSmbPath(episode.videoPath)) {
       actualPlayUrl = episode.actualPlayUrl ??
-          MediaSourceUtils.resolveSmbPathToUrl(episode.videoPath);
+          await MediaSourceUtils.resolveSmbPathToUrlInitialized(
+            episode.videoPath,
+          );
     }
 
     // 当 historyItem 未匹配到番剧（animeId 为空）但当前播放上下文已识别时，
@@ -740,7 +742,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     }
     if (MediaSourceUtils.isNewSmbPath(filePath)) {
       try {
-        final url = MediaSourceUtils.resolveSmbPathToUrl(filePath);
+        final url =
+            await MediaSourceUtils.resolveSmbPathToUrlInitialized(filePath);
         if (url != null && url.isNotEmpty) return url;
       } catch (_) {}
     }
