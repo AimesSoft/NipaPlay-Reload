@@ -73,6 +73,10 @@ extension VideoPlayerStateDanmaku on VideoPlayerState {
         if (_danmakuList.isNotEmpty) {
           danmakuController?.loadDanmaku(_danmakuList);
         }
+        // 必须显式关掉内核侧弹幕，否则内核继续画原生弹幕 + Flutter 叠层
+        // 再画一份 = 双层（FSR 1.0 实测：scalar 后端不进 CNN 合成管线，
+        // 原生弹幕清晰可见地与叠层叠加）。
+        unawaited(player.setNativeDanmakuEnabled(false));
         _notifyListeners();
         return;
       }
