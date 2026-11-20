@@ -12,6 +12,9 @@ import '../ui_data/host_settings.dart';
 import 'runtime_install_exception.dart';
 import 'dsh_manifest.dart';
 
+Future<String> _digestFile(String path) => Isolate.run(() async =>
+    (await sha256.bind(File(path).openRead()).first).toString());
+
 /// Mirrors that stand in for the official addresses when those do not
 /// deliver a file: [node] replaces `https://nodejs.org/dist`, [registry] the
 /// npm registry, for manifest addresses whose host is in [hosts].
@@ -47,12 +50,14 @@ final class DshInstall {
       required this.httpClient,
       required this.inUse,
       this.beforeInstall,
+      this.webLock,
       this.verifySignature = true,
       this.fallback = DshFallback.npmmirror,
       this.concurrency = 6});
 
   final Directory root;
   final DshManifest manifest;
+  final Future<String> Function()? webLock;
 
   /// The platform key (`macos-arm64`...), or null when this machine has none.
   final String? platform;
@@ -88,11 +93,20 @@ final class DshInstall {
   DateTime _lastNotify = DateTime.fromMillisecondsSinceEpoch(0);
 
   Directory get installed => Directory(p.join(root.path, manifest.id));
+  Directory get _web => Directory(p.join(root.path, 'web-${manifest.digest}'));
+  File get _webReady => File(p.join(_web.path, 'installed.json'));
+  String get _webBin => p.join(_web.path, 'lib', 'node_modules',
+      '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+  File get _webPnpm => File(p.join(
+      _web.path, 'lib', 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'));
+  Future<bool> _webInstalled() async => await _webReady.exists() &&
+      await File(_webBin).exists() && await _webPnpm.exists();
   Directory get _downloads => Directory(p.join(root.path, 'downloads'));
   File get _settings => File(p.join(root.path, 'settings.json'));
 
   bool get supported => platform != null && manifest.supports(platform!);
   bool get busy => _installing != null;
+  bool _webOperation = false;
 
   String get _nodeName => platform!.startsWith('windows') ? 'node.exe' : 'node';
   String get _node => p.join(installed.path, 'node', _nodeName);
@@ -172,12 +186,124 @@ final class DshInstall {
   }
 
   /// The runtime to launch, or null while it is not installed.
-  Future<DshRuntime?> runtime() async => await _ready()
-      ? DshRuntime(
-          node: File(_node).absolute.path,
-          bin: File(_bin).absolute.path,
-          version: manifest.dsh)
-      : null;
+  Future<DshRuntime?> runtime() async {
+    if (!await _ready()) return null;
+    final web = await _webInstalled();
+    return DshRuntime(
+      node: File(_node).absolute.path,
+      bin: File(_bin).absolute.path,
+      version: manifest.dsh,
+      webBin: web ? File(_webBin).absolute.path : null,
+      webPackageManager: web ? (
+        entry: _webPnpm.absolute.path,
+        data: Directory(p.join(root.path, 'pnpm')).absolute.path,
+        registry: (await mirrors()).registry ?? manifest.registry,
+      ) : null,
+    );
+  }
+
+  Future<Map<String, Object?>> webState() async => {
+        'version': manifest.dsh,
+        'installable': webLock != null && await _ready(),
+        'installed': await _webInstalled(),
+      };
+
+  Future<void> installWeb(String version) async {
+    await _withWebOperation(() async {
+      if (version != manifest.dsh || !await _ready() || webLock == null) {
+        throw const RuntimeInstallException('请先安装匹配版本的 DeepSeek Harness。');
+      }
+      if (await _webInstalled()) return;
+      if (inUse() && await File(_webBin).exists() && await _webPnpm.exists()) {
+        await _webReady.writeAsString('{}', flush: true);
+        return;
+      }
+      await _installWeb();
+    });
+  }
+
+  Future<void> _withWebOperation(Future<void> Function() body) async {
+    if (busy) throw const RuntimeInstallException('正在处理运行环境。');
+    _webOperation = true;
+    final operation = body();
+    _installing = operation.whenComplete(() {
+      _installing = null;
+      _webOperation = false;
+      notify();
+    });
+    await _installing;
+  }
+
+  Future<void> _installWeb() async {
+    _cancelled = false;
+    _unreachable.clear();
+    final staging = await root.createTemp('web-pending-');
+    try {
+      final packages = manifest.webPackages(await webLock!(), platform!);
+      if (packages.isEmpty) {
+        throw const RuntimeInstallException('此平台没有 DSH Web 安装包。');
+      }
+      final configured = await mirrors();
+      _client = httpClient()
+        ..autoUncompress = false
+        ..connectionTimeout = const Duration(seconds: 30)
+        ..maxConnectionsPerHost = concurrency;
+      await _downloads.create(recursive: true);
+      await beforeInstall?.call();
+      await _downloadAll([
+        for (final package in {for (final row in packages) row.sha256: row}.values)
+          _Item(package.name, package.sha256, package.bytes, _sources(
+              '${configured.registry ?? manifest.registry.replaceFirst(RegExp(r'/+$'), '')}/${package.url}',
+              configured.registry == null ? _fallbackPackage(package) : null)),
+      ]);
+      final source = Directory(p.join(installed.path, 'lib'));
+      final lib = Directory(p.join(staging.path, 'lib'));
+      await for (final entity in source.list(recursive: true, followLinks: false)) {
+        _checkCancelled();
+        final target = p.join(lib.path, p.relative(entity.path, from: source.path));
+        if (entity is File) {
+          await File(target).parent.create(recursive: true);
+          await entity.copy(target);
+        } else if (entity is Link) {
+          throw const RuntimeInstallException('运行环境包含意外的链接。');
+        }
+      }
+      for (final package in packages) {
+        _checkCancelled();
+        final target = Directory(p.join(lib.path, package.path));
+        await target.create(recursive: true);
+        await _tar(File(p.join(_downloads.path, package.sha256)), target, strip: 1);
+      }
+      if (!await File(p.join(lib.path, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')).exists()) {
+        throw const RuntimeInstallException('DSH Web 缺少包管理器。');
+      }
+      await File(p.join(staging.path, 'installed.json')).writeAsString('{}', flush: true);
+      _checkCancelled();
+      if (await _web.exists()) await _web.delete(recursive: true);
+      await staging.rename(_web.path);
+    } on _Cancelled {
+      throw const RuntimeInstallException('已取消 DSH Web 安装。');
+    } finally {
+      _client?.close(force: true);
+      _client = null;
+      if (await staging.exists()) await staging.delete(recursive: true);
+    }
+  }
+
+  Future<void> removeWeb() => _withWebOperation(() async {
+    if (await _webReady.exists()) await _webReady.delete();
+    await _deleteRemovedWeb();
+  });
+
+  Future<void> cleanRemovedWeb() async {
+    if (!busy) await _withWebOperation(_deleteRemovedWeb);
+  }
+
+  Future<void> _deleteRemovedWeb() async {
+    if (!inUse() && !await _webReady.exists() && await _web.exists()) {
+      await _web.delete(recursive: true);
+    }
+  }
 
   Future<void> install() {
     if (_installing case final operation?) return operation;
@@ -330,6 +456,7 @@ final class DshInstall {
   }
 
   void _count(_Item item, int bytes) {
+    if (_webOperation) return;
     _received += bytes - (_item[item.digest] ?? 0);
     _item[item.digest] = bytes;
     _progress();
@@ -340,8 +467,12 @@ final class DshInstall {
   Future<void> _fetch(_Item item) async {
     final file = _file(item);
     if (await file.exists() && await file.length() == item.bytes) {
-      _count(item, item.bytes);
-      return;
+      final digest = await _digestFile(file.path);
+      if (digest == item.digest) {
+        _count(item, item.bytes);
+        return;
+      }
+      await file.delete();
     }
     // A host that did not answer earlier in this installation goes last.
     final order = [
@@ -404,8 +535,7 @@ final class DshInstall {
       }
     }
     _checkCancelled();
-    final digest = await Isolate.run(
-        () async => (await sha256.bind(part.openRead()).first).toString());
+    final digest = await _digestFile(part.path);
     if (digest != item.digest) {
       await part.delete();
       _count(item, 0);
@@ -576,7 +706,11 @@ final class DshInstall {
   Future<void> cancel() async {
     _cancelled = true;
     _client?.close(force: true);
-    await _installing;
+    if (_webOperation) {
+      await _installing?.then<void>((_) {}, onError: (Object _) {});
+    } else {
+      await _installing;
+    }
   }
 
   Future<void> remove() async {

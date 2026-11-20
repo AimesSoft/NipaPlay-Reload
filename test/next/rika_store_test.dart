@@ -133,6 +133,26 @@ void main() {
   }
 
   group('official list', () {
+    test('an official Codex plugin publishes only verified files', () async {
+      final item = await skill('fixture-plugin', {
+        '.codex-plugin/plugin.json': '{"name":"fixture-plugin","version":"1.0.0"}',
+      });
+      await writeList([{...item, 'kind': 'codexPlugin'}]);
+      await expectLater(store.installOfficial('fixture-plugin', version: '1.0.0'),
+          throwsA(isA<StoreFormatException>()));
+      var activated = false;
+      await store.installOfficial('fixture-plugin', version: '1.0.0',
+          beforeCodex: (_) async {}, activateCodex: (plugin) async {
+        final root = store.codexMarketplace(plugin.id);
+        final manifest = File(p.join(root.path, '.agents', 'plugins', 'marketplace.json'));
+        expect(jsonDecode(await manifest.readAsString())['name'], 'nipaplay-fixture-plugin');
+        expect(await File(p.join(root.path, 'plugin', '.codex-plugin', 'plugin.json')).exists(), isTrue);
+        activated = true;
+      });
+      expect(activated, isTrue);
+      expect((await store.hostFacts()).codexSkillRoots, isEmpty);
+    });
+
     test('a skill installs pinned, and she is told where it is', () async {
       await writeList([
         await skill('dmhy', {
@@ -149,9 +169,11 @@ void main() {
       expect(facts.instructions, contains('动漫花园（官方）'));
       expect(facts.instructions, contains(p.join(folder, 'SKILL.md')));
       expect(facts.dshPlugins, isEmpty);
+      expect(facts.codexSkillRoots, [folder]);
 
       await store.setEnabled('dmhy', false);
       expect((await store.hostFacts()).instructions, isEmpty);
+      expect((await store.hostFacts()).codexSkillRoots, isEmpty);
       await store.remove('dmhy');
       expect(await Directory(folder).exists(), isFalse);
       expect(await store.installed(), isEmpty);

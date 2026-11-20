@@ -2,7 +2,7 @@ import 'dart:convert';
 
 /// What 梨花's store holds: skills (instructions and scripts she runs) and
 /// plugins (DeepSeek Harness npm packages, such as model providers).
-enum StoreKind { skill, plugin }
+enum StoreKind { skill, plugin, codexPlugin }
 
 /// Where an item came from: the official list, reviewed and pinned, or an
 /// npm package someone named, not reviewed by anyone.
@@ -244,6 +244,7 @@ final class StoreItem {
     final kind = switch (raw['kind']) {
       'skill' => StoreKind.skill,
       'plugin' => StoreKind.plugin,
+      'codexPlugin' when origin == StoreOrigin.official => StoreKind.codexPlugin,
       _ => _bad('$where 的 kind 无效'),
     };
     String text(String key, {int max = 200, bool optional = false}) {
@@ -269,7 +270,7 @@ final class StoreItem {
     final packages = <StorePackage>[];
     final peers = <String>[];
     final dsh = <StoreDshRow>[];
-    if (kind == StoreKind.skill) {
+    if (kind != StoreKind.plugin) {
       final raws = raw['files'];
       if (raws is! List || raws.isEmpty || raws.length > maxSkillFiles) {
         _bad('$where 的 files 无效');
@@ -277,7 +278,8 @@ final class StoreItem {
       for (final (i, f) in raws.indexed) {
         files.add(StoreFile.parse(f, '$where 的第 ${i + 1} 个文件'));
       }
-      if (!files.any((f) => f.path == 'SKILL.md')) _bad('$where 缺少 SKILL.md');
+      final requiredFile = kind == StoreKind.skill ? 'SKILL.md' : '.codex-plugin/plugin.json';
+      if (!files.any((f) => f.path == requiredFile)) _bad('$where 缺少 $requiredFile');
       if (files.map((f) => f.path.toLowerCase()).toSet().length !=
           files.length) {
         _bad('$where 有重名文件');
@@ -359,7 +361,7 @@ final class StoreItem {
             'sha256': readme!.sha256,
             'bytes': readme!.bytes
           },
-        if (kind == StoreKind.skill)
+        if (kind != StoreKind.plugin)
           'files': [for (final f in files) f.toJson()],
         if (packages.isNotEmpty)
           'packages': [for (final p in packages) p.toJson()],

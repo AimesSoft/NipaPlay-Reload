@@ -2,10 +2,11 @@ import 'dart:async';
 import '../widgets/elapsed_text.dart';
 
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/material.dart' show SelectionArea;
+import 'package:flutter/material.dart' show ScaffoldMessenger, SelectionArea, SnackBar;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../cards/card_views.dart';
 import '../conversation/nipa_chat.dart';
@@ -501,6 +502,7 @@ class _TurnViewState extends State<_TurnView> {
               key: ObjectKey(part),
               text: part.text,
               style: widget.text,
+              links: part.links,
             )),
         NoticePart() => Text(
             key: ObjectKey(part),
@@ -977,9 +979,10 @@ class _You extends StatelessWidget {
 
 /// Nipa's words, revealed as they stream, as light markdown.
 class ReplyText extends StatefulWidget {
-  const ReplyText({super.key, required this.text, required this.style});
+  const ReplyText({super.key, required this.text, required this.style, this.links = false});
   final String text;
   final TextStyle style;
+  final bool links;
 
   @override
   State<ReplyText> createState() => _ReplyTextState();
@@ -1047,6 +1050,22 @@ class _ReplyTextState extends State<ReplyText>
     final size = base.fontSize ?? 15;
     return _markdown = MarkdownBody(
       data: visible,
+      onTapLink: widget.links ? (_, href, __) async {
+        final uri = Uri.tryParse(href ?? '');
+        if (uri == null || !{'http', 'https'}.contains(uri.scheme) ||
+            uri.host.isEmpty || uri.userInfo.isNotEmpty) {
+          return;
+        }
+        try {
+          if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+        } catch (_) {
+        }
+        if (context.mounted) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            const SnackBar(content: Text('无法打开链接。')),
+          );
+        }
+      } : null,
       softLineBreak: true,
       fitContent: false,
       styleSheet: MarkdownStyleSheet(

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 
 /// What NipaPlay fetches to run Nipa on DeepSeek Harness: a Node.js archive
 /// from nodejs.org and the npm packages of the trimmed DSH, each pinned by
@@ -8,7 +9,7 @@ import 'dart:io';
 /// `scripts/next/dsh_runtime/build_lock.py`). Nothing is looked up at run time.
 final class DshManifest {
   DshManifest._(this.dsh, this.nodeVersion, this.nodes, this.registry,
-      this.platforms, this.packages);
+      this.platforms, this.packages, this.digest);
 
   factory DshManifest.parse(String text) {
     final json = jsonDecode(text) as Map<String, dynamic>;
@@ -28,7 +29,7 @@ final class DshManifest {
         List.unmodifiable([
           for (final p in json['packages'] as List)
             DshPackage._(p as Map<String, dynamic>)
-        ]));
+        ]), sha256.convert(utf8.encode(text)).toString());
   }
 
   /// The `@deepseek-ai/dsh` version.
@@ -44,6 +45,18 @@ final class DshManifest {
   /// The platforms whose package list has been traced and tested.
   final List<String> platforms;
   final List<DshPackage> packages;
+  final String digest;
+
+  List<DshPackage> webPackages(String lock, String platform) {
+    final json = jsonDecode(lock) as Map;
+    if (json['schema'] != 1 || json['baseSha256'] != digest) {
+      throw const FormatException('DSH Web 与运行环境的版本不匹配。');
+    }
+    return [
+      for (final row in json['platforms'][platform] as List? ?? const [])
+        DshPackage._(row as Map<String, dynamic>),
+    ];
+  }
 
   /// Where an installation of this manifest lives under the runtime root.
   String get id => 'dsh-$dsh-node-$nodeVersion';

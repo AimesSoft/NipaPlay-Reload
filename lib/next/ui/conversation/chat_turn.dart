@@ -77,8 +77,10 @@ final class SaidPart extends TurnPart {
 
 /// Something Nipa said.
 final class ReplyPart extends TurnPart {
-  ReplyPart(this.id, [this.text = '']);
+  ReplyPart(this.id, [this.text = '']) : links = false;
+  ReplyPart.command(this.id, this.text) : links = true;
   final String id;
+  final bool links;
   String text;
 }
 

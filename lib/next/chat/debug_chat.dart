@@ -18,6 +18,11 @@ void installDebugChat(ChatHost? Function() current,
       if (host == null) throw StateError('Chat host not running');
       final Object? result;
       switch (params['op']) {
+        case 'dshWeb':
+          return ServiceExtensionResponse.result(
+              jsonEncode({'url': host.dshWebUri?.toString()}));
+        case 'dshCommand':
+          result = await host.runDshCommand(params['threadId']!, params['line']!);
         case 'start':
           result = await host.startThread();
         case 'switchRuntime':

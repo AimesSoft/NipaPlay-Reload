@@ -71,6 +71,9 @@ import 'state/query.dart';
 import 'subscriptions/store.dart';
 import 'subscriptions/capability.dart';
 import 'store/capability.dart';
+import 'store/runtime_extensions.dart';
+import 'chat/chat_host.dart';
+import 'runtime/dsh_install.dart';
 import 'store/rika_store.dart';
 import 'store/sources.dart';
 import 'secrets/capability.dart';
@@ -203,6 +206,10 @@ final class NextCore {
   /// Restarts the conversation host so store changes take effect; set by
   /// the interface that runs it.
   Future<StoreApplyResult> Function()? restartAgent;
+  ChatHost? Function()? extensionChat;
+  DshInstall? Function()? extensionInstaller;
+  late final runtimeExtensions = RuntimeExtensions(
+      host: () => extensionChat?.call(), installer: () => extensionInstaller?.call());
   late final SessionStore sessions;
   late final HarnessMemory memory;
   late final CapabilityCatalogChanges catalogChanges;
@@ -641,8 +648,9 @@ final class NextCore {
       programRepository,
       FollowupCapability(followups),
       ChatAttachmentCapability(mesh.rpc),
-      StoreCapability(store, restart: () async => await restartAgent?.call() ??
+      StoreCapability(store, extensions: runtimeExtensions, restart: () async => await restartAgent?.call() ??
           const StoreApplyResult.notRun('No conversation host runs here to restart.')),
+      RuntimeExtensionCapability(runtimeExtensions),
       UiDataCapability(uiData),
       LibraryCapability(libraryData),
     ];

@@ -557,6 +557,11 @@ class NipaChat extends ChangeNotifier {
   Future<void> say(String text) async {
     text = text.trim();
     if (!acceptsTyping) return;
+    if (port case final SlashCommandPort local
+        when local.hasSlashCommands && text.startsWith('/')) {
+      await _sayCommand(local, text);
+      return;
+    }
     if (question != null) {
       if (text.isNotEmpty) await answerText(text);
       return;
@@ -636,6 +641,31 @@ class NipaChat extends ChangeNotifier {
     _quietWaived = null;
     _notify();
     await _start(turn);
+  }
+
+  Future<void> _sayCommand(SlashCommandPort local, String text) async {
+    final generation = _generation;
+    final turn = ChatTurn()
+      ..status = 'completed'
+      ..parts.add(SaidPart(text, echoed: true));
+    turns = [...turns, turn];
+    _notify();
+    try {
+      final target = await _target();
+      if (_disposed || generation != _generation) return;
+      if (target == null) throw StateError('会话未就绪。');
+      final result = await local.executeSlashCommand(target, text);
+      if (_disposed || generation != _generation) return;
+      final output = result['text'] as String? ?? '';
+      if (output.isNotEmpty) turn.parts.add(ReplyPart.command('slash-result', output));
+      if (result['kind'] == 'error') turn.status = 'failed';
+    } catch (_) {
+      if (_disposed || generation != _generation) return;
+      turn
+        ..status = 'failed'
+        ..parts.add(NoticePart('无法执行这条命令。'));
+    }
+    _notify();
   }
 
   Future<void> _start(ChatTurn turn) async {
@@ -946,6 +976,16 @@ class NipaChat extends ChangeNotifier {
         return;
       case 'host/handoverFailed':
         trouble = '没能切换，原对话未更改。';
+        _notify();
+        return;
+      case 'host/slashCommandResult':
+        if (about != thread || about == null) return;
+        final output = params['text'] as String? ?? '';
+        if (output.isEmpty) return;
+        final command = ChatTurn()
+          ..status = params['kind'] == 'error' ? 'failed' : 'completed'
+          ..parts.add(ReplyPart.command('slash-result', output));
+        turns = [...turns, command];
         _notify();
         return;
       case 'host/available':

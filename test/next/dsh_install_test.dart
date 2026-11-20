@@ -10,6 +10,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/next/runtime/dsh_install.dart';
 import 'package:nipaplay/next/runtime/dsh_manifest.dart';
+import 'package:nipaplay/next/runtime/runtime_install_exception.dart';
 import 'package:nipaplay/next/ui_data/host_settings.dart';
 
 /// The runtime NipaPlay fetches for DeepSeek Harness: Node.js from nodejs.org
@@ -91,12 +92,27 @@ void main() {
     }
   });
 
+  test('every Web platform pins the same package manager outside the base', () async {
+    final manifest = DshManifest.parse(
+        await File('assets/next/agent/dsh-runtime.json').readAsString());
+    final lock = await File('assets/next/agent/dsh-web.json').readAsString();
+    final platforms = (jsonDecode(lock)['platforms'] as Map).keys.cast<String>();
+    expect(platforms, unorderedEquals(['macos-arm64', 'linux-x64', 'windows-x64']));
+    for (final platform in platforms) {
+      final pnpm = manifest.webPackages(lock, platform).singleWhere((row) => row.name == 'pnpm');
+      expect(pnpm.version, '10.28.2');
+      expect(pnpm.path, 'node_modules/pnpm');
+      expect(pnpm.sha256, 'afa99b0b4b3d11c1dad2b472f9318ae2c78673829749ded527f89f09071479a7');
+      expect(manifest.packagesFor(platform).any((row) => row.name == 'pnpm'), false);
+    }
+  });
+
   group('installation', () {
     late DshInstall install;
     late int changes;
     late _Fixture fixture;
 
-    DshInstall make({bool Function()? inUse, DshFallback? fallback, bool verifySignature = false}) {
+    DshInstall make({bool Function()? inUse, DshFallback? fallback, bool verifySignature = false, Future<String> Function()? webLock}) {
       fixture = _Fixture.build(dir, platform!, server.base);
       server.files
         ..clear()
@@ -110,9 +126,78 @@ void main() {
           httpClient: HttpClient.new,
           inUse: inUse ?? () => false,
           verifySignature: verifySignature,
+          webLock: webLock,
           fallback: fallback ?? DshFallback.npmmirror,
           concurrency: 3);
     }
+
+    test('Web verifies on demand and publishes only a complete installation', () async {
+      const path = '/pnpm/-/pnpm-1.0.0.tgz';
+      final entered = Completer<void>();
+      final resume = Completer<void>();
+      var lockReads = 0;
+      late List<int> payload;
+      var inUse = false;
+      make(inUse: () => inUse, webLock: () async {
+        if (++lockReads == 2) {
+          entered.complete();
+          await resume.future;
+        }
+        return jsonEncode({
+          'schema': 1, 'baseSha256': fixture.manifest.digest,
+          'platforms': {platform!: [{
+            'path': 'node_modules/pnpm', 'name': 'pnpm',
+            'version': '1.0.0', 'url': path.substring(1),
+            'sha256': sha256.convert(payload).toString(), 'bytes': payload.length,
+          }]},
+        });
+      });
+      payload = fixture.pnpm;
+      server.files[path] = List<int>.of(payload)..[0] ^= 1;
+      await install.install();
+      final base = (await install.runtime())!;
+      expect(lockReads, 0);
+      expect(server.requests, isNot(contains(path)));
+      expect(base.webBin, isNull);
+      await expectLater(install.installWeb(base.version), throwsA(
+          isA<RuntimeInstallException>().having((error) => error.message, 'message', contains('SHA-256'))));
+      expect((await install.webState())['installed'], false);
+      expect((await install.runtime())!.bin, base.bin);
+
+      server.files[path] = payload;
+      final installing = install.installWeb(base.version);
+      final refused = expectLater(installing, throwsA(
+          isA<RuntimeInstallException>().having((error) => error.message, 'message', contains('已取消'))));
+      await entered.future;
+      expect((await install.runtime())!.webBin, isNull);
+      final cancelled = install.cancel();
+      resume.complete();
+      await cancelled;
+      await refused;
+      expect((await install.runtime())!.webBin, isNull);
+      expect(install.root.listSync().where((entry) => entry.path.contains('web-pending-')), isEmpty);
+
+      await install.configure(registryMirror: server.base);
+      await install.installWeb(base.version);
+      final runtime = (await install.runtime())!;
+      final web = runtime.webBin!;
+      expect(await File(web).readAsString(), await File(base.bin).readAsString());
+      final manager = runtime.webPackageManager!;
+      expect(await File(manager.entry).readAsString(), '// pnpm entry');
+      expect(manager.registry, server.base);
+      expect(manager.data, '${install.root.absolute.path}/pnpm');
+      await install.installWeb(base.version);
+      expect(lockReads, 3);
+      inUse = true;
+      await install.removeWeb();
+      expect((await install.runtime())!.webBin, isNull);
+      expect((await install.runtime())!.webPackageManager, isNull);
+      expect(await File(web).exists(), true);
+      inUse = false;
+      await install.cleanRemovedWeb();
+      expect(await File(web).exists(), false);
+      expect(await File(base.bin).exists(), true);
+    }, skip: skip);
 
     test('downloads, verifies, unpacks, and appears in one rename', () async {
       make();
@@ -436,11 +521,12 @@ final class _Server {
 
 /// Archives as nodejs.org and npm publish them, and the manifest that pins them.
 final class _Fixture {
-  _Fixture(this.manifest, this.served, this.totalBytes);
+  _Fixture(this.manifest, this.served, this.totalBytes, this.pnpm);
 
   final DshManifest manifest;
   final Map<String, List<int>> served;
   final int totalBytes;
+  final List<int> pnpm;
 
   static _Fixture build(Directory dir, String platform, String base) {
     final work = Directory('${dir.path}/fixture')..createSync(recursive: true);
@@ -533,6 +619,7 @@ final class _Fixture {
     final wanted = manifest.packagesFor(platform);
     final total = nodeBytes.length +
         {for (final p in wanted) p.sha256: p.bytes}.values.fold<int>(0, (a, b) => a + b);
-    return _Fixture(manifest, served, total);
+    return _Fixture(manifest, served, total,
+        tar('package', {'bin/pnpm.cjs': '// pnpm entry'}));
   }
 }

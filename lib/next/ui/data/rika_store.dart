@@ -67,10 +67,13 @@ final class UiStoreItem {
 /// is installed) and what came from npm.
 final class UiStore {
   const UiStore(
-      {required this.official, required this.fromNpm, this.listProblem});
+      {required this.official, required this.fromNpm, this.listProblem,
+      this.web = const {}, this.webPlugins = const []});
   final List<UiStoreItem> official;
   final List<UiStoreItem> fromNpm;
   final String? listProblem;
+  final Map web;
+  final List<Map> webPlugins;
 }
 
 const storeCategoryNames = {
@@ -104,8 +107,23 @@ final class NextRikaStore {
                 installed: true, notLoaded: notLoaded[raw['id']])
       ],
       listProblem: r['listProblem'] as String?,
+      web: r['dshWeb'] as Map? ?? const {},
+      webPlugins: ((r['dshWebPlugins'] as Map?)?['plugins'] as List? ?? const []).whereType<Map>().toList(),
     );
   }
+
+  Future<void> openWeb() => calls.call('store.web.open', {});
+
+  Future<JsonMap> codexCatalog() async => await calls.has('store.codex.list')
+      ? calls.call('store.codex.list', {}, reportFailure: false) : {};
+
+  Future<void> addMarketplace(String source) =>
+      calls.call('store.codex.marketplace.add', {'source': source});
+
+  Future<void> installCodex(String marketplace, String plugin) =>
+      calls.call('store.codex.install', {'marketplace': marketplace, 'plugin': plugin});
+
+  Future<void> removeCodex(String id) => calls.call('store.codex.remove', {'id': id});
 
   Future<({String version, String? text})> readme(String id) async {
     final result = await calls.call('store.readme', {'id': id});

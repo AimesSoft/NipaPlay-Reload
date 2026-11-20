@@ -598,6 +598,8 @@ final class NextRuntime extends ChangeNotifier {
               : 47811,
     );
     core.programs.credentialFile = _endpoint.credentialFile;
+    core.extensionChat = () => chat;
+    core.extensionInstaller = () => _hostSettings?.dsh;
     final desktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
     final labRoot = LabProfile.active ? Directory(LabProfile.root) : null;
     _hostSettings = HostSettingsService(
@@ -608,6 +610,7 @@ final class NextRuntime extends ChangeNotifier {
                 root: Directory('${root.path}/dsh-runtime'),
                 manifest: DshManifest.parse(await rootBundle
                     .loadString('assets/next/agent/dsh-runtime.json')),
+                webLock: () => rootBundle.loadString('assets/next/agent/dsh-web.json'),
                 platform: DshManifest.hostPlatform(),
                 notify: () => _hostSettings?.notify(),
                 inUse: () => chat?.available == true,
@@ -651,6 +654,7 @@ final class NextRuntime extends ChangeNotifier {
         modelSaved: () async {
           if (chat != null || _disposed || !_open) return;
           _operations = _operations.then((_) async {
+            if (chat != null || _disposed || !_open) return;
             if (_endpointStatus case AgentEndpointRunning(:final repository)) {
               await _startChat(repository);
               notifyListeners();
@@ -854,6 +858,7 @@ final class NextRuntime extends ChangeNotifier {
       for (final name in const [
         'nipa-app-server.mjs',
         'nipa-handover.mjs',
+        'nipa-web-launch.mjs',
         'nipa-memory.mjs',
         'persona-prefix.md',
         'persona-suffix.md'
@@ -1003,6 +1008,7 @@ final class NextRuntime extends ChangeNotifier {
                 : 'The Nipa runtime changed.');
         await chat?.close();
         chat = null;
+        await _hostSettings?.dsh?.cleanRemovedWeb();
         chatError = null;
         await _startChat(endpoint.repository, resumeThreadId: selected);
         if (!_disposed) notifyListeners();

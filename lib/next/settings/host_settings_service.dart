@@ -781,9 +781,13 @@ final class HostSettingsService
         home: home,
         model: model,
         provider: 'nipaplay',
+        providerOverride: 'model_providers.nipaplay={name=${jsonEncode(provider)}, '
+            'base_url=${jsonEncode(url.toString())}, wire_api="responses", '
+            'env_key="NIPAPLAY_MODEL_API_KEY", requires_openai_auth=false}',
         environment: {'NIPAPLAY_MODEL_API_KEY': key},
         prepare: () async {
           await home.create(recursive: true);
+          if (await File('${home.path}/config.toml').exists()) return;
           final config = File('${home.path}/config.toml.pending');
           // JSON string syntax is a subset of TOML basic string syntax here.
           await config.writeAsString(
@@ -791,9 +795,6 @@ final class HostSettingsService
               'model_provider = "nipaplay"\n'
               'cli_auth_credentials_store = "${Platform.isLinux ? 'auto' : 'keyring'}"\n'
               '[features]\nshell_snapshot = false\n'
-              '[model_providers.nipaplay]\nname = ${jsonEncode(provider)}\n'
-              'base_url = ${jsonEncode(url.toString())}\nwire_api = "responses"\n'
-              'env_key = "NIPAPLAY_MODEL_API_KEY"\nrequires_openai_auth = false\n'
               '[shell_environment_policy]\nexclude = ["NIPAPLAY_MODEL_API_KEY"]\n'
               '[projects.${jsonEncode(repository())}]\ntrust_level = "trusted"\n',
               flush: true);

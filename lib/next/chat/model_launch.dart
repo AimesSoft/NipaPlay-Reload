@@ -12,6 +12,7 @@ final class ModelLaunch {
       this.environment = const {},
       this.model,
       this.provider,
+      this.providerOverride,
       this.executable,
       this.prepare,
       this.route,
@@ -20,6 +21,7 @@ final class ModelLaunch {
   final Directory? home;
   final Map<String, String> environment;
   final String? model, provider;
+  final String? providerOverride;
   /// Absolute managed native binary, or an explicitly chosen advanced path.
   final String? executable;
   final Future<void> Function()? prepare;

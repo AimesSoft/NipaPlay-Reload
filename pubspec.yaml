@@ -274,6 +274,8 @@ flutter:
       platforms: [android, linux, macos, web, windows]
     - path: assets/next/agent/dsh-runtime.json
       platforms: [android, linux, macos, web, windows]
+    - path: assets/next/agent/dsh-web.json
+      platforms: [linux, macos, windows]
     - packages/adaptive_platform_ui/pubspec.yaml
     - packages/danmaku_canvas/pubspec.yaml
     - packages/nipaplay_smb2/pubspec.yaml
