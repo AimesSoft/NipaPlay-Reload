@@ -247,6 +247,13 @@ jobs:
                   "    const album: ESObject | undefined = metadata.get('album');",
               "    const artwork: ESObject = metadata.get('artwork');":
                   "    const artwork: ESObject | undefined = metadata.get('artwork');",
+              # The NAPI module is untyped to ArkTS here; annotate its results.
+              "    const playerId = await erikaNative.nativeCreateAsync(":
+                  "    const playerId: number = await erikaNative.nativeCreateAsync(",
+              "    const status = await erikaNative.nativeDetachSurfaceAsync(":
+                  "    const status: number = await erikaNative.nativeDetachSurfaceAsync(",
+              "    const raw = await erikaNative.nativeInvokeAsync(":
+                  "    const raw: string = await erikaNative.nativeInvokeAsync(",
           }
           for old, new in replacements.items():
               old_count = source.count(old)
