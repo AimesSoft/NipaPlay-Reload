@@ -1,4 +1,5 @@
 import UIKit
+import SwiftUI
 import Metal
 import Flutter
 
@@ -25,7 +26,11 @@ private final class MediaControlFactory: NSObject, FlutterPlatformViewFactory {
     init(_ messenger: FlutterBinaryMessenger) { self.messenger = messenger }
     func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol { FlutterStandardMessageCodec.sharedInstance() }
     func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
-        MediaControlView(frame, viewId, messenger, args as? [String: Any] ?? [:])
+        let params = args as? [String: Any] ?? [:]
+        if #available(tvOS 26.0, *), params["actions"] != nil {
+            return MediaActionGroupView(frame, viewId, messenger, params)
+        }
+        return MediaControlView(frame, viewId, messenger, params)
     }
 }
 
@@ -48,9 +53,13 @@ private final class MediaControlView: NSObject, FlutterPlatformView {
     func view() -> UIView { button }
     func update(_ args: [String: Any]) {
         guard #available(tvOS 26.0, *) else { return }
-        var config: UIButton.Configuration = (args["primary"] as? Bool ?? false) ? .prominentGlass() : .glass()
-        config.title = args["label"] as? String
-        config.subtitle = args["detail"] as? String
+        var config: UIButton.Configuration = (args["plain"] as? Bool ?? false)
+            ? .plain() : ((args["primary"] as? Bool ?? false) ? .prominentGlass() : .glass())
+        let iconOnly = args["iconOnly"] as? Bool ?? false
+        config.title = iconOnly ? nil : args["label"] as? String
+        config.subtitle = iconOnly ? nil : args["detail"] as? String
+        config.baseForegroundColor = .white
+        button.accessibilityLabel = args["label"] as? String
         config.image = UIImage(systemName: args["symbol"] as? String ?? "")
         config.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
             var result = attributes
@@ -88,4 +97,36 @@ private final class MediaControlView: NSObject, FlutterPlatformView {
         if #available(tvOS 17.0, *), button.menu != nil { return }
         channel.invokeMethod("pressed", arguments: nil)
     }
+}
+
+
+/// One SwiftUI host owns the shared interactive glass and its native controls.
+@available(tvOS 26.0, *)
+final class MediaActionGroupView: NSObject, FlutterPlatformView {
+    let model = MediaCapsuleModel()
+    let container: MediaCapsuleHostingContainer
+    private let channel: FlutterMethodChannel
+
+    init(_ frame: CGRect, _ id: Int64, _ messenger: FlutterBinaryMessenger,
+         _ args: [String: Any]) {
+        container = MediaCapsuleHostingContainer(frame: frame, model: model)
+        channel = FlutterMethodChannel(name: "nipaplay/native_media_control_\(id)", binaryMessenger: messenger)
+        super.init()
+        model.onPressed = { [weak self] index in
+            self?.channel.invokeMethod("pressed", arguments: ["index": index])
+        }
+        model.onSelected = { [weak self] index, selected in
+            self?.channel.invokeMethod("selected", arguments: ["index": index, "selected": selected])
+        }
+        model.update(args)
+        channel.setMethodCallHandler { [weak self] call, result in
+            guard call.method == "update" else { result(FlutterMethodNotImplemented); return }
+            if let args = call.arguments as? [String: Any] { self?.model.update(args) }
+            result(nil)
+        }
+    }
+
+    deinit { channel.setMethodCallHandler(nil) }
+    func view() -> UIView { container }
+    func update(_ args: [String: Any]) { model.update(args) }
 }

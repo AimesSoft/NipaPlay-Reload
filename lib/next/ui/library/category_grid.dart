@@ -33,6 +33,8 @@ class CategoryItems extends ChangeNotifier {
   final _stale = <int>{};
   bool _gone = false;
   int _refreshRevision = 0;
+  int _failures = 0;
+  Timer? _retry;
 
   static const slice = 60;
 
@@ -78,6 +80,17 @@ class CategoryItems extends ChangeNotifier {
     try {
       got = await data.items(categoryId,
           offset: n * slice, limit: slice, sort: asked);
+      _failures = 0;
+    } catch (error) {
+      // The tiles ask again a little later rather than wait for a change
+      // that may not come (#1125: a failed read left them waiting for good).
+      debugPrint('[NextLibrary] $categoryId slice $n not read: $error');
+      _failures++;
+      _retry ??= Timer(Duration(seconds: 1 << _failures.clamp(1, 5)), () {
+        _retry = null;
+        if (!_gone) notifyListeners();
+      });
+      return;
     } finally {
       _loading.remove(n);
     }
@@ -116,6 +129,7 @@ class CategoryItems extends ChangeNotifier {
   @override
   void dispose() {
     _gone = true;
+    _retry?.cancel();
     super.dispose();
   }
 }

@@ -7,6 +7,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/capabilities/download_capability.dart';
 import 'package:nipaplay/next/downloads/download_backend.dart';
 import 'package:nipaplay/next/downloads/download_executor.dart';
+import 'package:nipaplay/next/downloads/progress_observations.dart';
 import 'package:nipaplay/next/downloads/download_service.dart';
 import 'package:nipaplay/next/downloads/download_source.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
@@ -312,6 +313,44 @@ void main() {
     expect(stalls.last['index'], 1);
     expect(stalls.last.containsKey('metadata'), false);
     expect(stalls.first['resumedAt'], isNotNull);
+    await engine.cancel(job.jobId);
+  });
+
+  test(
+      'a byte count that stops growing is a stall, closed by the next byte '
+      '(as the headless engine reports it, #1120)', () async {
+    Future<List<Map>> stallsWhen(
+        String jobId, bool Function(List<Map>) done) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (true) {
+        final job = await engine.get(jobId);
+        final stalls = (job.checkpoint['stalls'] as List? ?? []).cast<Map>();
+        if (done(stalls)) return stalls;
+        expect(DateTime.now().isBefore(deadline), true,
+            reason: jsonEncode(job.toJson()));
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+
+    final observations = ProgressObservations();
+    final now = DateTime.now().toUtc();
+    // The source sent 1 KiB and nothing since, for six minutes.
+    observations.observe('h', 'hash|/out', 1024,
+        now: now.subtract(const Duration(minutes: 6)));
+    backend.health = observations.observe('h', 'hash|/out', 1024, now: now);
+    final job = await downloads.add(testRequest);
+    final stalls = await stallsWhen(job.jobId, (s) => s.isNotEmpty);
+    expect(stalls.single['secondsWithoutProgress'], 360);
+    expect(stalls.single['resumedAt'], isNull);
+    // A keepalive is not progress; a byte is.
+    backend.health = observations.observe('h', 'hash|/out', 1024);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect((await stallsWhen(job.jobId, (_) => true)).single['resumedAt'],
+        isNull);
+    backend.health = observations.observe('h', 'hash|/out', 2048);
+    final closed =
+        await stallsWhen(job.jobId, (s) => s.single['resumedAt'] != null);
+    expect(closed, hasLength(1));
     await engine.cancel(job.jobId);
   });
 

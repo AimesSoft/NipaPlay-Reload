@@ -61,9 +61,6 @@ class SettingsKeys {
   static const String labsShowRemoteAccessQrCode =
       'labs_show_remote_access_qr_code';
 
-  static const String labsEnableImmersiveAnimeDetail =
-      'labs_enable_immersive_anime_detail';
-
   static const String labsEnableAgentEndpoint = 'labs_enable_agent_endpoint';
 
   static const String danmakuEnableNextPlusPlusEngine =

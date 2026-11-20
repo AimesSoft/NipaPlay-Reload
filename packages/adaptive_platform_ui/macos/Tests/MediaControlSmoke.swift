@@ -152,3 +152,107 @@ control.selected(selectedItem)
 assert(messenger.events.last!.method == "selected")
 assert(messenger.events.last!.arguments as? Int == 0)
 print("Native control checks passed: tracking, pointer light, press/focus, inactive/disabled reset, accessibility, text layout, native menu callback")
+
+// Shared capsules supply one glass surface, while each action keeps native
+// content, accessibility and feedback without adding its own glass outline.
+private let groupedAction = MediaControlView(43, messenger, [
+    "label": "收藏", "symbol": "heart", "iconOnly": true,
+    "plain": true, "enabled": true])
+if #available(macOS 26.0, *) {
+    assert(!(groupedAction.glassContainer is NSGlassEffectView))
+}
+assert(groupedAction.button.superview === groupedAction.glassContainer)
+assert(groupedAction.button.accessibilityLabel() == "收藏")
+groupedAction.setInteraction(hovered: true, pressed: false, focused: true)
+assert(groupedAction.outline.opacity == 1)
+print("Grouped native action checks passed")
+
+if #available(macOS 26.0, *) {
+    let capsule = SwiftUIMediaActionGroupView(44, messenger, ["actions": [
+        ["label": "收藏", "symbol": "heart", "enabled": true],
+        ["label": "评论", "symbol": "bubble.left.and.bubble.right", "enabled": true, "selected": true],
+        ["label": "评分", "symbol": "square.and.pencil", "enabled": false],
+        ["label": "更多", "symbol": "ellipsis", "enabled": true, "items": [
+            ["label": "修改背景图", "enabled": true], ["label": "清理", "enabled": false]]],
+    ]])
+    capsule.frame = NSRect(x: 0, y: 0, width: 184, height: 44)
+    capsule.layoutSubtreeIfNeeded()
+    let model = capsule.model
+    assert(capsule.hosting.superview === capsule)
+    assert(capsule.hosting.rootView.model === model)
+    assert(capsule.hosting.frame.size == capsule.bounds.size)
+    assert(model.actions.map { $0.id } == [0, 1, 2, 3])
+    assert(model.actions[1].selected && !model.actions[2].enabled)
+    let before = messenger.events.count
+    model.activate(1)
+    assert(messenger.events.count == before + 1)
+    assert((messenger.events.last!.arguments as! [String: Int])["index"] == 1)
+    model.activate(2)
+    model.activate(99)
+    assert(messenger.events.count == before + 1)
+    model.select(3, item: 0)
+    assert((messenger.events.last!.arguments as! [String: Int]) == ["index": 3, "selected": 0])
+    let selectedCount = messenger.events.count
+    model.select(3, item: 1)
+    model.select(3, item: 9)
+    assert(messenger.events.count == selectedCount)
+    model.update(["actions": [
+        ["label": "已收藏", "symbol": "heart.fill", "enabled": true],
+        ["label": "评论", "symbol": "bubble.left.and.bubble.right", "enabled": true],
+        ["label": "评分", "symbol": "square.and.pencil", "enabled": false],
+        ["label": "更多", "symbol": "ellipsis", "enabled": true, "items": [["label": "修改背景图", "enabled": true]]],
+    ]])
+    assert(capsule.hosting.rootView.model === model)
+    assert(model.actions[0].symbol == "heart.fill")
+    // The platform view must remain in AppKit's native hit-test tree. This
+    // guards against reintroducing a Flutter input overlay or hitTest -> nil.
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 140),
+                          styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView!.addSubview(capsule)
+    capsule.frame = NSRect(x: 40, y: 40, width: 184, height: 44)
+    let previousApplication = NSWorkspace.shared.frontmostApplication
+    NSApp.setActivationPolicy(.accessory)
+    defer {
+        window.orderOut(nil)
+        previousApplication?.activate(options: [])
+        NSApp.setActivationPolicy(.prohibited)
+    }
+    let beforePointer = messenger.events.count
+    DispatchQueue.main.async {
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            window.contentView!.layoutSubtreeIfNeeded()
+            let hit = window.contentView!.hitTest(NSPoint(x: 66, y: 62))
+            assert(hit != nil && hit!.isDescendant(of: capsule))
+            if let path = ProcessInfo.processInfo.environment["NIPAPLAY_CAPSULE_PREVIEW"],
+               let bitmap = capsule.hosting.bitmapImageRepForCachingDisplay(in: capsule.hosting.bounds) {
+                capsule.hosting.cacheDisplay(in: capsule.hosting.bounds, to: bitmap)
+                try! bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
+            }
+            let stamp = ProcessInfo.processInfo.systemUptime
+            let down = NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 66, y: 62),
+                modifierFlags: [], timestamp: stamp, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!
+            let up = NSEvent.mouseEvent(with: .leftMouseUp, location: NSPoint(x: 66, y: 62),
+                modifierFlags: [], timestamp: stamp + 0.05, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 2, clickCount: 1, pressure: 0)!
+            NSApp.postEvent(down, atStart: false)
+            NSApp.postEvent(up, atStart: false)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                print("SwiftUI event result: active=\(NSApp.isActive), key=\(window.isKeyWindow), events=\(messenger.events.count - beforePointer)")
+                fflush(stdout)
+                assert(messenger.events.count == beforePointer + 1, "Native SwiftUI mouse activation failed")
+                assert((messenger.events.last!.arguments as! [String: Int])["index"] == 0)
+                NSApp.stop(nil)
+                NSApp.postEvent(NSEvent.otherEvent(with: .applicationDefined, location: .zero,
+                    modifierFlags: [], timestamp: stamp + 1, windowNumber: window.windowNumber,
+                    context: nil, subtype: 0, data1: 0, data2: 0)!, atStart: true)
+            }
+        }
+    }
+    // SwiftUI pointer gestures need a launched AppKit application, not only
+    // isolated RunLoop pumping. Let NSApplication deliver down/up normally.
+    NSApp.run()
+    print("SwiftUI capsule passed: native hit testing and mouse activation, persistent host, independent/disabled actions, menu callbacks and selected symbols")
+}

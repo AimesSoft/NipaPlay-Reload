@@ -27,6 +27,7 @@ import 'work_details.dart';
 import 'recently_played.dart';
 import 'library_service.dart';
 import '../mesh/library.dart';
+import '../mesh/library_codec.dart' show nextEpisode;
 import '../chat/turn_boundaries.dart';
 import '../util/slicer.dart';
 import '../db/notifications.dart';
@@ -256,17 +257,7 @@ final class UiDataService
     final fields = metadata['fields'] as JsonMap;
     final attrs = decodeMediaJson(rows.single['attributes']);
     episodes ??= await localEpisodes(workId, files: files, reads: reads);
-    final next = episodes
-            .where((e) =>
-                e.playable &&
-                e.progress != null &&
-                e.progress! > 0 &&
-                e.progress! < 1)
-            .firstOrNull ??
-        episodes
-            .where((e) => e.playable && (e.progress ?? 0) < 1)
-            .firstOrNull ??
-        episodes.where((e) => (e.progress ?? 0) < 1).firstOrNull;
+    final next = nextEpisode(episodes);
     final film = await media.store.workIsFilm(workId);
     final runtime = fields['runtimeMs'];
     return UiWork(

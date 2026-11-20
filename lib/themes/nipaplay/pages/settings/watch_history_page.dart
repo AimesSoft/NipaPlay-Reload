@@ -542,8 +542,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
           if (jellyfinService.isConnected) {
             playbackSession = await jellyfinService.createPlaybackSession(
               itemId: jellyfinId,
-              startPositionMs: currentItem.lastPosition > 0
-                  ? currentItem.lastPosition
+              startPositionMs: currentItem.resumePosition > 0
+                  ? currentItem.resumePosition
                   : null,
             );
           } else {
@@ -563,8 +563,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
           if (embyService.isConnected) {
             playbackSession = await embyService.createPlaybackSession(
               itemId: embyId,
-              startPositionMs: currentItem.lastPosition > 0
-                  ? currentItem.lastPosition
+              startPositionMs: currentItem.resumePosition > 0
+                  ? currentItem.resumePosition
                   : null,
             );
           } else {

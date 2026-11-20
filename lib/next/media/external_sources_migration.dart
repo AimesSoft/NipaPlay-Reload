@@ -324,7 +324,14 @@ bool _retiredEntity(String id) {
 
 Future<void> _retireJobs(DatabaseExecutor tx) async {
   for (final row in await tx.query('jobs')) {
-    final old = Job.fromJson(_json(row['snapshot']));
+    final Job old;
+    try {
+      old = Job.fromJson(_json(row['snapshot']));
+    } on Object {
+      // A snapshot this version cannot read is no task of a retired source
+      // to fail; it stays as it is rather than keep next.db from opening.
+      continue;
+    }
     if (old.state.isTerminal) continue;
     if (!_source(old.input['sourceId']) &&
         !old.type.startsWith('media.sources.remote_admin.') &&

@@ -13,7 +13,7 @@ fail these explicit runs, rather than silently passing them.
 | Tag | Prerequisites | Command |
 | --- | --- | --- |
 | `native_integration` | Rust toolchain, built Mesh native library/coordinator/issuer, OpenSSL, FFmpeg, and the Flutter JS QuickJS native library on the loader path | `flutter test --no-pub --tags native_integration --concurrency=1` |
-| `codex_integration` | A compatible `codex` CLI and Git on `PATH`; these tests use a local fixture provider | `flutter test --no-pub --tags codex_integration --concurrency=1` |
+| `codex_integration` | A compatible `codex` CLI and Git on `PATH`; for the DSH variants, a DSH install (`NIPAPLAY_DSH_NODE`/`NIPAPLAY_DSH_ROOT`, or `~/.nipa-next/y15`); these tests use a local fixture provider | `flutter test --no-pub --tags codex_integration --concurrency=1` |
 | `performance` | A dedicated machine for the large-profile CPU benchmark | `flutter test --no-pub --tags performance --concurrency=1` |
 
 Build the Mesh prerequisites before running its suites; the delegation and LAN

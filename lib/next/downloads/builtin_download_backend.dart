@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import 'download_backend.dart';
 import 'download_paths.dart';
+import 'progress_observations.dart';
 import 'bandwidth_native.dart';
 
 final class BuiltinDownloadBackend
@@ -23,14 +24,7 @@ final class BuiltinDownloadBackend
   final TorrentDownloadService service;
   @override
   Future<JsonMap> bandwidth(JsonMap input) async => NativeBandwidth.call(input);
-  final _observations = <String,
-      ({
-    DateTime since,
-    DateTime? lastProgress,
-    int bytes,
-    DateTime at,
-    int previousBytes
-  })>{};
+  final _observations = ProgressObservations();
   @override
   DownloadBackendRef get reference => const DownloadBackendRef.builtin();
   @override
@@ -57,42 +51,14 @@ final class BuiltinDownloadBackend
             {...facts['details'] as JsonMap, 'stats': facts['stats']});
         final stats = facts['stats'] as JsonMap;
         final progress = (stats['file_progress'] as List).cast<int>();
-        final now = DateTime.now().toUtc();
-        final observationKey = '${task.infoHash}|$output';
-        final previous = _observations[observationKey];
-        final bytes = progress.fold<int>(0, (a, b) => a + b);
-        final observation = (
-          since: previous?.since ?? now,
-          lastProgress: previous != null && bytes > previous.bytes
-              ? now
-              : previous?.lastProgress,
-          bytes: bytes,
-          at: now,
-          previousBytes: previous?.bytes ?? bytes
-        );
-        _observations[observationKey] = observation;
-        final peers = ((stats['live'] as Map?)?['snapshot']
-            as Map?)?['peer_stats'] as Map?;
         return _snapshot(details,
             resolvedOutput: output,
             progress: progress,
             disk: facts['disk'] as JsonMap,
             health: {
-              'observedAt': now.toIso8601String(),
-              'observingSince': observation.since.toIso8601String(),
-              'lastProgressAt': observation.lastProgress?.toIso8601String(),
-              'secondsWithoutProgress': now
-                  .difference(observation.lastProgress ?? observation.since)
-                  .inSeconds,
-              'sampleSeconds': previous == null
-                  ? 0
-                  : now.difference(previous.at).inMilliseconds / 1000,
-              'checkedBytesChange': bytes - observation.previousBytes,
-              'connectedPeers': peers?['live'],
-              'seenPeers': peers?['seen'],
-              'connectingPeers': peers?['connecting'],
-              'queuedPeers': peers?['queued'],
-              'deadPeers': peers?['dead'],
+              ..._observations.observe(handle, '${task.infoHash}|$output',
+                  progress.fold<int>(0, (a, b) => a + b)),
+              ...peerHealth(stats),
               'sources': facts['sources'],
               'seeders': null,
               'pieceAvailability': null,
@@ -139,8 +105,10 @@ final class BuiltinDownloadBackend
   Future<void> resume(String handle) =>
       _nativeCall(() => service.resume(int.parse(handle)));
   @override
-  Future<void> remove(String handle) =>
-      _nativeCall(() => service.forget(int.parse(handle)));
+  Future<void> remove(String handle) async {
+    await _nativeCall(() => service.forget(int.parse(handle)));
+    _observations.forget(handle);
+  }
   @override
   Future<void> delete(String handle) async {
     final task = await read(handle);

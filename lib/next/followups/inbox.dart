@@ -73,7 +73,17 @@ extension AgentInbox on Followups {
           {required bool question}) =>
       _serial(() async {
         await _inboxReady();
-        final target = await _inboxTarget(invocation, required: question);
+        // About a followup: its conversation, wherever the reminder is
+        // published from (the viewer reports a failed background delivery).
+        final about = input['followupId'] is String
+            ? await _get(input['followupId'] as String)
+            : null;
+        final target = about != null
+            ? <String, Object?>{
+                'repository': about['repository'],
+                'threadId': about['threadId'],
+              }
+            : await _inboxTarget(invocation, required: question);
         final id = 'inbox-${sha256.convert(utf8.encode(jsonEncode([
               target['repository'],
               target['threadId'],

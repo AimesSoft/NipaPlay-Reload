@@ -22,6 +22,7 @@ import '../widgets/icons.dart';
 import '../widgets/progress.dart';
 import '../widgets/television_focus.dart';
 import '../widgets/words.dart';
+import 'attach_button.dart';
 import 'input_paste.dart';
 
 /// Where you talk to Nipa, under the conversation: what this conversation
@@ -206,6 +207,9 @@ class _ChatComposerState extends State<ChatComposer>
     final empty =
         widget.controller.text.trim().isEmpty && chat.attachments.isEmpty;
     final underway = chat.underway;
+    // A remote has no file dialog or photo library to pick from.
+    final attaching = !TelevisionFocusable.television;
+    final indent = attaching ? 10.0 : 0.0;
     return Column(mainAxisSize: MainAxisSize.min, children: [
       if (underway.isNotEmpty) UnderwayBar(items: underway),
       // A remote's focus on the field rings the whole box.
@@ -214,7 +218,7 @@ class _ChatComposerState extends State<ChatComposer>
         scale: 1,
         radius: BorderRadius.circular(22),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(18, 10, 8, 8),
+          padding: EdgeInsets.fromLTRB(attaching ? 8 : 18, 10, 8, 8),
           decoration: BoxDecoration(
             color: const Color(0xE616161C),
             borderRadius: BorderRadius.circular(22),
@@ -232,7 +236,8 @@ class _ChatComposerState extends State<ChatComposer>
             children: [
               if (chat.about != null || chat.attachments.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 8, right: 10),
+                  padding:
+                      EdgeInsets.only(bottom: 8, right: 10, left: indent),
                   child: Wrap(spacing: 8, runSpacing: 8, children: [
                     if (chat.about case final work?)
                       AboutTag(work: work, onRemove: () => chat.setAbout(null)),
@@ -241,10 +246,11 @@ class _ChatComposerState extends State<ChatComposer>
                           paths: chat.attachments, onRemove: chat.detach),
                   ]),
                 ),
-              const NipaSetupChip(padding: EdgeInsets.only(bottom: 8)),
+              NipaSetupChip(
+                  padding: EdgeInsets.only(bottom: 8, left: indent)),
               if (_dictating || _voice.error != null)
                 Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: EdgeInsets.only(bottom: 8, left: indent),
                     child: Row(children: [
                       Expanded(
                           child: Text(
@@ -264,6 +270,13 @@ class _ChatComposerState extends State<ChatComposer>
                                         color: NextColors.p2)))),
                     ])),
               Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                if (attaching) ...[
+                  AttachButton(
+                      onFiles: chat.attach,
+                      enabled: chat.acceptsTyping && chat.question == null,
+                      refused: chat.filesRefused),
+                  const SizedBox(width: 4),
+                ],
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 9),

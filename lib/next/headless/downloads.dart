@@ -7,6 +7,7 @@ import '../downloads/download_backend.dart';
 import '../downloads/download_paths.dart';
 import '../downloads/download_source.dart';
 import '../downloads/indexed_download_library.dart';
+import '../downloads/progress_observations.dart';
 import 'native.dart';
 
 final class HeadlessDownloadBackend
@@ -27,6 +28,7 @@ final class HeadlessDownloadBackend
     : Map<String, Object?>.from(await native!.call('torrent_limits', {
       'download': input['downloadBytesPerSecond'] ?? -1, 'upload': input['uploadBytesPerSecond'] ?? -1}) as Map);
   Future<void>? _ready;
+  final _observations = ProgressObservations();
   @override
   DownloadBackendRef get reference => const DownloadBackendRef.builtin();
   @override
@@ -78,7 +80,12 @@ final class HeadlessDownloadBackend
         uploadSpeedBytesPerSecond: task.uploadSpeedBytesPerSecond,
         error: task.hasError ? task.error : null,
         disk: facts['disk'] as JsonMap,
+        // As the desktop engine says it: without these the executor never
+        // sees a stall, and a dead source hangs silently (#1120).
         health: {
+          ..._observations.observe(handle, '${task.infoHash}|${task.outputFolder}',
+              progress.fold<int>(0, (a, b) => a + b)),
+          ...peerHealth(facts['stats']),
           'sources': facts['sources'],
           'fileSelectionSupported': true,
           'filePrioritySupported': false
@@ -217,6 +224,7 @@ final class HeadlessDownloadBackend
   @override
   Future<void> remove(String handle) async {
     await native!.call('torrent_forget', {'id': int.parse(handle)});
+    _observations.forget(handle);
   }
 
   @override

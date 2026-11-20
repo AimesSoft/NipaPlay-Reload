@@ -11,6 +11,7 @@ final class FollowupCapability implements Capability {
           _FollowupAction(service, 'register'),
           _FollowupAction(service, 'list'),
           _FollowupAction(service, 'cancel'),
+          _FollowupAction(service, 'retry'),
           _FollowupAction(service, 'wake'),
           _FollowupAction(service, 'discover'),
           _TurnProcessAction(service),
@@ -131,6 +132,7 @@ final class _FollowupAction extends Action<_Json, _Json> {
         title: switch (operation) {
           'register' => '登记任务结束或事件发生后的 Agent 后续',
           'cancel' => '取消尚未执行的后续',
+          'retry' => '立即再次投递失败的后续',
           'wake' => '唤醒 Agent 的主会话或指定会话',
           'discover' => '记录有来源的发现',
           _ => '查询后续与等待条件',
@@ -145,6 +147,8 @@ final class _FollowupAction extends Action<_Json, _Json> {
                 'An active turn is never interrupted. Host unavailability remains visible in state.query followups.',
           'cancel' =>
             'Cancel waiting, ready or failed delivery; does not interrupt an already started turn.',
+          'retry' =>
+            'Deliver a followup again now: one waiting for its next automatic delivery after the model provider failed (retryAt), or one whose delivery failed (execution_failed). For the person who asked (the reminder of a failed background followup); do not loop on it: a provider that keeps failing fails again.',
           'wake' =>
             'Queue a new Agent turn with instruction and trigger facts. The host-configured agent device receives wakes from headless hooks and schedules; no conversation runs on the transfer device. Defaults to that Agent host’s main thread; optional threadId targets a conversation there. Busy turns are never interrupted. Uses the durable followup dispatcher.',
           'discover' =>
@@ -185,7 +189,8 @@ final class _FollowupAction extends Action<_Json, _Json> {
               'when',
               'instruction'
             ]),
-          'cancel' => const ObjectSchema({'id': StringSchema(minLength: 1)},
+          'cancel' || 'retry' => const ObjectSchema(
+              {'id': StringSchema(minLength: 1)},
               required: ['id']),
           _ => const ObjectSchema({}),
         },
@@ -208,6 +213,10 @@ final class _FollowupAction extends Action<_Json, _Json> {
         'cancel' => {
             'followup':
                 await service.cancel(input.value['id'] as String, invocation)
+          },
+        'retry' => {
+            'followup':
+                await service.retry(input.value['id'] as String, invocation)
           },
         'wake' => {'followup': await service.wake(input.value, invocation)},
         'discover' => await service.discover(input.value, invocation),

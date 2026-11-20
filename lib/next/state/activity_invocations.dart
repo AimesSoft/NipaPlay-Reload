@@ -10,18 +10,37 @@ import '../capabilities/local_operation_titles.dart';
 import '../platform/report_error.dart';
 
 /// Whether a journalled invocation is an entry of 动态 (conflicts always are).
-bool activityRecordsInvocation(String action, {required bool conflict}) =>
+///
+/// Of the interface's reads only `ui.capture` is one: the others
+/// (`ui.inbox.list`, `ui.library.page`…) are what the viewer polls to draw
+/// itself, and keeping each of them grew next.db by hundreds of megabytes
+/// (#1114). [effect] is null where it is not known (a stored row, which was
+/// only stored because it is shown).
+bool activityRecordsInvocation(String action,
+        {required bool conflict, Effect? effect}) =>
     conflict ||
     action.startsWith('media.sources.') ||
-    action.startsWith('ui.') ||
+    (action.startsWith('ui.') &&
+        (effect != Effect.read || action == 'ui.capture')) ||
     action.startsWith('discover.') ||
     action.startsWith('accounts.') ||
     localOperationTitles.containsKey(action);
 
+/// The `ui.*` reads earlier versions kept in `activity_invocations`; none of
+/// them is shown, so [purgeUnshownActivityInvocations] removes their rows.
+const unshownInterfaceReads = [
+  'ui.inbox.list',
+  'ui.library.sources',
+  'ui.library.page',
+  'ui.library.items',
+  'ui.detail.layout',
+];
+
 /// Whether a read's journal line keeps its result: those 动态 shows.
 bool activityKeepsResult(InvocationRecord record) =>
     activityRecordsInvocation(record.actionId,
-        conflict: record.failureCode == FailureCode.conflict);
+        conflict: record.failureCode == FailureCode.conflict,
+        effect: record.effect);
 
 /// journal.jsonl as Next keeps it: every invocation; reads without their
 /// result unless 动态 shows them; rotated into archives past 32 MiB.
@@ -31,6 +50,13 @@ JsonlJournal nextJournal(File file) => JsonlJournal(file,
     rotateBytes: nextJournalRotateBytes);
 
 const nextJournalRotateBytes = 32 << 20;
+
+/// Retention ceiling for `activity_invocations` (#1114): old rows are pruned
+/// so the table cannot grow without bound over months of use.
+const activityInvocationsMaxRows = 10000;
+
+/// Maximum serialized size of one `activity_invocations.result` payload.
+const activityResultMaxBytes = 64 << 10;
 
 Future<void> migrateActivityInvocations(DatabaseExecutor db) async {
   // The invocations 动态 shows, projected to what it reads of them.
@@ -45,6 +71,36 @@ Future<void> migrateActivityInvocations(DatabaseExecutor db) async {
   // into them.
   await db
       .execute('CREATE TABLE IF NOT EXISTS activity_backfill (done INTEGER)');
+}
+
+/// Removes the rows of [unshownInterfaceReads] that earlier versions kept
+/// (#1114: 171,572 `ui.inbox.list` rows, 636 MB, on one library of 29
+/// works). The space is given back once the database is open.
+Future<void> purgeUnshownActivityInvocations(DatabaseExecutor db) async {
+  await db.delete('activity_invocations',
+      where: 'action_id IN '
+          '(${List.filled(unshownInterfaceReads.length, '?').join(',')})',
+      whereArgs: unshownInterfaceReads);
+  await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_activity_invocations_started_at '
+      'ON activity_invocations(started_at)');
+}
+
+/// Keeps at most [maxRows] newest rows in `activity_invocations` (#1114).
+/// Returns the number of rows deleted.
+Future<int> pruneActivityInvocations(DatabaseExecutor db,
+    {int maxRows = activityInvocationsMaxRows}) async {
+  if (maxRows <= 0) return db.delete('activity_invocations');
+  final count = (await db.rawQuery(
+              'SELECT COUNT(*) AS n FROM activity_invocations'))
+          .single['n'] as int? ??
+      0;
+  if (count <= maxRows) return 0;
+  return db.rawDelete(
+      'DELETE FROM activity_invocations WHERE rowid IN ('
+      'SELECT rowid FROM activity_invocations '
+      'ORDER BY started_at DESC, rowid DESC LIMIT -1 OFFSET ?)',
+      [maxRows]);
 }
 
 const _inputKeys = ['provider', 'sourceId', 'entityId', 'next', 'entries'];
@@ -78,6 +134,35 @@ Object? _projectInput(Object? input) => input is! Map
                 : input[key],
       };
 
+const _resultSummaryKeys = [
+  'path',
+  'closed',
+  'opened',
+  'actual',
+  'refreshed',
+  'changed',
+  'status',
+  'ok',
+  'count',
+  'total',
+];
+
+String? _encodeBoundedResult(Object? result) {
+  if (result == null) return null;
+  final encoded = jsonEncode(result);
+  if (encoded.length <= activityResultMaxBytes) return encoded;
+  final compact = <String, Object?>{
+    if (result is Map)
+      for (final key in _resultSummaryKeys)
+        if (result.containsKey(key)) key: result[key],
+    '_truncated': true,
+    '_originalBytes': encoded.length,
+  };
+  final summary = jsonEncode(compact);
+  if (summary.length <= activityResultMaxBytes) return summary;
+  return jsonEncode({'_truncated': true, '_originalBytes': encoded.length});
+}
+
 /// The `activity_invocations` row of a journalled invocation [record]
 /// (shaped as a journal.jsonl line), or null when 动态 does not show it.
 Map<String, Object?>? activityInvocationRow(Map record) {
@@ -91,7 +176,8 @@ Map<String, Object?>? activityInvocationRow(Map record) {
     return null;
   }
   if (!activityRecordsInvocation(action,
-      conflict: record['failureCode'] == 'conflict')) {
+      conflict: record['failureCode'] == 'conflict',
+      effect: Effect.values.asNameMap()[record['effect']])) {
     return null;
   }
   String? text(Object? value) => value is String ? value : null;
@@ -105,7 +191,7 @@ Map<String, Object?>? activityInvocationRow(Map record) {
     'started_at': startedAt,
     'elapsed_ms': elapsed,
     'input': jsonEncode(_projectInput(record['input'])),
-    'result': result == null ? null : jsonEncode(result),
+    'result': _encodeBoundedResult(result),
   };
 }
 
@@ -129,12 +215,16 @@ Map<String, Object?> activityInvocationRecord(Map row) => {
 /// journal.jsonl; the journal written before this store existed is read
 /// into it once, on a background isolate.
 final class ActivityInvocations implements InvocationObserver {
-  ActivityInvocations(this.database, this.journal, {this.changed});
+  ActivityInvocations(this.database, this.journal,
+      {this.changed, this.maxRows = activityInvocationsMaxRows});
 
   final Database database;
 
   /// journal.jsonl, for the one-time backfill and the absence warning.
   final File journal;
+
+  /// Maximum rows kept in `activity_invocations`.
+  final int maxRows;
 
   /// Told after an invocation 动态 shows has been stored.
   void Function()? changed;
@@ -142,6 +232,10 @@ final class ActivityInvocations implements InvocationObserver {
   Future<void> _writes = Future.value();
   Future<void>? _backfilling;
   bool _backfilled = false, _closed = false;
+  int _storedSincePrune = 0;
+
+  int get _pruneCadence =>
+      maxRows <= 0 ? 1 : (maxRows ~/ 4).clamp(1, 200);
 
   /// Shown invocations are projected on a background isolate. A write
   /// returns once its rows are stored; a read does not wait for them, and
@@ -167,6 +261,11 @@ final class ActivityInvocations implements InvocationObserver {
       if (await row case final values?) {
         await database.insert('activity_invocations', values,
             conflictAlgorithm: ConflictAlgorithm.replace);
+        _storedSincePrune++;
+        if (_storedSincePrune >= _pruneCadence) {
+          _storedSincePrune = 0;
+          await pruneActivityInvocations(database, maxRows: maxRows);
+        }
         changed?.call();
       }
     }();
@@ -214,6 +313,7 @@ final class ActivityInvocations implements InvocationObserver {
         if (_closed) return;
         await database.rawInsert(sql, args);
       }
+      await pruneActivityInvocations(database, maxRows: maxRows);
       await database.insert('activity_backfill', {'done': 1});
       _backfilled = true;
     } catch (error, stack) {
@@ -263,7 +363,8 @@ Future<List<(String, List<Object?>)>> _readJournal(List<String> paths) async {
       // of an old journal is reads with large results).
       if (_header.matchAsPrefix(line) case final header?
           when header[3] == 'read' &&
-              !activityRecordsInvocation(header[2]!, conflict: false) &&
+              !activityRecordsInvocation(header[2]!,
+                  conflict: false, effect: Effect.read) &&
               !line.contains('"failureCode":"conflict"')) {
         shown.remove(header[1]);
         continue;

@@ -90,6 +90,13 @@ class NipaPlayLanDiscoveryResponder {
     bool reuseAddress,
   })? bindOverrideForTest;
 
+  /// 测试专用：改用另一个 UDP 端口，免得与本机正在运行的 NipaPlay 争用
+  /// 32123。生产代码不得设置。
+  @visibleForTesting
+  static int? portOverrideForTest;
+
+  static int get _port => portOverrideForTest ?? nipaplayLanDiscoveryPort;
+
   bool get isRunning => _socket != null;
 
   /// 最近一次 [start] 失败的原因；成功启动后清空。
@@ -111,7 +118,7 @@ class NipaPlayLanDiscoveryResponder {
           bindOverrideForTest != null ? bindOverrideForTest! : RawDatagramSocket.bind;
       final socket = await bindFn(
         InternetAddress.anyIPv4,
-        nipaplayLanDiscoveryPort,
+        _port,
         reuseAddress: true,
       );
 
@@ -134,7 +141,7 @@ class NipaPlayLanDiscoveryResponder {
 
       _socket = socket;
       _lastStartError = null;
-      debugPrint('NipaPlayLanDiscoveryResponder: started on UDP $nipaplayLanDiscoveryPort');
+      debugPrint('NipaPlayLanDiscoveryResponder: started on UDP $_port');
       return true;
     } catch (e) {
       _lastStartError = e.toString();

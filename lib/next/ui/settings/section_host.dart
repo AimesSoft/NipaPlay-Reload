@@ -14,7 +14,9 @@ import '../widgets/segmented.dart';
 import 'controls.dart';
 import 'dsh_config_card.dart';
 import '../../settings/reasoning_effort.dart';
+import '../data/rika_store.dart';
 import 'registry_rows.dart';
+import 'section_store.dart';
 import 'section_accounts.dart';
 import 'settings_layout.dart';
 
@@ -519,10 +521,14 @@ class NipaSection extends StatefulWidget {
     required this.onShow,
     required this.more,
     required this.onMore,
+    this.store,
     this.highlight,
   });
   final NextSettingsData data;
   final SettingsModel model;
+
+  /// 梨花's store (skills and plugins); none where she does not run.
+  final NextRikaStore? store;
 
   /// Go to a setting where it lives.
   final void Function(String key) onShow;
@@ -1344,6 +1350,7 @@ class NipaSectionState extends State<NipaSection> {
         DshConfigCard(host: _host as NextHostDshConfigSettings),
       if (setup?.runtime != UiAgentRuntimeKind.dsh && runtime != null)
         _runtimeCard(runtime),
+      if (widget.store case final store?) RikaStoreCard(store: store),
       if (files != null)
         SettingsCard(title: '梨花记得的事', children: [
           if (files.isEmpty) const SettingsRow(title: '还没有记下什么', dim: true),

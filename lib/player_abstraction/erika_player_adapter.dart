@@ -1353,6 +1353,11 @@ class ErikaPlayerAdapter
   @override
   void setPlaybackRate(double rate) {
     if (_disposed) return;
+    // Settle elapsed playback at the old rate before changing the slope.
+    // Otherwise releasing a long press recalculates that same interval at
+    // normal speed and moves the displayed position (and relative seeks) back.
+    _lastPositionMs = position;
+    _lastPositionUpdate = DateTime.now();
     _playbackRate = rate <= 0 ? 1.0 : rate;
     if (_isSupported) {
       unawaited(_player.setPlaybackRate(_playbackRate));

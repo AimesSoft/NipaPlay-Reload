@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:path/path.dart' as p;
 
+import '../store/rika_store.dart';
+
 import '../agent_endpoint.dart';
 import '../chat/chat_host.dart';
 import '../chat/dsh_runtime.dart';
@@ -82,11 +84,15 @@ final class HeadlessNipa {
       required this.activityPage,
       this.staleSources = const [],
       this.redact,
+      this.store,
       Map<String, String>? environment})
       : environment = environment ?? Platform.environment;
 
   /// The data directory (what the desktop calls Next's root).
   final Directory root;
+
+  /// 梨花's store: its skills and plugins join the host when it starts.
+  final RikaStore? store;
 
   /// Nipa's harness repository.
   final Directory repository;
@@ -161,6 +167,18 @@ final class HeadlessNipa {
   /// Looks at the switch, the model and the runtime again, and starts or
   /// stops Nipa to match. A running host is left alone (a changed model
   /// reaches it at its next turn).
+  /// Stops a running host and brings Nipa up again, so what the store
+  /// changed takes effect.
+  Future<void> restart() {
+    final next = _chain.then((_) async {
+      await _stopHost('Restarting for store changes.');
+      await _reconcile();
+    }).catchError((Object error, StackTrace stack) {
+      _fail('Nipa could not be brought up: ${redactHarnessText('$error')}');
+    });
+    return _chain = next;
+  }
+
   Future<void> reload() {
     final next = _chain.then((_) => _reconcile()).catchError(
         (Object error, StackTrace stack) {
@@ -307,9 +325,15 @@ final class HeadlessNipa {
         modelLaunch: model.launch,
         dsh: runtime,
         dshPlugins: plugins,
+        extensions: store?.hostFacts,
         // The harness's own ./nipa finds this endpoint from the hooks and
         // from her shell alike.
-        environment: {'NIPAPLAY_ENDPOINT_FILE': endpoint.credentialFile.path});
+        environment: {'NIPAPLAY_ENDPOINT_FILE': endpoint.credentialFile.path},
+        // The vault is plain files of this user; her tools may not name it.
+        protectedPaths: [
+          p.join(root.path, 'vault'),
+          ...?store?.protectedPaths,
+        ]);
     _host = host;
     jobOrigins.threadFor = host.threadForOrigin;
     memory.recent = (current) async {

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
+import 'package:nipaplay/services/webdav_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
 
@@ -22,6 +23,17 @@ import 'package:nipaplay/utils/media_source_utils.dart';
 /// 找不到连接或 SMB 本地代理启动失败时返回 `null`.
 Future<String?> resolveExternalPlayerMediaPath(PlayableItem item) async {
   final sessionUrl = item.playbackSession?.streamUrl;
+  if ((sessionUrl == null || sessionUrl.trim().isEmpty) &&
+      MediaSourceUtils.isNewWebDavPath(item.videoPath)) {
+    final service = WebDAVService.instance;
+    await service.initialize();
+    final resolved = service.resolveMediaPath(item.videoPath);
+    if (resolved != null &&
+        service.allAddressesUnreachable(resolved.connection.id)) {
+      // Do not reuse an actualPlayUrl generated before the failed recheck.
+      return service.getFileUrl(resolved.connection, resolved.relativePath);
+    }
+  }
   String finalPath;
   if (sessionUrl != null && sessionUrl.trim().isNotEmpty) {
     finalPath = sessionUrl;

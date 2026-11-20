@@ -65,7 +65,9 @@ nipaplay-headless --model-status
 nipaplay-headless --model-check
 ```
 
-将占位符替换为服务商的地址和模型 ID。`--model-check` 向模型发送一次检查请求。`--agent-status` 查看状态，`--agent-disable`、`--agent-enable` 关闭或开启本机梨花。宿主启动且梨花可用后，`nipaplay-headless nipa chat say "检查磁盘空间" --wait 120` 发送一条消息；系统级安装以数据所有者执行。
+将占位符替换为服务商的地址和模型 ID。梨花商店里的官方技能和插件可让梨花通过 `./nipa call store.install` 安装；未审核的 npm 包由你在主机的终端里运行 `nipaplay-headless --store-install-npm 包名 --data 数据目录` 并输入包名确认安装，见[梨花的商店](store.md)。`--model-check` 向模型发送一次检查请求。`--agent-status` 查看状态，`--agent-disable`、`--agent-enable` 关闭或开启本机梨花。宿主启动且梨花可用后，`nipaplay-headless nipa chat say "检查磁盘空间" --wait 120` 发送一条消息；系统级安装以数据所有者执行。
+
+梨花的命令和文件工具以宿主的系统用户运行，能读到这个用户能读的文件。无界面版的凭据保存在 `data/vault/`（仅该用户可读的文件），它们挡不住同一用户下的梨花。对此宿主做两件事：工具输出交给模型之前，隐去宿主已知的凭据值（包括模型密钥；不足 8 个字符的值只在单独出现时隐去，不改动包含它的更长的词，只有一个字符的值无法与普通文字区分，不隐去；能识别原文、JSON 转义和 URL 编码三种写法，换成其他写法的凭据，例如逐字转义，识别不出；凭据本身含引号、反斜杠或 `%XX` 这类 JSON、URL 语法字符时，可能和输出的结构混在一起）；直接点名 `data/vault/` 的工具调用会被拒绝。用别的方式拼出路径仍能读到文件，只是输出里的凭据值已隐去。不希望梨花接触的其他文件，请放在宿主用户读不到的位置。
 
 ## 备份、升级与恢复
 

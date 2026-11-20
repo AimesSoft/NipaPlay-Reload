@@ -1032,14 +1032,14 @@ final class FakeHostSettings
           baseUrl: 'https://api.deepseek.com/',
           model: 'deepseek-flash',
           problem: '还没有 API key'),
-      _ => const UiModelSetup(
+      _ => UiModelSetup(
           source: UiModelSource.nipaplay,
           codexAvailable: true,
-          provider: 'DeepSeek',
-          baseUrl: 'https://api.deepseek.com/',
-          model: 'deepseek-flash',
+          provider: _current.provider,
+          baseUrl: _current.baseUrl,
+          model: _current.model,
           hasKey: true,
-          inUse: 'deepseek-flash'),
+          inUse: _current.model),
     };
     final runtimeProblem = !dshRuntime || setup.problem != null
         ? null
@@ -1061,7 +1061,39 @@ final class FakeHostSettings
         reasoning: dshReasoning,
         hasKey: setup.hasKey,
         inUse: runtimeProblem == null ? setup.inUse : null,
-        problem: setup.problem ?? runtimeProblem);
+        problem: setup.problem ?? runtimeProblem,
+        recent: [
+          _current,
+          for (final choice in saved.reversed)
+            if (choice.source == UiModelSource.nipaplay &&
+                choice.model != _current.model)
+              choice,
+          if (_current.model != 'deepseek-flash') _fallback,
+          const UiModelChoice(
+              source: UiModelSource.nipaplay,
+              provider: 'OpenRouter',
+              baseUrl: 'https://openrouter.ai/api/v1',
+              model: 'anthropic/claude-sonnet-5.5',
+              api: UiModelApi.chat),
+        ]);
+  }
+
+  static const _fallback = UiModelChoice(
+      source: UiModelSource.nipaplay,
+      provider: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com/',
+      model: 'deepseek-flash');
+  UiModelChoice get _current => saved.lastWhere(
+      (c) => c.source == UiModelSource.nipaplay && c.model != null,
+      orElse: () => _fallback);
+
+  @override
+  Future<List<String>> providerModels() async {
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    return switch (_current.provider) {
+      'DeepSeek' => const ['deepseek-flash', 'deepseek-pro', 'deepseek-reasoner'],
+      _ => const [],
+    };
   }
 
   UiModelApi dshApi = UiModelApi.responses;

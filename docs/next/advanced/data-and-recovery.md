@@ -43,4 +43,4 @@
 
 ---
 
-上一篇：[DSH 高级配置](dsh-config.md) · 下一篇：[Linux 无界面版](headless.md)
+上一篇：[梨花的商店](store.md) · 下一篇：[Linux 无界面版](headless.md)

@@ -130,6 +130,7 @@
 | `followup.cancel` | write | 取消尚未启动的后续 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
 | `followup.list` | read | 查询后续及投递状态 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
 | `followup.register` | write | 登记任务或事件触发的持久后续 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
+| `followup.retry` | write | 立即再次投递失败或等待重试的后续 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
 | `history.continue_watching` | read | Get continue watching | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/history_capability.dart) |
 | `history.mark_watched_batch` | write | 标记本地观看状态 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/watched_history.dart) |
 | `history.remove` | write | Remove watch history | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/local_library_operations.dart) |
@@ -356,6 +357,21 @@ note、program（harness 相对路径）、facts（JSON对象，默认空）、c
 title/kind/note/program/createdBy 必填；输出另含 createdAt、updatedAt、revision、latestReport、latestDownloads，
 get 及写动作返回 reports。report.found 为 title、可选 key/episode；downloads 为 jobId/title/可选 episode，
 errors 为字符串数组。时间为 ISO-8601。所有判断归巡查脚本，不由宿主执行。
+
+## 梨花的商店
+
+| Action | Effect | 用途或限制 | 宿主代码 | Mesh | 定义 |
+| --- | --- | --- | --- | --- | --- |
+| `store.list` | read | 官方列表（技能与 DSH 插件）和本机已装条目：版本、启用、可更新、上次启动未加载的插件及原因、读不出的安装记录（可 remove）；refresh 立即重读列表（否则最多 10 分钟一次） | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.readme` | read | id；官方条目的说明，按列表的 SHA-256 校验 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.install` | write | id + version（官方列表；version 是用户看过说明的那个版本，列表已更新则冲突）或 npm（`name`/`name@version`）二选一；npm 包未经审核，只有本机界面的用户本人可装（无界面版用 `--store-install-npm`）；不运行安装脚本 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.enable` | write | id、enabled；不卸载地停用或启用 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.remove` | destructive | id；删除条目及其文件，插件存在 DSH 自己数据里的设置和登录保留 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.apply` | write | 重启对话宿主使改动生效，会结束进行中的回合；只有本机界面的用户本人可调用 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+
+改动在对话宿主下次启动时生效。技能装在 `<Next 数据>/store/skills/<id>/`，启动时把名称、说明和 SKILL.md 路径写进梨花的提示；
+插件装在 `store/plugins/<id>/`，运行环境提供的包以链接接入，只在 DeepSeek Harness 下加载。格式与审核规则见
+[梨花的商店](../advanced/store.md)。
 
 ## 语音输入动作
 

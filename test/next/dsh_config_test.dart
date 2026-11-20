@@ -68,6 +68,24 @@ void main() {
         config(Map.fromEntries(c.json.entries.toList().reversed)).fingerprint);
   });
 
+  test('plugins from 梨花\'s store load after NipaPlay\'s own', () {
+    final rows = dshPatch(
+        route: const DshRoute(
+            baseUrl: 'https://example.invalid', model: 'm', key: 'secret'),
+        plugins: Directory('/plugins'),
+        personaPrefix: '',
+        personaSuffix: '',
+        harness: '/harness',
+        version: 'test',
+        storePlugins: [
+          {'id': 'llm-example', 'name': '/store/plugins/x/index.js'}
+        ]);
+    final inserted = [
+      for (final row in rows.last['insert'] as List) (row as Map)['id']
+    ];
+    expect(inserted, ['nipa-memory', 'nipa-app-server', 'llm-example']);
+  });
+
   test('invalid budgets, types and host wiring cannot silently fall back', () {
     for (final value in <Map<String, Object?>>[
       {

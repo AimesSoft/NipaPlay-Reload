@@ -10,6 +10,7 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:smb_connect/smb_connect.dart';
 
+import 'package:nipaplay/services/remote_proxy_diagnostics.dart';
 import 'package:nipaplay/services/smb2_native_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 
@@ -22,6 +23,9 @@ class SMBProxyService {
 
   static final SMBProxyService instance = SMBProxyService._();
 
+  // The listener itself is observed inside the proxy isolate; this instance
+  // logs root-side lifecycle and probes the proxy over loopback.
+  final _diagnostics = RemoteProxyDiagnostics('SMB');
   Isolate? _isolate;
   ReceivePort? _receivePort;
   StreamSubscription<dynamic>? _receiveSubscription;
@@ -40,7 +44,12 @@ class SMBProxyService {
   VoidCallback? _smbListener;
 
   Future<void> initialize() async {
-    if (_isRunning || kIsWeb) return;
+    _diagnostics
+        .log('initialize running=$_isRunning pending=${_initializing != null}');
+    if (_isRunning || kIsWeb) {
+      if (_isRunning) unawaited(_diagnostics.probe('initialize-reuse'));
+      return;
+    }
     final stopping = _stopping;
     if (stopping != null) {
       await stopping;
@@ -121,6 +130,11 @@ class SMBProxyService {
       }
       if (type == 'resolve_password') {
         unawaited(_handleResolvePasswordRequest(message));
+        return;
+      }
+      if (type == 'log') {
+        final line = message['message'];
+        if (line is String) debugPrint(line);
       }
     });
 
@@ -141,6 +155,7 @@ class SMBProxyService {
       _port = started.port;
       _controlPort = started.controlPort;
       _isRunning = true;
+      _diagnostics.attach(_port);
 
       final listener = _syncConnectionsSnapshot;
       _smbListener = listener;
@@ -175,6 +190,7 @@ class SMBProxyService {
   }
 
   Future<void> _stopInternal() async {
+    _diagnostics.log('stop-request running=$_isRunning');
     try {
       await _initializing;
     } catch (_) {}
@@ -190,6 +206,7 @@ class SMBProxyService {
     }
 
     await _cleanupRootIsolateState(killIsolate: true);
+    _diagnostics.log('stop-complete');
   }
 
   Future<void> _cleanupRootIsolateState({required bool killIsolate}) async {
@@ -441,6 +458,12 @@ class _SmbProxyConnectionSnapshot {
 }
 
 void _smbProxyIsolateMain(_SmbProxyStartupArgs args) {
+  // Only the root isolate's debugPrint reaches the app log; forward to it.
+  debugPrint = (String? message, {int? wrapWidth}) {
+    if (message != null) {
+      args.mainPort.send({'type': 'log', 'message': message});
+    }
+  };
   final state = _SmbProxyIsolateState(
     mainPort: args.mainPort,
     useNativeSmb2: args.useNativeSmb2,
@@ -466,6 +489,7 @@ class _SmbProxyIsolateState {
       _pendingPasswordResolves =
       <int, Completer<_SmbProxyConnectionSnapshot>>{};
   int _nextPasswordResolveId = 1;
+  final _diagnostics = RemoteProxyDiagnostics('SMB');
   HttpServer? _server;
   bool _stopped = false;
 
@@ -482,23 +506,27 @@ class _SmbProxyIsolateState {
       ..add('GET', '/smb/stream', _handleStream)
       ..get('/smb/health', (Request request) => Response.ok('ok'));
 
-    final handler = const Pipeline().addHandler(router.call);
+    final handler = _diagnostics.wrap(const Pipeline().addHandler(router.call));
 
     Object? lastError;
     for (final candidatePort in portsToTry) {
       try {
-        _server = await shelf_io.serve(
-          handler,
+        _diagnostics.log('bind-attempt candidatePort=$candidatePort');
+        final server = await HttpServer.bind(
           InternetAddress.loopbackIPv4,
           candidatePort,
         );
+        _server = server;
+        shelf_io.serveRequests(_diagnostics.observe(server), handler);
         mainPort.send({
           'type': 'started',
-          'port': _server!.port,
+          'port': server.port,
           'controlPort': _controlPort.sendPort,
         });
         return;
       } catch (e) {
+        _diagnostics.log(
+            'bind-failed candidatePort=$candidatePort ${RemoteProxyDiagnostics.errorSummary(e)}');
         lastError = e;
       }
     }
@@ -769,6 +797,8 @@ class _SmbProxyIsolateState {
           headers: headers,
         );
       } catch (e) {
+        _diagnostics
+            .log('upstream-error ${RemoteProxyDiagnostics.errorSummary(e)}');
         return Response.internalServerError(body: 'SMB stream error: $e');
       }
     }
@@ -859,6 +889,8 @@ class _SmbProxyIsolateState {
         headers: headers,
       );
     } catch (e) {
+      _diagnostics
+          .log('upstream-error ${RemoteProxyDiagnostics.errorSummary(e)}');
       return Response.internalServerError(body: 'SMB stream error: $e');
     } finally {
       if (client != null) {

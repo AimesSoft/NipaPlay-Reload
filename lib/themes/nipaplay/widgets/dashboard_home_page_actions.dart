@@ -78,6 +78,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
           anime: summary,
           episode: episode,
         ),
+        mediaLibraryScope: MediaLibraryScope(MediaLibraryScopeKind.sharedRemote,
+            hostOrigin: resolvedProvider.activeHost?.baseUrl),
         sharedSourceLabel: resolvedProvider.activeHost?.displayName,
       );
     } catch (e) {
@@ -165,6 +167,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
           summary: summary,
           episode: episode,
         ),
+        mediaLibraryScope: MediaLibraryScope(MediaLibraryScopeKind.dandanplay,
+            hostOrigin: resolvedProvider.serverUrl),
         sharedSourceLabel: resolvedProvider.serverUrl ?? '弹弹play',
       );
 
@@ -250,8 +254,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
           if (jellyfinService.isConnected) {
             playbackSession = await jellyfinService.createPlaybackSession(
               itemId: jellyfinId,
-              startPositionMs: currentItem.lastPosition > 0
-                  ? currentItem.lastPosition
+              startPositionMs: currentItem.resumePosition > 0
+                  ? currentItem.resumePosition
                   : null,
             );
           } else {
@@ -273,8 +277,8 @@ extension DashboardHomePageActions on _DashboardHomePageState {
           if (embyService.isConnected) {
             playbackSession = await embyService.createPlaybackSession(
               itemId: embyId,
-              startPositionMs: currentItem.lastPosition > 0
-                  ? currentItem.lastPosition
+              startPositionMs: currentItem.resumePosition > 0
+                  ? currentItem.resumePosition
                   : null,
             );
           } else {

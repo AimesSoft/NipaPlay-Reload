@@ -1,8 +1,10 @@
+import 'media_library_scope.dart';
 import 'watch_history_model.dart';
 import 'media_server_playback.dart';
 import 'playback_detail_context.dart';
 
 class PlayableItem {
+  final MediaLibraryScope? mediaLibraryScope;
   final String videoPath;
   final String? title;
   final String? subtitle;
@@ -16,6 +18,7 @@ class PlayableItem {
 
   PlayableItem({
     required this.videoPath,
+    this.mediaLibraryScope,
     this.title,
     this.subtitle,
     this.animeId,
@@ -32,6 +35,7 @@ class PlayableItem {
     required PlaybackDetailContext detailContext,
   }) {
     return PlayableItem(
+      mediaLibraryScope: detailContext.mediaLibraryScope,
       videoPath: episode.videoPath,
       title: episode.title,
       subtitle: episode.subtitle,
@@ -51,6 +55,7 @@ class PlayableItem {
 
   PlayableItem withDetailContext(PlaybackDetailContext context) {
     return PlayableItem(
+      mediaLibraryScope: mediaLibraryScope ?? context.mediaLibraryScope,
       videoPath: videoPath,
       title: title,
       subtitle: subtitle,
@@ -63,4 +68,20 @@ class PlayableItem {
       mediaKey: mediaKey,
     );
   }
+}
+
+extension PlayableItemLibraryScope on PlayableItem {
+  PlayableItem withMediaLibraryScope(MediaLibraryScope? scope) => PlayableItem(
+        videoPath: videoPath,
+        title: title,
+        subtitle: subtitle,
+        animeId: animeId,
+        episodeId: episodeId,
+        historyItem: historyItem,
+        actualPlayUrl: actualPlayUrl,
+        playbackSession: playbackSession,
+        detailContext: detailContext,
+        mediaKey: mediaKey,
+        mediaLibraryScope: scope,
+      );
 }

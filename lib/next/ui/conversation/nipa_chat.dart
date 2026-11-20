@@ -529,6 +529,13 @@ class NipaChat extends ChangeNotifier {
   /// Whether the input takes text now.
   bool get acceptsTyping => !(question != null && secretAsked);
 
+  /// Why files cannot go with what is said now (Nipa runs on a device whose
+  /// NipaPlay cannot take them); null when they can.
+  String? get filesRefused => switch (port) {
+        final ChatFileStaging staging => staging.filesRefused,
+        _ => null,
+      };
+
   String get hint {
     if (question != null) return secretAsked ? '这里不输入密码' : '也可以直接说';
     if (attachments.isNotEmpty) return '想让梨花做什么？';
@@ -557,7 +564,29 @@ class NipaChat extends ChangeNotifier {
     final asked = about;
     // Where the video is when it is said, not once the library answers.
     final reading = _watching?.call();
-    var input = ChatContext.withFiles(text, files);
+    // Nipa on another device reads the files once they are over there; the
+    // conversation here keeps showing them from this device.
+    var there = files;
+    if (port case final ChatFileStaging staging when files.isNotEmpty) {
+      try {
+        there = await staging.stage(files);
+      } catch (error) {
+        debugPrint('[NextUi] attachments not handed over: $error');
+        final turn = ChatTurn()
+          ..parts.add(SaidPart(text,
+              about: asked?.title, files: files, echoed: false));
+        turns = [...turns, turn];
+        // Still waiting, to be sent again.
+        attachments = files;
+        _fail(
+            turn,
+            error is ChatUnavailable
+                ? error.message
+                : '附件没能送到梨花那边：${rawFailureText(error)}');
+        return;
+      }
+    }
+    var input = ChatContext.withFiles(text, there);
     if (asked != null) input = ChatContext.about(input, asked);
     final now = reading == null
         ? null

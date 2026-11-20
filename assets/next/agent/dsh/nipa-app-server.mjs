@@ -66,7 +66,7 @@ function exitStatus(text) {
  * followup only after a provider hiccup, which it recognises by HTTP status or
  * by these Codex names; DSH's own message and code are kept.
  */
-function turnError(failure) {
+export function turnError(failure) {
   if (!failure) return null;
   const message = String(failure.message ?? failure);
   const parsed = /\((\d{3})\)/.exec(message);
@@ -79,8 +79,11 @@ function turnError(failure) {
     info = { responseTooManyFailedAttempts: { httpStatusCode: status ?? 429 } };
   } else if (code === 'SERVER' || (status !== undefined && status >= 500)) {
     info = { responseTooManyFailedAttempts: { httpStatusCode: status ?? null } };
-  } else if (['TRANSPORT', 'TIMEOUT', 'LLM_STREAM_IDLE_TIMEOUT', 'EMPTY_RESPONSE'].includes(code)) {
+  } else if (['TRANSPORT', 'TIMEOUT', 'LLM_STREAM_IDLE_TIMEOUT'].includes(code)) {
     info = { responseStreamDisconnected: { httpStatusCode: status ?? null } };
+    // EMPTY_RESPONSE stays 'other': the stream ended normally with nothing in
+    // it, after DSH's own retries in the turn. Called a disconnect, NipaPlay
+    // delivered the same followup five more times (#1122: 24 requests).
   } else if (code === 'CONTEXT_WINDOW_EXCEEDED') {
     info = 'contextWindowExceeded';
   } else if (code === 'INVALID_CREDENTIAL' || code === 'MISSING_CREDENTIAL') {
@@ -380,6 +383,241 @@ class Wire {
   }
 }
 
+/**
+ * What NipaPlay holds as secrets (its vault, the model key): a tool that
+ * printed one (a `cat` of the vault, an `env` of a process) does not hand it
+ * to the model or to the session log (#1119). Values only, in this process's
+ * memory; NipaPlay sends them with `nipa/redact`, never through a file.
+ */
+export const REDACTED = '[已隐去的凭据]';
+// A value of one character cannot be told from text. One under
+// [WHOLE_FROM] characters is hidden only where it stands alone (not inside
+// a longer word or number): a password `http` must not break `https://`.
+const MIN_SECRET = 2;
+const WHOLE_FROM = 8;
+
+export function secretForms(secret) {
+  const forms = new Set([secret]);
+  forms.add(JSON.stringify(secret).slice(1, -1));
+  try { forms.add(encodeURIComponent(secret)); } catch { /* lone surrogate */ }
+  return [...forms].filter((form) => form.length >= MIN_SECRET);
+}
+
+// Standing alone: the characters on either side, as the text means them,
+// are not letters, digits or `_`. Tool output is often JSON or a URL, so a
+// neighbour written as a JSON escape (`\n`, `\u00a0`) or as percent-encoded
+// UTF-8 (`%E3%80%82`) is read as the character it stands for; and a match
+// that begins inside an escape (`n!` in `\n!`) is not the secret.
+const LETTER = /[\p{L}\p{N}_]/u;
+const JSON_ESCAPES = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '"': '"', '\\': '\\', '/': '/' };
+
+const HEX = /^[0-9A-Fa-f]$/;
+
+// Counted at most 64 back: a long run of backslashes must not make every
+// check walk it again.
+function unescapedBackslash(text, i) {
+  if (text[i] !== '\\') return false;
+  let run = 0;
+  for (let k = i - 1; k >= 0 && k >= i - 64 && text[k] === '\\'; k--) run++;
+  return run % 2 === 0;
+}
+
+// Whether the backslash at k begins a JSON escape, and how long it is.
+function escapeAt(text, k) {
+  if (!unescapedBackslash(text, k)) return 0;
+  if (text[k + 1] === 'u') return /^[0-9A-Fa-f]{4}$/.test(text.slice(k + 2, k + 6)) ? 6 : 0;
+  return 'nrtbf"\\/'.includes(text[k + 1] ?? '') ? 2 : 0;
+}
+
+// Whether position i is inside a JSON escape (`\n`, `\u00a0`) or a
+// percent-encoded byte (`%20`) that began before it.
+function splitsEscape(text, i) {
+  if (i <= 0 || i >= text.length) return false;
+  for (let back = 1; back <= 5; back++) {
+    const j = i - back;
+    if (j >= 0 && escapeAt(text, j) > back) return true;
+  }
+  if (text[i - 1] === '%' && HEX.test(text[i]) && HEX.test(text[i + 1] ?? '')) return true;
+  return i >= 2 && text[i - 2] === '%' && HEX.test(text[i - 1]) && HEX.test(text[i]);
+}
+
+function percentChar(chunk) {
+  if (!/^(%[0-9A-Fa-f]{2})+$/.test(chunk)) return null;
+  try {
+    const decoded = decodeURIComponent(chunk);
+    return [...decoded].length === 1 ? decoded : null;
+  } catch { return null; }
+}
+
+function charBefore(text, i) {
+  if (i <= 0) return null;
+  if (i >= 6 && escapeAt(text, i - 6) === 6) {
+    const unit = parseInt(text.slice(i - 4, i), 16);
+    // A low surrogate's letter is the pair's, escaped as two.
+    if (unit >= 0xdc00 && unit <= 0xdfff && i >= 12 && escapeAt(text, i - 12) === 6) {
+      return String.fromCharCode(parseInt(text.slice(i - 10, i - 6), 16), unit);
+    }
+    return String.fromCharCode(unit);
+  }
+  if (i >= 2 && escapeAt(text, i - 2) === 2) return JSON_ESCAPES[text[i - 1]];
+  for (let bytes = 1; bytes <= 4 && i - 3 * bytes >= 0; bytes++) {
+    const char = percentChar(text.slice(i - 3 * bytes, i));
+    if (char) return char;
+  }
+  return [...text.slice(Math.max(0, i - 2), i)].pop();
+}
+
+function charAfter(text, j) {
+  if (j >= text.length) return null;
+  const escape = escapeAt(text, j);
+  if (escape === 6) {
+    const unit = parseInt(text.slice(j + 2, j + 6), 16);
+    if (unit >= 0xd800 && unit <= 0xdbff && escapeAt(text, j + 6) === 6) {
+      return String.fromCharCode(unit, parseInt(text.slice(j + 8, j + 12), 16));
+    }
+    return String.fromCharCode(unit);
+  }
+  if (escape === 2) return JSON_ESCAPES[text[j + 1]];
+  for (let bytes = 1; bytes <= 4 && j + 3 * bytes <= text.length; bytes++) {
+    const char = percentChar(text.slice(j, j + 3 * bytes));
+    if (char) return char;
+  }
+  return String.fromCodePoint(text.codePointAt(j));
+}
+
+function standsAlone(text, at, length) {
+  const end = at + length;
+  // Neither end may cut an escape in two (the secret `n!` in `\n!`, `20`
+  // in `%20`, a secret ending in `\` before `"`).
+  if (splitsEscape(text, at) || splitsEscape(text, end)) return false;
+  for (let k = at; k < end; k++) {
+    if (k + escapeAt(text, k) > end) return false;
+  }
+  const before = charBefore(text, at), after = charAfter(text, end);
+  return !(before && LETTER.test(before)) && !(after && LETTER.test(after));
+}
+
+function standingAlone(form) {
+  return (text) => {
+    let out = '', from = 0, changed = false;
+    let at = text.indexOf(form);
+    while (at !== -1) {
+      if (standsAlone(text, at, form.length)) {
+        out += text.slice(from, at) + REDACTED;
+        from = at + form.length;
+        changed = true;
+        at = text.indexOf(form, from);
+      } else {
+        // The next occurrence may overlap this one.
+        at = text.indexOf(form, at + 1);
+      }
+    }
+    return changed ? out + text.slice(from) : text;
+  };
+}
+
+export class Redactions {
+  #forms = [];
+  remember(values) {
+    let changed = false;
+    for (const value of Array.isArray(values) ? values : []) {
+      if (typeof value !== 'string' || value.length < MIN_SECRET) continue;
+      // Whether it is short is the secret's own length, not its encoded
+      // form's: `密码` is short however long `%E5%AF%86%E7%A0%81` is.
+      const whole = value.length >= WHOLE_FROM;
+      for (const form of secretForms(value)) {
+        const known = this.#forms.find((f) => f.text === form);
+        if (known) {
+          // The same text from a long secret is hidden everywhere.
+          if (whole && known.alone) { known.alone = null; changed = true; }
+          continue;
+        }
+        this.#forms.push({ text: form, alone: whole ? null : standingAlone(form) });
+        changed = true;
+      }
+    }
+    // Longest first: a secret containing another is hidden whole.
+    if (changed) this.#forms.sort((a, b) => b.text.length - a.text.length);
+  }
+  get size() { return this.#forms.length; }
+  text(value) {
+    if (typeof value !== 'string' || this.#forms.length === 0) return value;
+    let out = value;
+    for (const form of this.#forms) {
+      if (!out.includes(form.text)) continue;
+      out = form.alone ? form.alone(out) : out.split(form.text).join(REDACTED);
+    }
+    return out;
+  }
+  json(value) {
+    if (typeof value === 'string') return this.text(value);
+    if (Array.isArray(value)) return value.map((item) => this.json(item));
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [this.text(k), this.json(v)]));
+    }
+    return value;
+  }
+  /** Text blocks with secrets hidden; the same array when none was there. */
+  content(blocks) {
+    if (!Array.isArray(blocks) || this.#forms.length === 0) return blocks;
+    let changed = false;
+    const out = blocks.map((block) => {
+      if (block?.type !== 'text' || typeof block.text !== 'string') return block;
+      const text = this.text(block.text);
+      if (text === block.text) return block;
+      changed = true;
+      return { ...block, text };
+    });
+    return changed ? out : blocks;
+  }
+  /**
+   * A `tools/post-execute` decision with secrets hidden from what the model
+   * reads of it. A failed call is rewritten as a block, so that its error
+   * message (shown and logged) is the hidden text too.
+   */
+  decision(result, decision) {
+    if (this.#forms.length === 0) return decision;
+    if (decision.kind === 'block') {
+      const feedback = this.content(decision.feedback);
+      return feedback === decision.feedback ? decision : { ...decision, feedback };
+    }
+    if (Object.hasOwn(decision, 'value')) {
+      const value = this.json(decision.value);
+      return JSON.stringify(value) === JSON.stringify(decision.value) ? decision : { ...decision, value };
+    }
+    const original = decision.content ?? result.content;
+    const content = this.content(original);
+    const failedMessage = result.isError ? this.text(String(result.error?.message ?? '')) : '';
+    const messageChanged = result.isError && failedMessage !== String(result.error?.message ?? '');
+    if (content === original && !messageChanged) return decision;
+    if (result.isError) {
+      return {
+        kind: 'block',
+        feedback: content,
+        ...(decision.additionalContexts ? { additionalContexts: decision.additionalContexts } : {}),
+      };
+    }
+    return { ...decision, content };
+  }
+}
+
+/**
+ * Whether a call names a protected path (a vault directory) in any of its
+ * arguments, as written or resolved: it is refused before it runs. A path
+ * built some other way still reaches only redacted output.
+ */
+export function namesProtectedPath(args, protectedPaths) {
+  if (!protectedPaths.length) return false;
+  const strings = [];
+  const walk = (value) => {
+    if (typeof value === 'string') strings.push(value);
+    else if (Array.isArray(value)) value.forEach(walk);
+    else if (value && typeof value === 'object') Object.values(value).forEach(walk);
+  };
+  walk(args);
+  return strings.some((text) => protectedPaths.some((path) => text.includes(path)));
+}
+
 export function apply(ctx, config = {}) {
   const provider = String(config.provider ?? 'nipaplay');
   const model = String(config.model ?? '');
@@ -393,6 +631,25 @@ export function apply(ctx, config = {}) {
   const home = process.env.DSH_HOME ?? join(process.env.HOME ?? '.', '.dsh');
   const meta = new ThreadMeta(join(home, 'nipaplay', 'threads.json'));
   const version = String(config.dshVersion ?? 'unknown');
+  const redactions = new Redactions();
+  redactions.remember([process.env.NIPAPLAY_MODEL_API_KEY]);
+  const protectedPaths = [];
+  for (const path of Array.isArray(config.protectedPaths) ? config.protectedPaths : []) {
+    if (typeof path !== 'string' || !path) continue;
+    protectedPaths.push(path);
+    try { protectedPaths.push(realpathSync(path)); } catch { /* not there yet */ }
+  }
+  ctx.on('tools/pre-execute', async (exec, next) => {
+    if (namesProtectedPath(exec.arguments, protectedPaths)) {
+      return { kind: 'deny', reason: 'This path is NipaPlay\'s own (its credentials, or what its store loads); tools do not read or change it. Use the secret names NipaPlay gives, and the store.* actions, instead.' };
+    }
+    return next();
+  }, { prepend: true });
+  // Outermost, so what any other policy (a spill preview) returns is hidden too.
+  ctx.on('tools/post-execute', async (exec, result, next) =>
+    redactions.decision(result, await next()), { prepend: true });
+  ctx.on('tools/ptc-dispatch-log', async (dispatch, next) =>
+    redactions.content(await next()), { prepend: true });
 
   /** Root agents this host created or resumed; DSH's subagent service owns its children. */
   const handles = new Map();
@@ -625,6 +882,10 @@ export function apply(ctx, config = {}) {
   };
 
   async function onMessage({ id, method, params }) {
+    if (method === 'nipa/redact' && (id === undefined || id === null)) {
+      redactions.remember(params?.values);
+      return;
+    }
     if (method === 'nipa/memoryStale' && (id === undefined || id === null)) {
       // NipaPlay's recent facts changed: nipa-memory rebuilds its block
       // before each root session's next model request.

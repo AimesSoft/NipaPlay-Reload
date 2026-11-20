@@ -236,6 +236,8 @@ void main() {
     expect(retry['attempts'], 1);
     expect(retry['failedTurns'], [first['id']]);
     expect(retry['turnId'], isNull);
+    // What the provider said is in the followup, for the agent to explain.
+    expect(retry['reason'], contains('429'));
     final retryAt = DateTime.parse(retry['retryAt'] as String);
     expect(retryAt.isAfter(DateTime.now().toUtc()), true);
     expect(

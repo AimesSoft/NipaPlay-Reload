@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
 
+import '../../mesh/chat_guest_host.dart'
+    show chatAttachmentChunk, chatAttachmentLimit;
 import '../../mesh/nipa_peers.dart';
 import 'chat_port.dart';
 
@@ -11,7 +15,7 @@ import 'chat_port.dart';
 /// What happens in it reaches this port by one long wait on that device
 /// (`mesh/chat/events`), not by asking again and again; the rest is one
 /// request each way. Nothing here starts a conversation host.
-final class MeshChatPort implements ChatPort {
+final class MeshChatPort implements ChatPort, ChatFileStaging {
   MeshChatPort(
       {required this.call,
       required this.hostChanges,
@@ -57,6 +61,7 @@ final class MeshChatPort implements ChatPort {
   int _generation = 0;
   bool _looping = false;
   bool _sharedThreads = false;
+  bool _takesFiles = false;
   Timer? _again;
   Future<void>? _probing;
 
@@ -133,6 +138,7 @@ final class MeshChatPort implements ChatPort {
       _epoch = state['epoch'] as String?;
       _sequence = (state['sequence'] as int?) ?? 0;
       _sharedThreads = state['sharedThreads'] == true;
+      _takesFiles = state['attachments'] == true;
       _up = true;
       _servedBy = peer;
       _why = null;
@@ -314,6 +320,61 @@ final class MeshChatPort implements ChatPort {
 
   @override
   Future<String?> switchThread(String threadId) async => threadId;
+
+  /// Each file goes over in parts to the device Nipa runs on, which keeps it
+  /// where she reads it; what is said then names it there.
+  @override
+  String? get filesRefused => !_up || _takesFiles
+      ? null
+      : '「${_name()}」上的 NipaPlay 需要更新后才能接收附件。';
+
+  @override
+  Future<List<String>> stage(List<String> paths) async {
+    if (filesRefused case final why?) throw ChatUnavailable(why);
+    final staged = <String>[];
+    for (final path in paths) {
+      final file = File(path);
+      final stat = await file.stat();
+      if (stat.type != FileSystemEntityType.file) {
+        throw ChatUnavailable('找不到文件「${_base(path)}」，没有发出去。');
+      }
+      final size = stat.size;
+      if (size == 0 || size > chatAttachmentLimit) {
+        throw ChatUnavailable(size == 0
+            ? '「${_base(path)}」是空的，没有发出去。'
+            : '「${_base(path)}」太大了，超过 ${chatAttachmentLimit >> 20} MB 的文件请放到媒体库里再告诉梨花。');
+      }
+      final input = await file.open();
+      try {
+        String? uploadId;
+        var offset = 0;
+        while (true) {
+          final bytes = await input.read(chatAttachmentChunk);
+          final sent = await _call('mesh/chat/attach', {
+            'name': _base(path),
+            'size': size,
+            'offset': offset,
+            'data': base64Encode(bytes),
+            if (uploadId != null) 'uploadId': uploadId,
+          });
+          uploadId = sent['uploadId'] as String?;
+          offset = sent['received'] as int;
+          if (sent['path'] case final String there) {
+            staged.add(there);
+            break;
+          }
+          if (bytes.isEmpty) {
+            throw StateError('The device stopped taking ${_base(path)}.');
+          }
+        }
+      } finally {
+        await input.close();
+      }
+    }
+    return staged;
+  }
+
+  static String _base(String path) => path.split(RegExp(r'[\\/]')).last;
 
   @override
   Future<ChatEvent?> startTurn(String threadId, String text) async {

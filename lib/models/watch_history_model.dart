@@ -24,6 +24,15 @@ class WatchHistoryItem {
   bool isFromScan;
   String? videoHash; // 添加视频哈希值字段，用于弹幕匹配
   String? mediaKey;
+
+  /// Explicitly replaying a completed episode must not seek back to its EOF.
+  /// Keep the stored watched mark; only the starting position is reset.
+  bool get isCompleted =>
+      watchProgress >= 0.999 ||
+      (duration > 0 && lastPosition >= duration - 100);
+
+  int get resumePosition => isCompleted ? 0 : lastPosition;
+
   bool get isDandanplayRemote {
     final normalized = filePath.toLowerCase();
     return normalized.startsWith('dandanplay://') ||

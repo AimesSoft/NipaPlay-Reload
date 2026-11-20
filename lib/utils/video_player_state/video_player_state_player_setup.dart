@@ -24,8 +24,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     PlaybackSession? playbackSession,
     EmbyResolvedTrackBundle? embyTrackSelection,
     PlaybackDetailContext? playbackDetailContext,
+    MediaLibraryScope? mediaLibraryScope,
     String? mediaKey,
     bool resetManualDanmakuOffset = true,
+    bool restartCompleted = true,
     bool preserveEmbyAccountKey = false,
     bool manualMatchHandled = false,
     bool episodeFileSelectionHandled = false,
@@ -65,6 +67,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           historyItem: historyItem,
           actualPlayUrl: actualPlayUrl,
           playbackSession: playbackSession,
+          mediaLibraryScope: mediaLibraryScope,
           detailContext: playbackDetailContext,
           mediaKey: mediaKey,
         ),
@@ -82,6 +85,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       actualPlayUrl = selected.actualPlayUrl;
       playbackSession = selected.playbackSession;
       playbackDetailContext = selected.detailContext;
+      mediaLibraryScope = selected.mediaLibraryScope;
       mediaKey = selected.mediaKey;
     }
     if (actualPlayUrl == null &&
@@ -142,6 +146,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       resolvedDetailContext = playbackDetailContext;
     } else {
       final sourceItem = PlayableItem(
+        mediaLibraryScope: mediaLibraryScope,
         videoPath: videoPath,
         title: historyItem?.animeName,
         subtitle: historyItem?.episodeTitle,
@@ -161,7 +166,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
     _clearPreviousVideoState(); // 清理旧状态
     _currentEmbyTrackSelection = embyTrackSelection;
     final initializationGeneration = _playbackGeneration;
-    _playbackDetailContext = resolvedDetailContext;
+    _playbackDetailContext = resolvedDetailContext.withMediaLibraryScope(
+      mediaLibraryScope ?? resolvedDetailContext.mediaLibraryScope,
+    );
     _statusMessages.clear(); // <--- 新增行：确保消息列表在开始时是空的
     _isStartupMessageFlowActive = true;
     _initialHistoryItem = historyItem;
@@ -346,6 +353,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           resolvedSession = await _createPlaybackSessionForStream(
             videoPath,
             historyItem: historyItem,
+            restartCompleted: restartCompleted,
           );
         } catch (e) {
           debugPrint('VideoPlayerState: 创建播放会话失败: $e');
@@ -877,7 +885,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       }
 
       // 获取上次播放位置
-      final lastPosition = await _getVideoPosition(videoPath);
+      final lastPosition = await _getVideoPosition(
+        videoPath,
+        restartCompleted: restartCompleted,
+      );
       debugPrint(
         'VideoPlayerState: lastPosition for $videoPath = $lastPosition (raw value from _getVideoPosition)',
       );
@@ -1470,8 +1481,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
   Future<PlaybackSession?> _createPlaybackSessionForStream(
     String videoPath, {
     WatchHistoryItem? historyItem,
+    bool restartCompleted = true,
   }) async {
-    final startPosition = historyItem?.lastPosition ?? 0;
+    final startPosition = restartCompleted
+        ? (historyItem?.resumePosition ?? 0)
+        : (historyItem?.lastPosition ?? 0);
     if (videoPath.startsWith('jellyfin://')) {
       final itemId = videoPath.replaceFirst('jellyfin://', '');
       return await JellyfinService.instance.createPlaybackSession(
@@ -1576,19 +1590,15 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             existingHistory.episodeId ?? _initialHistoryItem?.episodeId;
         _animeId ??= existingHistory.animeId ?? _initialHistoryItem?.animeId;
 
-        final updatedHistory = WatchHistoryItem(
+        var updatedHistory = existingHistory.copyWith(
           filePath: path,
           animeName: finalAnimeName,
           episodeTitle: finalEpisodeTitle,
           episodeId: _episodeId,
           animeId: _animeId,
-          watchProgress: existingHistory.watchProgress,
-          lastPosition: existingHistory.lastPosition,
-          duration: existingHistory.duration,
           lastWatchTime: DateTime.now(),
           thumbnailPath: existingHistory.thumbnailPath ??
               _initialHistoryItem?.thumbnailPath,
-          isFromScan: existingHistory.isFromScan,
         );
 
         if (isJellyfinStream) {
@@ -1600,14 +1610,22 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               existingHistory,
             );
             if (syncedHistory != null) {
-              await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
+              updatedHistory = updatedHistory.copyWith(
+                watchProgress: syncedHistory.watchProgress,
+                lastPosition: syncedHistory.lastPosition,
+                duration: syncedHistory.duration,
+                lastWatchTime: identical(syncedHistory, existingHistory)
+                    ? updatedHistory.lastWatchTime
+                    : syncedHistory.lastWatchTime,
+              );
+              await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
               await _saveVideoPosition(path, syncedHistory.lastPosition);
               debugPrint(
                 'Jellyfin同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms',
               );
               await syncService.reportPlaybackStart(
                 itemId,
-                syncedHistory,
+                updatedHistory,
                 playbackSession: _currentPlaybackSession,
               );
             } else {
@@ -1631,14 +1649,22 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               existingHistory,
             );
             if (syncedHistory != null) {
-              await WatchHistoryManager.addOrUpdateHistory(syncedHistory);
+              updatedHistory = updatedHistory.copyWith(
+                watchProgress: syncedHistory.watchProgress,
+                lastPosition: syncedHistory.lastPosition,
+                duration: syncedHistory.duration,
+                lastWatchTime: identical(syncedHistory, existingHistory)
+                    ? updatedHistory.lastWatchTime
+                    : syncedHistory.lastWatchTime,
+              );
+              await WatchHistoryManager.addOrUpdateHistory(updatedHistory);
               await _saveVideoPosition(path, syncedHistory.lastPosition);
               debugPrint(
                 'Emby同步成功，更新SharedPreferences位置: ${syncedHistory.lastPosition}ms',
               );
               await syncService.reportPlaybackStart(
                 itemId,
-                syncedHistory,
+                updatedHistory,
                 playbackSession: _currentPlaybackSession,
               );
             } else {

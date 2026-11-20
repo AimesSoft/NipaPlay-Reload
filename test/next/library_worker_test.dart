@@ -279,6 +279,46 @@ void main() {
     expect(current.workId, isNot(remote.workId));
     expect((await worker.homePlan()).hero?.work.workId, current.workId);
   });
+  test('the index says which local episode is behind next (#1125)', () async {
+    final db = jobs.database;
+    for (final n in [2, 3]) {
+      final video = File(ppath.join(root.path, 'episode$n.mkv'));
+      await video.writeAsString('video $n');
+      await db.insert(
+          'media_entities', {'id': 'f$n', 'kind': 'file', 'attributes': '{}'});
+      await db.insert('media_locations', {
+        'id': 'l$n',
+        'file_id': 'f$n',
+        'source': 'local',
+        'owner_device_id': 'owner',
+        'locator': video.path,
+        'available': 1,
+      });
+      await db.insert('media_file_episodes', {
+        'file_id': 'f$n',
+        'episode_id': 'e$n',
+        'relation': 'exact',
+        'ordinal': 0,
+      });
+    }
+    Future<Object?> indexed() async => jsonDecode(
+        (await db.query('next_library_index')).single['facts']
+            as String)['nextLocalEpisodeId'];
+    await worker.buildCurrent('owner');
+    final snapshot = await worker.compose({}, {}, null);
+    final next = snapshot.works.values.single.next!;
+    expect(next.playable, isTrue);
+    expect(snapshot.localTargets[next.episodeId], 'e2');
+    expect(await indexed(), 'e2');
+
+    // Watching episode 2 to the end moves next to episode 3, and the index
+    // says so without a rebuild.
+    await worker.call('progress', [
+      {'episodeId': next.episodeId, 'progress': 1.0}
+    ]);
+    expect(await indexed(), 'e3');
+  });
+
   test('an unreadable local file does not block the catalogue', () async {
     final db = jobs.database;
     for (var i = 1; i <= 2; i++) {

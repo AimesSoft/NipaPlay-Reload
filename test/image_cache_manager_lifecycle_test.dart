@@ -111,6 +111,18 @@ void main() {
     }
   });
 
+  test(
+      'leaving a page retains its recent memory cache instead of aging it an hour',
+      () async {
+    const url = 'https://example.com/recent-page.png';
+    await seedDiskCache(url);
+    final image = await ImageCacheManager.instance.loadImage(url);
+    ImageCacheManager.instance.releaseImage(url);
+    ImageCacheManager.instance.handleMemoryPressure();
+    expect(ImageCacheManager.instance.getCachedImage(url), same(image));
+    expect(image.debugDisposed, isFalse);
+  });
+
   test('前台内存警告只清索引，不动屏幕上正在显示的句柄', () async {
     const url = 'https://example.com/foreground.png';
     await seedDiskCache(url);

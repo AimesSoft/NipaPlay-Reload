@@ -1,3 +1,4 @@
+import 'package:nipaplay/models/media_library_scope.dart';
 import 'package:flutter/widgets.dart';
 import 'package:nipaplay/models/episode_file_candidate.dart';
 import 'package:nipaplay/models/playable_item.dart';
@@ -37,6 +38,9 @@ class EpisodeFileSelectionService {
       return await EpisodeFileSelectionService().resolve(
         requested,
         isCancelled: () => !context.mounted || (isCancelled?.call() ?? false),
+        onUnavailable: () {
+          if (context.mounted) BlurSnackBar.show(context, '当前媒体库中找不到此剧集的视频文件');
+        },
         choose: (candidates, unmatch) => EpisodeFileSelectionDialog.show(
           context: context,
           candidates: candidates,
@@ -72,35 +76,79 @@ class EpisodeFileSelectionService {
   Future<PlayableItem?> resolve(
     PlayableItem requested, {
     required EpisodeFileChooser choose,
+    void Function()? onUnavailable,
     bool Function()? isCancelled,
   }) async {
     bool cancelled() => isCancelled?.call() ?? false;
     if (cancelled()) return null;
+    final scope = requested.mediaLibraryScope ??
+        requested.detailContext?.mediaLibraryScope;
+    if (scope != null && requested.mediaLibraryScope == null) {
+      requested = requested.withMediaLibraryScope(scope);
+    }
     final stored = await _loadHistory(requested.videoPath);
     final history = requested.historyItem ?? stored;
     if (cancelled()) return null;
     final animeId = requested.animeId ?? history?.animeId;
     final episodeId = requested.episodeId ?? history?.episodeId;
-    if (animeId == null || episodeId == null) return requested;
+    bool inScope(WatchHistoryItem item) => scope?.contains(item) ?? true;
+    if (animeId == null || episodeId == null) {
+      return (scope?.containsPath(requested.videoPath) ?? true)
+          ? requested
+          : null;
+    }
     if (requested.animeId == null &&
         (history == null || history.animeName.trim().isEmpty)) {
-      return requested;
+      return (scope?.containsPath(requested.videoPath) ?? true)
+          ? requested
+          : null;
     }
 
-    final matches = await _loadMatches(animeId, episodeId);
+    // Remote hosts supply files which may never have been saved on this client.
+    // Include that authoritative request alongside locally remembered versions.
+    final suppliedRemote = scope != null &&
+            const {
+              MediaLibraryScopeKind.sharedRemote,
+              MediaLibraryScopeKind.dandanplay,
+              MediaLibraryScopeKind.jellyfin,
+              MediaLibraryScopeKind.emby
+            }.contains(scope.kind) &&
+            stored == null &&
+            history != null &&
+            inScope(history) &&
+            history.animeName.trim().isNotEmpty &&
+            history.animeId == animeId &&
+            history.episodeId == episodeId
+        ? history
+        : null;
+    Future<List<WatchHistoryItem>> loadMatches() async {
+      final items = await _loadMatches(animeId, episodeId);
+      if (suppliedRemote == null) return items;
+      final current = await _loadHistory(suppliedRemote.filePath);
+      return current != null && current.animeName.trim().isEmpty
+          ? items
+          : [...items, current ?? suppliedRemote];
+    }
+
+    final matches = await loadMatches();
     if (cancelled()) return null;
     final byIdentity = <String, EpisodeFileCandidate>{};
     for (final match in matches) {
       if (match.animeId != animeId ||
           match.episodeId != episodeId ||
           match.animeName.trim().isEmpty ||
-          match.filePath.trim().isEmpty) {
+          match.filePath.trim().isEmpty ||
+          !inScope(match)) {
         continue;
       }
       final candidate = EpisodeFileCandidate(match);
       byIdentity.putIfAbsent(candidate.identity, () => candidate);
     }
     if (byIdentity.isEmpty) {
+      if (scope != null) {
+        onUnavailable?.call();
+        return null;
+      }
       return stored != null && stored.animeName.trim().isEmpty
           ? null
           : requested;
@@ -123,14 +171,20 @@ class EpisodeFileSelectionService {
       }
       return true;
     });
-    if (cancelled() || selected == null) return null;
+    if (cancelled() ||
+        selected == null ||
+        !inScope(selected.history) ||
+        !byIdentity.containsKey(selected.identity)) {
+      return null;
+    }
     // Re-read after an asynchronous dialog so a stale/unlinked file cannot play.
-    final remaining = await _loadMatches(animeId, episodeId);
+    final remaining = await loadMatches();
     if (cancelled()) return null;
     for (final match in remaining) {
       if (match.animeId == animeId &&
           match.episodeId == episodeId &&
           match.animeName.trim().isNotEmpty &&
+          inScope(match) &&
           EpisodeFileCandidate(match).identity == selected.identity) {
         return EpisodeFileCandidate(match).toPlayable(requested);
       }

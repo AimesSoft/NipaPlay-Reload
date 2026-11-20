@@ -18,6 +18,8 @@ import 'package:nipaplay/next/chat/session_store.dart';
 import 'package:nipaplay/next/followups/service.dart';
 import 'package:nipaplay/next/repository_location.dart';
 import 'package:nipaplay/next/tasks/sqlite_job_store.dart';
+import 'package:nipaplay/security/credential_vault.dart';
+import 'package:nipaplay/security/secret_redactor.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Real DeepSeek Harness processes against a local Responses fixture. DSH and
@@ -316,6 +318,58 @@ trust_level = "trusted"
           (jsonDecode(line) as Map)['action']
       ];
       expect(sources, hasLength(2));
+    });
+
+    test(
+        'what a tool prints of a secret never reaches the model, and a call '
+        'naming the vault is refused (#1119)', () async {
+      // Known to NipaPlay (read from its vault in this run), and the model
+      // key DSH was started with.
+      final secret = 'vault-${DateTime.now().microsecondsSinceEpoch}-0f9e';
+      SecretRedactor.remember(const CredentialRef('fixture', 'leak'), secret);
+      final vault = await Directory('${Directory.systemTemp.path}/'
+              'nipa-vault-${DateTime.now().microsecondsSinceEpoch}')
+          .create();
+      addTearDown(() => vault.delete(recursive: true));
+      await File('${vault.path}/x.json').writeAsString('VAULT_FILE_BODY');
+      await open([
+        _Rule(when: ['LEAK_QX'], unless: ['call_'], calls: [
+          _bash('echo PRINTED=$secret KEY=$_key'),
+          _bash('cat ${vault.path}/x.json'),
+        ]),
+        _Rule(when: ['LEAK_QX', 'call_'], text: 'Done.'),
+      ]);
+      lab.protectedPaths = [vault.path];
+      final host = await lab.start();
+      await host.getMainSession();
+      await host.startTurn('LEAK_QX');
+      await lab.next((e) => e['method'] == 'turn/completed');
+      // What the tools returned, as the model is sent it (the calls
+      // themselves are the fixture model's own words).
+      String outputs() => jsonEncode([
+            for (final item in fake.requests.last['input'] as List)
+              if (item is Map && item['type'] == 'function_call_output') item
+          ]);
+      final sent = outputs();
+      expect(sent, contains('PRINTED=[已隐去的凭据] KEY=[已隐去的凭据]'));
+      expect(sent, isNot(contains(secret)));
+      expect(sent, isNot(contains(_key)));
+      expect(sent, contains('This path is NipaPlay\'s own'));
+      expect(jsonEncode(fake.requests.last['input']),
+          isNot(contains('VAULT_FILE_BODY')));
+      // A secret learned while it runs is hidden from then on.
+      final later = 'later-${DateTime.now().microsecondsSinceEpoch}-77aa';
+      SecretRedactor.remember(const CredentialRef('fixture', 'later'), later);
+      lab.events.clear();
+      // The history already has calls: what follows this one is its output.
+      fake.rules.insert(0, _Rule(when: ['AGAIN_QX'], unless: ['AGAIN='],
+          calls: [_bash('echo AGAIN=$later')]));
+      fake.rules.insert(1, _Rule(when: ['AGAIN='], text: 'Done.'));
+      await host.startTurn('AGAIN_QX');
+      await lab.next((e) => e['method'] == 'turn/completed');
+      final again = outputs();
+      expect(again, contains('AGAIN=[已隐去的凭据]'));
+      expect(again, isNot(contains(later)));
     });
 
     test('a change during a turn reaches the block at the next turn, not at the next step', () async {
@@ -962,6 +1016,7 @@ final class _Lab {
   ChatHost? host;
   Directory? plugins;
   bool userConfig = false;
+  List<String> protectedPaths = const [];
   StreamSubscription<ChatMessage>? _subscription;
   final events = <ChatMessage>[];
   HttpOverrides? _overrides;
@@ -1038,7 +1093,8 @@ def redact(text, secrets=()):
         modelLaunch: () async => ModelLaunch(revision: 0,
           dshConfig: userConfig ? await DshConfigStore(root).load() : null),
         dsh: runtime,
-        dshPlugins: plugins ?? Directory('assets/next/agent/dsh'));
+        dshPlugins: plugins ?? Directory('assets/next/agent/dsh'),
+        protectedPaths: protectedPaths);
     events.clear();
     _subscription = created.events.listen(events.add);
     await created.start();

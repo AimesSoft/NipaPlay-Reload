@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/security/credential_store.dart';
 import 'package:nipaplay/security/credential_vault.dart';
+import 'package:nipaplay/services/remote_proxy_diagnostics.dart';
 import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/services/smb_service.dart';
 import 'package:nipaplay/utils/media_source_utils.dart';
@@ -68,6 +70,58 @@ void main() {
       reason: 'Proxy isolate should respond before root isolate unblocks',
     );
     expect(result.elapsedMs, lessThan(400));
+  });
+
+  test('proxy isolate diagnostics reach the root log and the root probe',
+      () async {
+    SharedPreferences.setMockInitialValues({'smb_proxy_port': 0});
+    final logs = <String>[];
+    final originalPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() => debugPrint = originalPrint);
+    final proxy = SMBProxyService.instance;
+    addTearDown(proxy.stop);
+    await proxy.initialize();
+
+    final client =
+        HttpOverrides.runWithHttpOverrides(() => HttpClient(), _RealHttp());
+    try {
+      final response = await (await client.openUrl(
+        'HEAD',
+        Uri.parse(
+          'http://127.0.0.1:${proxy.port}/smb/stream?conn=private-name&path=/a.mp4',
+        ),
+      ))
+          .close();
+      expect(response.statusCode, HttpStatus.notFound);
+      await response.drain<void>();
+    } finally {
+      client.close(force: true);
+    }
+    HttpOverrides.runWithHttpOverrides(
+      () => RemoteProxyDiagnostics.lifecycle('resumed'),
+      _RealHttp(),
+    );
+
+    bool logged(String text) => logs.any((line) => line.contains(text));
+    for (var i = 0; i < 100; i++) {
+      if (logged('status=404') && logged('health reason=lifecycle-resumed')) {
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    // Lines written inside the proxy isolate arrive through the root's log.
+    expect(logged('listener-bound'), isTrue);
+    expect(logged('method=HEAD range=none'), isTrue);
+    expect(logged('status=404'), isTrue);
+    // The root isolate reaches the listener it no longer owns.
+    expect(
+      logs.firstWhere((line) => line.contains('health reason=lifecycle-resumed')),
+      contains('status=200'),
+    );
+    expect(logs.join('\n'), isNot(contains('private-name')));
   });
 
   test(

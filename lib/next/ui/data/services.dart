@@ -30,6 +30,7 @@ import 'settings_data.dart';
 import 'ui_actions.dart';
 import 'work_manage.dart';
 import 'upkeep.dart';
+import 'rika_store.dart';
 
 /// Everything the Next shell talks to.
 final class NextUiServices {
@@ -92,6 +93,7 @@ final class NextUiServices {
   late final collections = NextCollections(calls);
   late final upkeep = NextUpkeep(calls);
   late final plugins = NextPlugins(calls);
+  late final rikaStore = NextRikaStore(calls);
   late final sync = NextSync(calls);
   late final folders = NextFolders(calls);
   late final batch = NextBatch(calls, data);

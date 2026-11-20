@@ -44,7 +44,7 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
   List<JsonMap> _items = [];
   bool _loading = false, _acting = false, _expanded = false, _more = false;
   int _limit = 30;
-  String? _error, _lastEventError, _lastLoadError;
+  String? _error, _lastExternalError, _lastLoadError;
   String? _selectedId;
   final Set<String> _collapsedIds = {};
 
@@ -58,7 +58,21 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    watchUpdates(widget.calls.changes, _load);
+    watchUpdates(widget.calls.changes, _paced);
+  }
+
+  /// Change notifications read the inbox at most once a second: the stream
+  /// also carries every library change, and a scan moves it continuously
+  /// (#1114 counted 861 reads in one minute). Notifications arriving in the
+  /// wait are folded into the next read; what the user does reads at once.
+  static const _pace = Duration(seconds: 1);
+  DateTime? _loadedAt;
+  Future<void> _paced() async {
+    final since = _loadedAt == null ? null : DateTime.now().difference(_loadedAt!);
+    if (since != null && since < _pace) {
+      await Future<void>.delayed(_pace - since);
+    }
+    await _load();
   }
 
   Future<JsonMap> _call(String action, JsonMap input, [String? peer]) => peer ==
@@ -70,42 +84,206 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
 
   void _externalError() {
     final error = widget.errors?.value;
-    if (error != null) _recordError(error);
+    if (error != null) _recordError(error, external: true);
   }
+
+  /// The failure already reported for each conversation (null: the host's
+  /// own, which names none). A conversation's failure stays in its liveness
+  /// report, sent every second for every conversation, until its next turn
+  /// starts: it is reported once and not again until then, and two
+  /// conversations holding different failures do not take turns at it.
+  final _reported = <String?, String>{};
 
   void _event(Map event) {
     final method = event['method'];
     final params = event['params'] as Map? ?? const {};
+    final thread = params['threadId'] is String ? params['threadId'] as String : null;
+    if (method == 'turn/started') {
+      // That conversation tries again: a failure of it is news again; the
+      // others keep theirs.
+      _reported.remove(thread);
+      _lastExternalError = null;
+      return;
+    }
     final turn = params['turn'] as Map?;
     Object? raw;
+    String? turnId;
     if (method == 'host/error') raw = params['error'] ?? params;
     if (method == 'turn/completed' && turn?['status'] == 'failed') {
       raw = turn?['error'];
+      turnId = turn?['id'] as String?;
     }
-    if (method == 'host/liveness') raw = params['latestError'];
+    if (method == 'host/liveness') {
+      raw = params['latestError'];
+      turnId = params['turnId'] as String?;
+    }
     if (raw == null || raw == '') return;
     final body =
         raw is String ? raw : const JsonEncoder.withIndent('  ').convert(raw);
-    _recordError(body);
+    _recordError(body,
+        thread: method == 'host/error' ? null : thread, turnId: turnId);
   }
 
-  void _recordError(String body) {
-    if (body == _lastEventError) return;
-    _lastEventError = body;
-    // This is the runner's original UI error payload, never a model summary.
-    unawaited(_call('ui.notify', {
-      'requestId': 'runtime-${DateTime.now().microsecondsSinceEpoch}',
-      'title': '梨花运行失败',
-      'body': body,
-      'severity': 'error'
-    }).then((_) => _load()).catchError((Object e) {
+  /// What a runtime error says, whichever way it arrived. The runner's error
+  /// object (indented JSON) and the chat's text of the same failure carry one
+  /// message and are one failure: compared as written they published two
+  /// reminders 0.7 s apart (#1122).
+  static String _errorSignature(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map && decoded['message'] is String) {
+        return (decoded['message'] as String).trim();
+      }
+    } on FormatException {
+      // Plain text: the message itself.
+    }
+    return body.trim();
+  }
+
+  /// [external]: the conversation's own text of a failure (no conversation
+  /// named), which follows, or precedes, the runner's report of it.
+  void _recordError(String body,
+      {String? thread, String? turnId, bool external = false}) {
+    final signature = _errorSignature(body);
+    if (external) {
+      if (signature == _lastExternalError ||
+          _reported.containsValue(signature)) {
+        return;
+      }
+      _lastExternalError = signature;
+    } else {
+      if (_reported[thread] == signature) return;
+      _reported[thread] = signature;
+      // The conversation's text of this failure came first: the pair is one
+      // failure, reported once.
+      if (signature == _lastExternalError) {
+        _lastExternalError = null;
+        return;
+      }
+    }
+    unawaited(_publish(body, turnId).then((_) => _load()).catchError(
+        (Object e) {
       if (mounted) setState(() => _error = '$body\n\n$e');
     }));
+  }
+
+  /// Reminders already published about a followup, by request id.
+  final _followupNotices = <String>{};
+
+  /// A failed turn of a background followup says which task it was, and is
+  /// reported once while it is retried and once if it gives up, with a way
+  /// to retry it now or stop it (#1122); any other failure as it came. The
+  /// body is the runner's original error, never a model summary.
+  Future<void> _publish(String body, String? turnId) async {
+    final followup = turnId == null ? null : await _followupOf(turnId);
+    final state = followup?['state'];
+    final retrying = state == 'ready' && followup?['retryAt'] != null;
+    if (followup == null || !(retrying || state == 'execution_failed')) {
+      if (state == 'cancelled') return;
+      await _call('ui.notify', {
+        'requestId': 'runtime-${DateTime.now().microsecondsSinceEpoch}',
+        'title': '梨花运行失败',
+        'body': body,
+        'severity': 'error'
+      });
+      return;
+    }
+    final id = followup['id'] as String;
+    // One reminder per round: retried by hand, a followup that fails again
+    // is said again (#1122 review).
+    final round = followup['retries'] as int? ?? 0;
+    final requestId =
+        'followup-$id${round == 0 ? '' : '-$round'}-${retrying ? 'retrying' : 'failed'}';
+    if (!_followupNotices.add(requestId)) return;
+    final label = _followupLabel(followup);
+    try {
+      await _call('ui.notify', {
+        'requestId': requestId,
+        'title': retrying ? '「$label」暂时没能完成' : '「$label」没能完成',
+        'body': '${_errorSignature(body)}\n\n'
+            '${retrying ? '这是后台任务结束后梨花接着要做的事，会自动再试；也可以现在重试，或者停止。' : '这是后台任务结束后梨花接着要做的事，已不再自动重试；可以现在重试。'}',
+        'severity': 'error',
+        'followupId': id,
+      });
+    } on Failure catch (failure) {
+      // Published before this ran (a restart): that reminder stands.
+      if (failure.code != FailureCode.conflict) rethrow;
+    }
+  }
+
+  static String _followupLabel(JsonMap followup) {
+    final title = (followup['title'] as String?)?.trim();
+    if (title != null && title.isNotEmpty) return title;
+    final instruction = (followup['instruction'] as String? ?? '').trim();
+    if (instruction.isEmpty) return '后台任务';
+    return instruction.length <= 24
+        ? instruction
+        : '${instruction.substring(0, 24)}…';
+  }
+
+  /// The followup whose delivery [turnId] was, once it has taken in that
+  /// turn's failure (retrying, or failed for good); null for a turn of the
+  /// person's own, or where followups cannot be read.
+  Future<JsonMap?> _followupOf(String turnId) async {
+    for (var attempt = 0; attempt < 10; attempt++) {
+      final JsonMap listed;
+      try {
+        listed = await _call('followup.list', {});
+      } catch (_) {
+        return null;
+      }
+      JsonMap? found;
+      for (final raw
+          in (listed['followups'] as List? ?? const []).whereType<Map>()) {
+        final row = raw.cast<String, Object?>();
+        if (row['turnId'] == turnId ||
+            (row['failedTurns'] as List? ?? const []).contains(turnId)) {
+          found = row;
+          break;
+        }
+      }
+      if (found == null) return null;
+      final settled = found['turnId'] != turnId ||
+          const {'execution_failed', 'cancelled'}.contains(found['state']);
+      if (settled) return found;
+      // Still the turn it is in: the failure has not been taken in yet.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (!mounted) return null;
+    }
+    return null;
+  }
+
+  /// The reminder's 重试 / 停止 on its followup; the reminder is then read.
+  Future<void> _onFollowup(JsonMap row, String action) async {
+    final id = (row['request'] as Map?)?['followupId'];
+    if (_acting || id is! String) return;
+    setState(() {
+      _acting = true;
+      _error = null;
+    });
+    try {
+      await _call(action, {'id': id});
+      await _call('ui.inbox.dismiss', {'id': row['id']});
+      if (mounted) {
+        setState(() => _items.removeWhere(
+            (item) => item['id'] == row['id'] && item['_peer'] == null));
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = e is Failure && e.code == FailureCode.conflict
+            ? '这个后台任务已经不在等待重试了。'
+            : rawFailureText(e));
+      }
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
   }
 
   Future<void> _load() async {
     if (_loading || !mounted) return;
     _loading = true;
+    _loadedAt = DateTime.now();
     final peers = <String?>[null];
     final peer = widget.peer?.call();
     if (peer != null) peers.add(peer);
@@ -394,6 +572,20 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
                         onTap: _acting
                             ? null
                             : () => _act(row, 'ui.inbox.dismiss', {})),
+                  if ((row['request'] as Map?)?['followupId'] is String &&
+                      row['_peer'] == null) ...[
+                    _Quiet('立即重试',
+                        onTap: _acting
+                            ? null
+                            : () => _onFollowup(row, 'followup.retry')),
+                    // Still to be delivered again by itself: it can be stopped.
+                    if (((row['request'] as Map?)?['requestId'] as String? ?? '')
+                        .endsWith('-retrying'))
+                      _Quiet('停止',
+                          onTap: _acting
+                              ? null
+                              : () => _onFollowup(row, 'followup.cancel')),
+                  ],
                   _Quiet('查看对话', arrow: true, onTap: () => _open(row)),
                   if (pending)
                     _Quiet('取消问题',

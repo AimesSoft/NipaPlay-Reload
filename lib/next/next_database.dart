@@ -60,7 +60,28 @@ const _migrations = [
   migrateMediaPresentation,
   migrateExternalSources,
   migrateSubscriptions,
+  purgeUnshownActivityInvocations,
 ];
+
+/// Gives back the space a large deletion left as free pages (the rows
+/// [purgeUnshownActivityInvocations] removed): VACUUM once at least a quarter
+/// of the file, and 32 MiB, is free. Checked at every open, so a VACUUM cut
+/// short is done again next time.
+Future<void> _compact(Database db) async {
+  Future<int> pragma(String name) async =>
+      (await db.rawQuery('PRAGMA $name')).firstOrNull?.values.firstOrNull
+          as int? ??
+      0;
+  final free = await pragma('freelist_count');
+  if (free == 0) return;
+  final pages = await pragma('page_count');
+  if (free * await pragma('page_size') >= 32 << 20 && free * 4 >= pages) {
+    await db.execute('VACUUM');
+    // In WAL the rebuilt file is written to the log; the checkpoint is what
+    // shortens next.db (and empties the log it grew).
+    await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+  }
+}
 
 Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
   for (var version = oldVersion; version < newVersion; version++) {
@@ -120,6 +141,14 @@ Future<Database> openNextDatabase(Directory root,
     await finishExternalSourcesMigration(root, db);
     final files = DanmakuFiles(db);
     await files.migrate();
+    await pruneActivityInvocations(db);
+    try {
+      await _compact(db);
+    } on DatabaseException catch (error) {
+      // Reclaiming space is a courtesy: a disk too full for VACUUM's copy
+      // must not keep the database from opening. Tried again next start.
+      stderr.writeln('[NextDatabase] compaction skipped: $error');
+    }
     observedPath = db.path;
     await notifications.observe(db);
     return db;

@@ -12,12 +12,23 @@ final class MeshAddressLookup {
     required this.onChanged,
     required this.baseDelay,
     required this.maxDelay,
+    this.onCooldownEnded,
     DateTime Function()? now,
-  }) : _now = now ?? DateTime.now;
+    Timer Function(Duration delay, void Function() callback)? schedule,
+  })  : _now = now ?? DateTime.now,
+        _schedule = schedule ?? Timer.new;
 
   final Map<String, List<JsonMap>> cache;
   final Future<JsonMap> Function(String peer) request;
   final void Function() onChanged;
+
+  /// A shared cooldown (a 429, an unavailable coordinator) has run out.
+  /// Nothing else asks again by itself when the reports themselves succeed
+  /// all along (#1101); this is told once per cooldown, so that what is
+  /// waiting for an address asks for it.
+  final void Function()? onCooldownEnded;
+  final Timer Function(Duration delay, void Function() callback) _schedule;
+  Timer? _cooldown;
   final Duration baseDelay, maxDelay;
   final DateTime Function() _now;
   final _pending = <String, Future<List<JsonMap>>>{};
@@ -26,6 +37,7 @@ final class MeshAddressLookup {
   final _peerRetryAt = <String, DateTime>{};
   final _peerFailureGaps = <String, Duration>{};
   final _reached = <String>{};
+  final _peerFailures = <String, Failure>{};
   DateTime? retryAt;
   Failure? failure;
   Duration? _failureGap;
@@ -54,7 +66,45 @@ final class MeshAddressLookup {
     }
   }
 
+  void _armCooldown() {
+    final until = retryAt;
+    if (until == null || onCooldownEnded == null) return;
+    _cooldown?.cancel();
+    final wait = until.difference(_now());
+    _cooldown = _schedule(wait.isNegative ? Duration.zero : wait, () {
+      _cooldown = null;
+      final again = retryAt;
+      // Lengthened while waiting (a later 429): wait for that instead.
+      if (again != null && _now().isBefore(again)) return _armCooldown();
+      onCooldownEnded!();
+    });
+  }
+
+  /// What is known of [peer]'s address, for diagnostics: how many routes
+  /// are cached and since when, and when and why it is next asked for.
+  JsonMap peerFacts(String peer) {
+    final now = _now();
+    final shared =
+        retryAt != null && now.isBefore(retryAt!) ? retryAt : null;
+    final own = _peerRetryAt[peer] != null && now.isBefore(_peerRetryAt[peer]!)
+        ? _peerRetryAt[peer]
+        : null;
+    final next = own == null || (shared != null && shared.isAfter(own))
+        ? shared
+        : own;
+    final why = own != null ? _peerFailures[peer] : (shared != null ? failure : null);
+    return {
+      'cachedRoutes': cache[peer]?.length ?? 0,
+      'cachedAt': _lookedUp[peer]?.toUtc().toIso8601String(),
+      if (next != null) 'retryAt': next.toUtc().toIso8601String(),
+      if (why != null) 'error': why.toJson(),
+    };
+  }
+
   void reset() {
+    _cooldown?.cancel();
+    _cooldown = null;
+    _peerFailures.clear();
     _generation++;
     _pending.clear();
     _lookedUp.clear();
@@ -104,6 +154,7 @@ final class MeshAddressLookup {
       _reached.remove(peer);
       _peerRetryAt.remove(peer);
       _peerFailureGaps.remove(peer);
+      _peerFailures.remove(peer);
       cache[peer] = list;
       _lookedUp[peer] = _now();
       // An unrelated in-flight read can succeed after another read got 429.
@@ -131,9 +182,11 @@ final class MeshAddressLookup {
         if (retryAt == null || until.isAfter(retryAt!)) retryAt = until;
         failure = error;
         _failureGap = _grow(gap);
+        _armCooldown();
       } else {
         _peerRetryAt[peer] = _now().add(gap);
         _peerFailureGaps[peer] = _grow(gap);
+        _peerFailures[peer] = error;
       }
       return cache[peer] ?? const [];
     }

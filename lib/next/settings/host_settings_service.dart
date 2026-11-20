@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
@@ -354,6 +355,7 @@ final class HostSettingsService
           }
         : null;
     return UiModelSetup(
+        recent: await _recent(value),
         source: source,
         runtime: UiAgentRuntimeKind.values.byName(runtime.name),
         codexAvailable: exists,
@@ -373,6 +375,94 @@ final class HostSettingsService
                 environment ??
                 _checkProblem ??
                 (chatProblem() == null ? _liveProblem(host) : '模型服务未能启动'));
+  }
+
+  // —— Models set up before ——
+
+  static const _recentFile = 'model-recent.json', _recentKept = 8;
+  static const _recentFields = [
+    'provider',
+    'baseUrl',
+    'model',
+    'api',
+    'reasoning',
+    'compat'
+  ];
+
+  static String _recentIdentity(Map value) => jsonEncode([
+        value['provider'],
+        value['baseUrl'],
+        value['model'],
+        value['api'] ?? 'responses'
+      ]);
+
+  /// The current model first, then those set up before it (one each).
+  Future<void> _remember(JsonMap value) async {
+    final current = {
+      for (final field in _recentFields)
+        if (value[field] != null) field: value[field]
+    };
+    final earlier = ((await _read(_recentFile))['models'] as List? ?? const [])
+        .whereType<Map>()
+        .where((m) => _recentIdentity(m) != _recentIdentity(current));
+    await _save(_recentFile, {
+      'models': [current, ...earlier].take(_recentKept).toList()
+    });
+  }
+
+  Future<List<UiModelChoice>> _recent(JsonMap value) async {
+    final saved = ((await _read(_recentFile))['models'] as List? ?? const [])
+        .whereType<Map>()
+        .toList();
+    // Set up before this list was kept: the current model is its first.
+    if (saved.isEmpty && value['model'] != null && value['baseUrl'] != null) {
+      saved.add(value);
+    }
+    return [
+      for (final m in saved)
+        if (m['model'] is String && m['baseUrl'] is String)
+          UiModelChoice(
+              source: UiModelSource.nipaplay,
+              provider: m['provider'] as String?,
+              baseUrl: m['baseUrl'] as String,
+              model: m['model'] as String,
+              api: m['api'] == 'chat' ? UiModelApi.chat : UiModelApi.responses,
+              reasoning: reasoningChoice(m['reasoning']),
+              compat: (m['compat'] as Map?)?.cast<String, Object?>()),
+    ];
+  }
+
+  @override
+  Future<List<String>> providerModels() async {
+    await _writes;
+    final value = await _read('model.json');
+    if (_source(value, await effectiveRuntime()) != UiModelSource.nipaplay) {
+      return const [];
+    }
+    final key = await _secret(value);
+    if (key == null || key.isEmpty) return const [];
+    final client = httpClient();
+    try {
+      await SystemProxyService.instance.initialize();
+      client.findProxy = (uri) => uri.host == 'localhost' ||
+              InternetAddress.tryParse(uri.host)?.isLoopback == true
+          ? 'DIRECT'
+          : AppHttpProxy.findProxy(uri, SystemProxyService.instance.findProxy);
+      client.connectionTimeout = const Duration(seconds: 10);
+      final address = _url(value['baseUrl'] as String?);
+      final base =
+          value['api'] == 'chat' ? chatBase(address) : responsesBase(address);
+      return await listProviderModels(client, base, key)
+          .timeout(const Duration(seconds: 15));
+    } on Object catch (error) {
+      // A provider that lists nothing, or cannot be reached: the models
+      // set up before are still there to pick.
+      debugPrint('[NextSettings] provider models: '
+          '${SecretRedactor.text(error.toString())}');
+      return const [];
+    } finally {
+      client.close(force: true);
+    }
   }
 
   String? _liveProblem(ChatHost? host) {
@@ -434,6 +524,7 @@ final class HostSettingsService
           }
         }
         await _save('model.json', value);
+        if (choice.source == UiModelSource.nipaplay) await _remember(value);
         _record('model', before, value);
         _checkProblem = null;
         notify();
@@ -883,6 +974,9 @@ final class PendingHostSettings implements NextHostSettings, NextHostDeviceSetti
       (await ready).setModel(choice);
   @override
   Future<UiModelCheck> checkModel() async => (await ready).checkModel();
+  @override
+  Future<List<String>> providerModels() async =>
+      (await ready).providerModels();
   @override
   Future<UiMeshSetup> mesh() async => (await ready).mesh();
   @override
