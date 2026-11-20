@@ -1316,6 +1316,19 @@ class ErikaPlayerAdapter
   static bool get supportsNeuralUpscaler =>
       _isSupported && defaultTargetPlatform != TargetPlatform.android && !_isHarmonyOS;
 
+  /// iOS 主版本号（"Version 15.1 (...)" → 15）；非 iOS 返回 0。
+  /// MetalFX 系统要求 iOS 16+，VideoToolbox 官方超分入口要求 iOS 17+，
+  /// 低于版本的档位在菜单里隐藏，避免"选了没反应"的无效档。
+  static int get _iosMajorVersion {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return 0;
+    final match =
+        RegExp(r'Version (\d+)').firstMatch(Platform.operatingSystemVersion);
+    return int.tryParse(match?.group(1) ?? '') ?? 0;
+  }
+
+  static bool get _iosSupportsMetalFx => _iosMajorVersion >= 16;
+  static bool get _iosSupportsVideoToolboxUpscale => _iosMajorVersion >= 17;
+
   static List<PlayerUpscalerMode> get availableUpscalerModes {
     final apple = defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.iOS;
@@ -1327,9 +1340,14 @@ class ErikaPlayerAdapter
       if (!_isSupported) return false;
       if (mode == PlayerUpscalerMode.erikaFsr1) return true;
       if (mode == PlayerUpscalerMode.erikaPlatformVideo) {
-        return apple || defaultTargetPlatform == TargetPlatform.windows;
+        // iOS 15.x 无 Apple 官方超分入口（VTScaler 需 17+）；macOS 不门控。
+        return (apple && _iosSupportsVideoToolboxUpscale) ||
+            defaultTargetPlatform == TargetPlatform.windows;
       }
-      if (mode == PlayerUpscalerMode.erikaMetalFxSpatial) return apple;
+      if (mode == PlayerUpscalerMode.erikaMetalFxSpatial) {
+        // MetalFX 框架要求 iOS 16+；macOS（Ventura 13+ 均可用）不门控。
+        return apple && _iosSupportsMetalFx;
+      }
       if (mode == PlayerUpscalerMode.erikaArtCnnR8F64) return desktop;
       return supportsNeuralUpscaler;
     }).toList(growable: false);
@@ -1360,6 +1378,20 @@ class ErikaPlayerAdapter
       _lastUpscalerStatus = await getUpscalerStatus();
     } catch (error) {
       debugPrint('Erika: set upscaler failed: $error');
+      // 原生拒绝（如引擎不支持该后端）：超分实际未生效。
+      // 1) 弹幕所有权回到 native——超分没开就无需回退 Flutter 叠层；
+      // 2) 状态置 unknown，播放信息"实际后端"显示"未知"，与成功但未激活
+      //    （inactive）区分；不 rethrow——初始化/换内核路径没有 catch，
+      //    抛出会打断播放流程，设置页的失败可见性由状态回读兜底。
+      _upscalerActiveForDanmaku = false;
+      _lastUpscalerStatus = PlayerUpscalerStatus(
+        requestedMode: mode,
+        activeBackend: PlayerUpscalerBackendStatus.unknown,
+        fallbackCount: _lastUpscalerStatus.fallbackCount,
+        upscaledFrames: _lastUpscalerStatus.upscaledFrames,
+        lastEncodeDuration: _lastUpscalerStatus.lastEncodeDuration,
+        lastGpuDuration: _lastUpscalerStatus.lastGpuDuration,
+      );
     }
   }
 
