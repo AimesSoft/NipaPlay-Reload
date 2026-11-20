@@ -195,6 +195,16 @@ final class ChatGuests {
     _wake();
   }
 
+  /// This device's inbox changed: a guest showing it reads it again.
+  void inboxChanged() {
+    _log.add(_Entry(++_sequence, false,
+        <String, dynamic>{'method': 'host/inboxChanged', 'params': <String, dynamic>{}}));
+    if (_log.length > chatEventsKept) {
+      _log.removeRange(0, _log.length - chatEventsKept);
+    }
+    _wake();
+  }
+
   void _wake() {
     for (final waiter in _waiters) {
       if (!waiter.isCompleted) waiter.complete();
