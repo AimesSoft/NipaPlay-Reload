@@ -36,6 +36,8 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
   final _busy = <String>{};
   final _errors = <String, String>{};
   String _npm = '';
+  String _marketSource = '';
+  Map _codex = const {};
 
   @override
   void initState() {
@@ -47,9 +49,11 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
     if (refresh) setState(() => _refreshing = true);
     try {
       final store = await widget.store.read(refresh: refresh);
+      final codex = await widget.store.codexCatalog().timeout(const Duration(seconds: 5)).catchError((Object _) => <String, Object?>{});
       if (mounted) {
         setState(() {
           _store = store;
+          _codex = codex;
           _failed = null;
         });
       }
@@ -98,6 +102,57 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
       if (mounted) setState(() => _errors['apply'] = callFailure(error));
     }
     if (mounted) setState(() => _applying = false);
+    await _load();
+  }
+
+  Widget _web(UiStore store) {
+    final web = store.web;
+    final installed = web['installed'] == true;
+    const id = 'dsh-web';
+    return SettingsRow(
+      title: 'DSH Web',
+      subtitle: _errors[id] ?? (installed && web['ready'] != true ? '重启梨花后生效。' : null),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (web['ready'] == true)
+          PillButton(label: '打开 DSH Web', onTap: widget.store.openWeb),
+        if (installed)
+          ConfirmPill(label: '卸载', confirm: '确认卸载',
+              onConfirm: () => _run(id, () => widget.store.remove(id)))
+        else if (web['installable'] == true)
+          PillButton(label: '安装', busy: _busy.contains(id), onTap: _busy.contains(id) ? null : () =>
+              _run(id, () => widget.store.install(id: id, version: web['version'] as String))),
+      ]),
+    );
+  }
+
+  List<Widget> _codexRows() {
+    if (_codex.isEmpty) return const [];
+    final writable = _codex['writable'] == true;
+    return [
+      const _Heading('Codex 插件'),
+      if (writable)
+        SettingsRow(title: '添加插件市场', subtitle: _errors['codex-market'] ?? '第三方市场未审核。',
+          below: Row(children: [
+            Expanded(child: LiveTextField(value: _marketSource, hint: '市场地址或本地路径',
+                onChanged: (value) => setState(() => _marketSource = value))),
+            const SizedBox(width: 8),
+            PillButton(label: '添加', busy: _busy.contains('codex-market'),
+                onTap: _marketSource.trim().isEmpty || _busy.contains('codex-market') ? null :
+                    () => _run('codex-market', () => widget.store.addMarketplace(_marketSource.trim()))),
+          ])),
+      for (final market in (_codex['marketplaces'] as List? ?? const []).whereType<Map>())
+        for (final plugin in (market['plugins'] as List? ?? const []).whereType<Map>())
+          if (writable || plugin['installed'] == true)
+            SettingsRow(
+              title: (plugin['interface'] as Map?)?['displayName'] as String? ?? plugin['name'] as String,
+              subtitle: _errors[plugin['id']] ?? (plugin['installed'] == true ? '已安装' : null),
+              trailing: !writable ? null : plugin['installed'] == true
+                  ? PillButton(label: '卸载', busy: _busy.contains(plugin['id']), onTap: () =>
+                      _run(plugin['id'] as String, () => widget.store.removeCodex(plugin['id'] as String)))
+                  : PillButton(label: '安装', busy: _busy.contains(plugin['id']), onTap: () =>
+                      _run(plugin['id'] as String, () => widget.store.installCodex(market['name'] as String, plugin['name'] as String))),
+            ),
+    ];
   }
 
   /// Installs [item] after the person has read what it says of itself.
@@ -232,7 +287,7 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
                   busy: busy,
                   onTap: busy ? null : () => _install(item)),
             ),
-          NextToggle(
+          if (item.kind != 'codexPlugin') NextToggle(
               value: item.enabled ?? true,
               label: '启用${item.name}',
               onChanged: busy
@@ -283,6 +338,13 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
       else if (store == null)
         const SettingsRow(title: '正在读取…', dim: true)
       else ...[
+        if (store.web['version'] != null) _web(store),
+        if (store.webPlugins.isNotEmpty) ...[
+          const _Heading('来自 DSH Web'),
+          for (final plugin in store.webPlugins)
+            SettingsRow(title: plugin['name'] as String, subtitle: plugin['version'] as String?),
+        ],
+        ..._codexRows(),
         if (store.listProblem != null)
           SettingsRow(
               title: store.official.isEmpty ? '没能取到官方列表' : '官方列表可能不是最新的',

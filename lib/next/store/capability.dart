@@ -5,6 +5,8 @@ import 'npm_package.dart';
 import 'rika_store.dart';
 import 'store_fetch.dart';
 import 'store_index.dart';
+import 'runtime_extensions.dart';
+import 'package:path/path.dart' as p;
 
 const _output = ObjectSchema({}, additionalProperties: true);
 const _id = StringSchema(minLength: 1, maxLength: 64);
@@ -65,7 +67,8 @@ Future<T> _failures<T>(Future<T> Function() action) async {
 
 /// 梨花's store as actions, with an optional conversation-host restart.
 final class StoreCapability implements Capability {
-  StoreCapability(this.store, {Future<StoreApplyResult> Function()? restart})
+  StoreCapability(this.store, {Future<StoreApplyResult> Function()? restart,
+      RuntimeExtensions? extensions})
       : actions = [
           ClassicAction(
               const ActionSpec(
@@ -77,7 +80,7 @@ final class StoreCapability implements Capability {
                   input: ObjectSchema({'refresh': BooleanSchema()}),
                   output: _output),
               (input, _) =>
-                  _failures(() => _list(store, input['refresh'] == true))),
+                  _failures(() => _list(store, input['refresh'] == true, extensions))),
           ClassicAction(
               const ActionSpec(
                   id: 'store.readme',
@@ -140,12 +143,30 @@ final class StoreCapability implements Capability {
                   'An exact version is required; kind and preview integrity are required only for npm.');
             }
             return _failures(() async {
+              if (id == 'dsh-web' && extensions != null) {
+                await installStoreWeb(extensions, version);
+                return {'installed': {'id': id, 'version': version}, 'takesEffect': 'next conversation host start'};
+              }
+              final codex = extensions?.host();
               final installed = npm != null
                   ? await store.installNpm(npm,
                       version: version,
                       kind: StoreKind.values.byName(kind!),
                       expectedIntegrity: integrity)
-                  : await store.installOfficial(id!, version: version);
+                  : await store.installOfficial(id!, version: version,
+                      beforeCodex: (_) async {
+                        if (codex?.canManageCodexPlugins != true || codex?.available != true) {
+                          throw const Failure(FailureCode.unavailable, '请使用 NipaPlay 管理的 Codex。');
+                        }
+                      },
+                      activateCodex: (item) async {
+                        final root = store.codexMarketplace(item.id).path;
+                        await codex!.extensionRequest('marketplace/add', {'source': root});
+                        await codex.extensionRequest('plugin/install', {
+                          'pluginName': item.id,
+                          'marketplacePath': p.join(root, '.agents', 'plugins', 'marketplace.json'),
+                        });
+                      });
               return {
                 'installed': _installed(installed),
                 'takesEffect': 'next conversation host start',
@@ -176,7 +197,21 @@ final class StoreCapability implements Capability {
                   input: ObjectSchema({'id': _id}, required: ['id']),
                   output: _output),
               (input, _) => _failures(() async {
-                    await store.remove(input['id'] as String);
+                    final id = input['id'] as String;
+                    if (id == 'dsh-web' && extensions?.installer() != null) {
+                      await extensions!.installer()!.removeWeb();
+                      return {'removed': id};
+                    }
+                    final current = (await store.installed()).where((entry) => entry.item.id == id).firstOrNull;
+                    if (current?.item.kind == StoreKind.codexPlugin) {
+                      final codex = extensions?.requireHost(dsh: false);
+                      if (codex?.canManageCodexPlugins != true) {
+                        throw const Failure(FailureCode.unavailable, '请使用 NipaPlay 管理的 Codex。');
+                      }
+                      await codex!.extensionRequest('plugin/uninstall', {'pluginId': '$id@nipaplay-$id'});
+                      await codex.extensionRequest('marketplace/remove', {'marketplaceName': 'nipaplay-$id'});
+                    }
+                    await store.remove(id);
                     return {'removed': input['id']};
                   })),
           if (restart != null)
@@ -244,7 +279,7 @@ JsonMap _installed(InstalledItem installed) => {
       'installedAt': installed.at.toIso8601String(),
     };
 
-Future<JsonMap> _list(RikaStore store, bool refresh) async {
+Future<JsonMap> _list(RikaStore store, bool refresh, RuntimeExtensions? extensions) async {
   final installed = {for (final i in await store.installed()) i.item.id: i};
   StoreIndex? list;
   String? listSource;
@@ -269,6 +304,8 @@ Future<JsonMap> _list(RikaStore store, bool refresh) async {
   InstalledItem? installedOfficial(String id) =>
       installed[id]?.item.reviewed == true ? installed[id] : null;
   return {
+    if (extensions != null) 'dshWeb': await extensions.webState(),
+    if (extensions != null) 'dshWebPlugins': await extensions.dshPlugins().timeout(const Duration(seconds: 3), onTimeout: () => {}).catchError((Object _) => <String, Object?>{}),
     'official': [
       for (final official in list?.items ?? const <StoreItem>[])
         {

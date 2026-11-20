@@ -119,13 +119,14 @@ final class AgentRuntimeFixed {
 /// [AgentRuntimeFixed] for the environment and lab-file overrides.
 final class DshRuntime {
   const DshRuntime(
-      {required this.node, required this.bin, required this.version});
+      {required this.node, required this.bin, required this.version, this.webBin});
 
   /// Node.js executable that runs DSH.
   final String node;
 
   /// `@deepseek-ai/dsh/lib/bin.js`.
   final String bin;
+  final String? webBin;
 
   /// The installed `@deepseek-ai/dsh` version.
   final String version;
@@ -294,6 +295,7 @@ List<Map<String, Object?>> dshPatch(
         bool webSearch = false,
         List<String> protectedPaths = const [],
         List<Map<String, Object?>> storePlugins = const [],
+        List<Map<String, Object?>> webPlugins = const [],
         DshConfig? config}) =>
     [
       for (final id in dshDisabledRows) {'id': id, 'disabled': true},
@@ -348,6 +350,7 @@ List<Map<String, Object?>> dshPatch(
           // Installed from 梨花's store, after NipaPlay's own: each an
           // entry file by absolute path, as `RikaStore.hostFacts` gives it.
           ...storePlugins,
+          ...webPlugins,
         ]
       },
     ];

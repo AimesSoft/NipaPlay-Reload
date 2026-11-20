@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFil
 import { dirname, join } from 'node:path';
 
 export const name = 'nipa-app-server';
-export const inject = ['agents', 'sessions'];
+export const inject = ['agents', 'sessions', 'commands'];
 
 /** Message sources that are context, not something said in the conversation. */
 const HIDDEN_SOURCES = new Set(['runtime-context', 'agent-instructions', 'compact-checkpoint', 'tool-registry']);
@@ -851,9 +851,46 @@ export function apply(ctx, config = {}) {
     return {};
   }
 
+  const runningCommands = new Set();
+  async function executeCommand({ threadId, line }) {
+    if (typeof line !== 'string' || !line.startsWith('/') || line.length > 8192) {
+      throw rpcError(-32602, 'Invalid slash command.');
+    }
+    if (runningCommands.has(threadId)) throw rpcError(-32600, 'A command is already running.');
+    runningCommands.add(threadId);
+    try {
+      const outcome = await ctx.commands.execute(await ensureAgent(threadId), line, [], AbortSignal.timeout(60000));
+      if (!outcome) return { kind: 'error', text: '找不到这条命令。' };
+      return { kind: outcome.result.kind, text: outcome.result.text ?? '' };
+    } catch {
+      throw rpcError(-32603, '无法执行这条命令。');
+    } finally {
+      runningCommands.delete(threadId);
+    }
+  }
+
   const handlers = {
+    'nipa/plugins/list': async () => {
+      const bundles = await ctx.get('pluginManager')?.listBundles();
+      return { plugins: (bundles ?? []).filter(bundle => bundle.removable).map(bundle => ({
+        name: bundle.name, version: bundle.version, enabled: bundle.enabled,
+      })) };
+    },
+    'nipa/commands/list': async ({ threadId }) => ({
+      commands: ctx.commands.list(await ensureAgent(threadId)),
+    }),
+    'nipa/commands/execute': executeCommand,
     initialize: async () => {
       await ctx.get('loader')?.await?.();
+      try {
+        const server = ctx.get('webServer');
+        const connection = ctx.get('connection');
+        if (server && connection) {
+          notify('nipa/webReady', { url: connection.authenticatedUrl(server.getOrigin()) });
+        }
+      } catch {
+        // Web is optional; SDK chat can still initialize.
+      }
       return { userAgent: `nipaplay-dsh/${version}`, codexHome: home, platformFamily: process.platform, platformOs: process.platform };
     },
     'config/read': async () => ({ config: { model, model_provider: provider, model_reasoning_effort: config.reasoningEffort ?? null }, origins: {}, layers: null }),

@@ -372,6 +372,13 @@ errors 为字符串数组。时间为 ISO-8601。所有判断归巡查脚本，�
 | `store.install` | write | id + version（官方列表；须知对应的版本，版本变化则冲突）或 npm + version + kind + integrity（包名、确切版本、skill/plugin、预览返回的摘要；摘要不符则冲突）；按用户要求安装，安装前告知须知或 npm 未审核及用户权限风险；不运行安装脚本 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
 | `store.enable` | write | id、enabled；不卸载地停用或启用 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
 | `store.remove` | destructive | id；删除条目及其文件，插件存在 DSH 自己数据里的设置和登录保留 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.web.open` | read | DSH Web 的本机入口；设置页点击后在系统浏览器打开，结果不包含登录令牌 | GUI Core | 本地 | [源码](../../../lib/next/store/runtime_extensions.dart) |
+| `store.commands.list` | read | 可选 threadId；列出对话可执行的 DSH 斜杠命令 | GUI Core | 本地 | [源码](../../../lib/next/store/runtime_extensions.dart) |
+| `store.commands.execute` | write | line、可选 threadId；执行 DSH 斜杠命令而不发给模型，结果显示在对应的本机对话，回执不返回链接 | GUI Core | 本地 | [源码](../../../lib/next/store/runtime_extensions.dart) |
+| `store.codex.list` | read | 读取当前 Codex 的市场、插件与安装状态 | GUI Core | 本地 | [源码](../../../lib/next/store/runtime_extensions.dart) |
+| `store.codex.marketplace.add` | write | source；在 NipaPlay 管理的 Codex 添加未审核市场 | GUI Core | 本地 | [源码](../../../lib/next/store/runtime_extensions.dart) |
+| `store.codex.install` | write | marketplace、plugin；从 Codex 报告的市场安装，不更改已有配置 | GUI Core | 本地 | [源码](../../../lib/next/store/runtime_extensions.dart) |
+| `store.codex.remove` | destructive | id；从 NipaPlay 管理的 Codex 卸载插件 | GUI Core | 本地 | [源码](../../../lib/next/store/runtime_extensions.dart) |
 | `store.apply` | write | 立即重启正在运行的对话宿主，结束进行中的回合和会话子任务；保存的对话、跟进记录和定时保留。回执为 `restarted`、`notRun`（reason）或 `failed`（error）。重启成功后发布可订阅的 `store.applied`（`objectId: local`）；事件发布错误单独报告 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
 
 改动在对话宿主下次启动时生效。技能装在 `<Next 数据>/store/skills/<id>/`，启动时把名称、说明和 SKILL.md 路径写进梨花的提示；

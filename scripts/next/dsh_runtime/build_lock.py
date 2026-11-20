@@ -46,7 +46,42 @@ def name_of(path):
     return path.rsplit('node_modules/', 1)[-1]
 
 
+def write_web_lock(base_path, candidate_path, npm_lock_path, cache, out):
+    base = pathlib.Path(base_path).read_bytes()
+    runtime = json.loads(base)
+    npm_packages = json.loads(pathlib.Path(npm_lock_path).read_text())['packages']
+    locked = {entry['resolved']: entry for entry in npm_packages.values()
+              if 'resolved' in entry and 'integrity' in entry}
+    platforms = {}
+    for platform, candidates in json.loads(pathlib.Path(candidate_path).read_text()).items():
+        if platform not in runtime['platforms']:
+            raise ValueError(f'Unsupported add-on platform: {platform}')
+        platforms[platform] = []
+        for candidate in candidates:
+            row = {key: candidate[key] for key in
+                   ('path', 'name', 'version', 'url', 'bytes', 'sha256')}
+            entry = locked[f"{runtime['registry'].rstrip('/')}/{row['url']}"]
+            algorithm, digest = entry['integrity'].split('-', 1)
+            data = (pathlib.Path(cache) / pathlib.Path(candidate['archive']).name).read_bytes()
+            if (entry['version'] != row['version'] or
+                base64.b64encode(hashlib.new(algorithm, data).digest()).decode() != digest or
+                len(data) != row['bytes'] or hashlib.sha256(data).hexdigest() != row['sha256']):
+                raise ValueError(f"Invalid add-on tarball: {row['path']}")
+            platforms[platform].append(row)
+    pathlib.Path(out).write_text(json.dumps({
+        'schema': 1, 'baseSha256': hashlib.sha256(base).hexdigest(),
+        'platforms': platforms,
+    }, indent=1) + '\n')
+
+
 def main():
+    if sys.argv[1:2] == ['--web-addon']:
+        parser = argparse.ArgumentParser()
+        for field in ('base', 'candidate', 'npm-lock', 'cache', 'out'):
+            parser.add_argument(f'--{field}', required=True)
+        args = parser.parse_args(sys.argv[2:])
+        write_web_lock(args.base, args.candidate, args.npm_lock, args.cache, args.out)
+        return
     ap = argparse.ArgumentParser()
     ap.add_argument('--source', required=True)
     ap.add_argument('--trace', required=True, nargs='+', metavar='PLATFORM=FILE')
