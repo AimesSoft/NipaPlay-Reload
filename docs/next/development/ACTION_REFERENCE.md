@@ -41,7 +41,8 @@
 | `capability.describe` | read | Describe a capability family | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/family_descriptions.dart) |
 | `chat.attachment.send` | write | 从调用设备把指定文件暂存到目标设备，返回路径和暂存结果；不绑定会话、不发消息 | 通用/组合 | 本地 | [源码](../../../lib/next/mesh/chat_attachment.dart) |
 | `chat.model.candidates` | read | 查询候选；区分查询成功（可为空）、失败和不可用 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |
-| `chat.model.set` | write | 保存指定候选或思考强度；下一回合读取，不打断正在执行的回合 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |
+| `chat.model.set` | write | 选用指定模型和思考强度；运行器候选可保存到当前会话，或仅用于下一回合 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |
+| `chat.codex.account.status` | read | 读取 Codex 登录状态和可用的套餐、额度与用量，不回传凭据或授权材料 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |
 | `chat.model.status` | read | 分别读取宿主报告的在用模型、已保存选择和最近模型，不回传凭据 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |
 | `chat.read` | read | Read the latest turns of a conversation | Headless | 允许 | [源码](../../../lib/next/headless/chat_capability.dart) |
 | `chat.send` | write | Say something to Nipa on this host | Headless | 允许 | [源码](../../../lib/next/headless/chat_capability.dart) |

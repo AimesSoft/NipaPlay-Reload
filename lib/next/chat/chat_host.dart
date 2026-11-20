@@ -6,6 +6,7 @@ import 'dart:math';
 
 import 'package:nipaplay/security/credential_vault.dart' show CredentialRef;
 import 'package:nipaplay/security/secret_redactor.dart';
+import 'package:crypto/crypto.dart';
 
 import '../agent_endpoint.dart';
 import 'turn_boundaries.dart';
@@ -21,6 +22,10 @@ import 'turn_process_store.dart';
 import '../memory/service.dart';
 import 'model_launch.dart';
 import '../store/rika_store.dart' show StoreHostFacts;
+import '../ui_data/host_settings.dart';
+
+part 'session_models.dart';
+part 'codex_account.dart';
 
 typedef ChatMessage = Map<String, dynamic>;
 
@@ -174,6 +179,10 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   final _loaded = <String>{};
   Future<void> _rolloutWrites = Future.value();
   ChatMessage _modelDefaults = {};
+  final _nextModels = <String, UiModelChoice>{};
+  String? _codexLoginId;
+  String? _codexLoginState;
+  final _accountRequests = <int>{};
   File get _rolloutFile =>
       File('${endpoint.seedRepository.parent.path}/chat-rollouts.json');
   @override
@@ -635,6 +644,8 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
         'model': defaultModel,
         'modelProvider':
             _launch?.provider ?? config['model_provider'] ?? 'openai',
+        if (config['model_reasoning_effort'] case final String effort)
+          'effort': effort,
       };
     }
   }
@@ -678,6 +689,8 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   }
 
   Future<void> _stopTransport() async {
+    _codexLoginId = null;
+    _codexLoginState = null;
     _restarting = true;
     _clock?.cancel();
     _flush?.cancel();
@@ -802,10 +815,15 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
             }
           }
         }
-        _events.add(message);
+        if (wireMethod == 'account/login/completed' || wireMethod == 'account/updated' || wireMethod == 'account/rateLimits/updated') {
+          _accountNotification(wireMethod, message['params']);
+        } else if (!_accountRequests.contains(message['id'])) {
+          _events.add(message);
+        }
         final id = message['id'];
         if (id is int &&
             (message.containsKey('result') || message.containsKey('error'))) {
+          _accountRequests.remove(id);
           final pending = _pending.remove(id);
           _requestThreads.remove(id);
           if (pending != null) {
@@ -962,7 +980,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       final id = params['threadId'] as String;
       params = {
         ...params,
-        ..._modelDefaults,
+        ..._threadModelDefaults,
         if (_rollouts[id] != null) 'path': _rollouts[id]
       };
     }
@@ -971,6 +989,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       throw StateError('Chat server is not running');
     }
     final id = ++_nextId;
+    if (method.startsWith('account/')) _accountRequests.add(id);
     final result = Completer<ChatMessage>();
     _pending[id] = result;
     if (params['threadId'] case final String target) {
@@ -1000,7 +1019,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   }
 
   ChatMessage get _common => {
-        ..._modelDefaults,
+        ..._threadModelDefaults,
         'cwd': repository.path,
         'sandbox': 'danger-full-access',
         'approvalPolicy': 'never'
@@ -1104,10 +1123,19 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     _freshThreads.remove(id);
     try {
       final change = await memory?.changesFor(id);
-      return _public(await _request('turn/start', {
+      final selected = _nextModels[id] ?? await _savedModel(id);
+      final response = _public(await _request('turn/start', {
         'threadId': id,
+        ..._turnModelParams(selected),
         'input': _input(change == null ? text : '$text\n\n$change')
       }));
+      _nextModels.remove(id);
+      if (id == threadId) {
+        model = selected?.model ?? _modelDefaults['model'] as String? ?? model;
+        provider = selected?.provider ?? _modelDefaults['modelProvider'] as String? ?? provider;
+        _events.add({'method': 'host/modelChanged', 'params': header});
+      }
+      return response;
     } catch (error) {
       live.status = 'startFailed';
       live.endedAt = DateTime.now();

@@ -88,7 +88,7 @@ for k in rows:
     if k.startswith('danmaku.') and (not rows[k][0][1]):
         rows[k][0][1] = '弹幕 ' + k.split('.')[-1].replace('_', ' ') + '；来源及副作用见目标契约'
 import hashlib
-BASELINE_HASHES = {'lib/next/settings/model_capability.dart': '9a9cf6a192ec5abe9860ab652975f127b28614cbccfd1f32334ea4139b28bf92', 'lib/next/mesh/chat_attachment.dart': '98c373bfc3fc985b1d1e47ff5ce18e4a554defb52fdefe02b9e00a87e4532712', 
+BASELINE_HASHES = {'lib/next/settings/model_capability.dart': '23b3544bbe8e7c00677eac59c003eb8f42e8f5fbcbf903eede3280a9e759d262', 'lib/next/mesh/chat_attachment.dart': '98c373bfc3fc985b1d1e47ff5ce18e4a554defb52fdefe02b9e00a87e4532712',
  'lib/next/store/capability.dart': '8946a8a0b934ec01963d79e8313019e5033a9be3fe2bf9a65fdce5aaa55da6ca',
  'lib/next/voice/capability.dart': '635811717bf4e74b5540aaf660b7a128e575fe5a1c4a3f89329361b43027f6b1',
  'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': 'ee236b7f41cc2c4d46b23d603f2d2347e14a7082e9ce7fe8b674f754bd4d0de3',
@@ -140,7 +140,7 @@ BASELINE_HASHES = {'lib/next/settings/model_capability.dart': '9a9cf6a192ec5abe9
  'lib/next/mesh/runtime.dart': 'c8c9b9694ef899f2080ef15e5b0cd2e2b2751abf0f654dd08cfcf6c669360dd7',
  'lib/next/network/capability.dart': '0b12d2f9e1b415cc986e124d016767a5d230d0178a3e19f22fbb8d15481109d8',
  'lib/next/next_core.dart': '016d8da60c4571e7b74eceb0bf900e2096b351a3843dd67a31436fa32587f63f',
- 'lib/next/next_runtime.dart': '769238aab213166125899385c422880001c2e6bb6fa9f51abf4ae0122def279b',
+ 'lib/next/next_runtime.dart': 'e58da7d7b97bcfbfbbb7521ba1c8060e74b79b7a52366ef9b1bf1f1d84552382',
  'lib/next/player/features/local_operations.dart': '6e1d4e008ebf23f0f62c11abace5e1c10eb355675607d2ee26929b80f362e5b0',
  'lib/next/player/features/operation_specs.dart': '514a6c5049507ee3513bffeb4532d760d03d8f4154a93f00ee680c8af1e3d35a',
  'lib/next/player/ports/session_ports.dart': '4cf2d88a57dc8e3939b12237e23e243ec728cfa5587c5b2e20e3c48db275da9e',

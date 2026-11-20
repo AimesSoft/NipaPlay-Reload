@@ -12,6 +12,7 @@ import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
 import '../widgets/segmented.dart';
 import 'controls.dart';
+import 'codex_account_card.dart';
 import 'dsh_config_card.dart';
 import '../../settings/reasoning_effort.dart';
 import '../data/rika_store.dart';
@@ -921,7 +922,8 @@ class NipaSectionState extends State<NipaSection> {
     return SettingsCard(title: '模型', children: [
       SettingsRow(
         leading: const NipaAvatar(size: 32),
-        title: here ? (s.provider ?? (dsh ? '设置模型' : '在这里设置')) : '已有配置',
+        title: here ? (s.provider ?? (dsh ? '设置模型' : '在这里设置')) :
+          s.source == UiModelSource.chatgpt ? 'ChatGPT 订阅' : '已有配置',
         subtitle: status,
         trailing: dsh
             ? (s.codexAvailable
@@ -941,12 +943,17 @@ class NipaSectionState extends State<NipaSection> {
                     '已有配置',
                     (c) => Text('已有配置', style: NextText.sans(12.5, color: c))
                   ),
+                  (
+                    UiModelSource.chatgpt,
+                    'ChatGPT 订阅',
+                    (c) => Text('ChatGPT 订阅', style: NextText.sans(12.5, color: c))
+                  ),
                 ],
                 onChanged: _setSource,
               ),
         below:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (!here && !s.codexAvailable && s.problem == null)
+          if (s.source == UiModelSource.codex && !s.codexAvailable && s.problem == null)
             Padding(
               padding: const EdgeInsets.fromLTRB(64, 0, 18, 6),
               child: Text('这台电脑上没有 Codex 配置',
@@ -1060,7 +1067,7 @@ class NipaSectionState extends State<NipaSection> {
                     label: '保存', primary: true, busy: _saving, onTap: _save),
                 const SizedBox(width: 8),
               ],
-              PillButton(
+              if (here) PillButton(
                   label: '测试连接', busy: _checking, onTap: _dirty ? null : _test),
               if (_check case final check?) ...[
                 const SizedBox(width: 12),
@@ -1343,6 +1350,10 @@ class NipaSectionState extends State<NipaSection> {
     final runtime = _runtime;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (setup != null) _modelCard(setup),
+      if (setup != null && setup.runtime == UiAgentRuntimeKind.codex && _host is NextCodexAccountSettings)
+        CodexAccountCard(key: ValueKey(setup.source),
+            host: _host as NextCodexAccountSettings,
+            canLogin: setup.source == UiModelSource.chatgpt),
       if (setup?.runtime == UiAgentRuntimeKind.dsh)
         if (_dsh case final dsh?) _dshCard(dsh),
       if (setup?.runtime == UiAgentRuntimeKind.dsh &&

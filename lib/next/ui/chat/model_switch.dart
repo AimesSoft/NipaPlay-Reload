@@ -122,6 +122,9 @@ class _ModelSwitchState extends State<ModelSwitch> {
 /// choice had not been taken), else the one in use; null while there is
 /// none to name (the setup chip shows the way then).
 String? modelLabel(UiModelSetup setup) {
+  final choice = setup.nextTurnChoice ?? setup.sessionChoice;
+  if (choice != null) return choice.label ?? choice.model;
+  if (setup.source == UiModelSource.chatgpt) return setup.inUse ?? 'ChatGPT';
   if (setup.source == UiModelSource.codex) return setup.inUse ?? 'Codex 配置';
   return setup.model ?? setup.inUse;
 }
@@ -169,6 +172,8 @@ class _ModelSheetState extends State<ModelSheet> {
   UiModelSetup? _setup;
   UiModelCandidates? _listed;
   bool _busy = false;
+  bool _once = false;
+  UiModelChoice? _pendingChoice;
   String? _said;
 
   @override
@@ -196,7 +201,12 @@ class _ModelSheetState extends State<ModelSheet> {
       _said = null;
     });
     try {
-      await widget.host.setModel(choice);
+      final host = widget.host;
+      if (choice.catalog != null && host is NextSessionModelSettings) {
+        await (host as NextSessionModelSettings).setSessionModel(choice, once: _once);
+      } else {
+        await host.setModel(choice);
+      }
       if (close) {
         widget.onClose();
         return;
@@ -280,7 +290,8 @@ class _ModelSheetState extends State<ModelSheet> {
                             detail: setup.source == UiModelSource.codex
                                 ? setup.inUse
                                 : null,
-                            current: setup.source == UiModelSource.codex,
+                            current: setup.source == UiModelSource.codex &&
+                                setup.sessionChoice == null,
                             onTap: setup.source == UiModelSource.codex
                                 ? null
                                 : () => _choose(const UiModelChoice(
@@ -293,13 +304,24 @@ class _ModelSheetState extends State<ModelSheet> {
                               key: Key('chat.model.recent.$i'),
                               title: model.model ?? '',
                               detail: model.provider,
-                              current: _same(model, setup),
+                              current: setup.sessionChoice == null &&
+                                  _same(model, setup),
                               onTap: _same(model, setup)
                                   ? null
                                   : () => _choose(choiceOf(model))),
                       ],
                       ...[
                         const _Heading('候选模型'),
+                        if (_listed?.choices.any((choice) => choice.catalog != null) == true)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Segmented<bool>(
+                              value: _once,
+                              options: [for (final (once, label) in const [(false, '从现在起'), (true, '仅下一轮')])
+                                (once, label, (color) => Text(label, style: NextText.sans(12.5, color: color)))],
+                              onChanged: (value) => setState(() => _once = value),
+                            ),
+                          ),
                         if (_listed == null)
                           const Padding(
                               padding: EdgeInsets.symmetric(vertical: 10),
@@ -322,10 +344,22 @@ class _ModelSheetState extends State<ModelSheet> {
                         else
                           for (final choice in others)
                             _Row(
-                                key: Key('chat.model.listed.${choice.model}'),
-                                title: choice.model ?? '',
-                                detail: choice.provider,
-                                onTap: () => _choose(choice.source ==
+                                key: Key(choice.catalog == null
+                                    ? 'chat.model.listed.${choice.model}'
+                                    : 'chat.model.listed.${choice.catalog!.name}.${choice.provider}.${choice.model}'),
+                                title: choice.label ?? choice.model ?? '',
+                                detail: choice.catalog == null
+                                    ? choice.provider
+                                    : choice.providerLabel == choice.provider
+                                        ? null : choice.providerLabel,
+                                current: setup.sessionChoice?.catalog == choice.catalog &&
+                                    setup.sessionChoice?.model == choice.model &&
+                                    setup.sessionChoice?.provider == choice.provider,
+                                onTap: () => choice.catalog != null
+                                    ? choice.reasoningLevels.isEmpty
+                                        ? _choose(choice)
+                                        : setState(() => _pendingChoice = choice)
+                                    : _choose(choice.source ==
                                             setup.source &&
                                         choice.provider == setup.provider &&
                                         choice.baseUrl == setup.baseUrl &&
@@ -333,7 +367,18 @@ class _ModelSheetState extends State<ModelSheet> {
                                     ? currentChoice(setup, model: choice.model)
                                     : choiceOf(choice))),
                       ],
-                      if (setup.source == UiModelSource.nipaplay &&
+                      if (_pendingChoice case final selected?) ...[
+                        _Heading(selected.label ?? selected.model ?? '思考'),
+                        for (final effort in selected.reasoningLevels)
+                          _Row(title: switch (effort) {
+                            'none' => '关', 'minimal' => '极低', 'low' => '低',
+                            'medium' => '中', 'high' => '高', 'xhigh' => '很高',
+                            'max' => '最高', 'ultra' => '超高', _ => effort,
+                          }, current: effort == selected.reasoning,
+                          onTap: () => _choose(selected.withReasoning(effort))),
+                      ],
+                      if (setup.sessionChoice == null &&
+                          setup.source == UiModelSource.nipaplay &&
                           setup.runtime == UiAgentRuntimeKind.dsh) ...[
                         const _Heading('思考'),
                         Align(
