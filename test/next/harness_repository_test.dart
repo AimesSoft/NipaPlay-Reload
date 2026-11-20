@@ -59,6 +59,10 @@ void main() {
       await File('${repository.path}/personal-tool').writeAsString('mine');
       final staged = await git(['diff', '--cached', '--binary']);
       final unstaged = await git(['diff', '--binary']);
+      // The edit above has the size and, usually, the second of the staged
+      // entry. Update in a later second, so only the index file's timestamp
+      // can still tell Git to compare the contents.
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
       await maintainHarnessSeed(source, seed('updated', tool: true));
       final result = await updateHarnessRepository(repository, source);
       expect(result['state'], 'updated');
