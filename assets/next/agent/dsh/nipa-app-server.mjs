@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { appendHandover, validateHandover } from './nipa-handover.mjs';
+import { appendHandover, repairHandoverLog, validateHandover } from './nipa-handover.mjs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
@@ -742,12 +742,14 @@ export function apply(ctx, config = {}) {
     const persistence = ctx.get('sessionPersistence');
     const snapshot = await persistence?.stat(id);
     if (!snapshot) throw rpcError(-32600, `thread not found: ${id}`);
-    const handle = await persistence.open(id, 'read');
-    try {
-      return { header: snapshot.header, events: (await handle.read()).events, isLive: false };
-    } finally {
-      await handle.close();
-    }
+    return loadRepaired(id, async () => {
+      const handle = await persistence.open(id, 'read');
+      try {
+        return { header: snapshot.header, events: (await handle.read()).events, isLive: false };
+      } finally {
+        await handle.close();
+      }
+    });
   }
 
   async function threadWithHistory(id, includeTurns = true) {
@@ -761,6 +763,26 @@ export function apply(ctx, config = {}) {
     return threadObject(id, header, turns);
   }
 
+  // A conversation an earlier build handed over without the system head is
+  // put right once, whichever way it is first loaded; any other refusal to
+  // load stands.
+  async function loadRepaired(id, load) {
+    try {
+      return await load();
+    } catch (error) {
+      const path = /system\/message requires a protected first surface head \(raw log: (.+)\)$/
+        .exec(String(error?.message ?? ''))?.[1];
+      const restore = path ? await repairHandoverLog(path, { home, id }) : undefined;
+      if (!restore) throw error;
+      try {
+        return await load();
+      } catch (again) {
+        await restore();
+        throw again;
+      }
+    }
+  }
+
   async function ensureAgent(id) {
     const existing = ctx.agents.get(id);
     if (existing) return existing;
@@ -768,7 +790,7 @@ export function apply(ctx, config = {}) {
       const task = (async () => {
         const persistence = ctx.get('sessionPersistence');
         if (!(await persistence?.stat(id))) throw rpcError(-32600, `thread not found: ${id}`);
-        const handle = await ctx.agents.resume({ resumeSessionId: id, agentOptions });
+        const handle = await loadRepaired(id, () => ctx.agents.resume({ resumeSessionId: id, agentOptions }));
         handles.set(id, handle);
         return handle.agent;
       })();
