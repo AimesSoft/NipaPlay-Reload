@@ -131,6 +131,7 @@ typedef NpmResolution = ({
   String name,
   String requested,
   String version,
+  String integrity,
   String? deprecated,
   List<String> notices,
   bool hasSkill,
@@ -180,6 +181,7 @@ final class NpmPackages {
   Future<NpmResolution> resolve(String spec,
       {required Set<String>? provided,
       String? exactVersion,
+      String? expectedIntegrity,
       String? id,
       String? identityProblem}) async {
     final (name, wanted) = parseSpec(spec);
@@ -219,6 +221,9 @@ final class NpmPackages {
       throw StoreChanged('$name 请求的版本为 $requested，但镜像返回了 $version');
     }
     final integrity = dist['integrity'] as String;
+    if (expectedIntegrity != null && integrity != expectedIntegrity) {
+      throw StoreChanged('$name $version 的完整性校验值与预览不符，请重新预览后再安装');
+    }
     final tarball = await fetch.bytes([
       for (final registry in registries)
         Uri.parse('$registry/${tarballPath(name, version)}')
@@ -409,6 +414,7 @@ final class NpmPackages {
       name: name,
       requested: requested,
       version: version,
+      integrity: integrity,
       deprecated: deprecated,
       notices: notices,
       hasSkill: skill,

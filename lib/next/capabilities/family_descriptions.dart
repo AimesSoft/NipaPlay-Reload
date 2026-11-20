@@ -369,7 +369,7 @@ Classic 与 Next 使用各自的播放会话；部分设置、观看记录和进
   'plugins': r'''应用插件。''',
   'store': r'''梨花的商店：技能（说明加脚本，装在本机 store/skills/<id>/）和 DeepSeek Harness 插件（store/plugins/<id>/，只在 DSH 下加载）。
 - list 报告已装版本、列表版本及来源、启用状态和上次启动的加载选择及跳过原因。版本不同不代表升级。readme 带说明对应的版本。
-- resolve_npm 只读解析标签或版本，报告实际版本、弃用信息、根目录 SKILL.md、DSH 插件声明以及各类型是否可装和原因。install 按用户要求安装；安装前告知官方条目的 notices，或 npm 包未经审核、以用户账户权限运行，能读写文件和联网。官方安装指定 ID 与版本；npm 安装指定原始包名、确切版本和类型。
+- resolve_npm 只读解析标签或版本，报告实际版本、包内容的 integrity、弃用信息、根目录 SKILL.md、DSH 插件声明以及各类型是否可装和原因。install 按用户要求安装；安装前告知官方条目的 notices，或 npm 包未经审核、以用户账户权限运行，能读写文件和联网。官方安装指定 ID 与版本；npm 安装指定原始包名、确切版本、类型和预览返回的 integrity。摘要不符时返回冲突，应重新预览再确认。
 - enable 开关、remove 卸载。apply 立即重启正在运行的宿主，结束进行中的回合及会话子任务；回执区分已重启、未执行及原因、失败及错误。已保存的对话、跟进记录和定时保留；成功重启发布可供跟进订阅的 store.applied（objectId 为 local）。
 - 已装技能的说明文件为 store/skills/<id>/SKILL.md，提示中包含实际路径。''',
   'media.sources': r'''SMB、WebDAV 文件来源。

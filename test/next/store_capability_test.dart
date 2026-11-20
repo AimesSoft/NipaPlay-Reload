@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
@@ -14,6 +15,7 @@ void main() {
   late Directory temp;
   late RikaStore store;
   late Harness harness;
+  HttpServer? registry;
   var restarts = 0;
   late StoreApplyResult restartResult;
 
@@ -60,7 +62,7 @@ void main() {
         fetch: StoreFetch(HttpClient.new),
         listSources: () =>
             storeListSources({'NIPAPLAY_STORE_INDEX': list.path}),
-        registries: () async => ['http://127.0.0.1:9'],
+        registries: () async => ['http://127.0.0.1:${registry?.port ?? 9}'],
         provided: () async => null);
     restarts = 0;
     restartResult = const StoreApplyResult.restarted();
@@ -72,6 +74,8 @@ void main() {
     ]);
   });
   tearDown(() async {
+    await registry?.close(force: true);
+    registry = null;
     await store.close();
     await temp.delete(recursive: true);
   });
@@ -131,6 +135,7 @@ void main() {
           'npm': 'some-plugin',
           'version': '1.0.0',
           'kind': 'plugin',
+          'integrity': 'sha512-${base64Encode(sha512.convert([]).bytes)}',
         },
         origin: 'agent:x');
     expect((npm as Failed).failure.code, FailureCode.unavailable);
@@ -147,6 +152,85 @@ void main() {
     expect(value(await call('store.apply', {})),
         {'status': 'failed', 'restarted': false, 'error': 'startup failed'});
     expect(restarts, 3);
+  });
+
+  test('failed directory removal leaves a visible record for retry', () async {
+    value(await call('store.install', {'id': 'dmhy', 'version': '1.1.0'}));
+    final parent = p.join(store.root.path, 'skills');
+    Future<void> chmod(String mode) async {
+      final result = await Process.run('chmod', [mode, parent]);
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+    }
+
+    try {
+      await chmod('500');
+      await expectLater(
+          store.remove('dmhy'), throwsA(isA<FileSystemException>()));
+      expect(value(await call('store.list', {}))['installed'], [
+        containsPair('id', 'dmhy'),
+      ]);
+    } finally {
+      await chmod('700');
+    }
+    value(await call('store.remove', {'id': 'dmhy'}));
+    expect(await Directory(p.join(parent, 'dmhy')).exists(), isFalse);
+    expect(await store.installed(), isEmpty);
+  }, skip: Platform.isWindows);
+
+  test('npm install pins the previewed tarball', () async {
+    List<int> pack(String text) => gzip.encode(TarEncoder().encode(
+        Archive()..addFile(ArchiveFile.string('package/SKILL.md', text))));
+    String sri(List<int> bytes) =>
+        'sha512-${base64Encode(sha512.convert(bytes).bytes)}';
+    const name = 'preview-skill';
+    final reviewed = pack('original skill');
+    var served = reviewed;
+    var downloads = 0;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    registry = server;
+    server.listen((request) async {
+      if (request.uri.path == '/$name/latest' ||
+          request.uri.path == '/$name/1.0.0') {
+        request.response.write(jsonEncode({
+          'name': name,
+          'version': '1.0.0',
+          'dist': {'integrity': sri(served)},
+        }));
+      } else if (request.uri.path == '/$name/-/$name-1.0.0.tgz') {
+        downloads++;
+        request.response.add(served);
+      } else {
+        request.response.statusCode = 404;
+      }
+      await request.response.close();
+    });
+
+    final preview = value(await call('store.resolve_npm', {'npm': name}));
+    final install = {
+      'npm': name,
+      'version': preview['version'],
+      'kind': 'skill'
+    };
+    final unpinned = await call('store.install', install);
+    expect((unpinned as Failed).failure.code, FailureCode.invalidInput);
+    served = pack('different skill');
+    final changed = await call('store.install', {
+      ...install,
+      'integrity': preview['integrity'] ?? sri(reviewed),
+    });
+    expect((changed as Failed).failure.code, FailureCode.conflict);
+    expect(downloads, 1);
+    expect(await store.installed(), isEmpty);
+    expect(preview['integrity'], sri(reviewed));
+
+    served = reviewed;
+    value(await call(
+        'store.install', {...install, 'integrity': preview['integrity']}));
+    final item = (await store.installed()).single.item;
+    expect(
+        await File(p.join(store.root.path, 'skills', item.id, 'SKILL.md'))
+            .readAsString(),
+        'original skill');
   });
 
   test('exactly one of id or npm', () async {

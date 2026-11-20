@@ -128,6 +128,7 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
       if (!mounted) return;
       final name = facts['npm'] as String;
       final version = facts['version'] as String?;
+      final integrity = facts['integrity'] as String?;
       final kinds = facts['kinds'] as Map? ?? const {};
       const labels = {'skill': '技能', 'plugin': 'DSH 插件'};
       setState(() => _confirmingNpm = true);
@@ -150,14 +151,18 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
                 onCancel: () => close(),
                 actions: {
                   for (final entry in labels.entries)
-                    if (kinds[entry.key] case {'installable': true})
+                    if (kinds[entry.key] case {'installable': true}
+                        when version != null && integrity != null)
                       '安装为${entry.value}': () => close(entry.key),
                 },
               ),
           width: 520);
-      if (kind == null || version == null || !mounted) return;
+      if (kind == null || version == null || integrity == null || !mounted) {
+        return;
+      }
       setState(() => _confirmingNpm = false);
-      await widget.store.install(npm: name, version: version, kind: kind);
+      await widget.store.install(
+          npm: name, version: version, kind: kind, integrity: integrity);
       if (mounted)
         setState(() {
           _npm = '';

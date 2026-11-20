@@ -105,7 +105,7 @@ final class StoreCapability implements Capability {
                 title: '查看 npm 包的安装事实',
                 effect: Effect.read,
                 description:
-                    'Read the requested tag or version, resolved version, root SKILL.md, DSH plugin declarations, deprecation and installability per kind without installing or running package code. An unspecified tag means latest. Package metadata is unreviewed.',
+                    'Read the requested tag or version, resolved version, tarball integrity (npm dist.integrity), root SKILL.md, DSH plugin declarations, deprecation and installability per kind without installing or running package code. An unspecified tag means latest. Package metadata is unreviewed.',
                 input: ObjectSchema({'npm': _npmSpec}, required: ['npm']),
                 output: _output,
               ),
@@ -116,29 +116,35 @@ final class StoreCapability implements Capability {
                   title: '从商店安装',
                   effect: Effect.write,
                   description:
-                      'Install or replace an extension at the user’s request. The user is informed of official notices or the npm package’s unreviewed status and account-level file and network permissions before installation. Official items are identified by id and version; npm items by package name, exact version and chosen kind. Plugins load only with DSH. Changes take effect on conversation-host start.',
+                      'Install or replace an extension at the user’s request. The user is informed of official notices or the npm package’s unreviewed status and account-level file and network permissions before installation. Official items are identified by id and version; npm items by package name, exact version, chosen kind and integrity from store.resolve_npm. An integrity change returns a conflict; preview again before installing. Plugins load only with DSH. Changes take effect on conversation-host start.',
                   input: ObjectSchema({
                     'id': _id,
                     'version': StringSchema(minLength: 1, maxLength: 64),
                     'npm': _npmSpec,
                     'kind': StringSchema(values: ['skill', 'plugin']),
+                    'integrity': StringSchema(minLength: 1),
                   }),
                   output: _output), (input, _) {
             final id = input['id'] as String?, npm = input['npm'] as String?;
             final version = input['version'] as String?;
             final kind = input['kind'] as String?;
+            final integrity = input['integrity'] as String?;
             if ((id == null) == (npm == null)) {
               throw const Failure(
                   FailureCode.invalidInput, 'Give exactly one of id or npm.');
             }
-            if (version == null || (npm != null) != (kind != null)) {
+            if (version == null ||
+                (npm != null) != (kind != null) ||
+                (npm != null) != (integrity != null)) {
               throw const Failure(FailureCode.invalidInput,
-                  'An exact version is required; kind is required only for npm.');
+                  'An exact version is required; kind and preview integrity are required only for npm.');
             }
             return _failures(() async {
               final installed = npm != null
                   ? await store.installNpm(npm,
-                      version: version, kind: StoreKind.values.byName(kind!))
+                      version: version,
+                      kind: StoreKind.values.byName(kind!),
+                      expectedIntegrity: integrity)
                   : await store.installOfficial(id!, version: version);
               return {
                 'installed': _installed(installed),
@@ -200,6 +206,7 @@ Future<JsonMap> _resolveNpm(RikaStore store, String spec) async {
       'npm': name,
       'requested': requested,
       'version': result.version,
+      'integrity': result.integrity,
       'hasSkill': result.hasSkill,
       'declaresDshPlugin': result.isPlugin,
       'deprecated': result.deprecated,

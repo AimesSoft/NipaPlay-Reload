@@ -58,6 +58,7 @@ final class _FakeStore implements Capability {
               'npm': 'dsh-example',
               'requested': 'latest',
               'version': '1.0.0',
+              'integrity': 'sha512-preview',
               'hasSkill': true,
               'declaresDshPlugin': true,
               'notices': ['没有经过审核'],
@@ -150,6 +151,6 @@ void main() {
     expect(
         fake.calls,
         contains(
-            'store.install {version: 1.0.0, npm: dsh-example, kind: skill}'));
+            'store.install {version: 1.0.0, npm: dsh-example, kind: skill, integrity: sha512-preview}'));
   });
 }

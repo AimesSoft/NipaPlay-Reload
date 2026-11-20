@@ -119,14 +119,19 @@ final class NextRikaStore {
       calls.call('store.resolve_npm', {'npm': spec});
 
   /// From the list ([id] at the [version] whose notices were shown), or the
-  /// npm package [npm].
+  /// npm package [npm] with the preview's [integrity].
   Future<JsonMap> install(
-          {String? id, String? version, String? npm, String? kind}) =>
+          {String? id,
+          String? version,
+          String? npm,
+          String? kind,
+          String? integrity}) =>
       calls.call('store.install', {
         if (id != null) 'id': id,
         if (version != null) 'version': version,
         if (npm != null) 'npm': npm,
         if (kind != null) 'kind': kind,
+        if (integrity != null) 'integrity': integrity,
       });
 
   Future<void> setEnabled(String id, bool enabled) =>

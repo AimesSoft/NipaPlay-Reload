@@ -41,7 +41,9 @@ Future<int> runHeadlessStoreInstall(Directory root, String spec,
       return 1;
     }
     final installed = await store.installNpm(preview.name,
-        version: preview.version, kind: kind);
+        version: preview.version,
+        kind: kind,
+        expectedIntegrity: preview.integrity);
     final item = installed.item;
     out.writeln('Installed ${item.name} ${item.version} as ${item.id} '
         '(${item.kind.name}, not reviewed).');

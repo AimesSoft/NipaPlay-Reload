@@ -245,7 +245,8 @@ final class RikaStore {
         return _install(item, null);
       });
 
-  Future<NpmResolution> resolveNpm(String spec, {String? exactVersion}) async {
+  Future<NpmResolution> resolveNpm(String spec,
+      {String? exactVersion, String? expectedIntegrity}) async {
     final (name, _) = NpmPackages.parseSpec(spec);
     final items = await installed();
     final id = items
@@ -258,14 +259,18 @@ final class RikaStore {
     return NpmPackages(fetch, registries: await registries()).resolve(spec,
         provided: await provided?.call(),
         exactVersion: exactVersion,
+        expectedIntegrity: expectedIntegrity,
         id: id,
         identityProblem: problem);
   }
 
   Future<InstalledItem> installNpm(String name,
-          {required String version, required StoreKind kind}) =>
+          {required String version,
+          required StoreKind kind,
+          String? expectedIntegrity}) =>
       _serial(() async {
-        final resolution = await resolveNpm(name, exactVersion: version);
+        final resolution = await resolveNpm(name,
+            exactVersion: version, expectedIntegrity: expectedIntegrity);
         final choice = resolution.options[kind]!;
         final item =
             choice.item ?? (throw StoreFormatException(choice.reason!));
@@ -387,15 +392,19 @@ final class RikaStore {
             !_unreadable.containsKey(id)) {
           throw StoreFormatException('没有安装 $id');
         }
+        for (final kind in [_skills, _plugins]) {
+          final folder = Directory(p.join(kind.path, id));
+          try {
+            await folder.delete(recursive: true);
+          } on PathNotFoundException {
+            continue;
+          }
+        }
         await _save([
           for (final i in items)
             if (i.item.id != id) i
         ], dropping: id);
         _unreadable = {..._unreadable}..remove(id);
-        for (final kind in [_skills, _plugins]) {
-          final folder = Directory(p.join(kind.path, id));
-          if (await folder.exists()) await folder.delete(recursive: true);
-        }
         _changes.add(null);
       });
 
