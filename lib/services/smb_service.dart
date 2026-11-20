@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smb_connect/smb_connect.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:nipaplay/services/media_library_scan.dart';
 import 'package:nipaplay/services/process_memory_cache.dart';
 import 'package:nipaplay/services/smb2_native_service.dart';
 import 'package:nipaplay/utils/network_address_utils.dart';
@@ -509,6 +510,20 @@ class SMBService {
       forceRefresh: forceRefresh,
     );
   }
+
+  Future<List<SMBFileEntry>> collectLibraryVideos(
+    SMBConnection connection,
+    String path,
+  ) =>
+      collectMediaLibraryVideos<SMBFileEntry>(
+        path,
+        listDirectory: (path) => listDirectoryAll(connection, path),
+        nameOf: (entry) => entry.name,
+        pathOf: (entry) => entry.path,
+        isDirectory: (entry) => entry.isDirectory,
+        isVideoFile: isVideoFile,
+        onListError: (error) => debugPrint('获取SMB视频文件失败: $error'),
+      );
 
   Future<List<SMBFileEntry>> _listDirectoryAllCached(
     SMBConnection connection,

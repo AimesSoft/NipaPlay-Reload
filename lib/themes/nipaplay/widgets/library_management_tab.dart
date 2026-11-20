@@ -6063,7 +6063,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           updateProgress: true,
         );
         // 递归获取文件夹中的所有视频文件
-        final files = await _getWebDAVVideoFiles(connection, folderPath);
+        final files = await WebDAVService.instance.collectLibraryVideos(
+          connection,
+          folderPath,
+        );
 
         if (files.isEmpty) {
           _finishRemoteScrape('未找到可刮削的视频文件');
@@ -6128,38 +6131,6 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         }
       }
     }
-  }
-
-  // 获取WebDAV文件夹中的视频文件
-  Future<List<WebDAVFile>> _getWebDAVVideoFiles(
-      WebDAVConnection connection, String folderPath,
-      {bool recursive = true}) async {
-    final List<WebDAVFile> videoFiles = [];
-
-    try {
-      final files =
-          await WebDAVService.instance.listDirectory(connection, folderPath);
-
-      for (final file in files) {
-        if (file.isDirectory) {
-          // 递归获取子文件夹中的视频文件
-          if (recursive) {
-            final subFiles = await _getWebDAVVideoFiles(connection, file.path,
-                recursive: true);
-            videoFiles.addAll(subFiles);
-          }
-        } else {
-          // 检查是否为视频文件
-          if (WebDAVService.instance.isVideoFile(file.name)) {
-            videoFiles.add(file);
-          }
-        }
-      }
-    } catch (e) {
-      print('获取WebDAV视频文件失败: $e');
-    }
-
-    return videoFiles;
   }
 
   // 播放WebDAV文件
@@ -6297,7 +6268,10 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
           progress: null,
           updateProgress: true,
         );
-        final files = await _getSMBVideoFiles(connection, folderPath);
+        final files = await SMBService.instance.collectLibraryVideos(
+          connection,
+          folderPath,
+        );
         if (files.isEmpty) {
           _finishRemoteScrape('未找到可刮削的视频文件');
           if (mounted) {
@@ -6362,30 +6336,6 @@ class _LibraryManagementTabState extends State<LibraryManagementTab> {
         }
       }
     }
-  }
-
-  Future<List<SMBFileEntry>> _getSMBVideoFiles(
-      SMBConnection connection, String folderPath,
-      {bool recursive = true}) async {
-    final List<SMBFileEntry> videoFiles = [];
-    try {
-      final files =
-          await SMBService.instance.listDirectory(connection, folderPath);
-      for (final file in files) {
-        if (file.isDirectory) {
-          if (recursive) {
-            final nested =
-                await _getSMBVideoFiles(connection, file.path, recursive: true);
-            videoFiles.addAll(nested);
-          }
-        } else if (SMBService.instance.isVideoFile(file.name)) {
-          videoFiles.add(file);
-        }
-      }
-    } catch (e) {
-      debugPrint('获取SMB视频文件失败: $e');
-    }
-    return videoFiles;
   }
 
   void _playSMBFile(SMBConnection connection, SMBFileEntry file) {

@@ -12,6 +12,7 @@ import 'package:xml/xml.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:nipaplay/models/media_identity.dart';
+import 'package:nipaplay/services/media_library_scan.dart';
 import 'package:nipaplay/services/process_memory_cache.dart';
 import 'package:nipaplay/utils/network_address_utils.dart';
 import 'package:nipaplay/src/rust/api/webdav_multistatus.dart' as rust_webdav;
@@ -606,6 +607,20 @@ class WebDAVService {
       forceRefresh: forceRefresh,
     );
   }
+
+  Future<List<WebDAVFile>> collectLibraryVideos(
+    WebDAVConnection connection,
+    String path,
+  ) =>
+      collectMediaLibraryVideos<WebDAVFile>(
+        path,
+        listDirectory: (path) => listDirectoryAll(connection, path),
+        nameOf: (entry) => entry.name,
+        pathOf: (entry) => entry.path,
+        isDirectory: (entry) => entry.isDirectory,
+        isVideoFile: isVideoFile,
+        onListError: (error) => debugPrint('获取WebDAV视频文件失败: $error'),
+      );
 
   Future<List<WebDAVFile>> _listDirectoryAllCached(
     WebDAVConnection connection,
