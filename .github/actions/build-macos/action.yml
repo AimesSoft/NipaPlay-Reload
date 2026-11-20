@@ -305,7 +305,7 @@ runs:
           if [[ "$variant_suffix" != universal && -d "$universal_app" ]]; then
             python3 .github/workflows/scripts/apple_payload.py macos "$universal_app" "$app" "$variant_suffix"
             mkdir -p "build/symbols-macos/$variant_suffix"
-            cp "build/symbols-macos/universal/app.$variant_suffix.symbols" "build/symbols-macos/$variant_suffix/"
+            cp "build/symbols-macos/universal/app.darwin-$variant_suffix.symbols" "build/symbols-macos/$variant_suffix/"
           fi
           read -r -a archs <<< "$xcode_archs"
           arch_args=()
