@@ -80,7 +80,7 @@ final class HostSettingsService
   final AgentRuntimeKind defaultRuntime;
 
   /// Called after the runtime choice changed: the running host is replaced.
-  final Future<void> Function()? runtimeChanged;
+  final Future<void> Function(AgentRuntimeKind, Future<void> Function())? runtimeChanged;
   CodexRuntime get _codex => codex ?? (throw UnsupportedError('实验配置沿用外部 Codex'));
   @override
   Future<UiCodexRuntime> codexRuntime() => _codex.state();
@@ -149,18 +149,34 @@ final class HostSettingsService
   }
 
   @override
-  Future<void> setAgentRuntime(UiAgentRuntimeKind kind) => _write(() async {
-        if ((await _fixed()).kind != null) throw StateError('运行器由启动环境决定');
-        if (kind == UiAgentRuntimeKind.codex && codex == null) {
-          throw UnsupportedError('此宿主没有 Codex');
-        }
-        final before = await _read('runtime.json');
-        final value = <String, Object?>{...before, 'runtime': kind.name};
-        await _save('runtime.json', value);
-        _record('runtime', before, value);
-        _checkProblem = null;
-        notify();
-      }).then((_) => runtimeChanged?.call());
+  Future<void> setAgentRuntime(UiAgentRuntimeKind kind) async {
+    final target = AgentRuntimeKind.values.byName(kind.name);
+    if ((await _fixed()).kind != null) throw StateError('运行器由启动环境决定');
+    if (kind == UiAgentRuntimeKind.codex && codex == null && fixedRuntimeDirectory == null) {
+      throw UnsupportedError('此宿主没有 Codex');
+    }
+    if (await effectiveRuntime() == target) return;
+    final before = await _read('runtime.json');
+    final value = <String, Object?>{...before, 'runtime': kind.name};
+    var saved = false;
+    Future<void> save() async {
+      await _save('runtime.json', value);
+      saved = true;
+    }
+    try {
+      if (runtimeChanged case final change?) {
+        await change(target, save);
+      } else {
+        await save();
+      }
+    } catch (_) {
+      if (saved) await _save('runtime.json', before);
+      rethrow;
+    }
+    _record('runtime', before, value);
+    _checkProblem = null;
+    notify();
+  }
 
   DshInstall get _dsh => dsh ?? (throw UnsupportedError('此宿主不下载运行环境'));
   @override
@@ -579,8 +595,8 @@ final class HostSettingsService
     // The live host reads this snapshot only at the next turn boundary.
   }
 
-  Future<ModelLaunch> launch() async {
-    if (await effectiveRuntime() == AgentRuntimeKind.dsh) return _dshLaunch();
+  Future<ModelLaunch> launch({AgentRuntimeKind? runtime}) async {
+    if ((runtime ?? await effectiveRuntime()) == AgentRuntimeKind.dsh) return _dshLaunch();
     // Installation can outlast a settings edit. Read the selected model only
     // after it completes so first-use input takes effect on this launch.
     final executable = await codex?.executable();

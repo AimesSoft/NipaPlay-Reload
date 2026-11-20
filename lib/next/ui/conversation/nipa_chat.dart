@@ -933,6 +933,21 @@ class NipaChat extends ChangeNotifier {
       unawaited(refreshSessions());
     }
     switch (method) {
+      case 'host/handover':
+        if (about != null) {
+          _booted = true;
+          fresh = false;
+          main = about;
+          _elsewhere.clear();
+          _questions.clear();
+          unawaited(_open(about));
+          unawaited(refreshSessions());
+        }
+        return;
+      case 'host/handoverFailed':
+        trouble = '没能切换，原对话未更改。';
+        _notify();
+        return;
       case 'host/available':
         if (_booted) {
           unawaited(refreshSessions());

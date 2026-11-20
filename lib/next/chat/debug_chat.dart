@@ -10,7 +10,8 @@ import 'package:nipa_harness/nipa_harness.dart' show Invocation;
 import 'chat_host.dart';
 
 /// VM-service-only lab driver. Absent from the harness catalog and release builds.
-void installDebugChat(ChatHost? Function() current) {
+void installDebugChat(ChatHost? Function() current,
+    {Future<void> Function(String)? switchRuntime}) {
   registerExtension('ext.nipaplay.chat', (_, params) async {
     try {
       final host = current();
@@ -19,6 +20,9 @@ void installDebugChat(ChatHost? Function() current) {
       switch (params['op']) {
         case 'start':
           result = await host.startThread();
+        case 'switchRuntime':
+          await switchRuntime!(params['kind']!);
+          result = {'switched': true};
         case 'main':
           result = await host.getMainSession();
         case 'sessions':

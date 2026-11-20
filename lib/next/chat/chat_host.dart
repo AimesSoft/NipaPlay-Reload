@@ -17,6 +17,7 @@ import 'dsh_runtime.dart';
 import 'liveness.dart';
 import 'memory_stale.dart';
 import 'session_store.dart';
+import 'handover.dart' as handover;
 import 'turn_process_store.dart';
 import '../memory/service.dart';
 import 'model_launch.dart';
@@ -87,6 +88,8 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   final Directory repository;
   final Directory? labRoot;
   final SessionStore? sessions;
+  late final handover.ConversationHistory? _conversation =
+      sessions == null ? null : handover.ConversationHistory(sessions!.database);
   final HarnessMemory? memory;
   final String? codexExecutable;
   final Future<ModelLaunch> Function()? modelLaunch;
@@ -231,6 +234,13 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   Future<void>? _closeFuture;
   int _nextId = 0;
   String? threadId;
+  String? handoverThreadId;
+
+  void reportHandoverFailure() {
+    if (!_closing) {
+      _display.add({'method': 'host/handoverFailed', 'params': const {}});
+    }
+  }
   @override
   String? model, provider;
   ChatMessage? thread;
@@ -737,6 +747,13 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
         }
         final eventThread = wireParams?['threadId'] as String? ??
             _requestThreads[message['id']];
+        if (!probe && eventThread != null &&
+            (eventThread == threadId || eventThread == mainThreadId)) {
+          if (message['params'] case final Map params) {
+            _conversation?.observe(wireMethod, eventThread, params);
+          }
+        }
+        if (wireMethod == 'rawResponseItem/completed') continue;
         if (eventThread != null) {
           if (wireMethod == 'turn/completed') {
             unawaited(memory
@@ -1008,6 +1025,64 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   Future<ChatMessage> startThread() =>
       _control(() => _select('thread/start', _common));
 
+  Future<void> handoverTo(
+      Future<void> Function(handover.HandoverPayload?) accept) =>
+      _control(() async {
+        if (busy) throw StateError('请等当前对话结束后再切换');
+        final id = threadId;
+        final history = _conversation;
+        if (id == null || history == null) return accept(null);
+        final native = await _readNativeThread(id);
+        final turns = (native['turns'] as List).cast<Map>();
+        if (turns.any((turn) => turn['status'] == 'inProgress')) {
+          throw StateError('请等当前对话结束后再切换');
+        }
+        await accept(await history.prepare(id, turns));
+      });
+
+  Future<void> receiveHandover(handover.HandoverPayload payload,
+      Future<void> Function() saveRuntime) async {
+    String? id;
+    const timeout = Duration(seconds: 20);
+    try {
+      final response = await _request('thread/start', {
+        ..._common,
+        if (dsh == null) 'experimentalRawEvents': true,
+        'config': {
+          ...await _projectHookConfig(),
+          if (dsh != null) 'nipaplay.handover': true,
+        },
+      }).timeout(timeout);
+      final fresh = _public(Map<String, dynamic>.from(response['thread'] as Map));
+      id = fresh['id'] as String;
+      await _request('thread/name/set', {
+        'threadId': id, 'name': 'NipaPlay 主会话',
+      }).timeout(timeout);
+      if (payload.context.isNotEmpty || dsh != null) {
+        await _request('thread/inject_items', {
+          'threadId': id,
+          if (dsh == null) 'items': payload.responses.toList(),
+          if (dsh != null) 'turns': payload.context,
+        }).timeout(timeout);
+      }
+      await _conversation!.promote(_sessionKey, id, payload, saveRuntime);
+      thread = fresh;
+      threadId = mainThreadId = id;
+      handoverThreadId = id;
+      _freshThreads[id] = fresh;
+      model = response['model'] as String;
+      provider = response['modelProvider'] as String;
+    } catch (_) {
+      if (id != null && available) {
+        try {
+          await _request('thread/archive', {'threadId': id})
+              .timeout(const Duration(seconds: 3));
+        } catch (_) {}
+      }
+      rethrow;
+    }
+  }
+
   /// The NIPAPLAY_CHAT value whose calls the endpoint attributes to [origin].
   String _chatFor(String origin) => origin.startsWith('harness_cli:helper:')
       ? 'helper-${origin.substring('harness_cli:helper:'.length)}'
@@ -1160,6 +1235,8 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     final origin = selectedId == null ? null : threadOrigins[selectedId];
     final response = await _request(method, {
       ...params,
+      if (method == 'thread/start' && dsh == null && modelLaunch != null)
+        'experimentalRawEvents': true,
       'config': {
         ...await _projectHookConfig(),
         if (origin != null)
@@ -1230,6 +1307,20 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   /// into the turns; without it the items are the runtime's own.
   @override
   Future<ChatMessage> readThread(String id, {bool withProcess = true}) async {
+    final native = await _readNativeThread(id);
+    final prefix = await _conversation?.prefix(id);
+    final history = prefix == null || prefix.isEmpty ? native : {
+      ...native,
+      'turns': [
+        ...await handover.projectHandover(prefix),
+        ...native['turns'] as List,
+      ],
+    };
+    if (withProcess) await restoreProcess(id, history);
+    return history;
+  }
+
+  Future<ChatMessage> _readNativeThread(String id) async {
     if (modelLaunch != null &&
         !_loaded.contains(id) &&
         _rollouts.containsKey(id)) {
@@ -1243,9 +1334,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     if (_freshThreads[id] case final fresh?) return fresh;
     final result =
         await _request('thread/read', {'threadId': id, 'includeTurns': true});
-    final history = Map<String, dynamic>.from(result['thread'] as Map);
-    if (withProcess) await restoreProcess(id, history);
-    return history;
+    return Map<String, dynamic>.from(result['thread'] as Map);
   }
 
   /// Puts NipaPlay's saved display copy of the process back into the turns
@@ -1400,7 +1489,8 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     }
     try {
       await _processes?.flush();
-    } on FileSystemException {
+      await _conversation?.flush();
+    } catch (_) {
       // Facts that could not be written stay in memory until the next start.
     }
     await _events.close();

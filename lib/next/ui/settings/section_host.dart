@@ -562,6 +562,8 @@ class NipaSectionState extends State<NipaSection> {
   bool _dshDirty = false, _importing = false;
   String _registryMirror = '', _nodeMirror = '';
   String? _dshError;
+  String? _runtimeSwitchError;
+  bool _switchingRuntime = false;
   UiModelApi _api = UiModelApi.responses;
   String _reasoning = defaultReasoningEffort;
   Map<String, Object?>? _compat;
@@ -851,13 +853,18 @@ class NipaSectionState extends State<NipaSection> {
 
   Future<void> _setAgent(UiAgentRuntimeKind kind) async {
     final host = _runtimeHost;
-    if (host == null) return;
-    setState(() => _dshError = null);
+    if (host == null || _switchingRuntime) return;
+    setState(() {
+      _runtimeSwitchError = null;
+      _switchingRuntime = true;
+    });
     try {
       await host.setAgentRuntime(kind);
       _dirty = false;
     } catch (_) {
-      if (mounted) setState(() => _dshError = '没能切换');
+      if (mounted) setState(() => _runtimeSwitchError = '没能切换，原对话未更改');
+    } finally {
+      if (mounted) setState(() => _switchingRuntime = false);
     }
     await _loadModel();
   }
@@ -1343,6 +1350,7 @@ class NipaSectionState extends State<NipaSection> {
     final runtime = _runtime;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (setup != null) _modelCard(setup),
+      if (_runtimeSwitchError case final error?) SettingsRow(title: error),
       if (setup?.runtime == UiAgentRuntimeKind.dsh)
         if (_dsh case final dsh?) _dshCard(dsh),
       if (setup?.runtime == UiAgentRuntimeKind.dsh &&

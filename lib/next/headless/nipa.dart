@@ -119,6 +119,7 @@ final class HeadlessNipa {
 
   static const _pluginFiles = [
     'nipa-app-server.mjs',
+    'nipa-handover.mjs',
     'nipa-memory.mjs',
     'persona-prefix.md',
     'persona-suffix.md'
