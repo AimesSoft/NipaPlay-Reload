@@ -82,6 +82,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // 弹幕列表和屏蔽规则
   static List<BlockedDanmakuItem> _blockedItems       = const []; // 弹幕屏蔽项目列表
   static List<DisplayDanmakuItem> _displayDanmakuList = const []; // 弹幕列表, 包含源数据和显示状态
+  static Duration? _projectedPosition;
 
   /// 当前弹幕样式. 外部修改字段后调用 [queueDanmakuRefresh] 应用到播放器.
   static final DanmakuStyle _danmakuStyle = DanmakuStyle();
@@ -123,7 +124,30 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
   // 弹幕相关
   // ------------------------------------------------------------------------ //
   static DanmakuStyle get danmakuStyle => _danmakuStyle;
-  static List<DisplayDanmakuItem> get displayDanmakuList => _displayDanmakuList;
+  static List<DisplayDanmakuItem> get displayDanmakuList {
+    final position = _session?.position;
+    if (position != _projectedPosition) {
+      _projectedPosition = position;
+      List<DisplayDanmakuItem>? changed;
+      for (final entry in _displayDanmakuList.indexed) {
+        final (index, item) = entry;
+        final active = !item.isBlocked && position != null &&
+            position >= item.startTime && position < item.startTime + item.duration;
+        if (active == item.isActive) continue;
+        changed ??= _displayDanmakuList.toList(growable: false);
+        changed[index] = DisplayDanmakuItem(
+          item: item.item,
+          index: item.index,
+          startTime: item.startTime,
+          duration: item.duration,
+          isBlocked: item.isBlocked,
+          isActive: active,
+        );
+      }
+      if (changed != null) _displayDanmakuList = List.unmodifiable(changed);
+    }
+    return _displayDanmakuList;
+  }
   static List<BlockedDanmakuItem> get blockedItems => _blockedItems;
 
   /// 获取当前控制台样式快照.
@@ -401,8 +425,6 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
       return;
     }
 
-    // 如果会话仍然存在, 则更新用于显示的弹幕列表并通知监听器更新 UI
-    _updateDisplayDanmakuList();
     _instance.notifyListeners();
   }
 
@@ -412,6 +434,7 @@ class ExternalPlayerConsoleService extends ChangeNotifier {
         _displayDanmakuList.map((item) => item.item).toList(growable: false);
 
     final position = _session?.position; // 当前播放位置, 用于判断弹幕是否处于显示状态
+    _projectedPosition = position;
     const configuredScrollSeconds = 10;
     final scrollDuration =
         configuredScrollSeconds.isFinite && configuredScrollSeconds > 0

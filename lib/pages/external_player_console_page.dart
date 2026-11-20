@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/danmaku/blocked_item.dart';
@@ -13,6 +16,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_page_scaffold.dart
 import 'package:nipaplay/utils/app_accent_color.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// 桌面端 mpv 外部播放会话控制台。
 enum ExternalPlayerConsolePane {
@@ -21,7 +25,7 @@ enum ExternalPlayerConsolePane {
   danmakuList,
 }
 
-class ExternalPlayerConsolePage extends StatelessWidget {
+class ExternalPlayerConsolePage extends StatefulWidget {
   const ExternalPlayerConsolePage({
     super.key,
     this.pane = ExternalPlayerConsolePane.all,
@@ -34,85 +38,166 @@ class ExternalPlayerConsolePage extends StatelessWidget {
   final VoidCallback? onCloseWindow;
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: ExternalPlayerConsoleService.instance,
-      builder: (context, _) {
-        final hasSession = ExternalPlayerConsoleService.hasActiveSession;
-        final animeTitle = ExternalPlayerConsoleService.animeTitle;
-        final episodeTitle = ExternalPlayerConsoleService.episodeTitle;
-        final subtitle = <String>[
-          if (animeTitle != null && animeTitle.trim().isNotEmpty) animeTitle,
-          if (episodeTitle != null && episodeTitle.trim().isNotEmpty)
-            episodeTitle,
-        ].join(' · ');
+  State<ExternalPlayerConsolePage> createState() =>
+      _ExternalPlayerConsolePageState();
+}
 
-        return fluent.FluentTheme(
-          data: fluent.FluentThemeData(
-            brightness: Theme.of(context).brightness,
-            accentColor: fluent.AccentColor.swatch({
-              'normal': AppAccentColors.current,
-              'default': AppAccentColors.current,
-            }),
+class _ExternalPlayerConsolePageState extends State<ExternalPlayerConsolePage>
+    with WidgetsBindingObserver, WindowListener {
+  final _console = ExternalPlayerConsoleService.instance;
+  bool _windowFocused = true;
+  bool _focusEventReceived = false;
+  bool _active = false;
+  AppLifecycleState? _lifecycle;
+
+  bool get _trackMainWindow =>
+      widget.pane == ExternalPlayerConsolePane.all &&
+      ExternalPlayerConsoleService.isSupportedPlatform;
+
+  @override
+  void initState() {
+    super.initState();
+    final binding = WidgetsBinding.instance;
+    _lifecycle = binding.lifecycleState;
+    binding.addObserver(this);
+    _console.addListener(_onConsoleChanged);
+    if (_trackMainWindow) {
+      windowManager.addListener(this);
+      unawaited(_readInitialFocus());
+    }
+  }
+
+  Future<void> _readInitialFocus() async {
+    try {
+      final focused = await windowManager.isFocused();
+      if (mounted && !_focusEventReceived) _setWindowFocused(focused);
+    } on MissingPluginException {
+      // 使用 Flutter 的生命周期事件。
+    } on PlatformException catch (error) {
+      debugPrint('[ExternalPlayerConsole] Failed to read window focus: $error');
+    }
+  }
+
+  void _onConsoleChanged() {
+    if (_active) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_lifecycle != state) setState(() => _lifecycle = state);
+  }
+
+  void _setWindowFocused(bool value) {
+    if (_windowFocused != value) setState(() => _windowFocused = value);
+  }
+
+  @override
+  void onWindowFocus() {
+    _focusEventReceived = true;
+    _setWindowFocused(true);
+  }
+
+  @override
+  void onWindowBlur() {
+    _focusEventReceived = true;
+    _setWindowFocused(false);
+  }
+
+  @override
+  void onWindowMinimize() => onWindowBlur();
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    WidgetsBinding.instance.removeObserver(this);
+    _console.removeListener(_onConsoleChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _active = TickerMode.of(context) &&
+        _windowFocused &&
+        (_lifecycle == null || _lifecycle == AppLifecycleState.resumed);
+    return TickerMode(
+      enabled: _active,
+      child: _buildConsole(context),
+    );
+  }
+
+  Widget _buildConsole(BuildContext context) {
+    final pane = widget.pane;
+    final hasSession = ExternalPlayerConsoleService.hasActiveSession;
+    final animeTitle = ExternalPlayerConsoleService.animeTitle;
+    final episodeTitle = ExternalPlayerConsoleService.episodeTitle;
+    final subtitle = <String>[
+      if (animeTitle != null && animeTitle.trim().isNotEmpty) animeTitle,
+      if (episodeTitle != null && episodeTitle.trim().isNotEmpty) episodeTitle,
+    ].join(' · ');
+
+    return fluent.FluentTheme(
+      data: fluent.FluentThemeData(
+        brightness: Theme.of(context).brightness,
+        accentColor: fluent.AccentColor.swatch({
+          'normal': AppAccentColors.current,
+          'default': AppAccentColors.current,
+        }),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: SafeArea(
+          child: NipaplayLargeScreenPageScaffold(
+            title: pane == ExternalPlayerConsolePane.danmakuList
+                ? context.l10n.externalPlayerConsoleDanmakuList
+                : context.l10n.externalPlayerConsoleTitle,
+            subtitle: hasSession && subtitle.isNotEmpty ? subtitle : null,
+            actions: [
+              if (widget.onShowDanmakuList != null)
+                NipaplayLargeScreenIconButton(
+                  icon: Icons.format_list_bulleted_rounded,
+                  tooltip: context.l10n.externalPlayerConsoleDanmakuList,
+                  onPressed: widget.onShowDanmakuList,
+                ),
+              if (widget.onCloseWindow != null)
+                NipaplayLargeScreenIconButton(
+                  icon: Icons.close_rounded,
+                  tooltip: context.l10n.externalPlayerConsoleClose,
+                  onPressed: widget.onCloseWindow,
+                ),
+            ],
+            padding: pane == ExternalPlayerConsolePane.all
+                ? const EdgeInsets.fromLTRB(34, 24, 34, 28)
+                : const EdgeInsets.fromLTRB(18, 20, 18, 20),
+            headerBottomSpacing: 18,
+            showBackgroundEffects: false,
+            child: hasSession
+                ? _ConsoleWorkspace(
+                    processId: ExternalPlayerConsoleService.processId,
+                    mediaPath: ExternalPlayerConsoleService.mediaPath,
+                    animeTitle: animeTitle,
+                    episodeTitle: episodeTitle,
+                    episodeId: ExternalPlayerConsoleService.episodeId,
+                    danmakuList:
+                        ExternalPlayerConsoleService.displayDanmakuList,
+                    isPaused: ExternalPlayerConsoleService.isPaused ?? false,
+                    supportsSessionControl:
+                        ExternalPlayerConsoleService.ipcPath != null,
+                    position: ExternalPlayerConsoleService.position,
+                    duration: ExternalPlayerConsoleService.duration,
+                    fraction: ExternalPlayerConsoleService.fraction,
+                    danmakuStyle: ExternalPlayerConsoleService.danmakuStyle,
+                    blockedItems: ExternalPlayerConsoleService.blockedItems,
+                    pane: pane,
+                  )
+                : NipaplayLargeScreenEmptyState(
+                    icon: Icons.subtitles_outlined,
+                    title: context.l10n.externalPlayerConsoleEmptyTitle,
+                    subtitle:
+                        context.l10n.externalPlayerConsoleEmptyDescription,
+                  ),
           ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: SafeArea(
-              child: NipaplayLargeScreenPageScaffold(
-                title: pane == ExternalPlayerConsolePane.danmakuList
-                    ? context.l10n.externalPlayerConsoleDanmakuList
-                    : context.l10n.externalPlayerConsoleTitle,
-                subtitle: hasSession && subtitle.isNotEmpty ? subtitle : null,
-                actions: [
-                  if (onShowDanmakuList != null)
-                    NipaplayLargeScreenIconButton(
-                      icon: Icons.format_list_bulleted_rounded,
-                      tooltip: context.l10n.externalPlayerConsoleDanmakuList,
-                      onPressed: onShowDanmakuList,
-                    ),
-                  if (onCloseWindow != null)
-                    NipaplayLargeScreenIconButton(
-                      icon: Icons.close_rounded,
-                      tooltip: context.l10n.externalPlayerConsoleClose,
-                      onPressed: onCloseWindow,
-                    ),
-                ],
-                padding: pane == ExternalPlayerConsolePane.all
-                    ? const EdgeInsets.fromLTRB(34, 24, 34, 28)
-                    : const EdgeInsets.fromLTRB(18, 20, 18, 20),
-                headerBottomSpacing: 18,
-                showBackgroundEffects: false,
-                child: hasSession
-                    ? _ConsoleWorkspace(
-                        processId: ExternalPlayerConsoleService.processId,
-                        mediaPath: ExternalPlayerConsoleService.mediaPath,
-                        animeTitle: animeTitle,
-                        episodeTitle: episodeTitle,
-                        episodeId: ExternalPlayerConsoleService.episodeId,
-                        danmakuList:
-                            ExternalPlayerConsoleService.displayDanmakuList,
-                        isPaused:
-                            ExternalPlayerConsoleService.isPaused ?? false,
-                        supportsSessionControl:
-                            ExternalPlayerConsoleService.ipcPath != null,
-                        position: ExternalPlayerConsoleService.position,
-                        duration: ExternalPlayerConsoleService.duration,
-                        fraction: ExternalPlayerConsoleService.fraction,
-                        danmakuStyle: ExternalPlayerConsoleService.danmakuStyle,
-                        blockedItems: ExternalPlayerConsoleService.blockedItems,
-                        pane: pane,
-                      )
-                    : NipaplayLargeScreenEmptyState(
-                        icon: Icons.subtitles_outlined,
-                        title: context.l10n.externalPlayerConsoleEmptyTitle,
-                        subtitle:
-                            context.l10n.externalPlayerConsoleEmptyDescription,
-                      ),
-              ),
-            ),
-          ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -988,6 +1073,7 @@ class _DanmakuListState extends State<_DanmakuList> {
   int? _lastFirstActiveIndex;
   int? _pendingScrollIndex;
   double _itemExtent = 72;
+  bool _scrollEnabled = true;
 
   int? get _firstActiveIndex {
     final index = widget.items.indexWhere((item) => item.isActive);
@@ -1000,6 +1086,28 @@ class _DanmakuListState extends State<_DanmakuList> {
     _lastFirstActiveIndex = _firstActiveIndex;
     if (_lastFirstActiveIndex != null) {
       _scheduleScrollTo(_lastFirstActiveIndex!);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final enabled = TickerMode.of(context);
+    if (_scrollEnabled == enabled) return;
+    _scrollEnabled = enabled;
+    if (enabled) {
+      final index = _firstActiveIndex;
+      if (_followPlayback && index != null) _scheduleScrollTo(index);
+    } else {
+      _pendingScrollIndex = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            _scrollEnabled ||
+            !_programmaticScroll ||
+            !_scrollController.hasClients) return;
+        final position = _scrollController.position;
+        if (position is ScrollPositionWithSingleContext) position.goIdle();
+      });
     }
   }
 
@@ -1020,9 +1128,13 @@ class _DanmakuListState extends State<_DanmakuList> {
   }
 
   void _scheduleScrollTo(int index) {
+    if (!_scrollEnabled) return;
     _pendingScrollIndex = index;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_followPlayback || !_scrollController.hasClients) return;
+      if (!mounted ||
+          !_scrollEnabled ||
+          !_followPlayback ||
+          !_scrollController.hasClients) return;
       final pendingIndex = _pendingScrollIndex;
       _pendingScrollIndex = null;
       if (pendingIndex == null) return;
