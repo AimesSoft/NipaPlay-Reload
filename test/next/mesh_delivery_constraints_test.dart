@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/next/followups/migration.dart';
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/followups/service.dart';
 import 'package:nipaplay/next/headless/ports.dart' show HeadlessRepository;
@@ -153,6 +154,79 @@ void main() {
     await followups.sweep();
     expect(await followups.list(), hasLength(1));
     expect((await followups.list()).single['returnTicket'], 'issued-ticket');
+  });
+
+  test('an unreachable device is retried less often and recorded once', () async {
+    await engine.submit(type: 'program', title: '远端抽帧',
+        input: {'returnTo': target()}, details: {'command': 'ffmpeg fixture'});
+    final context = await programExecutor.entered.future;
+    await context.succeed(verified(details: {'exitCode': 0, 'elapsedMs': 18,
+        'stdoutTail': 'finished', 'stderrTail': '', 'command': 'ffmpeg fixture'}));
+    var tries = 0;
+    followups.deliverRemote = (_, row) async {
+      tries++;
+      throw Failure(FailureCode.unavailable,
+          tries.isOdd ? 'connect timeout' : 'Mesh is offline.');
+    };
+    Future<int> pendingEvents() async => (await store.database.query(
+            'followup_events',
+            where: "type = 'followup.pending'"))
+        .length;
+    Future<void> due() async {
+      final row = (await store.database.query('followups')).single;
+      final snapshot = jsonDecode(row['snapshot'] as String) as Map;
+      snapshot['remoteRetryAt'] = '2000-01-01T00:00:00.000Z';
+      await store.database.update('followups',
+          {'snapshot': jsonEncode(snapshot)}, where: 'id=?', whereArgs: [row['id']]);
+    }
+    final waits = <int>[];
+    for (var i = 0; i < 4; i++) {
+      if (i > 0) await due();
+      final before = DateTime.now().toUtc();
+      await followups.sweep();
+      final row = (await followups.list()).single;
+      expect(row['remoteAttempts'], i + 1);
+      waits.add(DateTime.parse(row['remoteRetryAt'] as String)
+          .difference(before)
+          .inSeconds);
+    }
+    expect(tries, 4);
+    // 30 s, then doubling.
+    expect(waits.map((w) => (w / 30).round()), [1, 2, 4, 8]);
+    // The alternating reasons of one run of failures are one event.
+    expect(await pendingEvents(), 1);
+  });
+
+  test('the migration keeps only the latest pending event of each followup',
+      () async {
+    final db = store.database;
+    Future<void> add(String id, String type) => db.insert('followup_events', {
+          'followup_id': id, 'at': '2026-11-20T00:00:00Z', 'type': type,
+          'origin': 'application', 'facts': '{}'});
+    for (final id in ['a', 'b']) {
+      await db.insert('followups', {
+        'id': id, 'state': 'ready', 'snapshot': '{}'
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+    await add('a', 'followup.registered');
+    for (var i = 0; i < 5; i++) {
+      await add('a', 'followup.pending');
+    }
+    await add('b', 'followup.pending');
+    await add('a', 'followup.sealed');
+    final latest = (await db.rawQuery(
+            "SELECT MAX(sequence) AS s FROM followup_events WHERE followup_id = 'a' AND type = 'followup.pending'"))
+        .single['s'];
+    await purgeFollowupRetryNoise(db);
+    final kept = await db.query('followup_events',
+        columns: ['followup_id', 'type', 'sequence'], orderBy: 'sequence');
+    expect(kept.map((r) => '${r['followup_id']} ${r['type']}'), [
+      'a followup.registered',
+      'a followup.pending',
+      'b followup.pending',
+      'a followup.sealed',
+    ]);
+    expect(kept[1]['sequence'], latest);
   });
 
   test(

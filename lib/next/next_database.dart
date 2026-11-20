@@ -63,6 +63,7 @@ const _migrations = [
   migrateSubscriptions,
   purgeUnshownActivityInvocations,
   migrateHandover,
+  purgeFollowupRetryNoise,
 ];
 
 /// Gives back the space a large deletion left as free pages (the rows

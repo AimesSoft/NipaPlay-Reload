@@ -76,3 +76,15 @@ List<String> _objects(String from, String snapshot, String id) {
         r"o.type = 'object' AND json_type(o.value, '$.data.fileId') = 'text'"),
   ];
 }
+
+/// Before retries were recorded once (11-20), each retry of a delivery to an
+/// unreachable device added a full `followup.pending` snapshot, hundreds of
+/// megabytes on a device left running. A followup's pending events before its
+/// latest one only repeated that wait; the latest, and every other kind of
+/// event, are kept.
+Future<void> purgeFollowupRetryNoise(DatabaseExecutor db) async {
+  await db.execute(
+      "DELETE FROM followup_events WHERE type = 'followup.pending' AND "
+      "sequence NOT IN (SELECT MAX(sequence) FROM followup_events "
+      "WHERE type = 'followup.pending' GROUP BY followup_id)");
+}
