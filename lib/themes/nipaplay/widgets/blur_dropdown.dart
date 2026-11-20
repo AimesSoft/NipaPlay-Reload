@@ -671,7 +671,10 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
                                 ),
                                 child: Text(
                                   item.title,
-                                  maxLines: 1,
+                                  // 宽度已按最长项实测自适应，正常单行；
+                                  // 偶发偏窄时换行完整展示，绝不截断。
+                                  softWrap: true,
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: item.enabled
                                       ? getTitleTextStyle(context)
