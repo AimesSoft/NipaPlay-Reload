@@ -27,6 +27,7 @@ import '../player/player_layer.dart';
 import '../player/playback.dart';
 import '../player/touch_surface.dart' show PhoneOrientation;
 import '../search/search_overlay.dart';
+import '../store/store_page.dart';
 import '../settings/settings_page.dart';
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
@@ -150,6 +151,7 @@ class _NextShellState extends State<NextShell> with WidgetsBindingObserver {
   Route<void> _route(RouteSettings settings) {
     if (settings.name == '/work') return workRoute(settings);
     if (settings.name == '/settings') return settingsRoute(settings);
+    if (settings.name == '/store') return storeRoute(settings);
     return PageRouteBuilder<void>(
       settings: settings,
       opaque: false,

@@ -6,18 +6,19 @@ import 'package:flutter/widgets.dart';
 import '../../ui_data/host_settings.dart';
 import '../data/gui_calls.dart' show callFailure, rawFailureText;
 import '../data/settings_data.dart';
+import '../shell/shell_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/icons.dart';
 import '../widgets/nipa_avatar.dart';
 import '../widgets/progress.dart';
 import '../widgets/segmented.dart';
+import '../widgets/sheet.dart';
 import 'controls.dart';
 import 'codex_account_card.dart';
 import 'dsh_config_card.dart';
 import '../../settings/reasoning_effort.dart';
 import '../data/rika_store.dart';
 import 'registry_rows.dart';
-import 'section_store.dart';
 import 'section_accounts.dart';
 import 'settings_layout.dart';
 
@@ -643,13 +644,63 @@ class NipaSectionState extends State<NipaSection> {
     _loadMemory();
   }
 
+  List<UiModelService>? _services;
+  String? _serviceError;
+
+  /// Another service set up: its default model becomes the one in use.
+  Future<void> _useService(UiModelService service) async {
+    setState(() => _serviceError = null);
+    try {
+      await _host.setModel(service.choice.withReasoning(
+          service.choice.reasoning ?? defaultReasoningEffort));
+    } catch (error) {
+      if (mounted) setState(() => _serviceError = callFailure(error));
+    }
+    await _loadModel();
+  }
+
+  Future<void> _removeService(UiModelService service) async {
+    setState(() => _serviceError = null);
+    try {
+      await (_host as NextModelServices).removeService(service.choice);
+    } catch (error) {
+      if (mounted) setState(() => _serviceError = callFailure(error));
+    }
+    await _loadModel();
+  }
+
+  /// A service added (or one not in use changed) without switching to it.
+  Future<void> _editService(UiModelService? service) async {
+    final dsh = _setup?.runtime == UiAgentRuntimeKind.dsh;
+    await showNextSheet<void>(
+        (context, close) => _ServiceSheet(
+              service: service,
+              templates: dsh ? _templates : _responsesTemplates,
+              dsh: dsh,
+              onSave: (choice) async {
+                await (_host as NextModelServices)
+                    .saveService(choice, replacing: service?.choice);
+                close();
+              },
+              onCancel: close,
+            ),
+        width: 520);
+    await _loadModel();
+  }
+
   Future<void> _loadModel() async {
     unawaited(_loadRuntime());
     unawaited(_loadDsh());
     final setup = await _host.model();
+    final services = _host is NextModelServices
+        ? await (_host as NextModelServices)
+            .services()
+            .catchError((Object _) => <UiModelService>[])
+        : null;
     if (!mounted) return;
     setState(() {
       _setup = setup;
+      _services = services;
       if (!_dirty) {
         _provider = setup.provider ?? '';
         _url = setup.baseUrl ?? '';
@@ -1091,9 +1142,53 @@ class NipaSectionState extends State<NipaSection> {
               ],
             ]),
           ),
+          if (here && _services != null) _servicesBlock(_services!),
         ]),
       ),
     ]);
+  }
+
+  /// The other services set up, each with its key kept apart: switch to
+  /// one, change it, remove it; or add another.
+  Widget _servicesBlock(List<UiModelService> services) {
+    final others = [for (final s in services) if (!s.current) s];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(64, 0, 18, 18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Container(height: 1, color: NextColors.line),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(
+            child: Text('其他服务',
+                style: NextText.sans(12.5, color: NextColors.p3)),
+          ),
+          PillButton(
+              key: const Key('settings.service.add'),
+              label: '添加服务',
+              onTap: () => _editService(null)),
+        ]),
+        if (others.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('可以同时设置多个服务，在对话的模型菜单里随时换用。',
+                style: NextText.sans(12.5, color: NextColors.p4)),
+          ),
+        for (final service in others)
+          _ServiceRow(
+            key: ValueKey('settings.service.${service.choice.provider}|${service.choice.baseUrl}'),
+            service: service,
+            onUse: service.hasKey ? () => _useService(service) : null,
+            onEdit: () => _editService(service),
+            onRemove: () => _removeService(service),
+          ),
+        if (_serviceError case final error?)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(error,
+                style: NextText.sans(12.5, color: NextColors.accent2)),
+          ),
+      ]),
+    );
   }
 
   /// Which runtime Nipa thinks in, when the person may choose.
@@ -1369,7 +1464,17 @@ class NipaSectionState extends State<NipaSection> {
         DshConfigCard(host: _host as NextHostDshConfigSettings),
       if (setup?.runtime != UiAgentRuntimeKind.dsh && runtime != null)
         _runtimeCard(runtime),
-      if (widget.store case final store?) RikaStoreCard(store: store),
+      if (widget.store != null)
+        SettingsCard(title: '扩展', children: [
+          SettingsRow(
+            key: const Key('settings.store'),
+            title: '商店',
+            subtitle: '梨花能学会的技能，和给她接入别处模型的插件',
+            onTap: () => NextShellScope.of(context).openStore(),
+            trailing: const NextIcon(NextGlyph.chevronRight,
+                size: 11, color: NextColors.p3),
+          ),
+        ]),
       if (files != null)
         SettingsCard(title: '梨花记得的事', children: [
           if (files.isEmpty) const SettingsRow(title: '还没有记下什么', dim: true),
@@ -1533,4 +1638,230 @@ class _MemoryEditorState extends State<_MemoryEditor> {
       ]),
     );
   }
+}
+
+
+/// A service not in use: its name, address and whether its key is kept.
+class _ServiceRow extends StatelessWidget {
+  const _ServiceRow(
+      {super.key,
+      required this.service,
+      required this.onUse,
+      required this.onEdit,
+      required this.onRemove});
+  final UiModelService service;
+  final VoidCallback? onUse;
+  final VoidCallback onEdit;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = service.choice;
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(children: [
+        Expanded(
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Flexible(
+                    child: Text(c.provider ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: NextText.sans(14, weight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: 8),
+                  StateDot(service.hasKey ? NextColors.mint : NextColors.amber,
+                      glow: false),
+                  const SizedBox(width: 5),
+                  Text(service.hasKey ? '密钥已保存' : '没有密钥',
+                      style: NextText.sans(11.5, color: NextColors.p4)),
+                ]),
+                const SizedBox(height: 2),
+                Text('${c.model ?? ''} · ${c.baseUrl ?? ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: NextText.sans(12, color: NextColors.p3)),
+              ]),
+        ),
+        const SizedBox(width: 10),
+        if (onUse != null) ...[
+          PillButton(label: '换用', onTap: onUse),
+          const SizedBox(width: 6),
+        ],
+        PillButton(label: '编辑', onTap: onEdit),
+        const SizedBox(width: 6),
+        ConfirmPill(label: '删除', confirm: '确认删除', onConfirm: onRemove),
+      ]),
+    );
+  }
+}
+
+/// Adding a service, or changing one not in use.
+class _ServiceSheet extends StatefulWidget {
+  const _ServiceSheet(
+      {required this.service,
+      required this.templates,
+      required this.dsh,
+      required this.onSave,
+      required this.onCancel});
+  final UiModelService? service;
+  final List<_Template> templates;
+  final bool dsh;
+  final Future<void> Function(UiModelChoice choice) onSave;
+  final VoidCallback onCancel;
+
+  @override
+  State<_ServiceSheet> createState() => _ServiceSheetState();
+}
+
+class _ServiceSheetState extends State<_ServiceSheet> {
+  late String _provider = widget.service?.choice.provider ?? '';
+  late String _url = widget.service?.choice.baseUrl ?? '';
+  late String _model = widget.service?.choice.model ?? '';
+  String _key = '';
+  late UiModelApi _api = widget.service?.choice.api ?? UiModelApi.responses;
+  late String _reasoning =
+      widget.service?.choice.reasoning ?? defaultReasoningEffort;
+  late Map<String, Object?>? _compat = widget.service?.choice.compat;
+  bool _saving = false;
+  String? _error;
+
+  Future<void> _save() async {
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onSave(UiModelChoice(
+        source: UiModelSource.nipaplay,
+        provider: _provider.trim(),
+        baseUrl: _url.trim(),
+        model: _model.trim(),
+        apiKey: _key.isEmpty ? null : _key,
+        api: _api,
+        reasoning: _reasoning,
+        compat: _compat ?? const {},
+      ));
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = callFailure(error);
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  Widget _field(String label, Widget child) => Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Row(children: [
+          SizedBox(
+              width: 64,
+              child: Text(label,
+                  style: NextText.sans(13, color: NextColors.p3))),
+          Expanded(child: child),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) => SheetSurface(
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(widget.service == null ? '添加服务' : '编辑服务',
+                  style: NextText.sans(17, weight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text('每个服务的密钥分开保存。',
+                  style: NextText.sans(12.5, color: NextColors.p3)),
+              if (widget.service == null) ...[
+                const SizedBox(height: 12),
+                Wrap(spacing: 6, children: [
+                  for (final t in widget.templates)
+                    PillButton(
+                        label: t.name,
+                        onTap: () => setState(() {
+                              _provider = t.name;
+                              _url = t.baseUrl;
+                              _model = t.model;
+                              _api = t.api;
+                              _reasoning = t.reasoning;
+                              _compat = t.compat;
+                            })),
+                ]),
+              ],
+              _field(
+                  '提供方',
+                  LiveTextField(
+                      key: ValueKey('p$_provider'),
+                      value: _provider,
+                      hint: 'DeepSeek、智谱、中转…',
+                      width: 340,
+                      onChanged: (v) => _provider = v)),
+              _field(
+                  '地址',
+                  LiveTextField(
+                      key: ValueKey('u$_url'),
+                      value: _url,
+                      hint: 'https://',
+                      width: 340,
+                      onChanged: (v) => _url = v)),
+              _field(
+                  '模型',
+                  LiveTextField(
+                      key: ValueKey('m$_model'),
+                      value: _model,
+                      width: 340,
+                      onChanged: (v) => _model = v)),
+              _field(
+                  'API key',
+                  LiveTextField(
+                      value: _key,
+                      obscure: true,
+                      hint: widget.service?.hasKey == true ? '已保存' : null,
+                      width: 340,
+                      onChanged: (v) => _key = v)),
+              if (widget.dsh)
+                _field(
+                    '接口',
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Segmented<UiModelApi>(
+                        value: _api,
+                        options: [
+                          for (final (v, t) in const [
+                            (UiModelApi.responses, 'Responses'),
+                            (UiModelApi.chat, 'Chat Completions'),
+                          ])
+                            (
+                              v,
+                              t,
+                              (c) =>
+                                  Text(t, style: NextText.sans(12.5, color: c))
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _api = v),
+                      ),
+                    )),
+              if (_error case final error?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(error,
+                      style: NextText.sans(12.5, color: NextColors.accent2)),
+                ),
+              const SizedBox(height: 18),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                PillButton(label: '取消', onTap: widget.onCancel),
+                const SizedBox(width: 8),
+                PillButton(
+                    key: const Key('settings.service.save'),
+                    label: '保存',
+                    primary: true,
+                    busy: _saving,
+                    onTap: _saving ? null : _save),
+              ]),
+            ]),
+      );
 }

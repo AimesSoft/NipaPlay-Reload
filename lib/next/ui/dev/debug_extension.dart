@@ -430,6 +430,29 @@ abstract final class NextUiDebug {
         timeDilation = double.parse(p['factor'] ?? '1');
       case 'section':
         shell.go(NextSection.values.byName(p['name'] ?? 'home'));
+      case 'store':
+        shell.openStore();
+        await _settle();
+      case 'tapkey':
+        // A widget by its key (`Key('chat.model')`), clicked at its centre.
+        await _settle();
+        final wanted = Key(p['key']!);
+        Element? found;
+        void visit(Element e) {
+          if (found != null) return;
+          if (e.widget.key == wanted) {
+            found = e;
+            return;
+          }
+          e.visitChildren(visit);
+        }
+        WidgetsBinding.instance.rootElement?.visitChildren(visit);
+        final box = found?.renderObject as RenderBox?;
+        if (box == null) throw StateError('No widget keyed ${p['key']}');
+        final centre = box.localToGlobal(box.size.center(Offset.zero));
+        _click([centre.dx.round(), centre.dy.round()]);
+        await _settle();
+        return {'at': [centre.dx.round(), centre.dy.round()], ..._status(shell)};
       case 'open':
         final id = p['workId'];
         final UiWork? work = id == null

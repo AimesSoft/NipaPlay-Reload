@@ -955,7 +955,8 @@ final class FakeHostSettings
     implements
         NextHostSettings,
         NextHostDeviceSettings,
-        NextHostRuntimeSettings {
+        NextHostRuntimeSettings,
+        NextModelServices {
   String modelState = 'key';
 
   /// The runtime Nipa thinks in.
@@ -1107,6 +1108,72 @@ final class FakeHostSettings
   UiModelApi dshApi = UiModelApi.responses;
   String? dshReasoning;
   final saved = <UiModelChoice>[];
+
+  /// The model services set up, with whether their key is stored.
+  final fakeServices = <(UiModelChoice, bool)>[
+    (_fallback, true),
+    (const UiModelChoice(
+        source: UiModelSource.nipaplay,
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        model: 'anthropic/claude-sonnet-5.5',
+        api: UiModelApi.chat), true),
+  ];
+
+  static bool _sameService(UiModelChoice a, UiModelChoice b) =>
+      a.provider == b.provider && a.baseUrl == b.baseUrl;
+
+  @override
+  Future<List<UiModelService>> services() async => [
+        for (final (choice, key) in fakeServices)
+          UiModelService(
+              choice: choice,
+              hasKey: key,
+              current: _sameService(choice, _current)),
+      ];
+
+  @override
+  Future<void> saveService(UiModelChoice service,
+      {UiModelChoice? replacing}) async {
+    final at = fakeServices
+        .indexWhere((s) => _sameService(s.$1, replacing ?? service));
+    final hasKey = service.apiKey?.isNotEmpty == true ||
+        (at >= 0 && fakeServices[at].$2);
+    final row = (service.withReasoning(service.reasoning), hasKey);
+    if (at >= 0) {
+      fakeServices[at] = row;
+    } else {
+      fakeServices.add(row);
+    }
+    _changes.add(null);
+  }
+
+  @override
+  Future<void> removeService(UiModelChoice service) async {
+    if (_sameService(service, _current)) {
+      throw StateError('正在用的服务不能删除，先换用别的模型');
+    }
+    fakeServices.removeWhere((s) => _sameService(s.$1, service));
+    _changes.add(null);
+  }
+
+  @override
+  Future<UiModelCandidates> modelsOf(UiModelChoice service) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    final models = switch (service.provider) {
+      'DeepSeek' => const ['deepseek-flash', 'deepseek-pro'],
+      'OpenRouter' => const ['anthropic/claude-sonnet-5.5', 'google/gemini-4-pro'],
+      _ => const <String>[],
+    };
+    return UiModelCandidates(UiModelQueryStatus.succeeded, choices: [
+      for (final model in models)
+        UiModelChoice(source: UiModelSource.nipaplay, model: model,
+            candidateOrigin: UiModelCandidateOrigin.provider,
+            provider: service.provider, baseUrl: service.baseUrl,
+            api: service.api, reasoning: service.reasoning,
+            compat: service.compat)
+    ]);
+  }
 
   @override
   Future<UiModelChoice?> codexModel() async => codexOffer;

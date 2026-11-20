@@ -30,7 +30,8 @@ final class HostSettingsService
         NextHostRuntimeSettings,
         NextSessionModelSettings,
         NextCodexAccountSettings,
-        NextHostDshConfigSettings {
+        NextHostDshConfigSettings,
+        NextModelServices {
   HostSettingsService(
       {required this.root,
       required this.vault,
@@ -407,6 +408,178 @@ final class HostSettingsService
                 (chatProblem() == null ? _liveProblem(host) : '模型服务未能启动'));
   }
 
+  // —— Model services ——
+
+  static const _servicesFile = 'model-services.json';
+
+  static String _serviceIdentity(Map value) =>
+      jsonEncode([value['provider'], value['baseUrl']]);
+
+  static JsonMap _serviceValue(UiModelChoice c) => {
+        'provider': c.provider,
+        'baseUrl': c.baseUrl,
+        'model': c.model,
+        'api': (c.api ?? UiModelApi.responses).name,
+        if (c.reasoning != null) 'reasoning': c.reasoning,
+        if (c.compat case final compat? when compat.isNotEmpty) 'compat': compat,
+      };
+
+  static UiModelChoice _serviceChoice(Map m) => UiModelChoice(
+      source: UiModelSource.nipaplay,
+      provider: m['provider'] as String?,
+      baseUrl: m['baseUrl'] as String?,
+      model: m['model'] as String?,
+      api: m['api'] == 'chat' ? UiModelApi.chat : UiModelApi.responses,
+      reasoning: reasoningChoice(m['reasoning']),
+      compat: (m['compat'] as Map?)?.cast<String, Object?>());
+
+  /// The services saved, else (set up before services were kept) the
+  /// current one and those of the models used before, one per provider
+  /// and address.
+  Future<List<Map>> _serviceRows() async {
+    final saved = ((await _read(_servicesFile))['services'] as List? ?? const [])
+        .whereType<Map>()
+        .where((m) => m['provider'] is String && m['baseUrl'] is String)
+        .toList();
+    if (saved.isNotEmpty) return saved;
+    final value = await _read('model.json');
+    final seen = <String>{};
+    final rows = <Map>[];
+    for (final (i, m) in [
+      if (value['baseUrl'] != null) value,
+      ...((await _read(_recentFile))['models'] as List? ?? const [])
+          .whereType<Map>(),
+    ].indexed) {
+      if (m['provider'] is! String ||
+          m['baseUrl'] is! String ||
+          !seen.add(_serviceIdentity(m))) {
+        continue;
+      }
+      final row = {for (final f in _recentFields) if (m[f] != null) f: m[f]};
+      // A model used before is a service only while its key is kept.
+      if (i > 0 && (await _secret(row))?.isNotEmpty != true) continue;
+      rows.add(row);
+    }
+    return rows;
+  }
+
+  /// The service of a model now in use is one of the services.
+  Future<void> _keepService(JsonMap value) async {
+    final row = {
+      for (final f in _recentFields)
+        if (value[f] != null) f: value[f]
+    };
+    final rows = await _serviceRows();
+    final id = _serviceIdentity(row);
+    await _save(_servicesFile, {
+      'services': [
+        for (final r in rows)
+          if (_serviceIdentity(r) == id) {...r, ...row} else r,
+        if (!rows.any((r) => _serviceIdentity(r) == id)) row,
+      ]
+    });
+  }
+
+  @override
+  Future<List<UiModelService>> services() async {
+    await _writes;
+    final value = await _read('model.json');
+    final current = _source(value, await effectiveRuntime()) ==
+            UiModelSource.nipaplay
+        ? _serviceIdentity(value)
+        : null;
+    return [
+      for (final row in await _serviceRows())
+        UiModelService(
+            choice: _serviceChoice(row),
+            hasKey: (await _secret(row as JsonMap))?.isNotEmpty == true,
+            current: _serviceIdentity(row) == current),
+    ];
+  }
+
+  @override
+  Future<void> saveService(UiModelChoice service,
+      {UiModelChoice? replacing}) async {
+    var current = false;
+    await _write(() async {
+      final row = _serviceValue(service)
+        ..['provider'] = _text(
+            service.provider?.trim().isNotEmpty == true
+                ? service.provider!.trim()
+                : '自定义',
+            '提供方')
+        ..['baseUrl'] = _url(service.baseUrl)
+            .toString()
+            .replaceFirst(RegExp(r'/$'), '')
+        ..['model'] = _text(service.model, '模型');
+      final rows = await _serviceRows();
+      final old = replacing == null ? null : _serviceValue(replacing);
+      final oldId = old == null ? null : _serviceIdentity(old);
+      final id = _serviceIdentity(row);
+      if (oldId != id && rows.any((r) => _serviceIdentity(r) == id)) {
+        throw StateError('已经有这个服务');
+      }
+      if (service.apiKey case final key?) {
+        if (key.contains(RegExp(r'[\x00-\x20]')) || key.length > 16384) {
+          throw const FormatException('密钥填写不正确');
+        }
+        if (key.isNotEmpty) {
+          SecretRedactor.remember(_key(row), key);
+          await vault.write(_key(row), key);
+          if (await vault.read(_key(row)) != key) {
+            throw StateError('保险库未能保存密钥');
+          }
+        }
+      } else if (old != null && oldId != id) {
+        // Moved to another provider name or address: its key goes with it.
+        if (await _secret(old) case final key? when key.isNotEmpty) {
+          await vault.write(_key(row), key);
+        }
+      }
+      if (old != null && oldId != id) await vault.delete(_key(old));
+      final value = await _read('model.json');
+      current = oldId != null && _serviceIdentity(value) == oldId ||
+          _serviceIdentity(value) == id;
+      await _save(_servicesFile, {
+        'services': [
+          for (final r in rows)
+            if (_serviceIdentity(r) == (oldId ?? id)) row else r,
+          if (!rows.any((r) => _serviceIdentity(r) == (oldId ?? id))) row,
+        ]
+      });
+    });
+    // The service in use changed: the model follows it.
+    if (current) await setModel(service.withReasoning(service.reasoning));
+    notify();
+  }
+
+  @override
+  Future<void> removeService(UiModelChoice service) async {
+    await _write(() async {
+      final row = _serviceValue(service);
+      final value = await _read('model.json');
+      if (_source(value, await effectiveRuntime()) == UiModelSource.nipaplay &&
+          _serviceIdentity(value) == _serviceIdentity(row)) {
+        throw StateError('正在用的服务不能删除，先换用别的模型');
+      }
+      final rows = await _serviceRows();
+      await _save(_servicesFile, {
+        'services': [
+          for (final r in rows)
+            if (_serviceIdentity(r) != _serviceIdentity(row)) r
+        ]
+      });
+      await vault.delete(_key(row));
+    });
+    notify();
+  }
+
+  @override
+  Future<UiModelCandidates> modelsOf(UiModelChoice service) async {
+    await _writes;
+    return _endpointModels(_serviceValue(service), UiModelSource.nipaplay);
+  }
+
   // —— Models set up before ——
 
   static const _recentFile = 'model-recent.json', _recentKept = 8;
@@ -701,6 +874,7 @@ final class HostSettingsService
         }
         await _saveModel(before, value,
             remember: choice.source == UiModelSource.nipaplay);
+        if (choice.source == UiModelSource.nipaplay) await _keepService(value);
       });
     if (restart && chat() != null && restartHost != null) {
       await restartHost!();
@@ -1153,7 +1327,7 @@ final class LabModelVault implements CredentialVault {
 }
 
 /// The settings page can subscribe before the application core is ready.
-final class PendingHostSettings implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings, NextSessionModelSettings, NextCodexAccountSettings {
+final class PendingHostSettings implements NextHostSettings, NextHostDeviceSettings, NextHostRuntimeSettings, NextSessionModelSettings, NextCodexAccountSettings, NextModelServices {
   PendingHostSettings(this.ready) {
     ready.then((value) {
       _subscription = value.changes.listen((_) => _changes.add(null));
@@ -1223,6 +1397,27 @@ final class PendingHostSettings implements NextHostSettings, NextHostDeviceSetti
   @override
   Future<UiModelCandidates> providerModels() async =>
       (await ready).providerModels();
+  NextModelServices? _services(NextHostSettings host) =>
+      host is NextModelServices ? host as NextModelServices : null;
+  @override
+  Future<List<UiModelService>> services() async =>
+      await _services(await ready)?.services() ?? const [];
+  @override
+  Future<void> saveService(UiModelChoice service,
+          {UiModelChoice? replacing}) async =>
+      (_services(await ready) ??
+              (throw UnsupportedError('此宿主不保存多个模型服务')))
+          .saveService(service, replacing: replacing);
+  @override
+  Future<void> removeService(UiModelChoice service) async =>
+      (_services(await ready) ??
+              (throw UnsupportedError('此宿主不保存多个模型服务')))
+          .removeService(service);
+  @override
+  Future<UiModelCandidates> modelsOf(UiModelChoice service) async =>
+      await _services(await ready)?.modelsOf(service) ??
+      const UiModelCandidates(UiModelQueryStatus.unavailable,
+          reason: '此宿主不列出模型');
   @override
   Future<UiMeshSetup> mesh() async => (await ready).mesh();
   @override
