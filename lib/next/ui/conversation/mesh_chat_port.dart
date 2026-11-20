@@ -337,7 +337,8 @@ final class MeshChatPort implements ChatPort, ChatFileStaging {
       if (result['path'] case final String there) {
         staged.add(there);
       } else {
-        final status = result['status'] == 'outcomeUnknown' ? '附件送达结果未知' : '附件未送达';
+        final status =
+            result['status'] == 'outcomeUnknown' ? '附件暂存结果未知' : '附件未暂存';
         throw ChatUnavailable('$status：${result['reason']}');
       }
     }

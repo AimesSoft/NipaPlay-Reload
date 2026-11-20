@@ -175,6 +175,8 @@ abstract interface class NextHostSettings {
   /// Takes effect for the next conversation turn.
   Future<void> setModel(UiModelChoice choice);
 
+  Future<void> setModelReasoning(String reasoning);
+
   /// The models the provider set up here lists (`GET {address}/models`,
   /// with its stored key), to pick another of them where the conversation
   /// is; empty when it lists none or cannot be asked.

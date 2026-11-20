@@ -12,6 +12,52 @@ import 'package:nipaplay/next/ui/shell/agent_inbox.dart';
 import 'package:nipaplay/next/ui/widgets/buttons.dart';
 
 void main() {
+  testWidgets('host errors accept message and error but ignore empty params',
+      (tester) async {
+    final world = _Inbox();
+    await tester.pumpWidget(world.widget());
+    for (final params in [
+      {},
+      {'message': 'transport closed'},
+      {'error': 'legacy error'}
+    ]) {
+      world.events.add({'method': 'host/error', 'params': params});
+    }
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox());
+    await world.events.close();
+    expect(world.notified.map((notice) => notice['body']),
+        ['transport closed', 'legacy error']);
+  });
+
+  testWidgets('a failed reminder can retry with the same request ID',
+      (tester) async {
+    final world = _Inbox();
+    final first = Completer<void>();
+    world.beforeNotify = () => first.future;
+    await tester.pumpWidget(world.widget());
+    const event = {
+      'method': 'host/error',
+      'params': {'error': 'turn failed', 'turnId': 'retry-turn'},
+    };
+    world.events.add(event);
+    await tester.pump();
+    world.events.add(event);
+    await tester.pump();
+    expect(world.notified, hasLength(1));
+    first.completeError(const Failure(FailureCode.unavailable, 'try later'));
+    await tester.pump();
+    world.beforeNotify = null;
+    world.events.add(event);
+    await tester.pump();
+    world.events.add(event);
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox());
+    await world.events.close();
+    expect(world.notified, hasLength(2));
+    expect(world.notified.last['requestId'], world.notified.first['requestId']);
+  });
+
   testWidgets(
       'empty inbox leaves no overlay and active messages preserve the control strip',
       (tester) async {
@@ -507,6 +553,7 @@ class _Inbox {
   final answers = <JsonMap>[];
   int notices = 0, lists = 0;
   final notified = <JsonMap>[];
+  Future<void> Function()? beforeNotify;
   final followups = <JsonMap>[];
   final followupCalls = <String>[];
   final changes = StreamController<void>.broadcast();
@@ -555,6 +602,7 @@ class _Capability implements Capability {
               (input, invocation) async {
             world.notices++;
             world.notified.add(Map.of(input));
+            if (world.beforeNotify case final before?) await before();
             if (input['followupId'] != null) {
               // As the inbox keeps it: unread, with its request.
               world.rows.insert(0, {

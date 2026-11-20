@@ -406,16 +406,17 @@ void main() {
       expect(nipa.rawError.value?.message, contains('空的'));
     });
 
-    test('attachment action returns landed bytes or unknown final outcome',
+    test('attachment action stages on a device without reading a conversation',
         () async {
-      final thread = await chat.delegationThread('attachment', '目标会话');
       final file = File('${dir.path}/attachment.bin');
       final payload = List<int>.filled(chatAttachmentChunk + 13, 42);
       await file.writeAsBytes(payload);
       var loseReceipt = false;
+      final methods = <String>[];
       final harness = Harness([
         ChatAttachmentCapability((peer, method, params) async {
           expect(peer, 'mac');
+          methods.add(method);
           final result = await guests.handle(method, params, 'ipad');
           if (loseReceipt &&
               method == 'mesh/chat/attach' &&
@@ -426,30 +427,34 @@ void main() {
           return result;
         })
       ]);
-      Future<JsonMap> send() async {
+      Future<JsonMap> send({String? legacyThread}) async {
         final result = await harness.invokeJson(
             'chat.attachment.send',
             {
               'path': file.path,
               'deviceId': 'mac',
-              'threadId': thread,
+              if (legacyThread != null) 'threadId': legacyThread,
             },
             harness_api.Invocation(origin: 'test'));
         expect(result, isA<Completed<JsonEncodable>>());
         return (result as Completed<JsonEncodable>).value.toJson() as JsonMap;
       }
 
-      final delivered = await send();
-      expect(delivered['status'], 'delivered');
-      expect(delivered['threadId'], thread);
-      expect(delivered['received'], payload.length);
-      expect(await File(delivered['path'] as String).readAsBytes(), payload);
+      final staged = await send(legacyThread: 'no-such-thread');
+      expect(staged['status'], 'staged');
+      expect(staged['deviceId'], 'mac');
+      expect(staged.containsKey('threadId'), isFalse);
+      expect(staged['received'], payload.length);
+      expect(await File(staged['path'] as String).readAsBytes(), payload);
+      expect(
+          methods, ['mesh/chat/state', 'mesh/chat/attach', 'mesh/chat/attach']);
       expect(chat.started, isEmpty);
       loseReceipt = true;
       final unknown = await send();
       expect(unknown['status'], 'outcomeUnknown');
       expect(unknown['received'], chatAttachmentChunk);
       expect(unknown['path'], isNull);
+      expect(unknown.containsKey('threadId'), isFalse);
     });
   });
 }

@@ -127,10 +127,14 @@ final class ChatModelCapability implements Capability {
       throw const Failure(
           FailureCode.invalidInput, 'Supply choiceId or reasoning.');
     }
+    if (id == null) {
+      await host.setModelReasoning(reasoning == 'off' ? '' : reasoning!);
+      return {'saved': true, ..._status(await host.model())};
+    }
     final setup = await host.model();
     final current = _current(setup);
     UiModelChoice? choice;
-    if (id == null || id == _id(current)) {
+    if (id == _id(current)) {
       choice = current;
     } else if (id == 'codex' &&
         setup.codexAvailable &&

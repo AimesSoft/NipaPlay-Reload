@@ -8,7 +8,7 @@
 
 `chat.model.status` 区分宿主报告的 `inUse` 与 `configured`，并列出最近的模型。`chat.model.candidates` 的 `succeeded` 可带空列表；`failed`、`unavailable` 附不含秘密的原因。`chat.model.set` 接收返回的 `choiceId`，或只传 `reasoning`（支持的运行时可选 `off`、`low`、`medium`、`high`）。保存不会打断正在执行的回合，在下一回合边界读取；保存不证明服务可连接。
 
-`chat.attachment.send` 在文件所在设备调用，传绝对 `path`、目标 `deviceId` 和已有 `threadId`。`delivered` 返回目标设备的 `path`、`uploadId` 和确认字节数 `received`，可在目标会话的消息中引用；暂存本身不发送消息或开启回合。`notDelivered` 表示未完成交付，`outcomeUnknown` 表示最后一块可能已落地但未收到有效回执。沿用对话附件的文件大小和保留约束。
+`chat.attachment.send` 在文件所在设备调用，传绝对 `path` 和目标 `deviceId`。旧调用传入的 `threadId` 会被忽略，回执只标识目标设备。`staged` 返回目标设备上的暂存 `path`、`uploadId` 和确认字节数 `received`；随后可在该设备上的会话消息中引用路径，暂存本身不绑定会话、不发送消息或开启回合。`notStaged` 表示未完成暂存，`outcomeUnknown` 表示最后一块可能已落地但未收到有效回执。沿用对话附件的文件大小和保留约束。
 
 ## 批量工作与并行分工
 

@@ -39,7 +39,7 @@
 | `cache.plan` | read | 分类缓存回收预览 | Core | 允许 | [源码](../../../lib/next/system/storage.dart) |
 | `cache.prune` | write | 回收预览中的可重取缓存 | Core | 允许 | [源码](../../../lib/next/system/storage.dart) |
 | `capability.describe` | read | Describe a capability family | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/family_descriptions.dart) |
-| `chat.attachment.send` | write | 从调用设备把指定文件暂存到目标会话所在设备，返回路径和传输结果；不发消息 | 通用/组合 | 本地 | [源码](../../../lib/next/mesh/chat_attachment.dart) |
+| `chat.attachment.send` | write | 从调用设备把指定文件暂存到目标设备，返回路径和暂存结果；不绑定会话、不发消息 | 通用/组合 | 本地 | [源码](../../../lib/next/mesh/chat_attachment.dart) |
 | `chat.model.candidates` | read | 查询候选；区分查询成功（可为空）、失败和不可用 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |
 | `chat.model.set` | write | 保存指定候选或思考强度；下一回合读取，不打断正在执行的回合 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |
 | `chat.model.status` | read | 分别读取宿主报告的在用模型、已保存选择和最近模型，不回传凭据 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |

@@ -338,6 +338,10 @@ final class UnavailableHostSettings implements NextHostSettings {
       throw const Failure(FailureCode.unavailable, _problem);
 
   @override
+  Future<void> setModelReasoning(String reasoning) async =>
+      throw const Failure(FailureCode.unavailable, _problem);
+
+  @override
   Future<UiModelCheck> checkModel() async =>
       const UiModelCheck(ok: false, message: _problem);
 

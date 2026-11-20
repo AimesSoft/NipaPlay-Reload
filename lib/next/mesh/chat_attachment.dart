@@ -16,9 +16,9 @@ final class ChatAttachmentCapability implements Capability {
           ClassicAction(
             const ActionSpec(
               id: 'chat.attachment.send',
-              title: '向另一台设备的会话交付附件',
+              title: '将附件暂存到另一台设备',
               description:
-                  'Stage an explicit local file for an existing conversation on another device. Returns the remote path and byte count on delivery; no message or turn is started. An unknown result means the final chunk may have landed without an acknowledgement.',
+                  'Stage an explicit local file on the target device and return its remote path and confirmed byte count. The optional legacy threadId is ignored: this does not attach to a conversation, send a message, or start a turn. An unknown result means the final chunk may have landed without an acknowledgement.',
               effect: Effect.write,
               input: ObjectSchema({
                 'path': StringSchema(minLength: 1),
@@ -26,29 +26,22 @@ final class ChatAttachmentCapability implements Capability {
                 'threadId': StringSchema(minLength: 1),
               }, required: [
                 'path',
-                'deviceId',
-                'threadId'
+                'deviceId'
               ]),
               output: ObjectSchema({}, additionalProperties: true),
             ),
             (input, _) async {
               final peer = input['deviceId'] as String;
-              final thread = input['threadId'] as String;
               final path = input['path'] as String;
               if (!File(path).isAbsolute) {
                 throw const Failure(
                     FailureCode.invalidInput, 'Supply an absolute local path.');
               }
-              final target = {'deviceId': peer, 'threadId': thread};
+              final target = {'deviceId': peer};
               try {
                 final state = await rpc(peer, 'mesh/chat/state', {});
                 if (state['attachments'] != true) {
                   throw const Failure(FailureCode.unavailable, '目标未报告支持附件');
-                }
-                final conversation = await rpc(
-                    peer, 'mesh/chat/read', {'threadId': thread, 'turns': 1});
-                if ((conversation['thread'] as Map?)?['id'] != thread) {
-                  throw const Failure(FailureCode.notFound, '未确认目标会话');
                 }
                 return {
                   ...target,
@@ -58,7 +51,7 @@ final class ChatAttachmentCapability implements Capability {
               } on Failure catch (failure) {
                 return {
                   ...target,
-                  'status': 'notDelivered',
+                  'status': 'notStaged',
                   'reason': failure.message
                 };
               }
@@ -119,7 +112,7 @@ Future<JsonMap> stageChatAttachment(
         received = next;
         if (finalChunkSent) {
           return {
-            'status': 'delivered',
+            'status': 'staged',
             'received': received,
             'uploadId': id,
             'path': reference
@@ -134,7 +127,7 @@ Future<JsonMap> stageChatAttachment(
     final unknown = finalChunkSent &&
         (error is! Failure || error.details['reason'] == 'outcome_unknown');
     return {
-      'status': unknown ? 'outcomeUnknown' : 'notDelivered',
+      'status': unknown ? 'outcomeUnknown' : 'notStaged',
       'received': received,
       if (uploadId != null) 'uploadId': uploadId,
       'reason': switch (error) {

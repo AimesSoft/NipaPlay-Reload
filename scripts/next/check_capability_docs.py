@@ -88,7 +88,7 @@ for k in rows:
     if k.startswith('danmaku.') and (not rows[k][0][1]):
         rows[k][0][1] = '弹幕 ' + k.split('.')[-1].replace('_', ' ') + '；来源及副作用见目标契约'
 import hashlib
-BASELINE_HASHES = {'lib/next/settings/model_capability.dart': 'fa3e0da3f9b26d2f49f9fd40c620887f1b1c9e49731f70e4843faeb26989c989', 'lib/next/mesh/chat_attachment.dart': '5e1cdf975fd3f8c05b82c8561f07f6fedc57c0b504de8e3e741ab88132bf0ed5', 
+BASELINE_HASHES = {'lib/next/settings/model_capability.dart': '9a9cf6a192ec5abe9860ab652975f127b28614cbccfd1f32334ea4139b28bf92', 'lib/next/mesh/chat_attachment.dart': '98c373bfc3fc985b1d1e47ff5ce18e4a554defb52fdefe02b9e00a87e4532712',
  'lib/next/store/capability.dart': '8c529b63cdb33d65fc67268713f778338b1089c76ca8d535fdae9628950b7930',
  'lib/next/voice/capability.dart': '635811717bf4e74b5540aaf660b7a128e575fe5a1c4a3f89329361b43027f6b1',
  'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': 'ee236b7f41cc2c4d46b23d603f2d2347e14a7082e9ce7fe8b674f754bd4d0de3',

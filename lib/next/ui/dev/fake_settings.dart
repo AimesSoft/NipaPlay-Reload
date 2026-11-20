@@ -1300,6 +1300,12 @@ final class FakeHostSettings
   }
 
   @override
+  Future<void> setModelReasoning(String reasoning) async {
+    dshReasoning = reasoning.isEmpty ? null : reasoning;
+    changed();
+  }
+
+  @override
   Future<UiModelCheck> checkModel() async {
     await Future<void>.delayed(const Duration(milliseconds: 900));
     return switch (modelState) {

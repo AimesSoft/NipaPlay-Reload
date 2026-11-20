@@ -514,12 +514,8 @@ final class HostSettingsService
               _url(choice.baseUrl).toString().replaceFirst(RegExp(r'/$'), '');
           value['model'] = _text(choice.model, '模型');
           if (choice.api != null) value['api'] = choice.api!.name;
-          if (choice.reasoning != null) {
-            if (!const {'', 'low', 'medium', 'high'}
-                .contains(choice.reasoning)) {
-              throw const FormatException('思考强度填写不正确');
-            }
-            value['reasoning'] = storedReasoning(choice.reasoning!);
+          if (choice.reasoning case final reasoning?) {
+            value['reasoning'] = _storedModelReasoning(reasoning);
           }
           if (choice.compat != null) {
             if (choice.compat!.isEmpty) {
@@ -543,13 +539,45 @@ final class HostSettingsService
             }
           }
         }
-        await _save('model.json', value);
-        if (choice.source == UiModelSource.nipaplay) await _remember(value);
-        _record('model', before, value);
-        _checkProblem = null;
-        notify();
-        // The live host reads this snapshot only at the next turn boundary.
+        await _saveModel(before, value,
+            remember: choice.source == UiModelSource.nipaplay);
       }).then((_) => modelSaved());
+
+  @override
+  Future<void> setModelReasoning(String reasoning) => _write(() async {
+        final before = await _read('model.json');
+        final runtime = await effectiveRuntime();
+        if (runtime != AgentRuntimeKind.dsh ||
+            _source(before, runtime) != UiModelSource.nipaplay) {
+          throw const Failure(FailureCode.invalidInput,
+              'Reasoning is not adjustable for this runtime and source.');
+        }
+        if (before['model'] == null || before['baseUrl'] == null) {
+          throw const Failure(FailureCode.invalidInput, '请先填写地址和模型名');
+        }
+        await _saveModel(before, {
+          ...before,
+          'reasoning': _storedModelReasoning(reasoning),
+          'revision': (before['revision'] as int? ?? 0) + 1,
+        }, remember: true);
+      }).then((_) => modelSaved());
+
+  static String _storedModelReasoning(String reasoning) {
+    if (!const {'', 'low', 'medium', 'high'}.contains(reasoning)) {
+      throw const FormatException('思考强度填写不正确');
+    }
+    return storedReasoning(reasoning);
+  }
+
+  Future<void> _saveModel(JsonMap before, JsonMap value,
+      {required bool remember}) async {
+    await _save('model.json', value);
+    if (remember) await _remember(value);
+    _record('model', before, value);
+    _checkProblem = null;
+    notify();
+    // The live host reads this snapshot only at the next turn boundary.
+  }
 
   Future<ModelLaunch> launch() async {
     if (await effectiveRuntime() == AgentRuntimeKind.dsh) return _dshLaunch();
@@ -992,6 +1020,9 @@ final class PendingHostSettings implements NextHostSettings, NextHostDeviceSetti
   @override
   Future<void> setModel(UiModelChoice choice) async =>
       (await ready).setModel(choice);
+  @override
+  Future<void> setModelReasoning(String reasoning) async =>
+      (await ready).setModelReasoning(reasoning);
   @override
   Future<UiModelCheck> checkModel() async => (await ready).checkModel();
   @override

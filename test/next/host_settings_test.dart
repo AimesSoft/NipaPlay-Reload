@@ -23,8 +23,10 @@ import 'package:nipaplay/next/programs/runtime.dart';
 import 'package:nipaplay/next/repository_location.dart';
 import 'package:nipaplay/next/settings/denylist.dart';
 import 'package:nipaplay/next/settings/host_settings_service.dart';
+import 'package:nipaplay/next/settings/model_capability.dart';
 import 'package:nipaplay/next/settings/classic_host_device_settings.dart';
 import 'package:nipaplay/security/credential_store.dart';
+import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/services/web_server_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/next/state/change_history.dart';
@@ -32,6 +34,29 @@ import 'package:nipaplay/next/state/query.dart';
 import 'package:nipaplay/next/ui_data/host_settings.dart';
 import 'package:nipaplay/services/app_http_proxy.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+final class _GatedModelVault implements CredentialVault {
+  final _vault = LabModelVault();
+  final reading = Completer<void>();
+  final resume = Completer<void>();
+  bool holdRead = false;
+
+  @override
+  Future<String?> read(CredentialRef ref) async {
+    if (holdRead) {
+      holdRead = false;
+      reading.complete();
+      await resume.future;
+    }
+    return _vault.read(ref);
+  }
+
+  @override
+  Future<void> write(CredentialRef ref, String secret) => _vault.write(ref, secret);
+
+  @override
+  Future<void> delete(CredentialRef ref) => _vault.delete(ref);
+}
 
 final class _Location implements RepositoryLocation {
   _Location(this.path);
@@ -326,9 +351,10 @@ void main() {
           'packages': <Object>[],
         }));
 
-    HostSettingsService service({CodexRuntime? codex}) => HostSettingsService(
+    HostSettingsService service({CodexRuntime? codex, CredentialVault? vault}) =>
+        HostSettingsService(
         root: root,
-        vault: LabModelVault(),
+        vault: vault ?? LabModelVault(),
         meshRuntime: mesh,
         programs: programs,
         history: history,
@@ -357,6 +383,29 @@ void main() {
       dshSettings = service();
     });
     tearDown(() => dshSettings.close());
+
+    test('changing only reasoning cannot restore a concurrently replaced model',
+        () async {
+      final vault = _GatedModelVault();
+      final host = service(vault: vault);
+      addTearDown(host.close);
+      const url = 'https://relay.example/v1';
+      await host.setModel(choice(url, model: 'model-a'));
+      final harness = Harness([ChatModelCapability(host)]);
+      vault.holdRead = true;
+      final reasoning = harness.invokeJson(
+          'chat.model.set', {'reasoning': 'high'}, Invocation(origin: 'test'));
+      try {
+        await vault.reading.future.timeout(const Duration(seconds: 5));
+        await host.setModel(choice(url, model: 'model-b'));
+      } finally {
+        vault.resume.complete();
+      }
+      expect(await reasoning, isA<Completed<JsonEncodable>>());
+      final setup = await host.model();
+      expect(setup.model, 'model-b');
+      expect(setup.reasoning, 'high');
+    });
 
     test('its route is the model set up here, on either wire, and no file holds the key',
         () async {

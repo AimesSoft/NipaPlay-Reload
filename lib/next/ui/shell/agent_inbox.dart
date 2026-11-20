@@ -48,6 +48,7 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
   int _limit = 30;
   String? _error, _lastLoadError;
   final _reported = <(String?, String)>{};
+  final _publishing = <(String?, String)>{};
   final _sessionId = DateTime.now().microsecondsSinceEpoch;
   int _errorSequence = 0;
   String? _selectedId;
@@ -100,7 +101,7 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
     Object? raw;
     String? turnId;
     if (method == 'host/error') {
-      raw = params['error'];
+      raw = params['error'] ?? params['message'];
       turnId = params['turnId'] as String?;
     }
     if (method == 'turn/completed' && turn?['status'] == 'failed') {
@@ -120,15 +121,28 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
 
   void _recordError(String body, {String? turnId}) {
     final peer = widget.peer?.call();
-    if (turnId != null) {
-      if (!_reported.add((peer, turnId))) return;
-      if (_reported.length > 512) _reported.remove(_reported.first);
+    final key = turnId == null ? null : (peer, turnId);
+    if (key != null && (_reported.contains(key) || !_publishing.add(key))) {
+      return;
     }
-    unawaited(_publish(body, turnId, peer)
-        .then((_) => _load())
-        .catchError((Object e) {
-      if (mounted) setState(() => _error = '$body\n\n$e');
-    }));
+    unawaited(_recordReminder(body, turnId, peer, key));
+  }
+
+  Future<void> _recordReminder(
+      String body, String? turnId, String? peer, (String?, String)? key) async {
+    try {
+      await _publish(body, turnId, peer);
+      if (key != null) {
+        _reported.add(key);
+        if (_reported.length > 512) _reported.remove(_reported.first);
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = '$body\n\n$error');
+      return;
+    } finally {
+      if (key != null) _publishing.remove(key);
+    }
+    await _load();
   }
 
   Future<void> _publish(String body, String? turnId, String? peer) async {
@@ -139,20 +153,15 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
     final requestId = turnId == null
         ? 'runtime-$_sessionId-${++_errorSequence}'
         : 'turn-${sha256.convert(utf8.encode(jsonEncode([peer, turnId])))}';
-    try {
-      await _call('ui.notify', {
-        'requestId': requestId,
-        'title': id == null
-            ? '梨花运行失败'
-            : '「${label == null || label.isEmpty ? id : label}」投递失败',
-        'body': body,
-        'severity': 'error',
-        if (id != null) 'followupId': id,
-      });
-    } on Failure catch (failure) {
-      // Published before this ran (a restart): that reminder stands.
-      if (failure.code != FailureCode.conflict) rethrow;
-    }
+    await _call('ui.notify', {
+      'requestId': requestId,
+      'title': id == null
+          ? '梨花运行失败'
+          : '「${label == null || label.isEmpty ? id : label}」投递失败',
+      'body': body,
+      'severity': 'error',
+      if (id != null) 'followupId': id,
+    });
   }
 
   Future<JsonMap?> _followupOf(String turnId) async {
