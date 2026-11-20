@@ -70,7 +70,7 @@ extension AgentInbox on Followups {
   }
 
   Future<JsonMap> publishInbox(JsonMap input, Invocation invocation,
-          {required bool question}) =>
+          {required bool question, JsonMap? target}) =>
       _serial(() async {
         await _inboxReady();
         // About a followup: its conversation, wherever the reminder is
@@ -78,16 +78,16 @@ extension AgentInbox on Followups {
         final about = input['followupId'] is String
             ? await _get(input['followupId'] as String)
             : null;
-        final target = about != null
+        final place = about != null
             ? <String, Object?>{
                 'repository': about['repository'],
                 'threadId': about['threadId'],
               }
-            : await _inboxTarget(invocation, required: question);
+            : target ?? await _inboxTarget(invocation, required: question);
         final id = 'inbox-${sha256.convert(utf8.encode(jsonEncode([
-              target['repository'],
-              target['threadId'],
-              target['deviceId'],
+              place['repository'],
+              place['threadId'],
+              place['deviceId'],
               invocation.origin,
               input['requestId']
             ])))}';
@@ -126,7 +126,7 @@ extension AgentInbox on Followups {
           'options': options,
           'severity': input['severity'] ?? 'info',
           'createdAt': now,
-          'target': target,
+          'target': place,
           'origin': invocation.origin,
           'request': input,
         };
@@ -138,6 +138,50 @@ extension AgentInbox on Followups {
         });
         _inboxChanged();
         return row;
+      });
+
+  /// A turn of this device's conversation host failed: one reminder here,
+  /// whichever window shows it (this one, or another device reading this
+  /// inbox), in the turn's own words. A turn that delivered a followup names
+  /// that followup.
+  Future<void> _reportFailedTurn(String repository, String? threadId, Map turn) async {
+    final id = turn['id'] as String;
+    final error = turn['error'];
+    if (error == null || error == '') return;
+    final about = (await _rows())
+        .where((row) =>
+            row['turnId'] == id ||
+            (row['failedTurns'] as List? ?? const []).contains(id))
+        .firstOrNull;
+    final label = (about?['title'] as String?)?.trim();
+    await publishInbox(
+        {
+          'requestId': 'turn-$id',
+          'title': about == null
+              ? '梨花运行失败'
+              : '「${label == null || label.isEmpty ? about['id'] : label}」投递失败',
+          'body': error is String
+              ? error
+              : const JsonEncoder.withIndent('  ').convert(error),
+          'severity': 'error',
+          if (about != null) 'followupId': about['id'],
+        },
+        Invocation(origin: 'host'),
+        question: false,
+        target: {'repository': repository, 'threadId': threadId});
+  }
+
+  /// The runner of this device's conversation host stopped ([message] is its
+  /// own words): one reminder for that run of the host.
+  Future<void> _reportHostStopped(String repository, int run, String message) =>
+      publishInbox({
+        'requestId': 'host-$run',
+        'title': '梨花运行失败',
+        'body': message,
+        'severity': 'error',
+      }, Invocation(origin: 'host'), question: false, target: {
+        'repository': repository,
+        'threadId': null,
       });
 
   Future<JsonMap> inboxList(

@@ -12,52 +12,6 @@ import 'package:nipaplay/next/ui/shell/agent_inbox.dart';
 import 'package:nipaplay/next/ui/widgets/buttons.dart';
 
 void main() {
-  testWidgets('host errors accept message and error but ignore empty params',
-      (tester) async {
-    final world = _Inbox();
-    await tester.pumpWidget(world.widget());
-    for (final params in [
-      {},
-      {'message': 'transport closed'},
-      {'error': 'legacy error'}
-    ]) {
-      world.events.add({'method': 'host/error', 'params': params});
-    }
-    await tester.pump();
-    await tester.pumpWidget(const SizedBox());
-    await world.events.close();
-    expect(world.notified.map((notice) => notice['body']),
-        ['transport closed', 'legacy error']);
-  });
-
-  testWidgets('a failed reminder can retry with the same request ID',
-      (tester) async {
-    final world = _Inbox();
-    final first = Completer<void>();
-    world.beforeNotify = () => first.future;
-    await tester.pumpWidget(world.widget());
-    const event = {
-      'method': 'host/error',
-      'params': {'error': 'turn failed', 'turnId': 'retry-turn'},
-    };
-    world.events.add(event);
-    await tester.pump();
-    world.events.add(event);
-    await tester.pump();
-    expect(world.notified, hasLength(1));
-    first.completeError(const Failure(FailureCode.unavailable, 'try later'));
-    await tester.pump();
-    world.beforeNotify = null;
-    world.events.add(event);
-    await tester.pump();
-    world.events.add(event);
-    await tester.pump();
-    await tester.pumpWidget(const SizedBox());
-    await world.events.close();
-    expect(world.notified, hasLength(2));
-    expect(world.notified.last['requestId'], world.notified.first['requestId']);
-  });
-
   testWidgets(
       'empty inbox leaves no overlay and active messages preserve the control strip',
       (tester) async {
@@ -230,231 +184,31 @@ void main() {
     await world.events.close();
   });
 
-  testWidgets('one failure arriving in two forms is one reminder (#1122)',
-      (tester) async {
-    final errors = ValueNotifier<ChatFailureEvent?>(null);
-    final world = _Inbox();
-    await tester.pumpWidget(world.widget(errors: errors));
-    await tester.pump();
-    const message =
-        'model "gpt-6.1-sol" returned a completed response with no content';
-    // The runner's error object, then the chat's text of the same failure,
-    // then the liveness report repeating it.
-    world.events.add({
-      'method': 'turn/completed',
-      'params': {
-        'turn': {
-          'id': 'same-turn',
-          'status': 'failed',
-          'error': {
-            'message': message,
-            'codexErrorInfo': 'other',
-            'additionalDetails': 'EMPTY_RESPONSE'
-          }
-        }
-      }
-    });
-    await tester.pump();
-    errors.value = ChatFailureEvent(message, turnId: 'same-turn');
-    await tester.pump();
-    world.events.add({
-      'method': 'host/liveness',
-      'params': {
-        'turnId': 'same-turn',
-        'status': 'failed',
-        'latestError': {'message': message}
-      }
-    });
-    await tester.pump();
-    expect(world.notices, 1);
-    errors.value = ChatFailureEvent(message);
-    await tester.pump();
-    expect(world.notices, 2);
-    // Starting a new turn resets dedupe so a later recurrence is still shown.
-    world.events.add({'method': 'turn/started', 'params': {}});
-    await tester.pump();
-    world.events.add({
-      'method': 'turn/completed',
-      'params': {
-        'turn': {
-          'id': 'new-turn',
-          'status': 'failed',
-          'error': {'message': message, 'codexErrorInfo': 'other'}
-        }
-      }
-    });
-    await tester.pump();
-    expect(world.notices, 3);
-    await tester.pumpWidget(const SizedBox());
-    await world.events.close();
-  });
-
-  testWidgets(
-      'failures kept by conversations in their liveness reports are each '
-      'reported once, and a new turn elsewhere does not repeat them',
-      (tester) async {
-    final errors = ValueNotifier<ChatFailureEvent?>(null);
-    final world = _Inbox();
-    await tester.pumpWidget(world.widget(errors: errors));
-    await tester.pump();
-    // As ChatHost sends it: every second, one report per conversation,
-    // each keeping its failure until its next turn starts.
-    void tick() {
-      for (final (thread, error) in [
-        ('main', null),
-        ('helper-a', 'model returned no content'),
-        ('helper-b', 'model returned no content'),
-      ]) {
-        world.events.add({
-          'method': 'host/liveness',
-          'params': {
-            'threadId': thread,
-            'turnId': 'turn-$thread',
-            'status': error == null ? 'inProgress' : 'failed',
-            'latestError': error
-          }
-        });
-      }
-    }
-
-    for (var i = 0; i < 5; i++) {
-      tick();
-      await tester.pump(const Duration(seconds: 1));
-    }
-    expect(world.notices, 2);
-    // The main conversation starts a turn: the helpers' failures are not
-    // news.
-    world.events.add({
-      'method': 'turn/started',
-      'params': {
-        'threadId': 'main',
-        'turn': {'id': 't2'}
-      }
-    });
-    for (var i = 0; i < 3; i++) {
-      tick();
-      await tester.pump(const Duration(seconds: 1));
-    }
-    expect(world.notices, 2);
-    // A helper tries again and fails the same way: that is news.
-    world.events.add({
-      'method': 'turn/started',
-      'params': {
-        'threadId': 'helper-a',
-        'turn': {'id': 't3'}
-      }
-    });
-    await tester.pump();
-    world.events.add({
-      'method': 'turn/completed',
-      'params': {
-        'threadId': 'helper-a',
-        'turn': {
-          'id': 't3',
-          'status': 'failed',
-          'error': {'message': 'model returned no content'}
-        }
-      }
-    });
-    await tester.pump();
-    tick();
-    await tester.pump(const Duration(seconds: 1));
-    expect(world.notices, 3);
-    await tester.pumpWidget(const SizedBox());
-    await world.events.close();
-  });
-
-  testWidgets(
-      "the conversation's text arriving before the runner's report is still "
-      'one reminder', (tester) async {
-    final errors = ValueNotifier<ChatFailureEvent?>(null);
-    final world = _Inbox();
-    await tester.pumpWidget(world.widget(errors: errors));
-    await tester.pump();
-    errors.value = ChatFailureEvent('connection reset', turnId: 't1');
-    await tester.pump();
-    world.events.add({
-      'method': 'turn/completed',
-      'params': {
-        'threadId': 'main',
-        'turn': {
-          'id': 't1',
-          'status': 'failed',
-          'error': {'message': 'connection reset'}
-        }
-      }
-    });
-    await tester.pump();
-    expect(world.notices, 1);
-    await tester.pumpWidget(const SizedBox());
-    await world.events.close();
-  });
-
-  testWidgets(
-      'distinct failed deliveries stay distinct and controls track live state',
+  testWidgets("a failed delivery's reminder offers what its followup still allows",
       (tester) async {
     final world = _Inbox()..rows.clear();
     final followup = <String, Object?>{
       'id': 'f1',
-      'state': 'started',
+      'state': 'ready',
       'title': '帮手找到的番',
-      'turnId': 't1',
-      'threadId': 'main',
+      'retryAt': '2026-11-19T02:13:00Z',
+      'failedTurns': ['t1'],
     };
     world.followups.add(followup);
+    JsonMap kept(String id, String turn) => {
+          'id': id,
+          'kind': 'notice',
+          'state': 'unread',
+          'hidden': false,
+          'title': '「帮手找到的番」投递失败',
+          'body': '{"message": "model returned no content"}',
+          'severity': 'error',
+          'request': {'requestId': 'turn-$turn', 'followupId': 'f1'},
+        };
+    // As this device's conversation host keeps it.
+    world.rows.add(kept('n1', 't1'));
     await tester.pumpWidget(world.widget());
     await tester.pump();
-    void failed(String turn, String message) => world.events.add({
-          'method': 'turn/completed',
-          'params': {
-            'threadId': 'main',
-            'turn': {
-              'id': turn,
-              'status': 'failed',
-              'error': {'message': message}
-            }
-          }
-        });
-    failed('t1', 'model returned no content');
-    await tester.pump();
-    // The dispatcher takes the failure in and will deliver it again.
-    followup
-      ..['state'] = 'ready'
-      ..['turnId'] = null
-      ..['retryAt'] = '2026-11-19T02:13:00Z'
-      ..['failedTurns'] = ['t1'];
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(world.notified, hasLength(1));
-    expect(world.notified.single['followupId'], 'f1');
-    final firstReceipt = world.notified.single['requestId'];
-    expect(world.notified.single['title'], contains('「帮手找到的番」'));
-    expect(
-        world.notified.single['body'], contains('model returned no content'));
-
-    // The same message on the next delivery is a distinct event.
-    world.events.add({
-      'method': 'turn/started',
-      'params': {
-        'threadId': 'main',
-        'turn': {'id': 't2'}
-      }
-    });
-    followup['turnId'] = 't2';
-    followup['state'] = 'started';
-    await tester.pump();
-    failed('t2', 'model returned no content');
-    followup
-      ..['state'] = 'ready'
-      ..['turnId'] = null
-      ..['failedTurns'] = ['t1', 't2'];
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(world.notified, hasLength(2));
-    expect(world.notified.last['requestId'], isNot(firstReceipt));
-
-    // The reminder offers to deliver it now, or to stop it.
-    await tester.pump(const Duration(seconds: 2));
     await tester.pump();
     expect(find.text('立即重试'), findsOneWidget);
     expect(find.text('停止'), findsOneWidget);
@@ -463,77 +217,80 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(world.followupCalls, ['cancel f1']);
 
-    // Given up for good: one more reminder, which can only be retried.
-    world.events.add({
-      'method': 'turn/started',
-      'params': {
-        'threadId': 'main',
-        'turn': {'id': 't3'}
-      }
-    });
+    // Given up for good: what is left is to retry it.
     followup
       ..['state'] = 'execution_failed'
-      ..['turnId'] = 't3'
       ..remove('retryAt');
-    await tester.pump();
-    failed('t3', 'rate limited (429)');
-    await tester.pump(const Duration(milliseconds: 400));
+    world.rows.add(kept('n2', 't3'));
+    world.changes.add(null);
     await tester.pump(const Duration(seconds: 2));
     await tester.pump();
-    expect(world.notified, hasLength(3));
-    expect(world.notified.last['requestId'], isNot(firstReceipt));
     expect(find.text('停止'), findsNothing);
     await tester.tap(find.text('立即重试'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(world.followupCalls, ['cancel f1', 'retry f1']);
-
-    // Retried by hand and failed for good again: said again, not swallowed.
-    world.events.add({
-      'method': 'turn/started',
-      'params': {
-        'threadId': 'main',
-        'turn': {'id': 't4'}
-      }
-    });
-    followup
-      ..['state'] = 'execution_failed'
-      ..['turnId'] = 't4'
-      ..['retries'] = 1;
-    await tester.pump();
-    failed('t4', 'rate limited (429)');
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump(const Duration(seconds: 2));
-    await tester.pump();
-    expect(world.notified, hasLength(4));
-    expect(world.notified.map((row) => row['requestId']).toSet(), hasLength(4));
+    expect(world.notified, isEmpty);
     await tester.pumpWidget(const SizedBox());
     await world.events.close();
   });
 
-  testWidgets('a failure of the person\'s own turn is reported as it came',
+  testWidgets(
+      "a conversation's events make no reminder here; an inbox change is read again",
       (tester) async {
     final world = _Inbox();
     await tester.pumpWidget(world.widget());
-    await tester.pump();
-    world.events.add({
-      'method': 'turn/completed',
-      'params': {
-        'threadId': 'main',
-        'turn': {
-          'id': 'own',
-          'status': 'failed',
-          'error': {'message': 'connection reset'}
+    await tester.pump(const Duration(seconds: 2));
+    for (final event in [
+      {
+        'method': 'turn/completed',
+        'params': {
+          'threadId': 'main',
+          'turn': {'id': 't', 'status': 'failed', 'error': {'message': '429'}}
         }
-      }
-    });
+      },
+      for (var second = 0; second < 3; second++)
+        {
+          'method': 'host/liveness',
+          'params': {
+            'threadId': 'main', 'turnId': 't', 'status': 'failed',
+            'latestError': 'session is corrupt'
+          }
+        },
+      {'method': 'host/error', 'params': {'message': 'transport closed'}},
+    ]) {
+      world.events.add(event);
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(world.notified, isEmpty);
+    expect(find.text('收起错误'), findsNothing);
+    final lists = world.lists;
+    world.events.add({'method': 'host/inboxChanged', 'params': {}});
+    await tester.pump(const Duration(seconds: 1));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(world.notified.single['title'], '梨花运行失败');
-    expect(world.notified.single.containsKey('followupId'), isFalse);
+    expect(world.lists, greaterThan(lists));
     await tester.pumpWidget(const SizedBox());
     await world.events.close();
   });
+
+  testWidgets("a window's own failure is kept here once, with its reason",
+      (tester) async {
+    final world = _Inbox()..beforeNotify = () async =>
+        throw const Failure(FailureCode.conflict, 'requestId already names a different message.');
+    final errors = ValueNotifier<ChatFailureEvent?>(null);
+    await tester.pumpWidget(world.widget(errors: errors));
+    await tester.pump();
+    errors.value = ChatFailureEvent('这段对话没打开');
+    await tester.pump();
+    await tester.pump();
+    expect(world.notified, hasLength(1));
+    expect(find.textContaining('requestId already names a different message.'),
+        findsOneWidget);
+    expect(find.textContaining("Instance of"), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await world.events.close();
+  });
+
 }
 
 class _Inbox {

@@ -921,6 +921,46 @@ trust_level = "trusted"
       final history = ((await host.readThread(thread))['turns'] as List).single as Map;
       expect(history['status'], 'failed');
       expect(jsonEncode(history['error']), contains('429'));
+      // One reminder on this device, about that followup, in the turn's words.
+      final reminders = (await lab.until(() async {
+        final items = (await lab.followups.inboxList())['items'] as List;
+        return items.isEmpty ? null : items;
+      }));
+      expect(reminders, hasLength(1));
+      final reminder = reminders.single as Map;
+      expect(reminder['severity'], 'error');
+      expect(reminder['title'], endsWith('投递失败'));
+      expect((reminder['request'] as Map)['followupId'], retry['id']);
+      expect(reminder['body'], contains('429'));
+      expect((reminder['target'] as Map)['threadId'], thread);
+    });
+
+    test("a failed turn is one reminder here; liveness repeating it adds none, and closed it stays closed", () async {
+      await open([_Rule(when: ['OWN_TURN_FAILS_QX'], status: 429, once: false)]);
+      final host = await lab.start();
+      await lab.attachFollowups(host);
+      await host.getMainSession();
+      final thread = host.mainThreadId!;
+      await host.startTurn('OWN_TURN_FAILS_QX');
+      final ended = await lab.next((e) => e['method'] == 'turn/completed');
+      expect(ended['params']['turn']['status'], 'failed');
+      final reminder = (await lab.until(() async {
+        final items = (await lab.followups.inboxList())['items'] as List;
+        return items.isEmpty ? null : items.single as Map;
+      }));
+      expect(reminder['title'], '梨花运行失败');
+      expect((reminder['request'] as Map).containsKey('followupId'), isFalse);
+      expect(reminder['body'], contains('429'));
+      expect((reminder['target'] as Map)['threadId'], thread);
+      // The host repeats the failed turn in its liveness every second.
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
+      expect((await lab.followups.inboxList())['items'], hasLength(1));
+      await lab.followups.dismissInbox(reminder['id'] as String);
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
+      expect((await lab.followups.inboxList())['items'], isEmpty);
+      final all = (await lab.followups.inboxList(includeResolved: true))['items'] as List;
+      expect(all, hasLength(1));
+      expect((all.single as Map)['state'], 'read');
     });
   }, skip: missing);
 }
