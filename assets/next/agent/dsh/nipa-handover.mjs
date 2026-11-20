@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib';
 
@@ -186,7 +186,9 @@ export async function repairHandoverLog(path, { home, id }) {
   if (!repaired) return undefined;
   const frame = (lines) => zstdCompressSync(Buffer.from(lines.map((line) => `${JSON.stringify(line)}\n`).join('')));
   const staging = join(dirname(path), 'session.repair.tmp');
-  await writeFile(staging, Buffer.concat([frame([header]), frame(repaired)]));
+  // As private as the log it replaces.
+  const { mode } = await stat(path);
+  await writeFile(staging, Buffer.concat([frame([header]), frame(repaired)]), { mode: mode & 0o777 });
   await rename(staging, path);
   await rm(join(home, 'storages', 'session_projcache', 'sessions', `${id}.json`), { force: true });
   return () => writeFile(path, original);
