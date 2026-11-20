@@ -84,7 +84,9 @@ void main() {
       }
       await batch.commit(noResult: true);
     });
-    await db.setVersion(version - 1);
+    // Before the purge; the handover tables that follow it are created
+    // idempotently.
+    await db.setVersion(version - 2);
     await db.close();
     final before = file.lengthSync();
     expect(before, greaterThan(32 << 20));

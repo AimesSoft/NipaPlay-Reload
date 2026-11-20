@@ -208,8 +208,11 @@ final class NextCore {
   Future<StoreApplyResult> Function()? restartAgent;
   ChatHost? Function()? extensionChat;
   DshInstall? Function()? extensionInstaller;
+  Future<bool> Function(Uri)? extensionOpenUrl;
   late final runtimeExtensions = RuntimeExtensions(
-      host: () => extensionChat?.call(), installer: () => extensionInstaller?.call());
+      host: () => extensionChat?.call(),
+      installer: () => extensionInstaller?.call(),
+      openUrl: () => extensionOpenUrl);
   late final SessionStore sessions;
   late final HarnessMemory memory;
   late final CapabilityCatalogChanges catalogChanges;

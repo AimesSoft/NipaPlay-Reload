@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'package:nipaplay/services/file_association_service.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -600,6 +601,8 @@ final class NextRuntime extends ChangeNotifier {
     core.programs.credentialFile = _endpoint.credentialFile;
     core.extensionChat = () => chat;
     core.extensionInstaller = () => _hostSettings?.dsh;
+    core.extensionOpenUrl =
+        (url) => launchUrl(url, mode: LaunchMode.externalApplication);
     final desktop = Platform.isMacOS || Platform.isWindows || Platform.isLinux;
     final labRoot = LabProfile.active ? Directory(LabProfile.root) : null;
     _hostSettings = HostSettingsService(

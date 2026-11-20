@@ -83,7 +83,7 @@ void main() {
       addTearDown(host.close);
       await host.start();
       final extensions =
-          RuntimeExtensions(host: () => host, installer: () => null);
+          RuntimeExtensions(host: () => host, installer: () => null, openUrl: () => null);
       final harness = Harness([
         StoreCapability(store, extensions: extensions),
         RuntimeExtensionCapability(extensions)

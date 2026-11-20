@@ -1,5 +1,4 @@
 import 'package:nipa_harness/nipa_harness.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../capabilities/classic_action.dart';
 import '../chat/chat_host.dart';
@@ -11,10 +10,15 @@ const _output = ObjectSchema({}, additionalProperties: true);
 const _name = StringSchema(minLength: 1, maxLength: 512);
 
 final class RuntimeExtensions {
-  RuntimeExtensions({required this.host, required this.installer});
+  RuntimeExtensions(
+      {required this.host, required this.installer, required this.openUrl});
 
   final ChatHost? Function() host;
   final DshInstall? Function() installer;
+
+  /// Opens a page in the system browser; null on a host without one (the
+  /// headless host must not link Flutter plugins).
+  final Future<bool> Function(Uri)? Function() openUrl;
 
   Future<JsonMap> webState() async => {
         ...?await installer()?.webState(),
@@ -76,7 +80,7 @@ final class RuntimeExtensionCapability implements Capability {
       if (invocation.origin == 'gui') {
         bool opened;
         try {
-          opened = await launchUrl(url, mode: LaunchMode.externalApplication);
+          opened = await extensions.openUrl()?.call(url) ?? false;
         } catch (_) {
           opened = false;
         }
