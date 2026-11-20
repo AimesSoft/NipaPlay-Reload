@@ -34,7 +34,7 @@ export 'host.dart' show authorizeMeshPeer;
 export 'trust.dart'
     show meshDefaultCoordinator, meshProductionIssuerPem, inspectMeshTrust;
 
-bool meshActionAllowed(String id) =>
+bool meshActionAllowed(String id) => id != 'chat.attachment.send' && (
     [
       'task.',
       'subscription.',
@@ -88,7 +88,7 @@ bool meshActionAllowed(String id) =>
       'mesh.refresh',
       'mesh.invoke',
       'mesh.invoke_destructive',
-    }.contains(id);
+    }.contains(id));
 
 String? meshActionRestriction(String id) => meshActionAllowed(id)
     ? null

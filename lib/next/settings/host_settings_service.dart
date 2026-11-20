@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/security/credential_vault.dart';
 import 'package:nipaplay/security/secret_redactor.dart';
@@ -433,16 +432,21 @@ final class HostSettingsService
   }
 
   @override
-  Future<List<String>> providerModels() async {
-    await _writes;
-    final value = await _read('model.json');
-    if (_source(value, await effectiveRuntime()) != UiModelSource.nipaplay) {
-      return const [];
-    }
-    final key = await _secret(value);
-    if (key == null || key.isEmpty) return const [];
-    final client = httpClient();
+  Future<UiModelCandidates> providerModels() async {
+    HttpClient? client;
     try {
+      await _writes;
+      final value = await _read('model.json');
+      if (_source(value, await effectiveRuntime()) != UiModelSource.nipaplay) {
+        return const UiModelCandidates(UiModelQueryStatus.unavailable,
+            reason: '当前配置没有候选查询入口');
+      }
+      final key = await _secret(value);
+      if (key == null || key.isEmpty) {
+        return const UiModelCandidates(UiModelQueryStatus.unavailable,
+            reason: '当前配置没有查询凭据');
+      }
+      client = httpClient();
       await SystemProxyService.instance.initialize();
       client.findProxy = (uri) => uri.host == 'localhost' ||
               InternetAddress.tryParse(uri.host)?.isLoopback == true
@@ -452,16 +456,32 @@ final class HostSettingsService
       final address = _url(value['baseUrl'] as String?);
       final base =
           value['api'] == 'chat' ? chatBase(address) : responsesBase(address);
-      return await listProviderModels(client, base, key)
+      final models = await listProviderModels(client, base, key)
           .timeout(const Duration(seconds: 15));
+      return UiModelCandidates(UiModelQueryStatus.succeeded, choices: [
+        for (final model in models)
+          UiModelChoice(
+              source: UiModelSource.nipaplay,
+              model: model,
+              provider: value['provider'] as String?,
+              baseUrl: address.toString(),
+              api: value['api'] == 'chat' ? UiModelApi.chat : UiModelApi.responses,
+              reasoning: reasoningChoice(value['reasoning']),
+              compat: (value['compat'] as Map?)?.cast<String, Object?>() ?? const {})
+      ]);
     } on Object catch (error) {
-      // A provider that lists nothing, or cannot be reached: the models
-      // set up before are still there to pick.
-      debugPrint('[NextSettings] provider models: '
-          '${SecretRedactor.text(error.toString())}');
-      return const [];
+      final reason = switch (error) {
+        TimeoutException() => '请求超时',
+        SocketException() => '无法连接候选来源',
+        HandshakeException() => 'TLS 握手失败',
+        HttpException(:final message)
+            when RegExp(r'^HTTP [0-9]{3}$').hasMatch(message) => message,
+        FormatException() => '地址或响应格式无效',
+        _ => '未能读取候选',
+      };
+      return UiModelCandidates(UiModelQueryStatus.failed, reason: reason);
     } finally {
-      client.close(force: true);
+      client?.close(force: true);
     }
   }
 
@@ -494,12 +514,8 @@ final class HostSettingsService
               _url(choice.baseUrl).toString().replaceFirst(RegExp(r'/$'), '');
           value['model'] = _text(choice.model, '模型');
           if (choice.api != null) value['api'] = choice.api!.name;
-          if (choice.reasoning != null) {
-            if (!const {'', 'low', 'medium', 'high'}
-                .contains(choice.reasoning)) {
-              throw const FormatException('思考强度填写不正确');
-            }
-            value['reasoning'] = storedReasoning(choice.reasoning!);
+          if (choice.reasoning case final reasoning?) {
+            value['reasoning'] = _storedModelReasoning(reasoning);
           }
           if (choice.compat != null) {
             if (choice.compat!.isEmpty) {
@@ -523,13 +539,45 @@ final class HostSettingsService
             }
           }
         }
-        await _save('model.json', value);
-        if (choice.source == UiModelSource.nipaplay) await _remember(value);
-        _record('model', before, value);
-        _checkProblem = null;
-        notify();
-        // The live host reads this snapshot only at the next turn boundary.
+        await _saveModel(before, value,
+            remember: choice.source == UiModelSource.nipaplay);
       }).then((_) => modelSaved());
+
+  @override
+  Future<void> setModelReasoning(String reasoning) => _write(() async {
+        final before = await _read('model.json');
+        final runtime = await effectiveRuntime();
+        if (runtime != AgentRuntimeKind.dsh ||
+            _source(before, runtime) != UiModelSource.nipaplay) {
+          throw const Failure(FailureCode.invalidInput,
+              'Reasoning is not adjustable for this runtime and source.');
+        }
+        if (before['model'] == null || before['baseUrl'] == null) {
+          throw const Failure(FailureCode.invalidInput, '请先填写地址和模型名');
+        }
+        await _saveModel(before, {
+          ...before,
+          'reasoning': _storedModelReasoning(reasoning),
+          'revision': (before['revision'] as int? ?? 0) + 1,
+        }, remember: true);
+      }).then((_) => modelSaved());
+
+  static String _storedModelReasoning(String reasoning) {
+    if (!const {'', 'low', 'medium', 'high'}.contains(reasoning)) {
+      throw const FormatException('思考强度填写不正确');
+    }
+    return storedReasoning(reasoning);
+  }
+
+  Future<void> _saveModel(JsonMap before, JsonMap value,
+      {required bool remember}) async {
+    await _save('model.json', value);
+    if (remember) await _remember(value);
+    _record('model', before, value);
+    _checkProblem = null;
+    notify();
+    // The live host reads this snapshot only at the next turn boundary.
+  }
 
   Future<ModelLaunch> launch() async {
     if (await effectiveRuntime() == AgentRuntimeKind.dsh) return _dshLaunch();
@@ -973,9 +1021,12 @@ final class PendingHostSettings implements NextHostSettings, NextHostDeviceSetti
   Future<void> setModel(UiModelChoice choice) async =>
       (await ready).setModel(choice);
   @override
+  Future<void> setModelReasoning(String reasoning) async =>
+      (await ready).setModelReasoning(reasoning);
+  @override
   Future<UiModelCheck> checkModel() async => (await ready).checkModel();
   @override
-  Future<List<String>> providerModels() async =>
+  Future<UiModelCandidates> providerModels() async =>
       (await ready).providerModels();
   @override
   Future<UiMeshSetup> mesh() async => (await ready).mesh();

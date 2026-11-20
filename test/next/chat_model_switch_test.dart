@@ -4,6 +4,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipa_harness/nipa_harness.dart' hide Action, Invocation;
+import 'package:nipa_harness/nipa_harness.dart' as harness_api show Invocation;
+import 'package:nipaplay/next/settings/model_capability.dart';
 import 'package:nipaplay/next/settings/responses_probe.dart';
 import 'package:nipaplay/next/ui/chat/model_switch.dart';
 import 'package:nipaplay/next/ui/conversation/chat_port.dart';
@@ -14,6 +17,34 @@ import 'package:nipaplay/next/ui_data/ui_data.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('model actions read and write through host settings without endpoints',
+      () async {
+    final host = FakeHostSettings()..runtime = UiAgentRuntimeKind.dsh;
+    final harness = Harness([ChatModelCapability(host)]);
+    Future<JsonMap> invoke(String operation, [JsonMap input = const {}]) async {
+      final result = await harness.invokeJson(
+          'chat.model.$operation', input, harness_api.Invocation(origin: 'test'));
+      expect(result, isA<Completed<JsonEncodable>>());
+      return (result as Completed<JsonEncodable>).value.toJson() as JsonMap;
+    }
+
+    final status = await invoke('status');
+    expect(status['inUse'], 'deepseek-flash');
+    expect(status['recent'], isNotEmpty);
+    final candidates = await invoke('candidates');
+    expect(candidates['status'], 'succeeded');
+    final choice = (candidates['choices'] as List)
+        .cast<JsonMap>()
+        .singleWhere((choice) => choice['model'] == 'deepseek-pro');
+    expect(choice.containsKey('baseUrl'), isFalse);
+    expect(choice.containsKey('apiKey'), isFalse);
+    final saved = await invoke(
+        'set', {'choiceId': choice['choiceId'], 'reasoning': 'off'});
+    expect(saved['appliesAt'], 'nextTurn');
+    expect(host.saved.last.model, 'deepseek-pro');
+    expect(host.saved.last.reasoning, '');
+  });
 
   group('listProviderModels', () {
     HttpOverrides? previousOverrides;
@@ -155,6 +186,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
       await tester.pump();
       expect(host.saved.last.model, 'deepseek-pro');
+      expect(host.saved.last.reasoning, 'high');
       expect(closed, 1);
 
       // Tapping settings link calls onSettings.
@@ -196,7 +228,8 @@ final class _IdleChatPort implements ChatPort {
   @override
   Future<void> interrupt({String? threadId}) async {}
   @override
-  Future<void> answer(Object requestId, Map<String, List<String>> answers) async {}
+  Future<void> answer(
+      Object requestId, Map<String, List<String>> answers) async {}
   @override
   void dispose() {}
 }

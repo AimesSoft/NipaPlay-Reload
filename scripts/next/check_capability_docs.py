@@ -88,10 +88,10 @@ for k in rows:
     if k.startswith('danmaku.') and (not rows[k][0][1]):
         rows[k][0][1] = '弹幕 ' + k.split('.')[-1].replace('_', ' ') + '；来源及副作用见目标契约'
 import hashlib
-BASELINE_HASHES = {
+BASELINE_HASHES = {'lib/next/settings/model_capability.dart': '9a9cf6a192ec5abe9860ab652975f127b28614cbccfd1f32334ea4139b28bf92', 'lib/next/mesh/chat_attachment.dart': '98c373bfc3fc985b1d1e47ff5ce18e4a554defb52fdefe02b9e00a87e4532712', 
  'lib/next/store/capability.dart': '8946a8a0b934ec01963d79e8313019e5033a9be3fe2bf9a65fdce5aaa55da6ca',
  'lib/next/voice/capability.dart': '635811717bf4e74b5540aaf660b7a128e575fe5a1c4a3f89329361b43027f6b1',
- 'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': '9762fedade67a672296e97d314a669f8317dcf80006f9d49df0477b100a34862',
+ 'lib/next/capabilities/download_backends.dart': '43c5f6dfb08475802db085ddab0059852d62fe840c4f981a01860a398d0d8587','lib/next/followups/inbox_capability.dart': 'ee236b7f41cc2c4d46b23d603f2d2347e14a7082e9ce7fe8b674f754bd4d0de3',
  'lib/next/knowledge/capability.dart': '705ef8725a060aa20504794279f0b433e14288663ee024d17e33477dd9b3c400',
  'lib/next/accounts/capability.dart': '1174193fe779e32c1cf3d97792ab7be09ea3aea93d424bca90d2b4ac3b8341e1',
  'lib/next/app_capabilities.dart': 'e154e184c3914b08fad13fc06fe9bc3276ce46951c6b340fea616887595daeda',
@@ -118,9 +118,9 @@ BASELINE_HASHES = {
  'lib/next/danmaku/capability.dart': '79f0e4bcf286a616bc0d7d668f83955b5ae5eb9cf746f3c1c47536c9caef3d8c',
  'lib/next/db/capability.dart': '4c0ccb89a9406d1d435625d698e27855b0ff802833f722ece4467a1cc2819367',
  'lib/next/events/capability.dart': '31a9379fc66b1a3680dd7e4f7ff7ade695c990a29230bf00e5c1adc5349c633d',
- 'lib/next/followups/capability.dart': 'c0da0cf87590582b55fdc607f0a496e60fa627acae276d2a19b77e499c07d223',
+ 'lib/next/followups/capability.dart': '456896a3c831666a9a6fa7776e8793392c0d19bffcf9a16503a74076bf6d9e20',
  'lib/next/headless/chat_capability.dart': 'b3512e2ca26b2086f0fc28273331a2b4ad621a65b6e75ee37f08aeb0550b4e80',
- 'lib/next/headless/core.dart': 'a1141327b63d2913d3d255246c48b6ce64f33f4445cca9b078886d6fc4ca2192',
+ 'lib/next/headless/core.dart': '7408b65f05248e59443fb0f644fe0f507ad00cdc8d95f128effc0778d71e7f15',
  'lib/next/headless/downloads.dart': '98598b4844673facd8d03947d6e8fae1e064062d85096f076ca680a19223d363',
  'lib/next/headless/library_roots.dart': 'cf11e2a49f6a437e031e0d39f544291dc61fe73f27db4cc2036b3f90ab146c44',
  'lib/next/headless/ports.dart': 'f07f7a3cf4b2071f6b7f1578c0047a1bbeb4af070634c481026836b926208d46',
@@ -137,10 +137,10 @@ BASELINE_HASHES = {
  'lib/next/mesh/delegation.dart': '7083cfde13976088d821b4c66671adc8d0cda91ae5396c13e46cfe1aead4d1e4',
  'lib/next/mesh/files.dart': '88bf2fb55f8d5a6404ca1955e1e430db11e417339dae7335144234992d0bf840',
  'lib/next/mesh/library_capability.dart': 'd9999630399b9aff79bb10f2f14ff2a902b80c572dc6f30edf8ec2f330b37240',
- 'lib/next/mesh/runtime.dart': 'af1d711cf8f3bddd646268f229a528b5ade351d3a94152f7fe8d0129ab38ee89',
+ 'lib/next/mesh/runtime.dart': 'c8c9b9694ef899f2080ef15e5b0cd2e2b2751abf0f654dd08cfcf6c669360dd7',
  'lib/next/network/capability.dart': '0b12d2f9e1b415cc986e124d016767a5d230d0178a3e19f22fbb8d15481109d8',
- 'lib/next/next_core.dart': 'bf1f6c6097005596838465fcbc67cc4a5a0d2c1ba044ce18a900c9d498ce92f6',
- 'lib/next/next_runtime.dart': '0dfdf7e2bdb5e01b17542e5b04be6d8a7992524ddae9ccfe932a5b85d685908c',
+ 'lib/next/next_core.dart': '016d8da60c4571e7b74eceb0bf900e2096b351a3843dd67a31436fa32587f63f',
+ 'lib/next/next_runtime.dart': '769238aab213166125899385c422880001c2e6bb6fa9f51abf4ae0122def279b',
  'lib/next/player/features/local_operations.dart': '6e1d4e008ebf23f0f62c11abace5e1c10eb355675607d2ee26929b80f362e5b0',
  'lib/next/player/features/operation_specs.dart': '514a6c5049507ee3513bffeb4532d760d03d8f4154a93f00ee680c8af1e3d35a',
  'lib/next/player/ports/session_ports.dart': '4cf2d88a57dc8e3939b12237e23e243ec728cfa5587c5b2e20e3c48db275da9e',

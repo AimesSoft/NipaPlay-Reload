@@ -1,11 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:nipa_harness/nipa_harness.dart';
 
-import '../../mesh/chat_guest_host.dart'
-    show chatAttachmentChunk, chatAttachmentLimit;
+import '../../mesh/chat_attachment.dart';
 import '../../mesh/nipa_peers.dart';
 import 'chat_port.dart';
 
@@ -331,50 +328,23 @@ final class MeshChatPort implements ChatPort, ChatFileStaging {
   @override
   Future<List<String>> stage(List<String> paths) async {
     if (filesRefused case final why?) throw ChatUnavailable(why);
+    final peer = _peer;
+    if (peer == null) throw ChatUnavailable(_missing());
     final staged = <String>[];
     for (final path in paths) {
-      final file = File(path);
-      final stat = await file.stat();
-      if (stat.type != FileSystemEntityType.file) {
-        throw ChatUnavailable('找不到文件「${_base(path)}」，没有发出去。');
-      }
-      final size = stat.size;
-      if (size == 0 || size > chatAttachmentLimit) {
-        throw ChatUnavailable(size == 0
-            ? '「${_base(path)}」是空的，没有发出去。'
-            : '「${_base(path)}」太大了，超过 ${chatAttachmentLimit >> 20} MB 的文件请放到媒体库里再告诉梨花。');
-      }
-      final input = await file.open();
-      try {
-        String? uploadId;
-        var offset = 0;
-        while (true) {
-          final bytes = await input.read(chatAttachmentChunk);
-          final sent = await _call('mesh/chat/attach', {
-            'name': _base(path),
-            'size': size,
-            'offset': offset,
-            'data': base64Encode(bytes),
-            if (uploadId != null) 'uploadId': uploadId,
-          });
-          uploadId = sent['uploadId'] as String?;
-          offset = sent['received'] as int;
-          if (sent['path'] case final String there) {
-            staged.add(there);
-            break;
-          }
-          if (bytes.isEmpty) {
-            throw StateError('The device stopped taking ${_base(path)}.');
-          }
-        }
-      } finally {
-        await input.close();
+      final result = await stageChatAttachment(path,
+          (params) => call(peer, 'mesh/chat/attach', params));
+      if (result['path'] case final String there) {
+        staged.add(there);
+      } else {
+        final status =
+            result['status'] == 'outcomeUnknown' ? '附件暂存结果未知' : '附件未暂存';
+        throw ChatUnavailable('$status：${result['reason']}');
       }
     }
+    if (peer != _peer) throw const ChatUnavailable('目标设备已切换，未发送消息。');
     return staged;
   }
-
-  static String _base(String path) => path.split(RegExp(r'[\\/]')).last;
 
   @override
   Future<ChatEvent?> startTurn(String threadId, String text) async {

@@ -6,6 +6,13 @@ import '../../next_runtime.dart';
 
 typedef ChatEvent = Map<String, dynamic>;
 
+final class ChatFailureEvent {
+  ChatFailureEvent(this.message, {this.turnId});
+
+  final String message;
+  final String? turnId;
+}
+
 /// Nipa cannot be spoken with now, and [message] says so as it is shown in
 /// the conversation (no host here, or the device that serves it is away).
 final class ChatUnavailable implements Exception {

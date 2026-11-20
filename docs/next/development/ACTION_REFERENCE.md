@@ -39,6 +39,10 @@
 | `cache.plan` | read | 分类缓存回收预览 | Core | 允许 | [源码](../../../lib/next/system/storage.dart) |
 | `cache.prune` | write | 回收预览中的可重取缓存 | Core | 允许 | [源码](../../../lib/next/system/storage.dart) |
 | `capability.describe` | read | Describe a capability family | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/family_descriptions.dart) |
+| `chat.attachment.send` | write | 从调用设备把指定文件暂存到目标设备，返回路径和暂存结果；不绑定会话、不发消息 | 通用/组合 | 本地 | [源码](../../../lib/next/mesh/chat_attachment.dart) |
+| `chat.model.candidates` | read | 查询候选；区分查询成功（可为空）、失败和不可用 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |
+| `chat.model.set` | write | 保存指定候选或思考强度；下一回合读取，不打断正在执行的回合 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |
+| `chat.model.status` | read | 分别读取宿主报告的在用模型、已保存选择和最近模型，不回传凭据 | Runtime | 允许 | [源码](../../../lib/next/settings/model_capability.dart) |
 | `chat.read` | read | Read the latest turns of a conversation | Headless | 允许 | [源码](../../../lib/next/headless/chat_capability.dart) |
 | `chat.send` | write | Say something to Nipa on this host | Headless | 允许 | [源码](../../../lib/next/headless/chat_capability.dart) |
 | `chat.session.list` | read | 列出会话及当前状态 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
@@ -130,7 +134,7 @@
 | `followup.cancel` | write | 取消尚未启动的后续 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
 | `followup.list` | read | 查询后续及投递状态 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
 | `followup.register` | write | 登记任务或事件触发的持久后续 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
-| `followup.retry` | write | 立即再次投递失败或等待重试的后续 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
+| `followup.retry` | write | 将 `execution_failed` 或带 `retryAt` 的 `ready` 跟进排入立即重投；不打断回合，返回受理状态而非完成 | 通用/组合 | 允许 | [源码](../../../lib/next/followups/capability.dart) |
 | `history.continue_watching` | read | Get continue watching | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/history_capability.dart) |
 | `history.mark_watched_batch` | write | 标记本地观看状态 | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/watched_history.dart) |
 | `history.remove` | write | Remove watch history | Runtime/部分共享 | 允许 | [源码](../../../lib/next/capabilities/local_library_operations.dart) |

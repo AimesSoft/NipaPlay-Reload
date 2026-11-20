@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipa_harness/nipa_harness.dart'
     show Failure, FailureCode, JsonMap;
 import 'package:flutter/foundation.dart';
 import '../data/gui_calls.dart';
+import '../conversation/chat_port.dart' show ChatFailureEvent;
 import '../theme/tokens.dart';
 import '../widgets/buttons.dart';
 import '../widgets/glass.dart';
@@ -32,7 +34,7 @@ class AgentInboxOverlay extends StatefulWidget {
   final Stream<Map> events;
   final String? Function()? peer;
   final Future<void> Function(JsonMap)? onOpen;
-  final ValueListenable<String?>? errors;
+  final ValueListenable<ChatFailureEvent?>? errors;
   @override
   State<AgentInboxOverlay> createState() => _AgentInboxOverlayState();
 }
@@ -44,7 +46,11 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
   List<JsonMap> _items = [];
   bool _loading = false, _acting = false, _expanded = false, _more = false;
   int _limit = 30;
-  String? _error, _lastExternalError, _lastLoadError;
+  String? _error, _lastLoadError;
+  final _reported = <(String?, String)>{};
+  final _publishing = <(String?, String)>{};
+  final _sessionId = DateTime.now().microsecondsSinceEpoch;
+  int _errorSequence = 0;
   String? _selectedId;
   final Set<String> _collapsedIds = {};
 
@@ -68,7 +74,8 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
   static const _pace = Duration(seconds: 1);
   DateTime? _loadedAt;
   Future<void> _paced() async {
-    final since = _loadedAt == null ? null : DateTime.now().difference(_loadedAt!);
+    final since =
+        _loadedAt == null ? null : DateTime.now().difference(_loadedAt!);
     if (since != null && since < _pace) {
       await Future<void>.delayed(_pace - since);
     }
@@ -84,173 +91,97 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
 
   void _externalError() {
     final error = widget.errors?.value;
-    if (error != null) _recordError(error, external: true);
+    if (error != null) _recordError(error.message, turnId: error.turnId);
   }
-
-  /// The failure already reported for each conversation (null: the host's
-  /// own, which names none). A conversation's failure stays in its liveness
-  /// report, sent every second for every conversation, until its next turn
-  /// starts: it is reported once and not again until then, and two
-  /// conversations holding different failures do not take turns at it.
-  final _reported = <String?, String>{};
 
   void _event(Map event) {
     final method = event['method'];
     final params = event['params'] as Map? ?? const {};
-    final thread = params['threadId'] is String ? params['threadId'] as String : null;
-    if (method == 'turn/started') {
-      // That conversation tries again: a failure of it is news again; the
-      // others keep theirs.
-      _reported.remove(thread);
-      _lastExternalError = null;
-      return;
-    }
     final turn = params['turn'] as Map?;
     Object? raw;
     String? turnId;
-    if (method == 'host/error') raw = params['error'] ?? params;
+    if (method == 'host/error') {
+      raw = params['error'] ?? params['message'];
+      turnId = params['turnId'] as String?;
+    }
     if (method == 'turn/completed' && turn?['status'] == 'failed') {
       raw = turn?['error'];
       turnId = turn?['id'] as String?;
     }
-    if (method == 'host/liveness') {
+    if (method == 'host/liveness' && params['status'] == 'failed') {
       raw = params['latestError'];
       turnId = params['turnId'] as String?;
+      if (turnId == null) return;
     }
     if (raw == null || raw == '') return;
     final body =
         raw is String ? raw : const JsonEncoder.withIndent('  ').convert(raw);
-    _recordError(body,
-        thread: method == 'host/error' ? null : thread, turnId: turnId);
+    _recordError(body, turnId: turnId);
   }
 
-  /// What a runtime error says, whichever way it arrived. The runner's error
-  /// object (indented JSON) and the chat's text of the same failure carry one
-  /// message and are one failure: compared as written they published two
-  /// reminders 0.7 s apart (#1122).
-  static String _errorSignature(String body) {
-    try {
-      final decoded = jsonDecode(body);
-      if (decoded is Map && decoded['message'] is String) {
-        return (decoded['message'] as String).trim();
-      }
-    } on FormatException {
-      // Plain text: the message itself.
-    }
-    return body.trim();
-  }
-
-  /// [external]: the conversation's own text of a failure (no conversation
-  /// named), which follows, or precedes, the runner's report of it.
-  void _recordError(String body,
-      {String? thread, String? turnId, bool external = false}) {
-    final signature = _errorSignature(body);
-    if (external) {
-      if (signature == _lastExternalError ||
-          _reported.containsValue(signature)) {
-        return;
-      }
-      _lastExternalError = signature;
-    } else {
-      if (_reported[thread] == signature) return;
-      _reported[thread] = signature;
-      // The conversation's text of this failure came first: the pair is one
-      // failure, reported once.
-      if (signature == _lastExternalError) {
-        _lastExternalError = null;
-        return;
-      }
-    }
-    unawaited(_publish(body, turnId).then((_) => _load()).catchError(
-        (Object e) {
-      if (mounted) setState(() => _error = '$body\n\n$e');
-    }));
-  }
-
-  /// Reminders already published about a followup, by request id.
-  final _followupNotices = <String>{};
-
-  /// A failed turn of a background followup says which task it was, and is
-  /// reported once while it is retried and once if it gives up, with a way
-  /// to retry it now or stop it (#1122); any other failure as it came. The
-  /// body is the runner's original error, never a model summary.
-  Future<void> _publish(String body, String? turnId) async {
-    final followup = turnId == null ? null : await _followupOf(turnId);
-    final state = followup?['state'];
-    final retrying = state == 'ready' && followup?['retryAt'] != null;
-    if (followup == null || !(retrying || state == 'execution_failed')) {
-      if (state == 'cancelled') return;
-      await _call('ui.notify', {
-        'requestId': 'runtime-${DateTime.now().microsecondsSinceEpoch}',
-        'title': '梨花运行失败',
-        'body': body,
-        'severity': 'error'
-      });
+  void _recordError(String body, {String? turnId}) {
+    final peer = widget.peer?.call();
+    final key = turnId == null ? null : (peer, turnId);
+    if (key != null && (_reported.contains(key) || !_publishing.add(key))) {
       return;
     }
-    final id = followup['id'] as String;
-    // One reminder per round: retried by hand, a followup that fails again
-    // is said again (#1122 review).
-    final round = followup['retries'] as int? ?? 0;
-    final requestId =
-        'followup-$id${round == 0 ? '' : '-$round'}-${retrying ? 'retrying' : 'failed'}';
-    if (!_followupNotices.add(requestId)) return;
-    final label = _followupLabel(followup);
+    unawaited(_recordReminder(body, turnId, peer, key));
+  }
+
+  Future<void> _recordReminder(
+      String body, String? turnId, String? peer, (String?, String)? key) async {
     try {
-      await _call('ui.notify', {
-        'requestId': requestId,
-        'title': retrying ? '「$label」暂时没能完成' : '「$label」没能完成',
-        'body': '${_errorSignature(body)}\n\n'
-            '${retrying ? '这是后台任务结束后梨花接着要做的事，会自动再试；也可以现在重试，或者停止。' : '这是后台任务结束后梨花接着要做的事，已不再自动重试；可以现在重试。'}',
-        'severity': 'error',
-        'followupId': id,
-      });
-    } on Failure catch (failure) {
-      // Published before this ran (a restart): that reminder stands.
-      if (failure.code != FailureCode.conflict) rethrow;
+      await _publish(body, turnId, peer);
+      if (key != null) {
+        _reported.add(key);
+        if (_reported.length > 512) _reported.remove(_reported.first);
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = '$body\n\n$error');
+      return;
+    } finally {
+      if (key != null) _publishing.remove(key);
     }
+    await _load();
   }
 
-  static String _followupLabel(JsonMap followup) {
-    final title = (followup['title'] as String?)?.trim();
-    if (title != null && title.isNotEmpty) return title;
-    final instruction = (followup['instruction'] as String? ?? '').trim();
-    if (instruction.isEmpty) return '后台任务';
-    return instruction.length <= 24
-        ? instruction
-        : '${instruction.substring(0, 24)}…';
+  Future<void> _publish(String body, String? turnId, String? peer) async {
+    final followup =
+        turnId == null || peer != null ? null : await _followupOf(turnId);
+    final id = followup?['id'] as String?;
+    final label = (followup?['title'] as String?)?.trim();
+    final requestId = turnId == null
+        ? 'runtime-$_sessionId-${++_errorSequence}'
+        : 'turn-${sha256.convert(utf8.encode(jsonEncode([peer, turnId])))}';
+    await _call('ui.notify', {
+      'requestId': requestId,
+      'title': id == null
+          ? '梨花运行失败'
+          : '「${label == null || label.isEmpty ? id : label}」投递失败',
+      'body': body,
+      'severity': 'error',
+      if (id != null) 'followupId': id,
+    });
   }
 
-  /// The followup whose delivery [turnId] was, once it has taken in that
-  /// turn's failure (retrying, or failed for good); null for a turn of the
-  /// person's own, or where followups cannot be read.
   Future<JsonMap?> _followupOf(String turnId) async {
-    for (var attempt = 0; attempt < 10; attempt++) {
-      final JsonMap listed;
-      try {
-        listed = await _call('followup.list', {});
-      } catch (_) {
-        return null;
-      }
-      JsonMap? found;
-      for (final raw
-          in (listed['followups'] as List? ?? const []).whereType<Map>()) {
-        final row = raw.cast<String, Object?>();
-        if (row['turnId'] == turnId ||
-            (row['failedTurns'] as List? ?? const []).contains(turnId)) {
-          found = row;
-          break;
-        }
-      }
-      if (found == null) return null;
-      final settled = found['turnId'] != turnId ||
-          const {'execution_failed', 'cancelled'}.contains(found['state']);
-      if (settled) return found;
-      // Still the turn it is in: the failure has not been taken in yet.
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      if (!mounted) return null;
+    final followups = await _followups();
+    return followups
+        .where((row) =>
+            row['turnId'] == turnId ||
+            (row['failedTurns'] as List? ?? const []).contains(turnId))
+        .firstOrNull;
+  }
+
+  Future<Iterable<JsonMap>> _followups() async {
+    try {
+      final listed = await _call('followup.list', {});
+      return (listed['followups'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => row.cast<String, Object?>());
+    } catch (_) {
+      return const [];
     }
-    return null;
   }
 
   /// The reminder's 重试 / 停止 on its followup; the reminder is then read.
@@ -321,6 +252,14 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
         }
       }
     }
+    if (result.any((row) =>
+        row['_peer'] == null &&
+        (row['request'] as Map?)?['followupId'] is String)) {
+      final followups = {for (final row in await _followups()) row['id']: row};
+      for (final row in result.where((row) => row['_peer'] == null)) {
+        row['_followup'] = followups[(row['request'] as Map?)?['followupId']];
+      }
+    }
     if (mounted) {
       setState(() {
         _items = result;
@@ -343,7 +282,8 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
     try {
       final result = await _call(
           action, {'id': row['id'], ...input}, row['_peer'] as String?);
-      if (mounted && const {'read', 'answered', 'cancelled'}.contains(result['state'])) {
+      if (mounted &&
+          const {'read', 'answered', 'cancelled'}.contains(result['state'])) {
         setState(() => _items.removeWhere((item) =>
             item['id'] == row['id'] && item['_peer'] == row['_peer']));
       }
@@ -445,6 +385,13 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
   Widget _card(BuildContext context, Size size, List<JsonMap> visible,
       JsonMap? row, String count) {
     final pending = row?['state'] == 'pending';
+    final followup = row?['_followup'] as JsonMap?;
+    final state = followup?['state'];
+    final canRetry = followup != null &&
+        followup['remoteDeviceId'] == null &&
+        (state == 'execution_failed' ||
+            (state == 'ready' && followup['retryAt'] != null));
+    final canStop = state == 'waiting' || state == 'ready';
     final failed = row?['severity'] == 'error';
     final options = [
       for (final o in (row?['options'] as List? ?? const [])) '$o'
@@ -498,8 +445,8 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
                     size: 36,
                     onTap: () {
                       setState(() {
-                        _collapsedIds.addAll(_items
-                            .map((r) => '${r['_peer']}:${r['id']}'));
+                        _collapsedIds.addAll(
+                            _items.map((r) => '${r['_peer']}:${r['id']}'));
                         _expanded = false;
                         _error = null;
                       });
@@ -572,20 +519,16 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
                         onTap: _acting
                             ? null
                             : () => _act(row, 'ui.inbox.dismiss', {})),
-                  if ((row['request'] as Map?)?['followupId'] is String &&
-                      row['_peer'] == null) ...[
+                  if (canRetry)
                     _Quiet('立即重试',
                         onTap: _acting
                             ? null
                             : () => _onFollowup(row, 'followup.retry')),
-                    // Still to be delivered again by itself: it can be stopped.
-                    if (((row['request'] as Map?)?['requestId'] as String? ?? '')
-                        .endsWith('-retrying'))
-                      _Quiet('停止',
-                          onTap: _acting
-                              ? null
-                              : () => _onFollowup(row, 'followup.cancel')),
-                  ],
+                  if (canStop)
+                    _Quiet('停止',
+                        onTap: _acting
+                            ? null
+                            : () => _onFollowup(row, 'followup.cancel')),
                   _Quiet('查看对话', arrow: true, onTap: () => _open(row)),
                   if (pending)
                     _Quiet('取消问题',
