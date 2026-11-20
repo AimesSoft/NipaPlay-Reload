@@ -9,6 +9,10 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get externalPlayerLaunchFailed =>
+      'Could not start the external player. Check its path and version. Trying the built-in player instead.';
+
+  @override
   String get appTitle => 'NipaPlay';
 
   @override

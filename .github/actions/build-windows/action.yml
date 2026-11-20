@@ -577,6 +577,9 @@ runs:
         PrivilegesRequired=lowest
         PrivilegesRequiredOverridesAllowed=dialog
         UsePreviousPrivileges=yes
+        CloseApplications=force
+        CloseApplicationsFilter={#MyAppExeName}
+        RestartApplications=no
         LicenseFile="$licensePath"
 
         [Languages]

@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get externalPlayerLaunchFailed => '外部播放器启动失败，请检查播放器路径和版本。已尝试使用内置播放器。';
+
+  @override
   String get appTitle => 'NipaPlay';
 
   @override
@@ -1970,6 +1973,9 @@ class AppLocalizationsZh extends AppLocalizations {
 /// The translations for Chinese, using the Han script (`zh_Hant`).
 class AppLocalizationsZhHant extends AppLocalizationsZh {
   AppLocalizationsZhHant() : super('zh_Hant');
+
+  @override
+  String get externalPlayerLaunchFailed => '外部播放器啟動失敗，請檢查播放器路徑和版本。已嘗試使用內建播放器。';
 
   @override
   String get appTitle => 'NipaPlay';

@@ -42,7 +42,7 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
   Timer? _processPollingTimer;
   bool _closed = false;
   bool _disposed = false; // ChangeNotifier 是否已被 dispose, dispose 后不再通知监听器
-  Future<int>? _processExitCode;
+  static const _startupWindow = Duration(milliseconds: 500);
 
   // 构造函数
   MpvSession(
@@ -97,7 +97,7 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
   @override
   Future<void> launch() async {
 
-    if (_disposed) throw StateError('MpvSession 已释放');
+    if (_disposed || _closed) throw StateError('MpvSession 已关闭');
     if (_processId != null) throw StateError('MpvSession 已启动');
 
     final ipcPath = _createMpvIpcPath();
@@ -105,7 +105,7 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
     final directory = Directory('${Directory.systemTemp.path}${Platform.pathSeparator}nipaplay_danmaku');
     if (!directory.existsSync()) directory.createSync(recursive: true);
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
     final assPath = '${directory.path}${Platform.pathSeparator}danmaku_$timestamp.ass';
     final luaPath = '${directory.path}${Platform.pathSeparator}nipaplay_danmaku_$timestamp.lua';
     final assName = assPath.split(Platform.pathSeparator).last;
@@ -122,13 +122,16 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
     }
     _assFilePath = assPath;
     _luaFilePath = luaPath;
+    if (_closed) {
+      _deleteDanmakuFiles();
+      throw StateError('MpvSession 已关闭');
+    }
 
     final launchArgs = [
       _mediaPath,
       ..._extraArgs,
       '--sub-file=$_assFilePath',
       '--script=$_luaFilePath',
-      _isMpvNet ? '--secondary-sub-override=no' : '--secondary-sub-ass-override=no',
       '--input-ipc-server=$ipcPath',
     ];
     debugPrint(
@@ -139,39 +142,65 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
     // 不通过 `open --args` 启动 mpv.app。沙盒应用交给 LaunchServices 后，
     // 参数可能不会转交给新实例，最终只会出现一个未加载媒体的空白 mpv 窗口。
     // 直接执行包内主程序也能让 processId 精确指向本次 mpv 会话。
-    //
-    // Windows 下使用 detached 模式启动 mpv, 进程存活检测通过 tasklist 实现。
-    late Process process;
+    late final Process process;
     try {
-      process = await Process.start(
-        executablePath,
-        launchArgs,
-        mode: Platform.isMacOS
-            ? ProcessStartMode.normal
-            : ProcessStartMode.detached,
-      );
+      process = await Process.start(executablePath, launchArgs);
     } catch (_) {
-      _deleteDanmakuFilePaths(
-        _assFilePath,
-        _luaFilePath,
-      );
-      _assFilePath = null;
-      _luaFilePath = null;
+      _close();
       rethrow;
     }
-    if (Platform.isMacOS) {
-      process.stdin.close();
-      unawaited(process.stdout.drain<void>());
-      unawaited(process.stderr.drain<void>());
-      _processExitCode = process.exitCode;
-    }
-
     _ipcPath = ipcPath;
     _processId = process.pid;
+    unawaited(process.stdin.close());
+
+    final stdoutPrefix = <int>[];
+    final stderrPrefix = <int>[];
+    var captureStartup = true;
+    Future<void> consume(Stream<List<int>> stream, List<int> prefix) async {
+      try {
+        await for (final chunk in stream) {
+          if (captureStartup && prefix.length < 2048) {
+            prefix.addAll(chunk.take(2048 - prefix.length));
+          }
+        }
+      } on IOException catch (error) {
+        debugPrint('[MpvSession] Failed reading player output: $error');
+      }
+    }
+
+    final outputDone = Future.wait([
+      consume(process.stderr, stderrPrefix),
+      consume(process.stdout, stdoutPrefix),
+    ]);
+    final exitCode = process.exitCode;
+    final earlyExit = await exitCode.then<int?>((code) => code).timeout(
+      _startupWindow,
+      onTimeout: () => null,
+    );
+    if (earlyExit != null && earlyExit != 0) {
+      await outputDone.timeout(const Duration(milliseconds: 100),
+          onTimeout: () => <void>[]);
+      captureStartup = false;
+      final output = utf8.decode(
+        stderrPrefix.isEmpty ? stdoutPrefix : stderrPrefix,
+        allowMalformed: true,
+      ).trim();
+      _close();
+      throw ProcessException(executablePath, const [], output, earlyExit);
+    }
+    captureStartup = false;
+    stdoutPrefix.clear();
+    stderrPrefix.clear();
+    if (_closed) {
+      if (earlyExit == null) process.kill();
+      _deleteIpcSocket();
+      _deleteDanmakuFiles();
+      throw StateError('MpvSession 已关闭');
+    }
 
     debugPrint('[MpvSession] mpv started: pid=${process.pid}, ipcPath=$ipcPath');
 
-    _startLifecycleMonitoring(); // 启动进程轮询和生命周期监控
+    _startLifecycleMonitoring(exitCode);
   }
 
   /// 终止当前外部播放器进程.
@@ -185,7 +214,7 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
       if (processId == null) {
         return;
       } else if (Platform.isWindows) {
-        // Windows 没有 SIGTERM, detached 进程需要通过 taskkill 终止.
+        // Windows 没有 SIGTERM，通过 taskkill 终止进程树。
         // /T 终止进程树, /F 强制终止.
         Process.runSync('taskkill', ['/PID', '$processId', '/T', '/F']);
       } else {
@@ -299,19 +328,8 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
   // --- Private Methods --- //
 
-  void _startLifecycleMonitoring() {
-    _stopLifecycleMonitoring();
-    final processExitCode = _processExitCode;
-    if (processExitCode != null) {
-      processExitCode.then(
-        (_) {
-          if (!_closed) _close();
-        },
-        onError: (Object error, StackTrace stackTrace) {
-          debugPrint('[MpvSession] Failed to watch player exit: $error');
-        },
-      );
-    }
+  void _startLifecycleMonitoring(Future<int> processExitCode) {
+    unawaited(processExitCode.then((_) => _close()));
     _scheduleNextProcessPoll();
   }
 
@@ -524,93 +542,34 @@ class MpvSession extends ChangeNotifier implements ExternalPlayerLaunchSession {
 
   /// 轮询外部播放器进程和播放状态
   Future<void> _pollProcessState(Timer timer) async {
-    bool running;
     try {
-      running = await _refreshProcessState(timer);
+      await _refreshProcessState(timer);
     } catch (error) {
       debugPrint('[MpvSession] Failed to refresh player state: $error');
-      running = true;
     }
 
     if (!identical(_processPollingTimer, timer)) return;
-    if (!running) {
-      _close();
-      return;
-    }
 
     // 继续轮询
     _scheduleNextProcessPoll();
   }
 
-  Future<bool> _refreshProcessState(Timer timer) async {
-    final running = await _isProcessRunning();
-    if (!identical(_processPollingTimer, timer) || !running) return running;
-
+  Future<void> _refreshProcessState(Timer timer) async {
     final nextState = await _readMpvState();
     if (!identical(_processPollingTimer, timer) || nextState == null) {
-      return true;
+      return;
     }
 
     if (_position == nextState.position &&
         _duration == nextState.duration &&
         _isPaused == nextState.isPaused) {
-      return true;
+      return;
     }
 
     _position = nextState.position;
     _duration = nextState.duration;
     _isPaused = nextState.isPaused;
     notifyListeners();
-    return true;
-  }
-
-  Future<bool> _isProcessRunning() async {
-    if (processId <= 0) return false;
-
-    // macOS 沙盒内执行 `ps` 可能失败并把仍在播放的 mpv 误判为已退出。
-    // launch 创建的会话通过 Process.exitCode 精确监听，轮询期间保持存活。
-    if (_processExitCode != null) return true;
-
-    if (Platform.isLinux) {
-      try {
-        final value = await File('/proc/$processId/stat').readAsString();
-        final closingParen = value.lastIndexOf(')');
-        if (closingParen < 0 || closingParen + 2 >= value.length) return true;
-        return value.substring(closingParen + 2, closingParen + 3) != 'Z';
-      } on FileSystemException {
-        return false;
-      }
-    }
-
-    if (Platform.isMacOS) {
-      try {
-        final result = await Process.run(
-          '/bin/ps',
-          ['-p', '$processId', '-o', 'stat='],
-        );
-        if (result.exitCode != 0) return false;
-        final state = (result.stdout as String).trim();
-        return state.isNotEmpty && !state.startsWith('Z');
-      } on ProcessException {
-        return false;
-      }
-    }
-
-    if (Platform.isWindows) {
-      try {
-        final result = await Process.run(
-          'tasklist',
-          ['/FI', 'PID eq $processId', '/NH'],
-        );
-        if (result.exitCode != 0) return false;
-        final output = (result.stdout as String).trim();
-        return output.contains('$processId');
-      } on ProcessException {
-        return false;
-      }
-    }
-
-    return false;
   }
 
   Future<_ExternalPlayerPlaybackState?> _readMpvState() async {
@@ -710,6 +669,15 @@ const String _danmakuLuaScript = r'''-- NipaPlay 弹幕外挂脚本: 把弹幕�
 -- 由 NipaPlay 自动生成; 目标弹幕文件名: __NIPAPLAY_ASS_BASENAME__
 -- 不抢占主字幕（内嵌/外挂）, 弹幕作为次字幕始终显示.
 local TARGET = "__NIPAPLAY_ASS_BASENAME__"
+mp.add_hook("on_load", 10, function()
+    for _, option in ipairs({"secondary-sub-ass-override", "secondary-sub-override"}) do
+        if mp.get_property("option-info/" .. option .. "/name") then
+            mp.set_property("options/" .. option, "no")
+            break
+        end
+    end
+end)
+
 local function find_danmaku_track()
     local tracks = mp.get_property_native("track-list")
     if not tracks then return nil end

@@ -4,18 +4,27 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/constants/danmaku/mode.dart';
 import 'package:nipaplay/constants/media_extensions.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/l10n/app_localizations.dart';
 import 'package:nipaplay/models/danmaku/blocked_item.dart';
 import 'package:nipaplay/models/danmaku/danmaku_item.dart';
 import 'package:nipaplay/models/danmaku/style.dart';
+import 'package:nipaplay/models/external_player_session/mpv_session.dart';
 import 'package:nipaplay/models/external_player_session/session.dart';
+import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/pages/external_player_console_page.dart';
+import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/services/external_player_console_service.dart';
+import 'package:nipaplay/services/playback_service.dart';
 import 'package:nipaplay/utils/danmaku_ass_converter.dart';
 import 'package:nipaplay/utils/external_player_danmaku_ass.dart';
 import 'package:nipaplay/utils/mpv_utils.dart';
+import 'package:nipaplay/utils/tab_change_notifier.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 _TestSession _session(
   Process process, {
@@ -366,6 +375,97 @@ Future<void> _waitUntil(
 }
 
 void main() {
+  group('外部 mpv 启动', () {
+    Future<File> makeExecutable(String script) async {
+      final directory = await Directory.systemTemp.createTemp('nipa-mpv-test');
+      addTearDown(() => directory.delete(recursive: true));
+      final executable = File('${directory.path}/mpv');
+      await executable.writeAsString('#!/bin/sh\n$script\n');
+      expect((await Process.run('chmod', ['+x', executable.path])).exitCode, 0);
+      return executable;
+    }
+
+    Future<MpvSession> makeSession(String script) async {
+      final executable = await makeExecutable(script);
+      final session = MpvSession(executable.path, 'fixture.mkv');
+      addTearDown(session.dispose);
+      return session;
+    }
+
+    test('兼容拒绝次字幕样式选项的旧 mpv', () async {
+      final session = await makeSession(r'''
+for arg in "$@"; do
+  case "$arg" in
+    --secondary-sub*-override=*) echo 'option not found' >&2; exit 2 ;;
+  esac
+done
+exec /bin/sleep 10
+''');
+      await session.launch();
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(session.isClosed, isFalse);
+    });
+
+    test('启动即失败时保留退出码和诊断', () async {
+      final session = await makeSession('echo "option not found" >&2; exit 2');
+      await expectLater(
+        session.launch(),
+        throwsA(isA<ProcessException>()
+            .having((error) => error.errorCode, '退出码', 2)
+            .having((error) => error.message, '诊断', contains('option not found'))),
+      );
+      expect(session.isClosed, isTrue);
+    });
+
+    testWidgets('启动失败时显示提示并回退到内置播放器', (tester) async {
+      final executable = (await tester.runAsync(
+        () => makeExecutable('echo "option not found" >&2; exit 2'),
+      ))!;
+      SharedPreferences.setMockInitialValues({
+        SettingsKeys.useExternalPlayer: true,
+        SettingsKeys.externalPlayerPath: executable.path,
+        SettingsKeys.externalPlayerType: ExternalPlayerType.mpv.name,
+        SettingsKeys.skipDanmakuMatching: true,
+      });
+      final settings = SettingsProvider();
+      final navigation = TabChangeNotifier();
+      addTearDown(settings.dispose);
+      addTearDown(navigation.dispose);
+      late BuildContext playbackContext;
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: settings),
+          ChangeNotifierProvider.value(value: navigation),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: Builder(builder: (context) {
+            playbackContext = context;
+            return const SizedBox.shrink();
+          })),
+        ),
+      ));
+      late Future<bool> request;
+      await tester.runAsync(() async {
+        final fallback = Completer<void>();
+        navigation.addListener(() => fallback.complete());
+        request = PlaybackService().tryPlayExternally(
+          playbackContext,
+          PlayableItem(videoPath: 'fixture.mkv', title: 'Fixture'),
+          episodeFileSelectionHandled: true,
+        );
+        await Future.any([fallback.future, request.then((_) {})]);
+      });
+      await tester.pump();
+      expect(navigation.targetPageId, AppPageIds.video);
+      expect(find.textContaining('Could not start the external player'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(await tester.runAsync(() => request), isTrue);
+    });
+  }, skip: !Platform.isMacOS && !Platform.isLinux);
+
   test('detects mpv from an explicit candidate list', () async {
     final tempDir = await Directory.systemTemp.createTemp(
       'nipaplay_mpv_detection_test_',
@@ -685,6 +785,49 @@ void main() {
         _showSession(_session(process));
 
         await _waitUntil(() => !ExternalPlayerConsoleService.hasActiveSession);
+      });
+
+      testWidgets('失焦期间播放进度不调度控制台帧，恢复后追上进度', (tester) async {
+        final process = await tester.runAsync(_startPlayer);
+        if (process == null) fail('Failed to start the test player process');
+        final session = _sessionFromProcessId(
+          process.pid,
+          duration: const Duration(minutes: 2),
+          position: Duration.zero,
+          danmakuList: List.generate(120, (index) => DanmakuItem(
+            time: Duration(seconds: index),
+            content: 'comment $index',
+          )),
+        );
+        _showSession(session);
+        addTearDown(() {
+          ExternalPlayerConsoleService.closePlayerAndConsole();
+          session.dispose();
+        });
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await tester.pumpWidget(const MaterialApp(
+          locale: Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ExternalPlayerConsolePage(pane: ExternalPlayerConsolePane.danmakuList),
+        ));
+        await tester.pumpAndSettle();
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        await tester.pumpAndSettle();
+
+        var scheduled = 0;
+        for (var index = 0; index < 8; index++) {
+          session.position = Duration(milliseconds: 59000 + 250 * index);
+          session.notifyListeners();
+          if (tester.binding.hasScheduledFrame) scheduled++;
+          await tester.pump(const Duration(milliseconds: 250));
+        }
+        debugPrint('BUGEXT: 失焦期间 $scheduled/8 次进度更新调度了帧');
+        expect(scheduled, 0);
+
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await tester.pumpAndSettle();
+        expect(find.text('comment 53'), findsOneWidget);
       });
 
       testWidgets('does not expose per-item visibility controls',
