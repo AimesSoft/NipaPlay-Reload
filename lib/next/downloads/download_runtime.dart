@@ -78,15 +78,11 @@ final class DownloadRuntime extends ChangeNotifier {
   Timer? _timer;
   Future<void>? _refreshing;
   bool _closed = false;
-  bool _admissionEnabled = false;
+  bool _admissionEnabled = true;
   int _admissionRevision = 0;
 
   void attach(TaskEngine engine, Directory root, {CredentialVault? vault}) {
     this.engine = engine;
-    engine.setAdmission(executor.type,
-        allowed: false,
-        obsoleteRetry: (job) => job.error?.code == FailureCode.unavailable &&
-            job.error?.message == 'Downloader is disabled.');
     http.stateDirectory ??= Directory('${root.path}/http_downloads');
     if (vault != null) {
       qbittorrent = QbittorrentHub(
@@ -121,7 +117,10 @@ final class DownloadRuntime extends ChangeNotifier {
     final allowed = setting != false && await _enabled();
     if (_closed || revision != _admissionRevision) return;
     _admissionEnabled = allowed;
-    engine.setAdmission(executor.type, allowed: allowed);
+    await engine.setAdmission(executor.type,
+        allowed: allowed,
+        obsoleteRetry: (job) => job.error?.code == FailureCode.unavailable &&
+            job.error?.message == 'Downloader is disabled.');
     _scheduleRefresh(immediate: allowed);
   }
 

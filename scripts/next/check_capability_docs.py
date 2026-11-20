@@ -166,7 +166,7 @@ BASELINE_HASHES = {'lib/next/store/runtime_extensions.dart': '4be923ed0a5a4583a1
  'lib/security/credential_capability.dart': '26bc1852bc98ef1c4c21446b165bfb0764bdb7c763fbd16355079ebbd03f32ac',
  'packages/nipa_harness/lib/src/action.dart': 'b80ccb05cb5eb0143290d6750ec8b4557da08511c222dfff06f929d329efcb55',
  'packages/nipa_harness/lib/src/tasks/actions.dart': 'd2ee746ca0224c55c47601ea7893a4ca0aa40604cc7c59499f9e9c5d9ea55f8b',
- 'packages/nipa_harness/lib/src/tasks/engine.dart': '8a73c5dda0cb1c9c56fdde8d73c178fe2751ce60a745cad94d5a1d5e6ec05cbb',
+ 'packages/nipa_harness/lib/src/tasks/engine.dart': 'd1bf9a403f94a419b1012ff633c9f2df41044f7b691b49e7bffb8800c66ab8ed',
  'lib/next/secrets/capability.dart': '2fd54d305cd95bf81dd7627b7e1b5c747717dabc8030689e3fda363d72d3bbed',
  'lib/next/subscriptions/capability.dart': '8b7da17a8b14972dd35c618cf62ec24db48d03b84c4b405256878cfe0c229e03'}
 current_files = {str(p.relative_to(root)) for p in paths if '/ui/dev/' not in str(p) and any((t in p.read_text() for t in ('ActionSpec(', 'extends Action<', 'implements Capability')))}

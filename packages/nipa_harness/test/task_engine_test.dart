@@ -246,7 +246,7 @@ void main() {
       });
       engine = TaskEngine(
           store: store, ownerDeviceId: 'device-test', executors: [second]);
-      engine.setAdmission('test', allowed: false);
+      await engine.setAdmission('test', allowed: false);
       await engine.start();
       expect((await store.events(job.jobId)).map((event) => event.kind),
           ['submitted', 'running']);
@@ -254,8 +254,8 @@ void main() {
       if (cancel) {
         await engine.cancel(job.jobId);
       } else {
-        engine.setAdmission('test', allowed: true);
-        engine.setAdmission('test', allowed: true);
+        await engine.setAdmission('test', allowed: true);
+        await engine.setAdmission('test', allowed: true);
       }
       await untilState(engine, job.jobId,
           cancel ? JobState.cancelled : JobState.succeeded);
