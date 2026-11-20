@@ -718,6 +718,9 @@ class PlaybackSourceService {
     SMBConnection connection,
     String currentPath,
   ) async {
+    // The episode URLs below point at the local proxy; make sure it is up
+    // (and healed after a suspension) before building them.
+    await SMBProxyService.instance.initialize();
     final entries = await SMBService.instance.listDirectory(
       connection,
       _smbParent(currentPath),

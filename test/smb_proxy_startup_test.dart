@@ -38,7 +38,7 @@ void main() {
     } finally {
       client.close(force: true);
     }
-    await proxy.initialize();
+    await HttpOverrides.runWithHttpOverrides(proxy.initialize, _RealHttp());
     expect(proxy.port, port);
     await proxy.stop();
     expect(proxy.isRunning, isFalse);
@@ -128,18 +128,12 @@ void main() {
     } finally {
       client.close(force: true);
     }
-    HttpOverrides.runWithHttpOverrides(
+    await HttpOverrides.runWithHttpOverrides(
       () => RemoteProxyDiagnostics.lifecycle('resumed'),
       _RealHttp(),
     );
 
     bool logged(String text) => logs.any((line) => line.contains(text));
-    for (var i = 0; i < 100; i++) {
-      if (logged('status=404') && logged('health reason=lifecycle-resumed')) {
-        break;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-    }
     // Lines written inside the proxy isolate arrive through the root's log.
     expect(logged('listener-bound'), isTrue);
     expect(logged('method=HEAD range=none'), isTrue);
