@@ -61,6 +61,9 @@ which `ui.notify` ties to the followup with `followupId` (its conversation is th
 reminder's target). The viewer reports a failed followup delivery at most twice:
 once while it is retried, once if it gives up.
 
+Mesh 源端因目标撤销、缺席或超过七天未上线而结束的投递，可以在源端用同一个
+`followup.retry` 入口手动重试。并不绕过名单判定，也不会重新生成源跟进 ID。
+
 `followup.list`, `followup.cancel` and the `followups` public view expose titles,
 waiting conditions, origin, trigger evidence, actual thread/turn IDs and reasons.
 Cancel is idempotent until delivery begins. Registration, triggering, pending

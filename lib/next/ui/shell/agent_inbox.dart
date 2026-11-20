@@ -94,31 +94,19 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
     if (error != null) _recordError(error.message, turnId: error.turnId);
   }
 
+  /// The conversation's events make no reminder here: the device that runs
+  /// a turn keeps the one reminder of its failure, and this window shows
+  /// that device's inbox. An event only says that inbox changed, or that
+  /// the device is back, so it is read again.
   void _event(Map event) {
-    final method = event['method'];
-    final params = event['params'] as Map? ?? const {};
-    final turn = params['turn'] as Map?;
-    Object? raw;
-    String? turnId;
-    if (method == 'host/error') {
-      raw = params['error'] ?? params['message'];
-      turnId = params['turnId'] as String?;
+    if (const {'host/inboxChanged', 'host/available'}
+        .contains(event['method'])) {
+      unawaited(_paced());
     }
-    if (method == 'turn/completed' && turn?['status'] == 'failed') {
-      raw = turn?['error'];
-      turnId = turn?['id'] as String?;
-    }
-    if (method == 'host/liveness' && params['status'] == 'failed') {
-      raw = params['latestError'];
-      turnId = params['turnId'] as String?;
-      if (turnId == null) return;
-    }
-    if (raw == null || raw == '') return;
-    final body =
-        raw is String ? raw : const JsonEncoder.withIndent('  ').convert(raw);
-    _recordError(body, turnId: turnId);
   }
 
+  /// A failure of something done in this window (a conversation that would
+  /// not open, a message not sent): kept in this device's inbox.
   void _recordError(String body, {String? turnId}) {
     final peer = widget.peer?.call();
     final key = turnId == null ? null : (peer, turnId);
@@ -137,7 +125,7 @@ class _AgentInboxOverlayState extends State<AgentInboxOverlay>
         if (_reported.length > 512) _reported.remove(_reported.first);
       }
     } catch (error) {
-      if (mounted) setState(() => _error = '$body\n\n$error');
+      if (mounted) setState(() => _error = '$body\n\n${rawFailureText(error)}');
       return;
     } finally {
       if (key != null) _publishing.remove(key);

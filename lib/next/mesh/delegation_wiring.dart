@@ -67,5 +67,6 @@ ChatGuests attachMeshChatGuests(MeshRuntime mesh, Followups followups) {
           }, Invocation(origin: 'mesh:$peer')));
   mesh.chatRequest = guests.handle;
   followups.chatListeners.add(guests.attach);
+  followups.inboxChanges.listen((_) => guests.inboxChanged());
   return guests;
 }
