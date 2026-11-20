@@ -12,9 +12,11 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { appendHandover, validateHandover } from './nipa-handover.mjs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 export const name = 'nipa-app-server';
-export const inject = ['agents', 'sessions'];
+export const inject = ['agents', 'sessions', 'llm'];
 
 /** Message sources that are context, not something said in the conversation. */
 const HIDDEN_SOURCES = new Set(['runtime-context', 'agent-instructions', 'compact-checkpoint', 'tool-registry']);
@@ -621,6 +623,27 @@ export function namesProtectedPath(args, protectedPaths) {
 
 export function apply(ctx, config = {}) {
   const provider = String(config.provider ?? 'nipaplay');
+  let catalog;
+  ctx.on('llm/adapters-updated', () => {
+    catalog = undefined;
+    notify('nipa/modelsChanged', {});
+  });
+  async function readCatalog() {
+    const failures = [];
+    const routes = await Promise.all(ctx.llm.listProviders().map(async (route) => {
+      try {
+        return (await ctx.llm.listModels(route.id)).map((entry) => ({
+          model: entry.id, displayName: entry.name ?? entry.id,
+          provider: route.id, providerName: route.name, isDefault: route.id === provider && entry.id === model,
+        }));
+      } catch {
+        failures.push(route.id);
+        return [];
+      }
+    }));
+    return { data: routes.flat(), failures, nextCursor: null };
+  }
+  const selections = new WeakMap();
   const model = String(config.model ?? '');
   const agentOptions = {
     provider, model,
@@ -817,6 +840,28 @@ export function apply(ctx, config = {}) {
       throw rpcError(-32600, 'Conversation is not ready');
     }
     const agent = await ensureAgent(id);
+    const selected = { provider: params.modelProvider ?? provider, model: params.model ?? model };
+    const changed = selected.provider !== provider || selected.model !== model;
+    if (changed) {
+      const listed = await (catalog ??= readCatalog());
+      if (!listed.data.some((entry) => entry.provider === selected.provider && entry.model === selected.model)) {
+        throw rpcError(-32602, 'Selected model is not in the provider catalog.');
+      }
+    } else if (config.reasoningEffort != null) {
+      selected.reasoningEffort = config.reasoningEffort;
+    }
+    if (changed || selections.has(agent)) {
+      if (currentTurnId(id) !== null) throw rpcError(-32600, 'Model selection requires an idle agent.');
+      let selection = selections.get(agent);
+      if (!selection) {
+        const require = createRequire(pathToFileURL(process.argv[1]));
+        const { installModelSelection } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-agent')).href);
+        selection = { current: selected };
+        installModelSelection(agent.ctx, selection);
+        selections.set(agent, selection);
+      }
+      selection.current = selected;
+    }
     const message = userMessage(params.input);
     // The turn exists once DSH claims this message from the agent's inbox.
     const claimed = new Promise((resolve, reject) => claims.set(message.id, { resolve, reject }));
@@ -871,6 +916,7 @@ export function apply(ctx, config = {}) {
       }],
       nextCursor: null,
     }),
+    'nipa/model/list': async () => (catalog = readCatalog()),
     // Nipa's memory arrives through the nipa-memory plugin, not Codex hooks.
     'hooks/list': async (params) => ({ data: (params?.cwds ?? []).map((cwd) => ({ cwd, hooks: [], errors: [], warnings: [] })) }),
     'thread/start': startThread,

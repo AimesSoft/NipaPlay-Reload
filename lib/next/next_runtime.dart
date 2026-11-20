@@ -621,6 +621,7 @@ final class NextRuntime extends ChangeNotifier {
         fixedRuntime: () =>
             AgentRuntimeFixed.readAsync(Platform.environment, labRoot: labRoot),
         fixedRuntimeDirectory: labRoot,
+        externalCodexStatusOnly: !LabProfile.active,
         // A lab profile prepared for Codex keeps using it until told otherwise.
         defaultRuntime: labRoot != null &&
                 File('${labRoot.path}/codex-home/config.toml').existsSync()
@@ -902,7 +903,7 @@ final class NextRuntime extends ChangeNotifier {
     _activityEvents =
         core.activityChanges.stream.listen((_) => host.memoryChanged());
     _hostEvents = host.events.listen((event) {
-      if (const {'host/modelChanged', 'host/error', 'turn/completed', 'error'}
+      if (const {'host/modelChanged', 'host/accountChanged', 'nipa/modelsChanged', 'host/error', 'turn/completed', 'error'}
           .contains(event['method'])) {
         _hostSettings!.notify();
       }
