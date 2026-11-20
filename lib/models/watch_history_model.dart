@@ -24,6 +24,15 @@ class WatchHistoryItem {
   bool isFromScan;
   String? videoHash; // 添加视频哈希值字段，用于弹幕匹配
   String? mediaKey;
+
+  /// Explicitly replaying a completed episode must not seek back to its EOF.
+  /// Keep the stored watched mark; only the starting position is reset.
+  bool get isCompleted =>
+      watchProgress >= 0.999 ||
+      (duration > 0 && lastPosition >= duration - 100);
+
+  int get resumePosition => isCompleted ? 0 : lastPosition;
+
   bool get isDandanplayRemote {
     final normalized = filePath.toLowerCase();
     return normalized.startsWith('dandanplay://') ||
@@ -138,6 +147,7 @@ class WatchHistoryManager {
   static const String _historyFileName = 'watch_history.json';
   static late String _historyFilePath;
   static bool _initialized = false;
+  static Future<void>? _initializing;
   static bool _isWriting = false; // 添加写入锁标志
   static final List<WatchHistoryItem> _cachedItems = []; // 添加内存缓存
   static DateTime _lastWriteTime = DateTime.now(); // 记录最后写入时间
@@ -153,6 +163,15 @@ class WatchHistoryManager {
   // 初始化历史记录管理器
   static Future<void> initialize() async {
     if (_initialized) return;
+    final pending = _initializing ??= _initialize();
+    try {
+      await pending;
+    } finally {
+      if (identical(_initializing, pending)) _initializing = null;
+    }
+  }
+
+  static Future<void> _initialize() async {
     if (kIsWeb) {
       try {
         _migratedToDatabase = true;
@@ -446,7 +465,10 @@ class WatchHistoryManager {
 
   // 获取所有历史记录
   static Future<List<WatchHistoryItem>> getAllHistory() async {
-    if (!_initialized) await initialize();
+    if (!_initialized) {
+      await initialize();
+      return List.from(_cachedItems);
+    }
     
     // 如果已迁移到数据库，则直接从数据库获取
     if (_migratedToDatabase) {

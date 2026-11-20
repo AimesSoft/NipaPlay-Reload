@@ -113,6 +113,7 @@ class BangumiAccountViewModel {
     required this.onClearCache,
     required this.onOpenDandanHelp,
     required this.onOpenNipaplayHelp,
+    required this.onOpenTokenPage,
   });
 
   static const String dandanTitle = '弹弹play内置 Bangumi 绑定（仅同步进度）';
@@ -120,7 +121,10 @@ class BangumiAccountViewModel {
   static const String tokenTitle = '访问令牌';
   static const String tokenDescription = '在 Bangumi 网站生成访问令牌后粘贴到此处。';
   static const String tokenPlaceholder = '请输入 Bangumi 访问令牌';
-  static const String tokenHelpLabel = '如何获取 Bangumi 访问令牌';
+  static const String tokenHelpLabel = '前往 Bangumi 创建访问令牌';
+  /// Bangumi 官方访问令牌创建页面。点击帮助按钮时直接跳转到该页面。
+  static const String bangumiAccessTokenUrl =
+      'https://next.bgm.tv/demo/access-token';
   static const String actionsTitle = '同步操作';
 
   final bool isAuthorized;
@@ -146,6 +150,9 @@ class BangumiAccountViewModel {
   final VoidCallback onClearCache;
   final VoidCallback onOpenDandanHelp;
   final VoidCallback onOpenNipaplayHelp;
+
+  /// 打开 Bangumi 访问令牌创建页面（外部浏览器）。
+  final VoidCallback onOpenTokenPage;
 
   bool get isDandanAuthorizationExpired =>
       dandanLinkedExpireTime != null &&

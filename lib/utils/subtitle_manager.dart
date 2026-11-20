@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'subtitle_parser.dart';
+import 'subtitle_timeline_index.dart';
 import 'storage_service.dart';
 import '../../player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/services/remote_subtitle_service.dart';
@@ -37,6 +38,7 @@ class SubtitleManager extends ChangeNotifier {
   String? _currentExternalSubtitlePath;
   final Map<String, Map<String, dynamic>> _subtitleTrackInfo = {};
   final Map<String, List<dynamic>> _subtitleCache = {};
+  final Expando<SubtitleTimelineIndex> _subtitleIndexes = Expando();
 
   /// 缓存指纹：path -> "size:mtime"，用于检测字幕文件内容变化
   final Map<String, String> _subtitleCacheFingerprint = {};
@@ -237,6 +239,23 @@ class SubtitleManager extends ChangeNotifier {
     return _textAtPath(path, positionMs);
   }
 
+  /// 所有 SRT/VTT 外挂字幕共用的时轴偏移（秒；设置项 `srt_subtitle_delay`）。
+  /// 由 VideoPlayerState 在读取/修改该设置时同步进来。
+  double srtDelaySeconds = 0.0;
+
+  /// 叠层里这条外挂字幕此刻的总偏移（毫秒；正值延后，负值提前）：
+  /// SRT/VTT 先加共用的 SRT 偏移，再加这条字幕自己的偏移；ASS/SSA 只有自己的偏移。
+  int overlayDelayMs(String path) {
+    final extension = p.extension(path).toLowerCase();
+    final shared =
+        extension == '.srt' || extension == '.vtt' ? srtDelaySeconds : 0.0;
+    return ((shared + pathDelaySeconds(path)) * 1000).round();
+  }
+
+  /// 叠层此刻给出的这条外挂字幕的那一行：播放位置减去总偏移后查表。
+  String overlayTextAt(String path, int playbackMs) =>
+      pathSubtitleTextAt(path, playbackMs - overlayDelayMs(path));
+
   // 获取当前活跃的外部字幕文件路径
   String? getActiveExternalSubtitlePath() {
     // 检查是否是外部字幕
@@ -409,12 +428,18 @@ class SubtitleManager extends ChangeNotifier {
     }
   }
 
+  /// 外挂字幕激活状态变化（挂载、移除、清除、切换）后回调。每个改变激活
+  /// 状态的入口最后都会走 [onSubtitleTrackChanged]，在这里统一通知，
+  /// VideoPlayerState 借此让内核 sub-visibility 跟随整块字幕模式。
+  VoidCallback? onExternalSubtitleActivationChanged;
+
   // 当字幕轨道改变时调用
   void onSubtitleTrackChanged() {
     final subtitlePath = getActiveExternalSubtitlePath();
     if (subtitlePath != null) {
       preloadSubtitleFile(subtitlePath);
     }
+    onExternalSubtitleActivationChanged?.call();
   }
 
   // 设置当前外部字幕路径
@@ -591,7 +616,18 @@ class SubtitleManager extends ChangeNotifier {
     bool clearPlayer = true,
   }) {
     ++_subtitleLoadToken;
-    if (clearPlayer) {
+    // SRT/VTT only live in the app overlay. With no native external subtitle,
+    // clearing this state must not unload media or disable embedded tracks.
+    // resetPlayer clears again on idle and before reopening, while MDK may
+    // still be stopping: changing its subtitle tracks then can strand the
+    // decoder and make fvp's next prepare wait for Stopped forever.
+    final currentPath = _currentExternalSubtitlePath;
+    final hasNativeExternalSubtitle =
+        (currentPath != null &&
+            !_shouldRenderExternalSubtitleInApp(currentPath)) ||
+        _activeExternalSubtitlePaths
+            .any((path) => !_shouldRenderExternalSubtitleInApp(path));
+    if (clearPlayer && hasNativeExternalSubtitle) {
       try {
         if (_player.supportsExternalSubtitles) {
           _player.setMedia("", MediaType.subtitle);
@@ -678,7 +714,8 @@ class SubtitleManager extends ChangeNotifier {
         final shouldFixEncoding = _shouldFixExternalSubtitleEncoding();
         _currentExternalSubtitlePath = path;
         if (shouldRenderInApp) {
-          _activateAppRenderedExternalSubtitle(path);
+          _activateAppRenderedExternalSubtitle(path,
+              keepKernelExternal: preserveStack);
         } else if (!shouldFixEncoding) {
           // 设置外部字幕文件
           _loadExternalSubtitleIntoPlayer(
@@ -737,8 +774,6 @@ class SubtitleManager extends ChangeNotifier {
 
         debugPrint('SubtitleManager: 外部字幕设置成功');
       } else if (path.isEmpty) {
-        _activeExternalSubtitlePaths.clear();
-        _pathDisplayState.clear();
         _clearExternalSubtitleState();
         debugPrint('SubtitleManager: 外部字幕已清除');
       } else {
@@ -845,7 +880,7 @@ class SubtitleManager extends ChangeNotifier {
       if (displayName != null) registerPathDisplayName(path, displayName);
       _activeExternalSubtitlePaths.add(path);
       unawaited(_loadPathDisplayState(path));
-      _activateAppRenderedExternalSubtitle(path);
+      _activateAppRenderedExternalSubtitle(path, keepKernelExternal: true);
       if (!_activeExternalSubtitlePaths
           .contains(_currentExternalSubtitlePath)) {
         _currentExternalSubtitlePath = path;
@@ -940,15 +975,13 @@ class SubtitleManager extends ChangeNotifier {
     // SRT/VTT 无特效，全平台 App 内叠层渲染（与内核无关）：
     // 不占内核字幕轨 -> 可与 mkv 内嵌轨共存、可热切换、可拖动
     if (extension == '.srt' || extension == '.vtt') return true;
-    // ASS/SSA：libmpv(Media Kit) 内核走内核轨由 libass 渲染，保留特效样式
-    // （滚动/卡拉OK/渐变等，adapter 已设 sub-ass-override=no）。
-    // 其他内核（Erika 等）对外挂 ASS 支持差 -> 走 App 叠层纯文本保证可显示。
+    // ASS/SSA：libmpv(Media Kit)、MDK、Erika 内核走内核轨由 libass 渲染，
+    // 保留特效样式（滚动/卡拉OK/渐变等，adapter 已设 sub-ass-override=no）。
+    // 其他内核走 App 叠层纯文本保证可显示。
     if (extension == '.ass' || extension == '.ssa') {
       try {
         final kernel = _player.getPlayerKernelName();
-        // libmpv(Media Kit)/MDK 内核走内核轨由 libass 渲染，保留特效样式；
-        // Erika 等内核挂载不了外挂 ASS 轨 -> 走 App 叠层纯文本保证可显示。
-        return kernel != 'Media Kit' && kernel != 'MDK';
+        return kernel != 'Media Kit' && kernel != 'MDK' && kernel != 'Erika';
       } catch (_) {
         return true;
       }
@@ -956,16 +989,71 @@ class SubtitleManager extends ChangeNotifier {
     return false;
   }
 
-  void _activateAppRenderedExternalSubtitle(String path) {
-    // 多字幕分块渲染：外挂字幕（SRT/ASS）走 Flutter 叠层，与内嵌轨共存，
-    // 不再清内核字幕轨/选择——否则挂载外挂会顶掉用户选好的内嵌轨。
+  void _activateAppRenderedExternalSubtitle(String path,
+      {bool keepKernelExternal = false}) {
+    // 同一时间只显示一条字幕：外挂字幕走 Flutter 叠层渲染，内核里选中的内嵌轨
+    // 会同时出画面，所以挂载时先关掉内核的内嵌轨。叠加挂载时若内核正在渲染外挂
+    // ASS/SSA（占 sid），则保持不动。
+    final kernelExternalActive = keepKernelExternal &&
+        _activeExternalSubtitlePaths.any(
+            (other) => other != path && !_shouldRenderExternalSubtitleInApp(other));
+    if (!kernelExternalActive) {
+      try {
+        // Media Kit's cached list can still be empty while mpv has already
+        // auto-selected a sidecar. Always send the native "no subtitle" intent.
+        if (_isMediaKitKernel() || _player.activeSubtitleTracks.isNotEmpty) {
+          _player.activeSubtitleTracks = [];
+        }
+      } catch (e) {
+        debugPrint('SubtitleManager: 关闭内嵌字幕轨失败: $e');
+      }
+    }
     unawaited(preloadSubtitleFile(path));
     debugPrint('SubtitleManager: 使用应用内叠层渲染外挂字幕: $path');
+  }
+
+  /// 在字幕菜单里选内嵌轨（[trackIndex] >= 0）或关闭字幕（< 0）：
+  /// 先摘掉所有外挂字幕（叠层与内核轨），再选内嵌轨，保证同一时间只显示一条。
+  void selectEmbeddedSubtitleTrack(int trackIndex) {
+    setExternalSubtitle('');
+    try {
+      if (trackIndex >= 0) {
+        _lastSelectedEmbeddedTrackIndex = trackIndex;
+        _player.activeSubtitleTracks = [trackIndex];
+      } else {
+        _player.activeSubtitleTracks = [];
+      }
+    } catch (e) {
+      debugPrint('SubtitleManager: 切换内嵌字幕轨失败: $e');
+    }
+    onSubtitleTrackChanged();
+    notifyListeners();
   }
 
   /// 该外挂字幕是否走 App 叠层渲染（false = 内核轨，如 libmpv 的 ASS/SSA）
   bool externalSubtitleRenderedInApp(String path) =>
       _shouldRenderExternalSubtitleInApp(path);
+
+  /// Whether the currently active external subtitle is a kernel-track
+  /// ASS/SSA (rendered by libass with script styles under libmpv).
+  ///
+  /// The whole-block embedded subtitle mode must step aside for it: writing
+  /// sub-visibility=no stops libass rendering and sub-text only exposes
+  /// plain text, which strips the script's positioning and colors (colored
+  /// \pos annotations collapse into white centered text).
+  bool isKernelRenderedExternalAssActive() {
+    bool isNativeAss(String path) {
+      if (_shouldRenderExternalSubtitleInApp(path)) return false;
+      final ext = p.extension(path).toLowerCase();
+      return ext == '.ass' || ext == '.ssa';
+    }
+
+    // In an ASS + SRT stack the last/primary path may be the app overlay;
+    // the ASS still owns the native track and must retain libass rendering.
+    if (_activeExternalSubtitlePaths.any(isNativeAss)) return true;
+    final path = getActiveExternalSubtitlePath();
+    return path != null && path.isNotEmpty && isNativeAss(path);
+  }
 
   bool shouldRenderCurrentExternalSubtitleInApp() {
     // 多字幕分块渲染：以激活路径集合为准——取消其中一条不能让
@@ -1001,28 +1089,14 @@ class SubtitleManager extends ChangeNotifier {
     if (!_shouldRenderExternalSubtitleInApp(path)) return '';
 
     final cachedEntries = _subtitleCache[path];
-    if (cachedEntries == null || cachedEntries.isEmpty) {
+    if (cachedEntries == null) {
       unawaited(preloadSubtitleFile(path));
       return '';
     }
 
-    final activeContents = <String>[];
-    for (final entry in cachedEntries) {
-      if (entry is! SubtitleEntry) {
-        continue;
-      }
-      if (positionMs < entry.startTimeMs || positionMs > entry.endTimeMs) {
-        continue;
-      }
-
-      final content = entry.content.trim();
-      if (content.isEmpty || activeContents.contains(content)) {
-        continue;
-      }
-      activeContents.add(content);
-    }
-
-    return activeContents.join('\n');
+    final index = _subtitleIndexes[cachedEntries] ??=
+        SubtitleTimelineIndex(cachedEntries.whereType<SubtitleEntry>());
+    return index.textAt(positionMs);
   }
 
   List<String> _snapshotCurrentSubtitleTrackSignatures() {

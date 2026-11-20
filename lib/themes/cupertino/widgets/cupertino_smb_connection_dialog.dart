@@ -44,6 +44,8 @@ class _CupertinoSmbConnectionSheetState
     extends State<_CupertinoSmbConnectionSheet> {
   final TextEditingController _hostController = TextEditingController();
   final TextEditingController _portController = TextEditingController();
+  final TextEditingController _wanHostController = TextEditingController();
+  final TextEditingController _wanPortController = TextEditingController();
   final TextEditingController _domainController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -58,6 +60,8 @@ class _CupertinoSmbConnectionSheetState
     if (edit != null) {
       _hostController.text = edit.host;
       _portController.text = edit.port.toString();
+      _wanHostController.text = edit.wanHost;
+      _wanPortController.text = edit.wanPort.toString();
       _domainController.text = edit.domain;
       _usernameController.text = edit.username;
       _passwordController.text = edit.password;
@@ -68,6 +72,8 @@ class _CupertinoSmbConnectionSheetState
   void dispose() {
     _hostController.dispose();
     _portController.dispose();
+    _wanHostController.dispose();
+    _wanPortController.dispose();
     _domainController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
@@ -76,12 +82,20 @@ class _CupertinoSmbConnectionSheetState
 
   String? _validateInputs() {
     final host = _hostController.text.trim();
-    if (host.isEmpty) {
-      return context.l10n.smbEnterHostOrIp;
+    final wanHost = _wanHostController.text.trim();
+    if (host.isEmpty && wanHost.isEmpty) {
+      return context.l10n.addressAtLeastOne;
     }
     final portText = _portController.text.trim();
     if (portText.isNotEmpty) {
       final port = int.tryParse(portText);
+      if (port == null || port <= 0 || port > 65535) {
+        return context.l10n.smbInvalidPortRange;
+      }
+    }
+    final wanPortText = _wanPortController.text.trim();
+    if (wanPortText.isNotEmpty) {
+      final port = int.tryParse(wanPortText);
       if (port == null || port <= 0 || port > 65535) {
         return context.l10n.smbInvalidPortRange;
       }
@@ -93,18 +107,24 @@ class _CupertinoSmbConnectionSheetState
     final host = _hostController.text.trim();
     final portText = _portController.text.trim();
     final port = portText.isEmpty ? 445 : int.parse(portText);
+    final wanHost = _wanHostController.text.trim();
+    final wanPortText = _wanPortController.text.trim();
+    final wanPort = wanPortText.isEmpty ? 445 : int.parse(wanPortText);
     final domain = _domainController.text.trim();
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
-    final name =
-        widget.editConnection?.name ?? (port == 445 ? host : '$host:$port');
+    final fallbackHost = host.isNotEmpty ? host : wanHost;
+    final name = widget.editConnection?.name ??
+        (port == 445 ? fallbackHost : '$fallbackHost:$port');
 
     return SMBConnection(
       id: widget.editConnection?.id,
       name: name,
       host: host,
       port: port,
+      wanHost: wanHost,
+      wanPort: wanPort,
       username: username,
       password: password,
       domain: domain,
@@ -243,7 +263,7 @@ class _CupertinoSmbConnectionSheetState
                 children: [
                   _buildField(
                     context,
-                    label: context.l10n.smbHostOrIp,
+                    label: context.l10n.smbLanHost,
                     controller: _hostController,
                     placeholder: context.l10n.smbHostOrIpPlaceholder,
                     keyboardType: TextInputType.url,
@@ -253,6 +273,23 @@ class _CupertinoSmbConnectionSheetState
                     context,
                     label: context.l10n.smbPort,
                     controller: _portController,
+                    placeholder: context.l10n.smbDefaultPort445,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                  const SizedBox(height: 12),
+                  _buildField(
+                    context,
+                    label: context.l10n.smbWanHost,
+                    controller: _wanHostController,
+                    placeholder: context.l10n.smbHostOrIpPlaceholder,
+                    keyboardType: TextInputType.url,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildField(
+                    context,
+                    label: context.l10n.smbPort,
+                    controller: _wanPortController,
                     placeholder: context.l10n.smbDefaultPort445,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],

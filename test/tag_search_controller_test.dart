@@ -6,6 +6,21 @@ import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
 import 'package:nipaplay/themes/cupertino/widgets/cupertino_tag_search_view.dart';
 
 void main() {
+  test('draft keyword changes do not notify but are used when submitted',
+      () async {
+    final dataSource = _FakeTagSearchDataSource(advancedResults: [_anime(1)]);
+    final controller = TagSearchController(dataSource: dataSource);
+    var notifications = 0;
+    controller.addListener(() => notifications++);
+    controller.setKeyword('pin', notify: false);
+    controller.setKeyword('拼音', notify: false);
+    expect(notifications, 0);
+    await controller.performSmartSearch();
+    expect(dataSource.advancedKeyword, '拼音');
+    expect(notifications, greaterThan(0));
+    controller.dispose();
+  });
+
   test('tag search controller owns shared text search and pagination state',
       () async {
     final dataSource = _FakeTagSearchDataSource(

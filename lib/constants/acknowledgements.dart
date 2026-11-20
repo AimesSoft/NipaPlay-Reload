@@ -15,4 +15,5 @@ const List<String> kAcknowledgementNames = [
   'Bassman',
   '银蓝_Yl',
   '小石絹代',
+  '泉こなた',
 ];

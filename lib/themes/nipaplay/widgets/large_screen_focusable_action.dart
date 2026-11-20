@@ -110,7 +110,7 @@ class _NipaplayLargeScreenFocusableActionState
       autofocus: widget.autofocus || isSelected,
       enabled: widget.onActivate != null,
       onFocusChange: (value) {
-        if (value && widget.isSelected == true) {
+        if (value) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               Scrollable.ensureVisible(context, alignment: 0.5);
@@ -134,9 +134,14 @@ class _NipaplayLargeScreenFocusableActionState
         });
       },
       shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
-        SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.enter, includeRepeats: false):
+            ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.numpadEnter, includeRepeats: false):
+            ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.select, includeRepeats: false):
+            ActivateIntent(),
+        SingleActivator(LogicalKeyboardKey.gameButtonA, includeRepeats: false):
+            ActivateIntent(),
       },
       actions: <Type, Action<Intent>>{
         ActivateIntent: CallbackAction<ActivateIntent>(

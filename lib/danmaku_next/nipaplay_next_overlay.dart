@@ -14,7 +14,6 @@ const Locale _danmakuLocale = Locale.fromSubtags(
 
 class NipaPlayNextOverlay extends StatefulWidget {
   final List<Map<String, dynamic>> danmakuList;
-  final int danmakuListVersion;
   final ValueListenable<double> playbackTimeMs;
   final double currentTimeSeconds;
   final double fontSize;
@@ -35,7 +34,6 @@ class NipaPlayNextOverlay extends StatefulWidget {
   const NipaPlayNextOverlay({
     super.key,
     required this.danmakuList,
-    this.danmakuListVersion = 0,
     required this.playbackTimeMs,
     required this.currentTimeSeconds,
     required this.fontSize,
@@ -104,8 +102,7 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
     }
 
     final listIdentity = identityHashCode(widget.danmakuList);
-    if (listIdentity != _listIdentity ||
-        oldWidget.danmakuListVersion != widget.danmakuListVersion) {
+    if (listIdentity != _listIdentity) {
       _listIdentity = listIdentity;
       _layoutSnapshotPending = true;
       // 2026-06-22 方案A：danmakuList 变化时触发预构建，
@@ -176,7 +173,6 @@ class _NipaPlayNextOverlayState extends State<NipaPlayNextOverlay>
 
         _engine.configure(
           danmakuList: widget.danmakuList,
-          danmakuListVersion: widget.danmakuListVersion,
           size: size,
           fontSize: widget.fontSize,
           displayArea: widget.displayArea,

@@ -22,6 +22,8 @@ class ImageCacheMemoryPressureHandler extends StatefulWidget {
 
 class _ImageCacheMemoryPressureHandlerState
     extends State<ImageCacheMemoryPressureHandler> with WidgetsBindingObserver {
+  bool _restoreImagesOnResume = false;
+
   @override
   void initState() {
     super.initState();
@@ -47,14 +49,20 @@ class _ImageCacheMemoryPressureHandlerState
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       // 回到前台：挂起时释放掉的图片由各个组件自己重新加载（有磁盘缓存兜底）。
-      ImageCacheManager.instance.lifecycleGeneration.value++;
+      if (_restoreImagesOnResume) {
+        _restoreImagesOnResume = false;
+        ImageCacheManager.instance.lifecycleGeneration.value++;
+      }
       return;
     }
     // 退到后台时连句柄一起释放；组件会同步放下引用，回前台再重载。
     if (state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      ImageCacheManager.instance.handleMemoryPressure(releaseHandles: true);
+      final manager = ImageCacheManager.instance;
+      final generation = manager.lifecycleGeneration.value;
+      manager.handleMemoryPressure(releaseHandles: true);
+      _restoreImagesOnResume |= manager.lifecycleGeneration.value != generation;
     }
   }
 

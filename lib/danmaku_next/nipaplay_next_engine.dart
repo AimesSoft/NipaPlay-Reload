@@ -37,7 +37,6 @@ class NipaPlayNextEngine {
   List<String>? _fontFamilyFallback;
   Locale? _locale;
   int _sourceListIdentity = 0;
-  int _sourceListVersion = -1;
 
   // ──── Native (C++ FFI) layout engine ────
   DanmakuLayoutEngine? _nativeEngine;
@@ -148,7 +147,6 @@ class NipaPlayNextEngine {
 
   void configure({
     required List<Map<String, dynamic>> danmakuList,
-    int danmakuListVersion = 0,
     required Size size,
     required double fontSize,
     required double displayArea,
@@ -161,10 +159,8 @@ class NipaPlayNextEngine {
   }) {
     final listIdentity = identityHashCode(danmakuList);
     final mergeChanged = mergeDanmaku != _mergeDanmaku;
-    if (listIdentity != _sourceListIdentity ||
-        danmakuListVersion != _sourceListVersion || mergeChanged) {
+    if (listIdentity != _sourceListIdentity || mergeChanged) {
       _sourceListIdentity = listIdentity;
-      _sourceListVersion = danmakuListVersion;
       _mergeDanmaku = mergeDanmaku;
       DanmakuNextLog.d(
         'Engine',
@@ -209,10 +205,6 @@ class NipaPlayNextEngine {
     }
 
     if (_layoutDirty) {
-      // A paused frame can keep the same timestamp while its data or layout
-      // changes. Invalidate the frame cache before rebuilding either backend.
-      _lastLayoutTime = -1e9;
-      _positionedBuffer.clear();
       final native = _tryInitNativeEngine();
       if (native != null) {
         _logFrame('configure -> _rebuildLayoutNative (C++ path)');

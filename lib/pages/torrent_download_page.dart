@@ -1,5 +1,6 @@
 library torrent_download_page;
 
+import 'package:nipaplay/widgets/page_activity_mixin.dart';
 import 'dart:async';
 
 import 'package:file_selector/file_selector.dart';
@@ -49,7 +50,7 @@ class TorrentDownloadPage extends StatefulWidget {
 }
 
 class _TorrentDownloadPageState extends State<TorrentDownloadPage>
-    with WidgetsBindingObserver {
+    with PageActivityMixin {
   final TorrentDownloadService _service = TorrentDownloadService.instance;
   final TextEditingController _searchController = TextEditingController();
   Timer? _refreshTimer;
@@ -94,7 +95,6 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _taskController = TorrentTaskController(loadTasks: _service.listTasks);
     _taskController.addListener(_onTasksChanged);
     _initialize();
@@ -105,24 +105,23 @@ class _TorrentDownloadPageState extends State<TorrentDownloadPage>
     _refreshTimer?.cancel();
     _taskController.removeListener(_onTasksChanged);
     _taskController.dispose();
-    WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
     super.dispose();
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Stop refreshing when app is backgrounded, resume when foregrounded.
-    if (state == AppLifecycleState.resumed) {
+  void onPageActivityChanged(bool active) {
+    if (active && !_isLoading) {
       _startRefreshTimer();
       unawaited(_refreshTasks(silent: true));
-    } else if (state == AppLifecycleState.paused) {
+    } else {
       _refreshTimer?.cancel();
     }
   }
 
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
+    if (!mounted || !isPageActive || _isLoading) return;
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _refreshTasks(silent: true),

@@ -398,11 +398,13 @@ class TvOSRemoteTextInputScope extends StatefulWidget {
     required this.child,
     this.enabled = true,
     this.onRemoteInputRequested,
+    this.preferNativeKeyboard,
   });
 
   final Widget child;
   final bool enabled;
   final TvOSRemoteInputRequestHandler? onRemoteInputRequested;
+  final bool? preferNativeKeyboard;
 
   @override
   State<TvOSRemoteTextInputScope> createState() =>
@@ -412,10 +414,15 @@ class TvOSRemoteTextInputScope extends StatefulWidget {
 class _TvOSRemoteTextInputScopeState extends State<TvOSRemoteTextInputScope> {
   bool _isOpening = false;
   OnKeyEventCallback? _earlyKeyHandler;
+  LogicalKeyboardKey? _openingKey;
+  late final FocusHighlightStrategy _previousHighlightStrategy;
 
   @override
   void initState() {
     super.initState();
+    _previousHighlightStrategy = FocusManager.instance.highlightStrategy;
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
     _earlyKeyHandler = _handleEarlyKeyEvent;
     FocusManager.instance.addEarlyKeyEventHandler(_earlyKeyHandler!);
   }
@@ -426,10 +433,23 @@ class _TvOSRemoteTextInputScopeState extends State<TvOSRemoteTextInputScope> {
       FocusManager.instance.removeEarlyKeyEventHandler(_earlyKeyHandler!);
       _earlyKeyHandler = null;
     }
+    FocusManager.instance.highlightStrategy = _previousHighlightStrategy;
     super.dispose();
   }
 
   KeyEventResult _handleEarlyKeyEvent(KeyEvent event) {
+    final command = NipaplayLargeScreenInputControls.fromKeyEvent(event);
+    if (widget.enabled &&
+        event is KeyRepeatEvent &&
+        (command == NipaplayLargeScreenInputCommand.activate ||
+            command == NipaplayLargeScreenInputCommand.back ||
+            command == NipaplayLargeScreenInputCommand.toggleMenu)) {
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == _openingKey) {
+      if (event is KeyUpEvent) _openingKey = null;
+      return KeyEventResult.handled;
+    }
     if (!widget.enabled || _isOpening || event is! KeyDownEvent) {
       return KeyEventResult.ignored;
     }
@@ -442,18 +462,30 @@ class _TvOSRemoteTextInputScopeState extends State<TvOSRemoteTextInputScope> {
     );
     if (target == null) return KeyEventResult.ignored;
     _isOpening = true;
-    unawaited(_openRemoteInput(target));
+    _openingKey = event.logicalKey;
+    unawaited(_openRemoteInput(target, FocusManager.instance.primaryFocus));
     return KeyEventResult.handled;
   }
 
-  Future<void> _openRemoteInput(TvOSRemoteTextInputTarget target) async {
+  Future<void> _openRemoteInput(
+      TvOSRemoteTextInputTarget target, FocusNode? origin) async {
     try {
       final handler = widget.onRemoteInputRequested;
       if (handler != null) {
         await handler(context, target);
         return;
       }
-      await _showRemoteInput(target);
+      if (widget.preferNativeKeyboard ?? globals.isTvOS) {
+        final result = await _showNativeInput(target);
+        if (result == null) return;
+        if (result.usePhone) {
+          await _showRemoteInput(target);
+        } else if (result.value != null) {
+          applyTvOSRemoteTextInputValue(target, result.value!);
+        }
+      } else {
+        await _showRemoteInput(target);
+      }
     } catch (error) {
       if (mounted) {
         BlurSnackBar.show(
@@ -463,6 +495,87 @@ class _TvOSRemoteTextInputScopeState extends State<TvOSRemoteTextInputScope> {
       }
     } finally {
       _isOpening = false;
+      // UIKit can consume the opening button's release while its keyboard is
+      // visible. Do not leave the next Select blocked by that missing release.
+      _openingKey = null;
+      if (mounted &&
+          target.element.mounted &&
+          origin?.context != null &&
+          ModalRoute.of(target.element)?.isCurrent != false) {
+        origin!.requestFocus();
+      }
+    }
+  }
+
+  Future<_TvOSNativeInputResult?> _showNativeInput(
+      TvOSRemoteTextInputTarget target) async {
+    final field = target.primaryField;
+    try {
+      // Keep the native TV editor's focus and text lifecycle together. This
+      // also supports Bluetooth keyboards without depending on a LAN server.
+      final result = await const MethodChannel('nipaplay/tvos_keyboard')
+          .invokeMapMethod<String, dynamic>('editText', {
+        'title': field.title,
+        'value': field.controller.text,
+        'obscureText': field.obscureText,
+        'inputType': field.inputType,
+      });
+      if (result == null) return null;
+      return _TvOSNativeInputResult(
+        value: result['value'] as String?,
+        usePhone: result['usePhone'] == true,
+      );
+    } on MissingPluginException {
+      // Other television platforms and widget tests use Flutter's editor.
+    }
+    final controller = TextEditingController(text: field.controller.text);
+    try {
+      // A plain EditableText is intentional: flutter-tvos presents the system
+      // keyboard for it. Do not use our read-only/QR TV field wrapper here.
+      final route = DialogRoute<_TvOSNativeInputResult>(
+        context: target.element,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(field.title),
+          content: SizedBox(
+            width: 560,
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              obscureText: field.obscureText,
+              enableSuggestions: !field.obscureText,
+              autocorrect: false,
+              keyboardType: field.editableText.keyboardType,
+              maxLines: field.obscureText ? 1 : field.editableText.maxLines,
+              inputFormatters: field.editableText.inputFormatters,
+              maxLength: field.maxLength,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (value) => Navigator.of(dialogContext).pop(
+                _TvOSNativeInputResult(value: value),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消')),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext)
+                  .pop(const _TvOSNativeInputResult(usePhone: true)),
+              child: const Text('手机扫码输入'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext)
+                  .pop(_TvOSNativeInputResult(value: controller.text)),
+              child: const Text('完成'),
+            ),
+          ],
+        ),
+      );
+      final result = await Navigator.of(target.element).push(route);
+      await route.completed;
+      return result;
+    } finally {
+      controller.dispose();
     }
   }
 
@@ -571,6 +684,12 @@ class _TvOSRemoteTextInputScopeState extends State<TvOSRemoteTextInputScope> {
   Widget build(BuildContext context) {
     return widget.child;
   }
+}
+
+class _TvOSNativeInputResult {
+  const _TvOSNativeInputResult({this.value, this.usePhone = false});
+  final String? value;
+  final bool usePhone;
 }
 
 String _remoteInputTypeName(TextInputType type) {

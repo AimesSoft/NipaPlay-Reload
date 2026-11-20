@@ -1,8 +1,13 @@
 library dashboard_home_page;
 
+import 'package:nipaplay/models/media_library_scope.dart';
+
+import 'package:nipaplay/widgets/page_activity_mixin.dart';
+import 'package:nipaplay/widgets/scroll_edge_builder.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 import 'dart:async';
+import 'package:nipaplay/widgets/dandanplay_login_required_view.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
@@ -65,6 +70,7 @@ import 'package:nipaplay/utils/media_source_utils.dart';
 import 'package:nipaplay/app/app_page_ids.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/app/app_size_class_scope.dart';
 import 'package:nipaplay/app/unified_home_components.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/server_history_sync_service.dart';
@@ -105,7 +111,7 @@ class DashboardHomePage extends StatefulWidget {
 }
 
 class _DashboardHomePageState extends State<DashboardHomePage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, PageActivityMixin {
   bool get _isLargeScreenModeActive {
     return NipaplayLargeScreenHomeScope.isActive(context);
   }
@@ -224,6 +230,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   final Map<String, TrendingBangumiResult> _trendingResults = {};
   final Set<String> _trendingLoadingKeys = {};
   String? _trendingError;
+  bool _trendingLoginRequired = false;
   ScrollController? _trendingScrollController;
 
   void _updateTrendingState(VoidCallback update) => setState(update);
@@ -284,7 +291,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   bool _isAutoSwitching = true;
   int _currentHeroBannerIndex = 0;
   late final ValueNotifier<int> _heroBannerIndexNotifier;
-  int? _hoveredIndicatorIndex;
+  final _hoveredIndicatorIndex = ValueNotifier<int?>(null);
 
   // 追踪已绘制的文件路径
   // ignore: unused_field
@@ -377,8 +384,18 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     return _todayAnimesScrollController!;
   }
 
+  @override
+  void onPageActivityChanged(bool active) {
+    if (active) {
+      _startAutoSwitch();
+    } else {
+      _autoSwitchTimer?.cancel();
+    }
+  }
+
   void _startAutoSwitch() {
     _autoSwitchTimer?.cancel();
+    if (!mounted || !isPageActive) return;
     _autoSwitchTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (_isAutoSwitching && _recommendedItems.length >= 5 && mounted) {
         _currentHeroBannerIndex = (_currentHeroBannerIndex + 1) % 5;
@@ -400,6 +417,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
   }
 
   void _resumeAutoSwitch() {
+    if (!mounted) return;
     _isAutoSwitching = true;
     _startAutoSwitch();
   }
@@ -644,6 +662,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     if (!mounted) return;
 
     final isCurrentlyActive = _isVideoPlayerActive();
+    if (isCurrentlyActive == _wasPlayerActive) return;
 
     // 检测播放器从活跃状态变为非活跃状态（退出播放器）
     if (_wasPlayerActive && !isCurrentlyActive) {
@@ -979,6 +998,7 @@ class _DashboardHomePageState extends State<DashboardHomePage>
     _wasPlayerActive = false;
 
     _heroBannerIndexNotifier.dispose();
+    _hoveredIndicatorIndex.dispose();
 
     // 移除监听器 - 使用初始化时保存的实例引用，避免在dispose中再次查找context
     try {
@@ -1095,33 +1115,33 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         ],
         padding: const EdgeInsets.fromLTRB(30, 24, 30, 30),
         headerBottomSpacing: 14,
-        child: Consumer2<JellyfinProvider, EmbyProvider>(
-          builder: (context, jellyfinProvider, embyProvider, child) {
+        child: Builder(
+          builder: (context) {
             final configuredSections = _buildConfiguredSections(
               isPhone: false,
               sectionsProvider: homeSections,
             );
-            return SingleChildScrollView(
+            final sections = <Widget>[
+              // 主页顶部推荐区（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
+              if (_isAnyHomeHeroWidgetVisible(false)) ...[
+                Builder(builder: (_) => _buildHeroBanner(isPhone: false)),
+                const SizedBox(height: 24),
+              ],
+              if (_hasQuarterlyReviewForToday()) ...[
+                Builder(builder: (_) => _buildQuarterlyReviewSection()),
+                const SizedBox(height: 24),
+              ],
+              ...configuredSections,
+              const SizedBox(height: 56),
+            ];
+            return PrimaryScrollController(
               controller: _mainScrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: PrimaryScrollController(
+              child: ListView.builder(
                 controller: _mainScrollController,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 主页顶部推荐区（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
-                    if (_isAnyHomeHeroWidgetVisible(false)) ...[
-                      _buildHeroBanner(isPhone: false),
-                      const SizedBox(height: 24),
-                    ],
-                    if (_hasQuarterlyReviewForToday()) ...[
-                      _buildQuarterlyReviewSection(),
-                      const SizedBox(height: 24),
-                    ],
-                    ...configuredSections,
-                    const SizedBox(height: 56),
-                  ],
-                ),
+                padding: EdgeInsets.zero,
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: sections.length,
+                itemBuilder: (_, index) => sections[index],
               ),
             );
           },
@@ -1140,38 +1160,37 @@ class _DashboardHomePageState extends State<DashboardHomePage>
         onPressed: _onDashboardRefreshPressed,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: Consumer2<JellyfinProvider, EmbyProvider>(
-        builder: (context, jellyfinProvider, embyProvider, child) {
+      body: Builder(
+        builder: (context) {
           final configuredSections = _buildConfiguredSections(
             isPhone: isPhone,
             sectionsProvider: homeSections,
           );
-          return SingleChildScrollView(
-            controller: _mainScrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: PrimaryScrollController(
-              controller: _mainScrollController,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 大海报推荐区域（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
-                  if (_isAnyHomeHeroWidgetVisible(isPhone)) ...[
-                    _buildHeroBanner(isPhone: isPhone),
-                    SizedBox(height: isPhone ? 16 : 32),
-                  ],
-                  if (_hasQuarterlyReviewForToday()) ...[
-                    _buildQuarterlyReviewSection(),
-                    SizedBox(height: isPhone ? 16 : 32),
-                  ],
-                  ...configuredSections,
+          final sections = <Widget>[
+            // 大海报推荐区域（大图轮播 + 两张推荐小卡片，可在外观设置中开关）
+            if (_isAnyHomeHeroWidgetVisible(isPhone)) ...[
+              Builder(builder: (_) => _buildHeroBanner(isPhone: isPhone)),
+              SizedBox(height: isPhone ? 16 : 32),
+            ],
+            if (_hasQuarterlyReviewForToday()) ...[
+              Builder(builder: (_) => _buildQuarterlyReviewSection()),
+              SizedBox(height: isPhone ? 16 : 32),
+            ],
+            ...configuredSections,
 
-                  // 底部间距（大屏幕模式额外预留40px，避免被底部overlay遮挡）
-                  SizedBox(
-                    height: (isPhone ? 30 : 50) +
-                        (_isLargeScreenModeActive ? 40 : 0),
-                  ),
-                ],
-              ),
+            // 底部间距（大屏幕模式额外预留40px，避免被底部overlay遮挡）
+            SizedBox(
+              height: (isPhone ? 30 : 50) + (_isLargeScreenModeActive ? 40 : 0),
+            ),
+          ];
+          return PrimaryScrollController(
+            controller: _mainScrollController,
+            child: ListView.builder(
+              controller: _mainScrollController,
+              padding: EdgeInsets.zero,
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: sections.length,
+              itemBuilder: (_, index) => sections[index],
             ),
           );
         },

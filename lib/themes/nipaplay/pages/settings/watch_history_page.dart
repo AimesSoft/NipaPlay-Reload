@@ -542,8 +542,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
           if (jellyfinService.isConnected) {
             playbackSession = await jellyfinService.createPlaybackSession(
               itemId: jellyfinId,
-              startPositionMs: currentItem.lastPosition > 0
-                  ? currentItem.lastPosition
+              startPositionMs: currentItem.resumePosition > 0
+                  ? currentItem.resumePosition
                   : null,
             );
           } else {
@@ -563,8 +563,8 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
           if (embyService.isConnected) {
             playbackSession = await embyService.createPlaybackSession(
               itemId: embyId,
-              startPositionMs: currentItem.lastPosition > 0
-                  ? currentItem.lastPosition
+              startPositionMs: currentItem.resumePosition > 0
+                  ? currentItem.resumePosition
                   : null,
             );
           } else {
@@ -770,11 +770,11 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
       context: context,
       title: '删除观看记录',
       content: '确定要删除 ${item.animeName} 的观看记录吗？',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
           child: const Text('取消'),
           onPressed: () {
-            Navigator.of(context).pop();
+            Navigator.of(dialogContext).pop();
           },
         ),
         HoverScaleTextButton(
@@ -786,7 +786,7 @@ class _WatchHistoryPageState extends State<WatchHistoryPage> {
             final watchHistoryProvider =
                 Provider.of<WatchHistoryProvider>(context, listen: false);
             await watchHistoryProvider.removeHistory(item.filePath);
-            Navigator.of(context).pop();
+            Navigator.of(dialogContext).pop();
           },
         ),
       ],

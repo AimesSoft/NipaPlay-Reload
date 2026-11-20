@@ -18,6 +18,8 @@ set_target_properties(${PLUGIN_NAME} PROPERTIES
   OUTPUT_NAME "fvp")
 target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(${PLUGIN_NAME} PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../../../lib/src")
 
 target_compile_options(${PLUGIN_NAME} PRIVATE -fno-rtti -fno-exceptions -ffunction-sections -fdata-sections)
 target_link_options(${PLUGIN_NAME} PRIVATE -Wl,--gc-sections)

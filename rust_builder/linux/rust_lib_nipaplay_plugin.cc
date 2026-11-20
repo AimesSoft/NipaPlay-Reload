@@ -3,9 +3,14 @@
 #include <flutter_linux/flutter_linux.h>
 #include <epoxy/egl.h>
 #include <epoxy/gl.h>
+#include <gdk/gdk.h>
+#ifdef GDK_WINDOWING_X11
+#include <gdk/gdkx.h>
+#endif
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -71,6 +76,12 @@ struct _Next2GLTexture {
   GLuint texture_name = 0;
   uint32_t texture_width = 0;
   uint32_t texture_height = 0;
+  // X11 only: private EGL context sharing objects with Flutter's raster context.
+  EGLDisplay egl_display = EGL_NO_DISPLAY;
+  EGLContext egl_context = EGL_NO_CONTEXT;
+  bool egl_failed = false;
+  // Whether the GDK context was ever made current (teardown needs it then).
+  bool gdk_used = false;
 };
 
 struct _Next2GLTextureClass {
@@ -83,6 +94,7 @@ struct _RustLibNipaplayPlugin {
   GObject parent_instance;
   FlMethodChannel* channel;
   FlPluginRegistrar* registrar;
+  FlView* view;
   FlTextureRegistrar* texture_registrar;
   SurfaceMap surfaces;
   SurfaceMutex surfaces_lock;
@@ -203,6 +215,123 @@ class ScopedGlContext {
   GdkGLContext* previous_;
 };
 
+// Flutter's Linux embedder renders with EGL on its raster thread even under
+// X11, but GTK3's GdkGLContext is GLX-only on X11. libglvnd refuses to make a
+// GLX context current on a thread that already has an EGL context current and
+// raises BadAccess (GLX MakeContextCurrent), which GDK treats as a fatal X
+// error. On X11 we therefore render Next2 in a private EGL context created on
+// the raster thread that shares objects with Flutter's current EGL context.
+struct EglBinding {
+  EGLDisplay display = EGL_NO_DISPLAY;
+  EGLSurface draw = EGL_NO_SURFACE;
+  EGLSurface read = EGL_NO_SURFACE;
+  EGLContext context = EGL_NO_CONTEXT;
+};
+
+static EglBinding CurrentEglBinding() {
+  EglBinding binding;
+  binding.context = eglGetCurrentContext();
+  if (binding.context != EGL_NO_CONTEXT) {
+    binding.display = eglGetCurrentDisplay();
+    binding.draw = eglGetCurrentSurface(EGL_DRAW);
+    binding.read = eglGetCurrentSurface(EGL_READ);
+  }
+  return binding;
+}
+
+static bool IsX11Display() {
+#ifdef GDK_WINDOWING_X11
+  GdkDisplay* display = gdk_display_get_default();
+  return display != nullptr && GDK_IS_X11_DISPLAY(display);
+#else
+  return false;
+#endif
+}
+
+static bool EnsureEglContext(Next2GLTexture* self, const EglBinding& flutter) {
+  if (self->egl_context != EGL_NO_CONTEXT) {
+    return true;
+  }
+  if (self->egl_failed || flutter.context == EGL_NO_CONTEXT ||
+      flutter.display == EGL_NO_DISPLAY) {
+    return false;
+  }
+  self->egl_failed = true;  // Cleared below on success.
+
+  const char* extensions = eglQueryString(flutter.display, EGL_EXTENSIONS);
+  if (extensions == nullptr ||
+      strstr(extensions, "EGL_KHR_surfaceless_context") == nullptr) {
+    g_warning("Next2: EGL_KHR_surfaceless_context unavailable");
+    return false;
+  }
+
+  EGLint config_id = 0;
+  EGLint client_type = EGL_OPENGL_ES_API;
+  EGLint client_version = 2;
+  eglQueryContext(flutter.display, flutter.context, EGL_CONFIG_ID, &config_id);
+  eglQueryContext(flutter.display, flutter.context, EGL_CONTEXT_CLIENT_TYPE,
+                  &client_type);
+  eglQueryContext(flutter.display, flutter.context, EGL_CONTEXT_CLIENT_VERSION,
+                  &client_version);
+
+  const EGLint config_attribs[] = {EGL_CONFIG_ID, config_id, EGL_NONE};
+  EGLConfig config = nullptr;
+  EGLint num_configs = 0;
+  if (!eglChooseConfig(flutter.display, config_attribs, &config, 1,
+                       &num_configs) ||
+      num_configs < 1) {
+    g_warning("Next2: no EGL config matching Flutter's (id %d)", config_id);
+    return false;
+  }
+
+  const EGLenum previous_api = eglQueryAPI();
+  eglBindAPI(static_cast<EGLenum>(client_type));
+  const EGLint es_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, client_version,
+                               EGL_NONE};
+  const EGLint gl_attribs[] = {EGL_NONE};
+  EGLContext context = eglCreateContext(
+      flutter.display, config, flutter.context,
+      client_type == EGL_OPENGL_ES_API ? es_attribs : gl_attribs);
+  eglBindAPI(previous_api);
+  if (context == EGL_NO_CONTEXT) {
+    g_warning("Next2: eglCreateContext failed (0x%x)", eglGetError());
+    return false;
+  }
+
+  self->egl_display = flutter.display;
+  self->egl_context = context;
+  self->egl_failed = false;
+  return true;
+}
+
+// Makes the private EGL context current (surfaceless) and restores whatever
+// EGL binding the thread had before.
+class ScopedEglContext {
+ public:
+  ScopedEglContext(EGLDisplay display, EGLContext context)
+      : display_(display), previous_(CurrentEglBinding()) {
+    ok_ = eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, context) ==
+          EGL_TRUE;
+    if (!ok_) {
+      g_warning("Next2: eglMakeCurrent failed (0x%x)", eglGetError());
+    }
+  }
+  ~ScopedEglContext() {
+    if (previous_.context != EGL_NO_CONTEXT) {
+      eglMakeCurrent(previous_.display, previous_.draw, previous_.read,
+                     previous_.context);
+    } else {
+      eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    }
+  }
+  bool ok() const { return ok_; }
+
+ private:
+  EGLDisplay display_;
+  EglBinding previous_;
+  bool ok_ = false;
+};
+
 static const void* next2_gl_proc_loader(const char* name) {
   if (name == nullptr) {
     return nullptr;
@@ -288,20 +417,40 @@ static gboolean next2_gl_texture_populate(FlTextureGL* texture,
     return FALSE;
   }
 
-  ScopedGlContext context(next2_texture->gl_context);
-  const bool has_storage = EnsureTextureStorage(next2_texture, desired_width, desired_height);
-  bool rendered = false;
-  if (has_storage) {
-    rendered = next2_engine_render_gl_texture(engine_handle, next2_texture->texture_name,
-                                              desired_width, desired_height,
-                                              next2_gl_proc_loader) != 0;
-    if (!rendered) {
-      ClearTexture(next2_texture->texture_name, desired_width, desired_height);
+  // Renders into the shared texture with Next2's context already current.
+  auto render = [&]() -> bool {
+    const bool storage = EnsureTextureStorage(next2_texture, desired_width, desired_height);
+    if (storage) {
+      const bool rendered =
+          next2_engine_render_gl_texture(engine_handle, next2_texture->texture_name,
+                                         desired_width, desired_height,
+                                         next2_gl_proc_loader) != 0;
+      if (!rendered) {
+        ClearTexture(next2_texture->texture_name, desired_width, desired_height);
+      }
     }
+    // The shared texture must be complete before Flutter samples it in its own
+    // context. This also covers the transparent clear path after a failed render.
+    glFinish();
+    return storage;
+  };
+
+  bool has_storage = false;
+  const EglBinding flutter_binding = IsX11Display() ? CurrentEglBinding() : EglBinding{};
+  if (flutter_binding.context != EGL_NO_CONTEXT) {
+    if (!EnsureEglContext(next2_texture, flutter_binding)) {
+      return FALSE;
+    }
+    ScopedEglContext context(next2_texture->egl_display, next2_texture->egl_context);
+    if (!context.ok()) {
+      return FALSE;
+    }
+    has_storage = render();
+  } else {
+    next2_texture->gdk_used = true;
+    ScopedGlContext context(next2_texture->gl_context);
+    has_storage = render();
   }
-  // The shared texture must be complete before Flutter samples it in its own
-  // context. This also covers the transparent clear path after a failed render.
-  glFinish();
 
   if (!has_storage) {
     return FALSE;
@@ -320,7 +469,31 @@ static void next2_gl_texture_dispose(GObject* object) {
     auto state = *self->state;
     std::lock_guard<std::mutex> guard(state->lock);
     // wgpu's external GL adapter must also be dropped with its context current.
-    if (self->gl_context != nullptr) {
+    if (self->egl_context != EGL_NO_CONTEXT) {
+      // Dispose may run on a thread where GTK left its GLX context current;
+      // release it first so the EGL context can be bound, then put it back.
+      GdkGLContext* gdk_previous = gdk_gl_context_get_current();
+      if (gdk_previous != nullptr) {
+        g_object_ref(gdk_previous);
+        gdk_gl_context_clear_current();
+      }
+      {
+        ScopedEglContext context(self->egl_display, self->egl_context);
+        if (context.ok()) {
+          if (state->engine_handle != 0) next2_engine_dispose(state->engine_handle);
+          if (self->texture_name != 0) glDeleteTextures(1, &self->texture_name);
+          glFinish();
+        } else {
+          g_warning("Next2: leaking renderer, could not bind its EGL context");
+        }
+      }
+      eglDestroyContext(self->egl_display, self->egl_context);
+      self->egl_context = EGL_NO_CONTEXT;
+      if (gdk_previous != nullptr) {
+        gdk_gl_context_make_current(gdk_previous);
+        g_object_unref(gdk_previous);
+      }
+    } else if (self->gl_context != nullptr && self->gdk_used) {
       ScopedGlContext context(self->gl_context);
       if (state->engine_handle != 0) next2_engine_dispose(state->engine_handle);
       if (self->texture_name != 0) glDeleteTextures(1, &self->texture_name);
@@ -349,6 +522,10 @@ static void next2_gl_texture_init(Next2GLTexture* self) {
   self->texture_name = 0;
   self->texture_width = 0;
   self->texture_height = 0;
+  self->egl_display = EGL_NO_DISPLAY;
+  self->egl_context = EGL_NO_CONTEXT;
+  self->egl_failed = false;
+  self->gdk_used = false;
 }
 
 static FlTextureGL* create_gl_texture(const std::shared_ptr<SurfaceState>& state,
@@ -438,7 +615,7 @@ static void handle_method_call(RustLibNipaplayPlugin* self,
         fl_method_call_respond(method_call, response, nullptr);
         return;
       }
-      FlView* view = fl_plugin_registrar_get_view(self->registrar);
+      FlView* view = self->view;
       GdkWindow* window = view ? gtk_widget_get_window(GTK_WIDGET(view)) : nullptr;
       g_autoptr(GError) context_error = nullptr;
       GdkGLContext* context = window
@@ -611,6 +788,7 @@ static void rust_lib_nipaplay_plugin_init(RustLibNipaplayPlugin* self) {
   new (&self->surfaces_lock) SurfaceMutex();
   self->channel = nullptr;
   self->registrar = nullptr;
+  self->view = nullptr;
   self->texture_registrar = nullptr;
   self->tick_source = 0;
 }
@@ -619,6 +797,7 @@ void rust_lib_nipaplay_plugin_register_with_registrar(FlPluginRegistrar* registr
   RustLibNipaplayPlugin* self = RUST_LIB_NIPAPLAY_PLUGIN(
       g_object_new(rust_lib_nipaplay_plugin_get_type(), nullptr));
   self->registrar = registrar;
+  self->view = fl_plugin_registrar_get_view(registrar);
   self->texture_registrar = fl_plugin_registrar_get_texture_registrar(registrar);
 
   g_autoptr(FlMethodCodec) codec =

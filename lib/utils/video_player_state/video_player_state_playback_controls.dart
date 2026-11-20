@@ -75,11 +75,17 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 截图依赖 player.snapshot()，播放器停止后截图会失败
       // 须先等截图完成，_currentThumbnailPath 才是最新值，_updateWatchHistory 才能写入正确缩略图
       if (_isCapturingFrame) {
+        // The OHOS native surface can stop drawing while the phone rotates.
+        // Its thumbnail is best effort and must not hold up leaving playback.
+        final screenshotWait = globals.isHarmonyOS &&
+                player.getPlayerKernelName() == 'MDK'
+            ? const Duration(milliseconds: 300)
+            : const Duration(seconds: 4);
         _logMacOSHdrResetTrace('waiting for exit screenshot to complete');
         try {
           await Future.any([
             _waitForScreenshotComplete(),
-            Future.delayed(const Duration(seconds: 4)),
+            Future.delayed(screenshotWait),
           ]);
           _logMacOSHdrResetTrace(
             'exit screenshot wait done, isCapturing=$_isCapturingFrame',
