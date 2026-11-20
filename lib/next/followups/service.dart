@@ -590,10 +590,13 @@ final class Followups {
 
   JsonMap _public(JsonMap row) => {...row}..remove('hookCursor');
 
+  /// Saves [row]; with [record] false the state changes without an event
+  /// in `followup_events` (a retry of the same failure is not news).
   Future<void> _save(JsonMap row, String state, String event,
       {String origin = 'application',
       String? invocationId,
-      String? reason}) async {
+      String? reason,
+      bool record = true}) async {
     row['state'] = state;
     row['reason'] = reason;
     row['updatedAt'] = DateTime.now().toUtc().toIso8601String();
@@ -604,7 +607,7 @@ final class Followups {
       await tx.update(
           'followups', {'state': state, 'snapshot': jsonEncode(row)},
           where: 'id=?', whereArgs: [row['id']]);
-      await _event(tx, row, event, origin, invocationId);
+      if (record) await _event(tx, row, event, origin, invocationId);
     });
   }
 
@@ -831,17 +834,27 @@ final class Followups {
               await _save(row, 'ready', 'sealed');
             }
             row['remoteReceipt'] = await deliver(peer, row);
+            row
+              ..remove('remoteAttempts')
+              ..remove('remoteRetryAt');
             row['dispatchedAt'] = DateTime.now().toUtc().toIso8601String();
             row['deliveryState'] = 'forwarded';
             await _save(row, 'completed', 'forwarded',
                 reason:
                     'Destination durably accepted this delivery; its conversation state is owned there.');
           } on Failure catch (error) {
-            final retry =
-                DateTime.now().toUtc().add(const Duration(seconds: 30));
+            // An unreachable device is tried again less and less often (30 s,
+            // doubling, at most 30 min); only the first failure of a run is
+            // recorded as an event, the retries update the row.
+            final attempts = (row['remoteAttempts'] as int? ?? 0) + 1;
+            final wait = Duration(
+                seconds: min(30 * pow(2, attempts - 1), 1800).toInt());
+            final retry = DateTime.now().toUtc().add(wait);
+            row['remoteAttempts'] = attempts;
             row['remoteRetryAt'] = retry.toIso8601String();
             _until(retry);
-            await _save(row, 'ready', 'pending', reason: error.message);
+            await _save(row, 'ready', 'pending',
+                reason: error.message, record: attempts == 1);
           }
           continue;
         }
@@ -1260,3 +1273,4 @@ final class _Slice {
     _clock.reset();
   }
 }
+
