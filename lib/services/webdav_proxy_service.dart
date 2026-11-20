@@ -49,10 +49,15 @@ class WebDAVProxyService {
     if (kIsWeb) return;
     _diagnostics
         .log('initialize running=$_isRunning pending=${_initializing != null}');
-    while (_stopping != null) {
-      await _stopping;
-    }
-    await _ensureListener('initialize-reuse');
+    // A proxy that is stopping must not be handed out again: wait for the
+    // stop, then start a fresh one. A stop that begins while this call waits
+    // on a shared start or health probe is waited for as well.
+    do {
+      while (_stopping != null) {
+        await _stopping;
+      }
+      await _ensureListener('initialize-reuse');
+    } while (_stopping != null);
   }
 
   Future<void> _onResume() async {
@@ -150,6 +155,8 @@ class WebDAVProxyService {
 
   Future<void> _stopInternal() async {
     _diagnostics.log('stop-request running=$_isRunning');
+    // Nothing may treat the proxy as usable once a stop has begun.
+    _isRunning = false;
     try {
       await _initializing;
     } catch (_) {}

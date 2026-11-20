@@ -53,11 +53,14 @@ class SMBProxyService {
         .log('initialize running=$_isRunning pending=${_initializing != null}');
     if (kIsWeb) return;
     // A proxy that is stopping must not be handed out again: wait for the
-    // stop, then start a fresh one.
-    while (_stopping != null) {
-      await _stopping;
-    }
-    await _ensureListener('initialize-reuse');
+    // stop, then start a fresh one. A stop that begins while this call waits
+    // on a shared start or health probe is waited for as well.
+    do {
+      while (_stopping != null) {
+        await _stopping;
+      }
+      await _ensureListener('initialize-reuse');
+    } while (_stopping != null);
   }
 
   Future<void> _onResume() async {

@@ -924,13 +924,15 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
                 pathSegments.isNotEmpty ? pathSegments.last : filePath;
             final fallbackTitle = _remoteDisplayNameCache[filePath] ??
                 p.basenameWithoutExtension(_safeDecode(lastSegment));
-            final actualPlayUrl = switch (uri?.scheme) {
-              'webdav' => await MediaSourceUtils.resolveWebDavPathToUrlInitialized(
-                  filePath),
-              'smb' => await MediaSourceUtils.resolveSmbPathToUrlInitialized(
-                  filePath),
-              _ => filePath,
-            };
+            // File names often contain unescaped `[` `]`, which Uri cannot
+            // parse; dispatch on the stored path prefix instead.
+            final actualPlayUrl = MediaSourceUtils.isNewWebDavPath(filePath)
+                ? await MediaSourceUtils.resolveWebDavPathToUrlInitialized(
+                    filePath)
+                : MediaSourceUtils.isNewSmbPath(filePath)
+                    ? await MediaSourceUtils.resolveSmbPathToUrlInitialized(
+                        filePath)
+                    : MediaSourceUtils.resolveRemotePathToUrl(filePath);
             if (actualPlayUrl == null || actualPlayUrl.isEmpty) {
               throw Exception('无法解析远程媒体路径: $filePath');
             }
