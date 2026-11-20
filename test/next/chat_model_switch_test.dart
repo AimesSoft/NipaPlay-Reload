@@ -39,6 +39,7 @@ void main() {
         .singleWhere((choice) => choice['model'] == 'deepseek-pro');
     expect(choice.containsKey('baseUrl'), isFalse);
     expect(choice.containsKey('apiKey'), isFalse);
+    expect(choice['candidateOrigin'], 'provider');
     final saved = await invoke(
         'set', {'choiceId': choice['choiceId'], 'reasoning': 'off'});
     expect(saved['appliesAt'], 'nextTurn');
@@ -173,6 +174,7 @@ void main() {
           findsNothing);
       expect(find.byKey(const Key('chat.model.listed.deepseek-pro')),
           findsOneWidget);
+      expect(find.text('这个服务商'), findsNWidgets(2));
 
       // Tapping reasoning '高' updates model without closing the sheet.
       await tester.tap(find.text('高'));

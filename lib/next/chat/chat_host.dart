@@ -179,6 +179,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
   final _loaded = <String>{};
   Future<void> _rolloutWrites = Future.value();
   ChatMessage _modelDefaults = {};
+  bool _hasOpenAiRoute = false;
   final _nextModels = <String, UiModelChoice>{};
   String? _codexLoginId;
   String? _codexLoginState;
@@ -521,6 +522,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
 
   Future<void> _startServer() async {
     if (_process != null) throw StateError('Chat server already started.');
+    _hasOpenAiRoute = false;
     if (dsh case final runtime?) {
       await _launchDsh(runtime);
     } else if (Platform.isWindows) {
@@ -633,8 +635,14 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
     if (modelLaunch != null) {
       final configuration = await _request('config/read', {});
       final config = configuration['config'] as Map;
+      final defaultProvider =
+          _launch?.provider ?? config['model_provider'] ?? 'openai';
+      _hasOpenAiRoute = dsh == null &&
+          defaultProvider == 'openai' &&
+          _officialModelEndpoint(config['openai_base_url'], 'api.openai.com') &&
+          _officialModelEndpoint(config['chatgpt_base_url'], 'chatgpt.com');
       String? defaultModel = _launch?.model ?? config['model'] as String?;
-      if (defaultModel == null) {
+      if (defaultModel == null && _hasOpenAiRoute) {
         final models = await _request('model/list', {});
         defaultModel = (models['data'] as List)
             .cast<Map>()
@@ -642,8 +650,7 @@ final class ChatHost implements ConversationHistory, DelegationChat, GuestChat {
       }
       _modelDefaults = {
         'model': defaultModel,
-        'modelProvider':
-            _launch?.provider ?? config['model_provider'] ?? 'openai',
+        'modelProvider': defaultProvider,
         if (config['model_reasoning_effort'] case final String effort)
           'effort': effort,
       };

@@ -25,7 +25,7 @@ final class ChatModelCapability implements Capability {
                   id: 'chat.model.candidates',
                   title: '查询候选模型',
                   description:
-                      'List model choices from candidate sources. succeeded with no choices, failed, and unavailable are distinct; failures include a sanitized reason.',
+                      'List model choices with candidateOrigin facts: openai, chatgptAccount, provider, or dshProvider. The Codex catalog is not proof of model access. succeeded with no choices, failed, and unavailable are distinct; failures include a sanitized reason.',
                   effect: Effect.read,
                   input: ObjectSchema({}),
                   output: _facts), (_, __) async {
@@ -89,6 +89,8 @@ final class ChatModelCapability implements Capability {
   static JsonMap _choice(UiModelChoice choice) => {
         'choiceId': _id(choice),
         'source': choice.source.name,
+        if (choice.candidateOrigin != null)
+          'candidateOrigin': choice.candidateOrigin!.name,
         if (choice.catalog != null) 'catalog': choice.catalog!.name,
         if (choice.providerLabel != null)
           'providerName': _safe(choice.providerLabel),

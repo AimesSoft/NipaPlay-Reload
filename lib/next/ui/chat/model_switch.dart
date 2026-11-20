@@ -348,10 +348,13 @@ class _ModelSheetState extends State<ModelSheet> {
                                     ? 'chat.model.listed.${choice.model}'
                                     : 'chat.model.listed.${choice.catalog!.name}.${choice.provider}.${choice.model}'),
                                 title: choice.label ?? choice.model ?? '',
-                                detail: choice.catalog == null
-                                    ? choice.provider
-                                    : choice.providerLabel == choice.provider
-                                        ? null : choice.providerLabel,
+                                detail: switch (choice.candidateOrigin) {
+                                  UiModelCandidateOrigin.openai => 'OpenAI',
+                                  UiModelCandidateOrigin.chatgptAccount => 'ChatGPT 账号',
+                                  UiModelCandidateOrigin.provider => '这个服务商',
+                                  UiModelCandidateOrigin.dshProvider => 'DSH 服务商',
+                                  null => choice.providerLabel ?? choice.provider,
+                                },
                                 current: setup.sessionChoice?.catalog == choice.catalog &&
                                     setup.sessionChoice?.model == choice.model &&
                                     setup.sessionChoice?.provider == choice.provider,

@@ -1,5 +1,15 @@
 part of 'chat_host.dart';
 
+bool _officialModelEndpoint(Object? configured, String host) {
+  if (configured == null || configured == '') return true;
+  final uri = configured is String ? Uri.tryParse(configured) : null;
+  return uri != null &&
+      uri.scheme == 'https' &&
+      uri.host == host &&
+      uri.port == 443 &&
+      uri.userInfo.isEmpty;
+}
+
 extension SessionModels on ChatHost {
   UiAgentRuntimeKind get _modelRuntime =>
       dsh == null ? UiAgentRuntimeKind.codex : UiAgentRuntimeKind.dsh;
@@ -12,21 +22,32 @@ extension SessionModels on ChatHost {
         '${endpoint.seedRepository.parent.path}/session-models/$key.json');
   }
 
-  Future<List<UiModelChoice>> runtimeModels() async {
+  Future<List<UiModelChoice>?> runtimeModels() async {
+    if (dsh == null && !_hasOpenAiRoute) return null;
+    final process = _process;
+    final defaults = _modelDefaults;
+    final origin = dsh != null
+        ? UiModelCandidateOrigin.dshProvider
+        : await _codexCandidateOrigin();
     final choices = <UiModelChoice>[];
     String? cursor;
     final seen = <String>{};
     do {
+      if (!available || !identical(process, _process)) return null;
       final result = await _request(
           dsh == null ? 'model/list' : 'nipa/model/list',
           {if (cursor != null) 'cursor': cursor});
       for (final entry in (result['data'] as List).cast<Map>()) {
-        final choice = _decodeModel(entry);
+        final choice = _decodeModel(entry,
+            origin: origin == UiModelCandidateOrigin.dshProvider &&
+                    entry['provider'] == defaults['modelProvider']
+                ? UiModelCandidateOrigin.provider
+                : origin);
         if (choice.model != null) choices.add(choice);
         if (dsh == null &&
-            entry['model'] == _modelDefaults['model'] &&
-            _modelDefaults['effort'] == null) {
-          _modelDefaults['effort'] = choice.reasoning;
+            entry['model'] == defaults['model'] &&
+            defaults['effort'] == null) {
+          defaults['effort'] = choice.reasoning;
         }
       }
       if (choices.isEmpty &&
@@ -35,11 +56,26 @@ extension SessionModels on ChatHost {
       }
       cursor = result['nextCursor'] as String?;
     } while (cursor != null && seen.add(cursor));
-    return choices;
+    return available && identical(process, _process) ? choices : null;
   }
 
-  UiModelChoice _decodeModel(Map value) => UiModelChoice(
+  Future<UiModelCandidateOrigin> _codexCandidateOrigin() async {
+    try {
+      final response = await _request('account/read', {'refreshToken': false});
+      final account = response['account'];
+      if (account is Map && account['type'] == 'chatgpt') {
+        return UiModelCandidateOrigin.chatgptAccount;
+      }
+    } on ChatRpcError {
+      return UiModelCandidateOrigin.openai;
+    }
+    return UiModelCandidateOrigin.openai;
+  }
+
+  UiModelChoice _decodeModel(Map value, {UiModelCandidateOrigin? origin}) =>
+      UiModelChoice(
           catalog: _modelRuntime,
+          candidateOrigin: origin,
           source: _modelRuntime == UiAgentRuntimeKind.codex
               ? UiModelSource.codex
               : UiModelSource.nipaplay,

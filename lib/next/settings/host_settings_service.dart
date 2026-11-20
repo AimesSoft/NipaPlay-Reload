@@ -443,20 +443,48 @@ final class HostSettingsService
 
   @override
   Future<UiModelCandidates> providerModels() async {
-    final live = chat();
-    final configured = _endpointModels();
-    if (live == null || !live.available) return configured;
+    final pendingWrites = _writes;
+    await pendingWrites;
+    final AgentRuntimeKind runtimeKind;
+    final JsonMap value;
     try {
-      final runtime = await live.runtimeModels();
-      final endpoint = await configured;
+      runtimeKind = await effectiveRuntime();
+      value = await _read('model.json');
+    } on Object {
+      return const UiModelCandidates(UiModelQueryStatus.failed,
+          reason: '无法读取模型配置');
+    }
+    final live = chat();
+    final source = _source(value, runtimeKind);
+    final configured = _endpointModels(value, source);
+    List<UiModelChoice>? runtime;
+    var runtimeFailed = false;
+    if (live != null && live.available &&
+        (runtimeKind == AgentRuntimeKind.dsh ||
+            (source != UiModelSource.nipaplay &&
+                (value['revision'] as int? ?? 0) == live.activeModelRevision))) {
+      try {
+        runtime = await live.runtimeModels();
+      } catch (_) {
+        runtimeFailed = true;
+      }
+    }
+    final endpoint = await configured;
+    if (await effectiveRuntime() != runtimeKind ||
+        !identical(pendingWrites, _writes)) {
+      return const UiModelCandidates(UiModelQueryStatus.unavailable,
+          reason: '模型配置已更改');
+    }
+    if (!identical(live, chat())) return endpoint;
+    if (runtime != null) {
       return UiModelCandidates(UiModelQueryStatus.succeeded,
           choices: [...runtime, ...endpoint.choices]);
-    } catch (_) {
-      final endpoint = await configured;
-      return UiModelCandidates(endpoint.status == UiModelQueryStatus.succeeded
-          ? endpoint.status : UiModelQueryStatus.failed,
+    }
+    if (runtimeFailed && endpoint.status != UiModelQueryStatus.succeeded) {
+      return UiModelCandidates(UiModelQueryStatus.failed,
           choices: endpoint.choices, reason: '无法读取运行器的模型目录');
     }
+    return endpoint;
   }
 
   @override
@@ -536,12 +564,11 @@ final class HostSettingsService
   @override
   Stream<void> get codexAccountChanges => changes;
 
-  Future<UiModelCandidates> _endpointModels() async {
+  Future<UiModelCandidates> _endpointModels(
+      JsonMap value, UiModelSource source) async {
     HttpClient? client;
     try {
-      await _writes;
-      final value = await _read('model.json');
-      if (_source(value, await effectiveRuntime()) != UiModelSource.nipaplay) {
+      if (source != UiModelSource.nipaplay) {
         return const UiModelCandidates(UiModelQueryStatus.unavailable,
             reason: '当前配置没有候选查询入口');
       }
@@ -566,6 +593,7 @@ final class HostSettingsService
         for (final model in models)
           UiModelChoice(
               source: UiModelSource.nipaplay,
+              candidateOrigin: UiModelCandidateOrigin.provider,
               model: model,
               provider: value['provider'] as String?,
               baseUrl: address.toString(),

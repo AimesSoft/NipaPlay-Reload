@@ -284,6 +284,8 @@ enum UiModelApi { responses, chat }
 
 enum UiModelQueryStatus { succeeded, failed, unavailable }
 
+enum UiModelCandidateOrigin { openai, chatgptAccount, provider, dshProvider }
+
 final class UiModelCandidates {
   const UiModelCandidates(this.status, {this.choices = const [], this.reason});
 
@@ -305,6 +307,7 @@ final class UiModelChoice {
     this.catalog,
     this.label,
     this.providerLabel,
+    this.candidateOrigin,
     this.reasoningLevels = const [],
   });
   final UiModelSource source;
@@ -317,12 +320,14 @@ final class UiModelChoice {
   final String? apiKey;
   final UiAgentRuntimeKind? catalog;
   final String? label, providerLabel;
+  final UiModelCandidateOrigin? candidateOrigin;
   final List<String> reasoningLevels;
 
   UiModelChoice withReasoning(String? value) => UiModelChoice(
       source: source, provider: provider, baseUrl: baseUrl, model: model,
       api: api, reasoning: value, compat: compat, catalog: catalog,
-      label: label, providerLabel: providerLabel, reasoningLevels: reasoningLevels);
+      label: label, providerLabel: providerLabel, candidateOrigin: candidateOrigin,
+      reasoningLevels: reasoningLevels);
 }
 
 abstract interface class NextSessionModelSettings {
