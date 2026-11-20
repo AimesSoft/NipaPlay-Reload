@@ -1,13 +1,19 @@
 library video_player_state;
 
+import 'package:nipaplay/models/media_library_scope.dart';
+
 export 'video_aspect_geometry.dart' show VideoAspectMode;
+export 'screenshot_encoding.dart' show ScreenshotFormat;
 
 import 'package:nipaplay/services/playback_position_store.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/plugins/url_resolver.dart';
 import 'video_aspect_geometry.dart';
+import 'video_frame_image.dart';
+import 'screenshot_encoding.dart';
 
 import 'package:nipaplay/utils/local_danmaku_file.dart';
+import 'package:nipaplay/utils/danmaku_track_timing.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,7 +33,6 @@ import 'package:universal_html/html.dart' as web_html;
 // Added import for subtitle parser
 import 'dart:io';
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:nipaplay/utils/storage_service.dart';
@@ -36,6 +41,7 @@ import 'package:path/path.dart' as p;
 
 import 'globals.dart' as globals;
 import 'dart:convert';
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:nipaplay/services/dandanplay_service.dart';
 // 带前缀的完整导入：part 文件里的跳过片头逻辑要用 http.get 直接打
 // Bangumi / AniList 的公开接口（无需令牌，走 WebRemoteAccessService 代理）。
@@ -56,6 +62,7 @@ import 'package:nipaplay/services/emby_player_menu_selection.dart';
 import 'package:nipaplay/services/emby_track_application.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/remote_proxy_diagnostics.dart';
 import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
 import 'package:nipaplay/services/emby_playback_sync_service.dart';
 import 'package:nipaplay/services/shared_remote_playback_sync_service.dart';
@@ -68,6 +75,7 @@ import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/utils/playback_resume_policy.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
@@ -520,6 +528,8 @@ int _exactEndStreak = 0;
   bool _screenshotCropLetterbox = true;
   // 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3），默认适应
   VideoAspectMode _videoAspectMode = VideoAspectMode.contain;
+  /// 视频画面尺寸模式（适应/填充/拉伸/16:9/4:3）。
+  VideoAspectMode get videoAspectMode => _videoAspectMode;
   final String _videoAspectModeKey = 'video_aspect_mode';
   // 软解输出颜色格式（空=内核默认），mdk 走 video.decoder 属性
     String _softDecodePixelFormat = '';
@@ -570,6 +580,8 @@ int _exactEndStreak = 0;
   ScreenshotSaveTarget _screenshotSaveTarget = ScreenshotSaveTarget.file;
   final String _screenshotQualityKey = 'screenshot_quality';
   ScreenshotQuality _screenshotQuality = ScreenshotQuality.ultra;
+  final String _screenshotFormatKey = 'screenshot_format';
+  ScreenshotFormat _screenshotFormat = ScreenshotFormat.jpeg;
 
   Duration? _lastSeekPosition; // 添加这个字段来记录最后一次seek的位置
   PlaybackEndAction _playbackEndAction = PlaybackEndAction.autoNext;
@@ -658,6 +670,7 @@ int _exactEndStreak = 0;
   bool _doubleResolutionPlaybackEnabled = false;
   final String _erikaUpscalerModeKey = 'erika_upscaler_mode';
   PlayerUpscalerMode _erikaUpscalerMode = PlayerUpscalerMode.off;
+  String _erikaUpscalerModelPath = '';
   final String _crtProfileKey = 'crt_profile';
   CrtProfile _crtProfile = CrtProfile.off;
   List<String> _crtShaderPaths = const <String>[];
@@ -792,6 +805,14 @@ int _exactEndStreak = 0;
   String _subtitleFontName = '';
   String _subtitleFontDir = '';
   SubtitleStyleOverrideMode _subtitleOverrideMode = defaultSubtitleOverrideMode;
+
+  // 内嵌字幕整块移动模式（双语不重叠）：开启后内核只解码不渲染
+  // （sub-visibility=no），App 按 sub-text 轮询取文本整块渲染——位置
+  // 滑块移动整个字幕块（行距永不收拢）、水平边距按屏幕像素生效。
+  bool _embeddedSubtitleOverlayMode = false;
+  final String _embeddedSubtitleOverlayModeKey = 'embedded_subtitle_overlay_mode';
+  String _embeddedSubtitleOverlayText = '';
+  int _lastEmbeddedSubTextPollMs = 0;
 
   // 弹幕轨道显示区域设置
   double _danmakuDisplayArea =
@@ -1012,6 +1033,10 @@ int _exactEndStreak = 0;
     player = Player();
     _ensurePlayerVolumeMatchesPlatformPolicy();
     _subtitleManager = SubtitleManager(player: player);
+    // 菜单挂载/移除外挂 ASS 等入口只经过 SubtitleManager，在这里统一同步
+    // 整块字幕模式的内核开关。
+    _subtitleManager.onExternalSubtitleActivationChanged =
+        () => applyEmbeddedSubtitleOverlayKernelState();
     _audioTrackManager = AudioTrackManager(player: player);
     _decoderManager = DecoderManager(player: player);
     onExternalSubtitleAutoLoaded = _onExternalSubtitleAutoLoaded;
@@ -1298,6 +1323,7 @@ int _exactEndStreak = 0;
   String? get screenshotSaveDirectory => _screenshotSaveDirectory;
   ScreenshotSaveTarget get screenshotSaveTarget => _screenshotSaveTarget;
   ScreenshotQuality get screenshotQuality => _screenshotQuality;
+  ScreenshotFormat get screenshotFormat => _screenshotFormat;
   List<Map<String, dynamic>> get danmakuList => _danmakuList;
   int get danmakuListVersion => _danmakuListVersion;
   int get locallySentDanmakuRevision => _locallySentDanmakuRevision;
@@ -1678,6 +1704,7 @@ int _exactEndStreak = 0;
   bool get doubleResolutionPlaybackEnabled => _doubleResolutionPlaybackEnabled;
   bool get isDoubleResolutionSupported => _supportsAnime4KForCurrentPlayer();
   PlayerUpscalerMode get erikaUpscalerMode => _erikaUpscalerMode;
+  String get erikaUpscalerModelPath => _erikaUpscalerModelPath;
   bool get isErikaUpscalerSupported => _supportsErikaUpscalerForCurrentPlayer();
   List<String> get anime4kShaderPaths => List.unmodifiable(_anime4kShaderPaths);
   CrtProfile get crtProfile => _crtProfile;

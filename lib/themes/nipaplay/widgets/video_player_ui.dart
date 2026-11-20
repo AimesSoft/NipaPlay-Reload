@@ -1,3 +1,4 @@
+import 'package:nipaplay/playback/player_ui_snapshot.dart';
 import 'dart:async';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nipaplay/danmaku_abstraction/danmaku_kernel_factory.dart';
+import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/services/system_share_service.dart';
 import 'package:nipaplay/services/photo_library_service.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
@@ -16,6 +18,7 @@ import 'package:nipaplay/widgets/video_surface_layout.dart';
 import 'package:nipaplay/widgets/context_menu/context_menu.dart';
 import 'package:nipaplay/widgets/danmaku_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
+import 'package:nipaplay/widgets/embedded_subtitle_overlay.dart';
 import 'package:nipaplay/widgets/macos_native_video_view.dart';
 import 'package:nipaplay/widgets/desktop_transient_overlay.dart';
 import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
@@ -158,7 +161,7 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
         opacity: videoState.mappedDanmakuOpacity,
       ),
       builder: (context, posMs, child) {
-        if (isStableKernel && child != null) {
+        if ((isStableKernel || !videoState.danmakuVisible) && child != null) {
           return child;
         }
         return DanmakuOverlay(
@@ -431,6 +434,21 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   }
 
   Widget _buildVideoSurfaceStage(VideoPlayerState videoState, int? textureId) {
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.macOS &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_VIDEO_ONLY'] == '1' &&
+        _shouldUseMacOSWindowHostedVideoOverlay &&
+        Platform.environment['NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER'] != '0') {
+      // Leave the area outside the video unpainted in transparent video-only mode.
+      return Center(
+        child: AspectRatio(
+          aspectRatio: DesktopPlayerWindowService.normalizeAspectRatio(
+            videoState.aspectRatio,
+          ),
+          child: _buildVideoSurface(videoState, textureId),
+        ),
+      );
+    }
     if (_shouldUseWindowHostedVideoOverlay(videoState)) {
       // iOS only: the window-overlay plane mirrors this Flutter rect, so keep
       // it sized to the video aspect ratio and centered. This preserves the
@@ -518,13 +536,13 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
               context: context, // 使用 VideoPlayerUI 的 context
               title: '播放错误',
               content: errorMessage,
-              actions: [
+              actionsBuilder: (dialogContext) => [
                 HoverScaleTextButton(
                   child: const Text('确定'),
                   onPressed: () {
                     // 1. Pop the dialog
-                    //    这里的 context 是 BlurDialog.show 内部创建的用于对话框的 context
-                    Navigator.of(context).pop();
+                    //    使用弹窗路由内部的 context 关闭弹窗。
+                    Navigator.of(dialogContext).pop();
 
                     // 2. Reset the player state.
                     //    这将导致 VideoPlayerUI 重建并因 hasVideo 为 false 而显示 VideoUploadUI。
@@ -1134,8 +1152,10 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
   Widget build(BuildContext context) {
     final isPictureInPicture =
         DesktopPictureInPictureScope.isEnabledOf(context);
-    return Consumer<VideoPlayerState>(
-      builder: (context, videoState, child) {
+    return Selector<VideoPlayerState, List<Object?>>(
+      selector: (_, state) => playerUiSnapshot(state),
+      builder: (context, snapshot, child) {
+        final videoState = context.read<VideoPlayerState>();
         return ValueListenableBuilder<int?>(
           valueListenable: videoState.player.textureId,
           builder: (context, textureId, _) {
@@ -1226,7 +1246,6 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                               _handleHorizontalDragEnd(context, details)
                           : null,
                       child: FocusScope(
-                        node: FocusScopeNode(),
                         child: globals.isMobilePlatform
                             ? RepaintBoundary(
                                 key: videoState.screenshotBoundaryKey,
@@ -1241,37 +1260,47 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                         ),
                                       ),
                                     ),
-                                    if ((videoState.hasVideo ||
-                                            videoState
-                                                .isDfmStartupGatePending) &&
-                                        videoState.danmakuVisible)
+                                    if (videoState.hasVideo ||
+                                        videoState.isDfmStartupGatePending)
                                       Positioned.fill(
-                                        child: IgnorePointer(
-                                          ignoring: true,
-                                          child: Consumer<VideoPlayerState>(
-                                            builder: (context, videoState, _) {
-                                              return _buildDanmakuOverlay(
-                                                videoState,
-                                              );
-                                            },
+                                        // RepaintBoundary isolates the danmaku layer: sibling
+                                        // subtitle overlays repainting must not drag the danmaku
+                                        // layer into recompositing (danmaku flicker).
+                                        child: RepaintBoundary(
+                                          child: IgnorePointer(
+                                            ignoring: true,
+                                            child: Selector<VideoPlayerState,
+                                                List<Object?>>(
+                                              selector: (_, state) =>
+                                                  danmakuUiSnapshot(state),
+                                              builder: (context, snapshot, _) {
+                                                return _buildDanmakuOverlay(
+                                                  context
+                                                      .read<VideoPlayerState>(),
+                                                );
+                                              },
+                                            ),
                                           ),
                                         ),
                                       ),
                                     if (videoState.hasVideo)
                                       Positioned.fill(
-                                        child: Consumer<VideoPlayerState>(
-                                          builder: (context, videoState, _) {
-                                            return ValueListenableBuilder<
-                                                double>(
-                                              valueListenable:
-                                                  videoState.playbackTimeMs,
-                                              builder: (context, posMs, __) {
-                                                return ExternalSubtitleOverlay(
-                                                  currentPositionMs: posMs,
-                                                );
-                                              },
-                                            );
-                                          },
+                                        // RepaintBoundary: the SRT overlay repaints per
+                                        // frame; isolating it keeps the danmaku layer
+                                        // out of that recompositing cost.
+                                        child: const RepaintBoundary(
+                                          child: ExternalSubtitleOverlay(),
+                                        ),
+                                      ),
+                                    // 内嵌字幕整块移动模式：sub-text 驱动的
+                                    // App 层渲染（双语整块、行距不收拢）。
+                                    if (videoState.hasVideo)
+                                      const Positioned.fill(
+                                        child: IgnorePointer(
+                                          ignoring: true,
+                                          child: RepaintBoundary(
+                                            child: EmbeddedSubtitleOverlay(),
+                                          ),
                                         ),
                                       ),
                                     if (videoState.status ==
@@ -1329,38 +1358,47 @@ class _VideoPlayerUIState extends State<VideoPlayerUI>
                                           ),
                                         ),
                                       ),
-                                      if ((videoState.hasVideo ||
-                                              videoState
-                                                  .isDfmStartupGatePending) &&
-                                          videoState.danmakuVisible)
+                                      if (videoState.hasVideo ||
+                                          videoState.isDfmStartupGatePending)
                                         Positioned.fill(
-                                          child: IgnorePointer(
-                                            ignoring: true,
-                                            child: Consumer<VideoPlayerState>(
-                                              builder:
-                                                  (context, videoState, _) {
-                                                return _buildDanmakuOverlay(
-                                                  videoState,
-                                                );
-                                              },
+                                          // RepaintBoundary isolates the danmaku layer: sibling
+                                          // subtitle overlays repainting must not drag the danmaku
+                                          // layer into recompositing (danmaku flicker).
+                                          child: RepaintBoundary(
+                                            child: IgnorePointer(
+                                              ignoring: true,
+                                              child: Selector<VideoPlayerState,
+                                                  List<Object?>>(
+                                                selector: (_, state) =>
+                                                    danmakuUiSnapshot(state),
+                                                builder:
+                                                    (context, snapshot, _) {
+                                                  return _buildDanmakuOverlay(
+                                                    context.read<
+                                                        VideoPlayerState>(),
+                                                  );
+                                                },
+                                              ),
                                             ),
                                           ),
                                         ),
                                       if (videoState.hasVideo)
                                         Positioned.fill(
-                                          child: Consumer<VideoPlayerState>(
-                                            builder: (context, videoState, _) {
-                                              return ValueListenableBuilder<
-                                                  double>(
-                                                valueListenable:
-                                                    videoState.playbackTimeMs,
-                                                builder: (context, posMs, __) {
-                                                  return ExternalSubtitleOverlay(
-                                                    currentPositionMs: posMs,
-                                                  );
-                                                },
-                                              );
-                                            },
+                                          // RepaintBoundary: the SRT overlay repaints per
+                                          // frame; isolating it keeps the danmaku layer
+                                          // out of that recompositing cost.
+                                          child: const RepaintBoundary(
+                                            child: ExternalSubtitleOverlay(),
+                                          ),
+                                        ),
+                                      // 内嵌字幕整块移动模式（第二处布局分支）
+                                      if (videoState.hasVideo)
+                                        const Positioned.fill(
+                                          child: IgnorePointer(
+                                            ignoring: true,
+                                            child: RepaintBoundary(
+                                              child: EmbeddedSubtitleOverlay(),
+                                            ),
                                           ),
                                         ),
                                       if (videoState.status ==

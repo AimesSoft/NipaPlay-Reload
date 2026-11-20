@@ -15,6 +15,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.da
 import 'package:nipaplay/utils/remote_access_address_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:nipaplay/widgets/in_view_dialog.dart';
 
 class RemoteAccessReceiverSettingsSection extends StatefulWidget {
   const RemoteAccessReceiverSettingsSection({super.key});
@@ -27,6 +28,8 @@ class RemoteAccessReceiverSettingsSection extends StatefulWidget {
 class _RemoteAccessReceiverSettingsSectionState
     extends State<RemoteAccessReceiverSettingsSection> {
   bool _webServerEnabled = false;
+  bool _lanDiscoveryRunning = false;
+  String? _lanDiscoveryError;
   bool _receiverEnabled = true;
   bool _autoStartEnabled = false;
   bool _ipv6Enabled = false;
@@ -53,6 +56,8 @@ class _RemoteAccessReceiverSettingsSectionState
     final shouldUpdateUrls = server.isRunning;
     setState(() {
       _webServerEnabled = server.isRunning;
+      _lanDiscoveryRunning = server.lanDiscoveryRunning;
+      _lanDiscoveryError = server.lanDiscoveryError;
       _receiverEnabled = receiverEnabled;
       _autoStartEnabled = server.autoStart;
       _ipv6Enabled = server.ipv6Enabled;
@@ -108,7 +113,7 @@ class _RemoteAccessReceiverSettingsSectionState
               ],
             ),
           )
-        : await showDialog<bool>(
+        : await showInViewDialog<bool>(
             context: context,
             builder: (dialogContext) => AlertDialog(
               title: const Text('移除受信任设备'),
@@ -146,10 +151,13 @@ class _RemoteAccessReceiverSettingsSectionState
   }
 
   Future<void> _updateAccessUrls() async {
-    final urls = await ServiceProvider.webServer.getAccessUrls();
+    final server = ServiceProvider.webServer;
+    final urls = await server.getAccessUrls();
     if (!mounted) return;
     setState(() {
       _accessUrls = urls;
+      _lanDiscoveryRunning = server.lanDiscoveryRunning;
+      _lanDiscoveryError = server.lanDiscoveryError;
     });
     await _fetchPublicIp();
   }
@@ -307,7 +315,7 @@ class _RemoteAccessReceiverSettingsSectionState
       );
       return;
     }
-    showDialog<void>(
+    showInViewDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('远程访问服务启动失败'),
@@ -356,7 +364,7 @@ class _RemoteAccessReceiverSettingsSectionState
     }
 
     final controller = TextEditingController(text: _currentPort.toString());
-    final newPort = await showDialog<int>(
+    final newPort = await showInViewDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('设置远程访问端口'),
@@ -471,7 +479,7 @@ class _RemoteAccessReceiverSettingsSectionState
       return;
     }
 
-    await showDialog<void>(
+    await showInViewDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('手机扫码连接'),
@@ -640,6 +648,8 @@ class _RemoteAccessReceiverSettingsSectionState
             onPressed: _showPortDialog,
           ),
         ),
+        if (_webServerEnabled && !_lanDiscoveryRunning)
+          _buildLanDiscoveryWarning(context),
         if (_webServerEnabled) ...[
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -654,6 +664,52 @@ class _RemoteAccessReceiverSettingsSectionState
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildLanDiscoveryWarning(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.error.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.wifi_off, size: 18, color: colorScheme.error),
+              const SizedBox(width: 8),
+              Text(
+                '局域网自动发现不可用',
+                style: TextStyle(
+                  color: colorScheme.error,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${_lanDiscoveryError ?? "UDP 端口 32123 启动失败"}。'
+            '其他设备的"扫描局域网"将无法发现本机，通过地址或二维码手动连接不受影响。'
+            '常见原因：UDP 端口 32123 被其他程序占用、被系统保留（Hyper-V/WSL 端口排除），'
+            '或被 Windows 防火墙拦截（入站 UDP 32123 / TCP $_currentPort）。',
+            style: TextStyle(
+              color: colorScheme.onSurfaceVariant,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

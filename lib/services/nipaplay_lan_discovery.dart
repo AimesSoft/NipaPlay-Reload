@@ -79,17 +79,35 @@ class NipaPlayLanDiscoveryProtocol {
 class NipaPlayLanDiscoveryResponder {
   RawDatagramSocket? _socket;
   int _webPort = 1180;
+  String? _lastStartError;
+
+  /// 测试专用：注入 bind 实现以模拟绑定失败。生产代码不得设置。
+  @visibleForTesting
+  static Future<RawDatagramSocket> Function(
+    InternetAddress host,
+    int port, {
+    bool reuseAddress,
+  })? bindOverrideForTest;
 
   bool get isRunning => _socket != null;
 
-  Future<void> start({required int webPort}) async {
+  /// 最近一次 [start] 失败的原因；成功启动后清空。
+  String? get lastStartError => _lastStartError;
+
+  /// 返回 UDP 发现应答器是否成功启动。
+  /// 绑定失败（端口被占用/被系统保留/防火墙策略）时返回 false，
+  /// 调用方应把该状态暴露给用户，避免"HTTP 服务正常但局域网发现失效"无提示。
+  Future<bool> start({required int webPort}) async {
     _webPort = webPort;
     if (_socket != null) {
-      return;
+      _lastStartError = null;
+      return true;
     }
 
     try {
-      final socket = await RawDatagramSocket.bind(
+      final bindFn =
+          bindOverrideForTest != null ? bindOverrideForTest! : RawDatagramSocket.bind;
+      final socket = await bindFn(
         InternetAddress.anyIPv4,
         nipaplayLanDiscoveryPort,
         reuseAddress: true,
@@ -113,9 +131,13 @@ class NipaPlayLanDiscoveryResponder {
       });
 
       _socket = socket;
+      _lastStartError = null;
       debugPrint('NipaPlayLanDiscoveryResponder: started on UDP $nipaplayLanDiscoveryPort');
+      return true;
     } catch (e) {
+      _lastStartError = e.toString();
       debugPrint('NipaPlayLanDiscoveryResponder: start failed: $e');
+      return false;
     }
   }
 

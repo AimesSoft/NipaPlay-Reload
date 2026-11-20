@@ -2170,7 +2170,9 @@ class _ServerSelectorSheet extends StatelessWidget {
                     ),
                   ),
                   subtitle: Text(
-                    connection.url,
+                    connection.wanUrl.trim().isEmpty
+                        ? connection.url
+                        : '${connection.url} / ${connection.wanUrl}',
                     style: TextStyle(
                       color: secondaryTextColor,
                       fontSize: 12,

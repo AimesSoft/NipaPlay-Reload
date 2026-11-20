@@ -62,6 +62,7 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
   late int _selectedRating;
   late TextEditingController _commentController;
   bool _isSubmitting = false;
+  bool _markAsWatched = true;
 
   Color get _accentColor =>
       CupertinoDynamicColor.resolve(CupertinoColors.systemPurple, context);
@@ -99,15 +100,12 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
-
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: _dismissKeyboard,
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + keyboardHeight),
+        child: _KeyboardInsetPadding(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,6 +124,23 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
               _buildRatingSection(),
               const SizedBox(height: 18),
               _buildCommentInput(),
+              const SizedBox(height: 8),
+              CupertinoListTile(
+                padding: EdgeInsets.zero,
+                leading: CupertinoCheckbox(
+                  value: _markAsWatched,
+                  activeColor: _accentColor,
+                  onChanged: _isSubmitting
+                      ? null
+                      : (value) => setState(
+                          () => _markAsWatched = value ?? false),
+                ),
+                title: Text('将状态改为[已看]',
+                    style: TextStyle(color: _textColor, fontSize: 13)),
+                onTap: _isSubmitting
+                    ? null
+                    : () => setState(() => _markAsWatched = !_markAsWatched),
+              ),
               const SizedBox(height: 20),
               _buildActionButtons(),
             ],
@@ -332,7 +347,8 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
 
     final result = BangumiCollectionSubmitResult(
       rating: _selectedRating,
-      collectionType: widget.collectionType,
+      collectionType: _markAsWatched ? 2 : widget.collectionType,
+      markAsWatched: _markAsWatched,
       comment: _commentController.text,
       episodeStatus: 0,
     );
@@ -350,4 +366,17 @@ class _CupertinoCommentDialogState extends State<CupertinoCommentDialog> {
       }
     }
   }
+}
+
+// Keyboard metrics rebuild only this wrapper, keeping the form child stable.
+class _KeyboardInsetPadding extends StatelessWidget {
+  const _KeyboardInsetPadding({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            20, 20, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+        child: child,
+      );
 }

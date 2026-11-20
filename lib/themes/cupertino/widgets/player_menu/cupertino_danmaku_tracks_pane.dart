@@ -8,6 +8,7 @@ import 'package:nipaplay/themes/nipaplay/widgets/large_screen_mode_scope.dart';
 import 'package:nipaplay/utils/local_danmaku_file.dart';
 import 'package:nipaplay/utils/globals.dart' as globals;
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/widgets/danmaku_track_offset_button.dart';
 
 class CupertinoDanmakuTracksPane extends StatefulWidget {
   const CupertinoDanmakuTracksPane({
@@ -111,6 +112,17 @@ class _CupertinoDanmakuTracksPaneState
               ],
             ),
             if (!globals.isTelevision)
+              ListenableBuilder(
+                listenable: widget.videoState,
+                builder: (context, _) => AdaptivePlayerMenuSection(
+                  header: const Text('弹幕轨道'),
+                  children: [
+                    for (final entry in widget.videoState.danmakuTracks.entries)
+                      if (entry.key != 'timeline') _buildTrackTile(entry),
+                  ],
+                ),
+              ),
+            if (!globals.isTelevision)
               AdaptivePlayerMenuSection(
                 header: const Text('本地弹幕'),
                 children: [
@@ -169,6 +181,37 @@ class _CupertinoDanmakuTracksPaneState
         color: enabled
             ? CupertinoTheme.of(context).primaryColor
             : CupertinoColors.inactiveGray,
+      ),
+    );
+  }
+
+  Widget _buildTrackTile(MapEntry<String, Map<String, dynamic>> entry) {
+    final state = widget.videoState;
+    final generation = state.playbackGeneration;
+    final name = entry.value['name']?.toString() ?? entry.key;
+    final offset = state.danmakuTrackOffset(entry.key);
+    bool isCurrentTrack() => state.playbackGeneration == generation &&
+        identical(state.danmakuTracks[entry.key], entry.value);
+    return AdaptivePlayerMenuTile(
+      title: Text(name),
+      subtitle: Text('${entry.value["count"] ?? 0}条 · ${formatDanmakuTrackOffset(offset)}'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DanmakuTrackOffsetButton(
+            trackName: name,
+            offset: offset,
+            onChanged: (value) {
+              if (isCurrentTrack()) state.setDanmakuTrackOffset(entry.key, value);
+            },
+          ),
+          AdaptivePlayerMenuSwitch(
+            value: state.danmakuTrackEnabled[entry.key] == true,
+            onChanged: (value) {
+              if (isCurrentTrack()) state.toggleDanmakuTrack(entry.key, value);
+            },
+          ),
+        ],
       ),
     );
   }

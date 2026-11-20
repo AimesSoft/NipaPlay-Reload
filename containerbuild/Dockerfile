@@ -8,11 +8,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl wget unzip zip xz-utils ca-certificates file python3 \
     clang cmake ninja-build pkg-config libgtk-3-dev \
+    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+    libevdev-dev \
     libayatana-appindicator3-dev \
     libmpv-dev libmpv2 mpv \
     libmimalloc-dev libmimalloc2.0 \
     libasound2-dev libass-dev libkeybinder-3.0-dev \
-    p7zip-full desktop-file-utils patchelf \
+    p7zip-full desktop-file-utils patchelf flatpak flatpak-builder zstd \
     && rm -rf /var/lib/apt/lists/*
 
 # Rust toolchain (cargokit builds rust_lib_nipaplay; preinstalled on GitHub runners)

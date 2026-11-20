@@ -1,3 +1,4 @@
+import 'package:nipaplay/player_abstraction/player_data_models.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -410,6 +411,8 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
       return [
         InfoItem('编解码器', codecName),
         InfoItem('分辨率', resolution),
+        InfoItem('帧率', codecInfo['fps'] ?? '未知'),
+        InfoItem('码率', codecInfo['bitRate'] ?? '未知'),
         InfoItem('解码', videoState.player.getProperty('decoder.video') ?? 'Erika'),
         if (details.isNotEmpty) InfoItem('参数', details),
       ];
@@ -633,42 +636,12 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
     ];
   }
 
-  String _formatErikaUpscalerMode(String mode) {
-    switch (mode) {
-      case 'erikaArtCnnC4F16':
-      case 'artCnnC4F16':
-        return 'ART-CNN C4F16';
-      case 'erikaArtCnnC4F32':
-      case 'artCnnC4F32':
-        return 'ART-CNN C4F32';
-      case 'erikaArtCnnC4F16Ds':
-      case 'artCnnC4F16Ds':
-        return 'ART-CNN C4F16 DS';
-      case 'off':
-        return '关闭';
-      default:
-        return mode;
-    }
-  }
+  String _formatErikaUpscalerMode(String mode) => PlayerUpscalerMode.values
+      .where((value) => value.name == mode || value.nativeName == mode)
+      .firstOrNull?.label ?? mode;
 
-  String _formatErikaUpscalerBackend(String backend) {
-    switch (backend) {
-      case 'simdgroupMatrix':
-        return 'SIMD-group Matrix';
-      case 'scalar':
-        return 'Scalar fallback';
-      case 'building':
-        return '构建中';
-      case 'inactive':
-        return '未激活';
-      case 'off':
-        return '关闭';
-      case 'unknown':
-        return '未知';
-      default:
-        return backend;
-    }
-  }
+  String _formatErikaUpscalerBackend(String backend) => PlayerUpscalerBackendStatus.values
+      .where((value) => value.name == backend).firstOrNull?.label ?? backend;
 
   String _formatMicrosAsMs(int micros) {
     if (micros <= 0) {
@@ -706,12 +679,15 @@ class _PlaybackInfoMenuState extends State<PlaybackInfoMenu> {
           ? _formatChannels(codec.channels!)
           : '未知';
       final sampleFormat = audioStream.metadata['sampleFormat'];
+      final bitRate = codec.bitRate != null && codec.bitRate! > 0
+          ? '${(codec.bitRate! / 1000).toStringAsFixed(0)} kbps'
+          : '未知';
       return [
         InfoItem('编解码器', codecName),
         InfoItem('采样率', sampleRate),
         InfoItem('声道', channels),
         if (sampleFormat != null) InfoItem('采样格式', sampleFormat),
-        InfoItem('码率', '未知'),
+        InfoItem('码率', bitRate),
       ];
     } else if (playerKernelName.toLowerCase().contains('mdk')) {
       // MDK播放器：解析完整的参数字符串

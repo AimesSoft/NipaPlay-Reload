@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
 
@@ -134,23 +135,31 @@ class _ImmersiveEpisodeRailState extends State<ImmersiveEpisodeRail> {
                   ),
                   const Spacer(),
                   if (widget.onSelectEpisodes != null)
-                    TextButton.icon(
-                      onPressed: widget.onSelectEpisodes,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white.withValues(alpha: 0.82),
-                        backgroundColor: Colors.black.withValues(alpha: 0.25),
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.16),
+                    if (AdaptiveMediaDetailActionButton.useNativeLiquidGlass(
+                        context))
+                      AdaptiveMediaDetailActionButton(
+                        icon: Ionicons.list_outline,
+                        label: '剧集',
+                        onPressed: widget.onSelectEpisodes,
+                      )
+                    else
+                      TextButton.icon(
+                        onPressed: widget.onSelectEpisodes,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white.withValues(alpha: 0.82),
+                          backgroundColor: Colors.black.withValues(alpha: 0.25),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.16),
+                          ),
+                          minimumSize: const Size(48, 40),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
-                        minimumSize: const Size(48, 40),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        icon: const Icon(Ionicons.list_outline, size: 17),
+                        label: const Text('剧集', maxLines: 1, softWrap: false),
                       ),
-                      icon: const Icon(Ionicons.list_outline, size: 17),
-                      label: const Text('选择剧集'),
-                    ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -199,6 +208,7 @@ class ImmersiveEpisodeCard extends StatefulWidget {
     required this.title,
     required this.onTap,
     this.thumbnailPath,
+    this.fallbackThumbnailUrl,
     this.progress = 0,
     this.durationLabel,
     this.isCurrent = false,
@@ -209,6 +219,7 @@ class ImmersiveEpisodeCard extends StatefulWidget {
   final String episodeLabel;
   final String title;
   final String? thumbnailPath;
+  final String? fallbackThumbnailUrl;
   final double progress;
   final String? durationLabel;
   final bool isCurrent;
@@ -266,7 +277,10 @@ class _ImmersiveEpisodeCardState extends State<ImmersiveEpisodeCard> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        _EpisodeThumbnail(path: widget.thumbnailPath),
+                        _EpisodeThumbnail(
+                          path: widget.thumbnailPath,
+                          fallbackUrl: widget.fallbackThumbnailUrl,
+                        ),
                         if (active)
                           ColoredBox(
                             color: Colors.white.withValues(alpha: 0.045),
@@ -439,14 +453,28 @@ class ImmersiveEpisodeUnavailableBadge extends StatelessWidget {
 }
 
 class _EpisodeThumbnail extends StatelessWidget {
-  const _EpisodeThumbnail({this.path});
+  const _EpisodeThumbnail({this.path, this.fallbackUrl});
 
   final String? path;
+  final String? fallbackUrl;
+
+  Widget _fallback() {
+    final url = fallbackUrl?.trim() ?? '';
+    if (url.isEmpty) return const _EpisodePlaceholder();
+    return CachedNetworkImageWidget(
+      key: ValueKey(url),
+      imageUrl: url,
+      fit: BoxFit.cover,
+      memCacheWidth: 520,
+      placeholderBuilder: (_) => const _EpisodePlaceholder(),
+      errorBuilder: (_, __) => const _EpisodePlaceholder(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final value = path?.trim() ?? '';
-    if (value.isEmpty) return const _EpisodePlaceholder();
+    if (value.isEmpty) return _fallback();
     final lower = value.toLowerCase();
     if (lower.startsWith('http://') || lower.startsWith('https://')) {
       return AnimatedSwitcher(
@@ -457,13 +485,13 @@ class _EpisodeThumbnail extends StatelessWidget {
           fit: BoxFit.cover,
           memCacheWidth: 520,
           fadeDuration: const Duration(milliseconds: 240),
-          errorBuilder: (_, __) => const _EpisodePlaceholder(),
+          errorBuilder: (_, __) => _fallback(),
         ),
       );
     }
-    if (kIsWeb) return const _EpisodePlaceholder();
+    if (kIsWeb) return _fallback();
     final file = File(value);
-    if (!file.existsSync()) return const _EpisodePlaceholder();
+    if (!file.existsSync()) return _fallback();
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 240),
       child: Image.file(
@@ -471,7 +499,7 @@ class _EpisodeThumbnail extends StatelessWidget {
         key: ValueKey(value),
         fit: BoxFit.cover,
         cacheWidth: 520,
-        errorBuilder: (_, __, ___) => const _EpisodePlaceholder(),
+        errorBuilder: (_, __, ___) => _fallback(),
       ),
     );
   }

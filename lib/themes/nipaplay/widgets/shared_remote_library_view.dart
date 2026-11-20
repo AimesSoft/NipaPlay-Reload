@@ -1,3 +1,6 @@
+import 'package:nipaplay/themes/nipaplay/widgets/media_detail_poster.dart';
+import 'package:nipaplay/models/media_library_scope.dart';
+import 'package:nipaplay/widgets/page_activity_mixin.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart' as cupertino;
@@ -46,7 +49,7 @@ class SharedRemoteLibraryView extends StatefulWidget {
 }
 
 class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, PageActivityMixin {
   static Color get _accentColor => AppAccentColors.current;
 
   // “只看未观看”状态的持久化 Key
@@ -98,7 +101,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
   // 本地观看历史中已看过的番剧 ID（用于“只看未观看”过滤）
   Set<int> _watchedAnimeIds() {
     try {
-      final provider = Provider.of<WatchHistoryProvider>(context, listen: false);
+      final provider =
+          Provider.of<WatchHistoryProvider>(context, listen: false);
       if (provider.isLoaded) {
         return provider.history
             .where((item) => item.animeId != null)
@@ -689,9 +693,7 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         title: filteredEmpty
             ? '没有未观看的番剧'
             : (provider.activeHost == null ? '请选择共享客户端' : '该客户端尚未扫描番剧'),
-        subtitle: filteredEmpty
-            ? '关闭“只看未观看”后可查看全部内容'
-            : '切换客户端或进入库管理添加远程文件夹',
+        subtitle: filteredEmpty ? '关闭“只看未观看”后可查看全部内容' : '切换客户端或进入库管理添加远程文件夹',
       );
     }
 
@@ -1235,6 +1237,8 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
             final anime = animeSummaries[index];
             return HorizontalAnimeCard(
               key: ValueKey('shared_${anime.animeId}'),
+              posterHeroTag: mediaLibraryPosterHeroTag(
+                  'shared:${provider.activeHost?.baseUrl}', anime.animeId),
               title:
                   anime.nameCn?.isNotEmpty == true ? anime.nameCn! : anime.name,
               imageUrl: anime.imageUrl ?? '',
@@ -1296,8 +1300,24 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
     }
   }
 
+  @override
+  void onPageActivityChanged(bool active) {
+    _scanStatusTimer?.cancel();
+    if (active && widget.mode == SharedRemoteViewMode.libraryManagement) {
+      final provider = context.read<SharedRemoteLibraryProvider>();
+      if (provider.hasActiveHost && !_scanStatusRequestInFlight) {
+        _scanStatusRequestInFlight = true;
+        provider.refreshScanStatus(showLoading: false).whenComplete(() {
+          _scanStatusRequestInFlight = false;
+          if (mounted && isPageActive) _startScanStatusPolling();
+        });
+      }
+    }
+  }
+
   void _startScanStatusPolling() {
     _scanStatusTimer?.cancel();
+    if (!mounted || !isPageActive) return;
     _scanStatusTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) {
         _scanStatusTimer?.cancel();
@@ -1817,7 +1837,9 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            filteredEmpty ? Ionicons.eye_off_outline : Ionicons.folder_open_outline,
+            filteredEmpty
+                ? Ionicons.eye_off_outline
+                : Ionicons.folder_open_outline,
             color: Colors.white38,
             size: 48,
           ),
@@ -1884,12 +1906,17 @@ class _SharedRemoteLibraryViewState extends State<SharedRemoteLibraryView>
         context,
         anime.animeId,
         sharedSummary: anime,
+        posterHeroTag: mediaLibraryPosterHeroTag(
+            'shared:${provider.activeHost?.baseUrl}', anime.animeId),
+        posterImageUrl: anime.imageUrl,
         sharedEpisodeLoader: () =>
             provider.loadAnimeEpisodes(anime.animeId, force: true),
         sharedEpisodeBuilder: (episode) => provider.buildPlayableItem(
           anime: anime,
           episode: episode,
         ),
+        mediaLibraryScope: MediaLibraryScope(MediaLibraryScopeKind.sharedRemote,
+            hostOrigin: provider.activeHost?.baseUrl),
         sharedSourceLabel: provider.activeHost?.displayName,
       );
     } catch (e) {

@@ -5,6 +5,7 @@
 // found in the LICENSE file.
 #include "fvp_plugin.h"
 #include <flutter/standard_method_codec.h>
+#include "../lib/src/callbacks.h"
 
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3d11.lib")
@@ -175,13 +176,23 @@ void FvpPlugin::HandleMethodCall(
       auto player = make_shared<TexturePlayer>(handle, tex, texture_registrar_);
       result->Success(flutter::EncodableValue(player->textureId));
       players_[player->textureId] = player;
+      handles_[player->textureId] = handle;
   } else if (method_call.method_name() == "ReleaseRT") {
     auto args = std::get<flutter::EncodableMap>(*method_call.arguments());
     const auto texId = args[flutter::EncodableValue("texture")].LongValue();
     texture_registrar_->UnregisterTexture(texId);
+    int64_t handle = 0;
+    if (auto it = handles_.find(texId); it != handles_.cend()) {
+        handle = it->second;
+        handles_.erase(it);
+    }
     if (auto it = players_.find(texId); it != players_.cend()) {
         players_.erase(it);
     }
+    // Destroying the texture's wrapper reset every callback on the native
+    // player; the player lives on and its Dart side still needs them.
+    if (handle)
+        MdkCallbacksRearm(handle);
     result->Success();
   } else if (method_call.method_name() == "MixWithOthers") {
     result->Success();

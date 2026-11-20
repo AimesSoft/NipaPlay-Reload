@@ -151,12 +151,9 @@ class _CustomScaffoldState extends State<CustomScaffold> {
     const enableAnimation = false;
 
     final currentIndex = widget.tabController!.index;
-    final preloadIndices = widget.pageIsHome
-        ? List<int>.generate(
-            widget.pages.length,
-            (i) => i,
-          ).where((i) => i != 1).toList()
-        : const <int>[];
+    // Create tabs on first visit and retain them thereafter. Constructing
+    // every hidden page at launch competes with the visible page's first load.
+    const preloadIndices = <int>[];
 
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final bool hasVideo = context.select<VideoPlayerState, bool>(

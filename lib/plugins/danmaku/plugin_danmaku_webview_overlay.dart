@@ -16,11 +16,13 @@ class PluginDanmakuWebViewOverlay extends StatefulWidget {
     required this.renderer,
     required this.videoState,
     this.fontScale = 1.0,
+    this.isVisible = true,
   });
 
   final PluginDanmakuRenderer renderer;
   final VideoPlayerState videoState;
   final double fontScale;
+  final bool isVisible;
 
   @override
   State<PluginDanmakuWebViewOverlay> createState() =>
@@ -40,6 +42,10 @@ class _PluginDanmakuWebViewOverlayState
   String _lastSettingsJson = '';
   String _lastPlaybackState = '';
   bool _lastBuffering = false;
+  bool? _lastVisible;
+  int _visibilitySeekRevision = 0;
+
+  bool get _visible => widget.isVisible && widget.videoState.danmakuVisible;
   Future<void> _sendQueue = Future<void>.value();
   int _loadGeneration = 0;
 
@@ -68,6 +74,9 @@ class _PluginDanmakuWebViewOverlayState
       unawaited(_initialize());
     } else if (oldWidget.fontScale != widget.fontScale && _initialStateSent) {
       unawaited(_sendSettings(force: true));
+    }
+    if (oldWidget.isVisible != widget.isVisible) {
+      _onVideoStateChanged();
     }
   }
 
@@ -221,7 +230,7 @@ class _PluginDanmakuWebViewOverlayState
           state.titanDanmakuSettings.fontSize * fontScale;
     }
     final settings = <String, dynamic>{
-      'visible': state.danmakuVisible,
+      'visible': _visible,
       'opacity': state.mappedDanmakuOpacity,
       'fontSize': state.actualDanmakuFontSize * fontScale,
       'fontFamily': state.danmakuFontFamily,
@@ -248,6 +257,10 @@ class _PluginDanmakuWebViewOverlayState
     final state = widget.videoState;
     final playbackState = state.status.toString().split('.').last;
     final isBuffering = state.isBuffering;
+    final visible = _visible;
+    final visibilityChanged = visible != _lastVisible;
+    // Restore the current window after hidden playback without reloading data.
+    if (visible && _lastVisible == false) _visibilitySeekRevision++;
     final seekChanged = state.seekRevision != _lastSeekRevision;
     final stateChanged = playbackState != _lastPlaybackState;
     final bufferingChanged = isBuffering != _lastBuffering;
@@ -256,20 +269,22 @@ class _PluginDanmakuWebViewOverlayState
         !seekChanged &&
         !stateChanged &&
         !bufferingChanged &&
-        now - _lastClockSentAtMs < 100) {
+        !visibilityChanged &&
+        (!visible || now - _lastClockSentAtMs < 100)) {
       return;
     }
     _lastClockSentAtMs = now;
     _lastSeekRevision = state.seekRevision;
     _lastPlaybackState = playbackState;
     _lastBuffering = isBuffering;
+    _lastVisible = visible;
     await _send(<String, dynamic>{
       'type': 'clock',
       'positionSeconds': state.playbackTimeMs.value / 1000,
       'durationSeconds': state.videoDuration.inMilliseconds / 1000,
-      'playing': playbackState == 'playing' && !isBuffering,
+      'playing': visible && playbackState == 'playing' && !isBuffering,
       'playbackRate': state.effectivePlaybackRate,
-      'seekRevision': state.seekRevision,
+      'seekRevision': state.seekRevision + _visibilitySeekRevision,
     });
   }
 

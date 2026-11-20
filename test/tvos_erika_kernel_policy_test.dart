@@ -48,7 +48,7 @@ void main() {
 
     expect(
       labs,
-      contains('PlayerFactory.isErikaKernelSupported &&'),
+      isNot(contains('Show Erika Player Kernel')),
     );
     expect(player, contains('if (!kIsWeb && !globals.isTvOS)'));
     expect(

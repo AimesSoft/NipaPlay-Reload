@@ -42,6 +42,7 @@ import 'package:nipaplay/utils/hotkey_service.dart';
 import 'package:nipaplay/pages/anime_detail_page.dart';
 import 'package:nipaplay/services/desktop_player_window_service.dart';
 import 'package:nipaplay/widgets/desktop_picture_in_picture_scope.dart';
+import 'package:nipaplay/widgets/player_volume_scroll_region.dart';
 import 'package:nipaplay/models/playback_detail_context.dart';
 
 typedef _PlaybackPageLayoutSnapshot = ({
@@ -57,6 +58,31 @@ bool shouldConsumeLargeScreenPlaybackPop({
   required bool hasVideo,
 }) {
   return isLargeScreen && hasVideo;
+}
+
+/// Width the player top bar leaves for the title, between the leading
+/// buttons and the [rightButtonCount] action buttons on the right.
+@visibleForTesting
+double playerTopBarTitleMaxWidth({
+  required double windowWidth,
+  required double leftInset,
+  required double rightInset,
+  required int rightButtonCount,
+  required bool isPictureInPicture,
+  required bool isMobilePlatform,
+}) {
+  final double rightButtonsWidth = rightButtonCount > 0
+      ? rightButtonCount * 44.0 + (rightButtonCount - 1) * 12.0
+      : 0.0;
+  return (windowWidth -
+          (16.0 + leftInset) -
+          (isPictureInPicture ? 0.0 : 116.0) -
+          (16.0 + rightInset) -
+          rightButtonsWidth -
+          (isMobilePlatform ? 86.0 : 0.0) -
+          24.0)
+      .clamp(80.0, 600.0)
+      .toDouble();
 }
 
 class PlayVideoPage extends StatefulWidget {
@@ -363,6 +389,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
     if (kIsWeb) return;
     if (!videoState.hasVideo) return;
 
+    final format = videoState.screenshotFormat;
     try {
       if (Platform.isIOS && target == ScreenshotSaveTarget.photos) {
         final ok = await videoState.captureScreenshotToPhotos(
@@ -375,6 +402,7 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       }
 
       final path = await videoState.captureScreenshot(
+        format: format,
         includeDanmaku: includeDanmaku,
         includeSubtitles: includeSubtitles,
         temporary: Platform.isIOS || Platform.isAndroid,
@@ -387,14 +415,17 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
       if (Platform.isAndroid) {
         await PhotoLibraryService.saveTemporaryFileToPhotos(
           path,
-          mimeType: 'image/jpeg',
+          mimeType: format.mimeType,
         );
         if (!mounted) return;
         BlurSnackBar.show(context, '截图已保存到相册');
         return;
       }
       if (Platform.isIOS) {
-        await SystemShareService.exportFile(path, mimeType: 'image/jpeg');
+        await SystemShareService.exportFile(
+          path,
+          mimeType: format.mimeType,
+        );
         return;
       }
       BlurSnackBar.show(context, '截图已保存: $path');
@@ -458,9 +489,9 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
           ),
         ],
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: const Text('关闭'),
         ),
       ],
@@ -528,25 +559,38 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
   }) {
     final isPictureInPicture =
         DesktopPictureInPictureScope.isEnabledOf(context);
-    return Stack(
-      fit: StackFit.expand,
-      clipBehavior: Clip.hardEdge,
-      children: [
-        Positioned.fill(
-          child: VideoPlayerWidget(danmakuScale: portraitUiScale),
-        ),
-        if (videoState.hasVideo)
-          NipaplayLargeScreenModeScope.isActiveOf(context) &&
-                  !isPictureInPicture
-              ? _buildLargeScreenMaterialControls(videoState)
-              : KeyedSubtree(
-                  key: ValueKey<bool>(portraitUiScale < 0.999),
-                  child: _buildMaterialControls(
-                    videoState,
-                    portraitUiScale: portraitUiScale,
+    return PlayerVolumeScrollRegion(
+      isEnabled: () =>
+          globals.isDesktop &&
+          videoState.hasVideo &&
+          !videoState.hotkeysSuppressed,
+      onVolumeChange: (change) {
+        if (change > 0) {
+          videoState.increaseVolume(step: change);
+        } else {
+          videoState.decreaseVolume(step: -change);
+        }
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.hardEdge,
+        children: [
+          Positioned.fill(
+            child: VideoPlayerWidget(danmakuScale: portraitUiScale),
+          ),
+          if (videoState.hasVideo)
+            NipaplayLargeScreenModeScope.isActiveOf(context) &&
+                    !isPictureInPicture
+                ? _buildLargeScreenMaterialControls(videoState)
+                : KeyedSubtree(
+                    key: ValueKey<bool>(portraitUiScale < 0.999),
+                    child: _buildMaterialControls(
+                      videoState,
+                      portraitUiScale: portraitUiScale,
+                    ),
                   ),
-                ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -984,18 +1028,14 @@ class _PlayVideoPageState extends State<PlayVideoPage> {
         (showAirPlayButton ? 1 : 0) +
         (showScreenshotButton ? 1 : 0) +
         (showShareButton ? 1 : 0);
-    final double rightButtonsWidth = rightButtonCount > 0
-        ? rightButtonCount * 44.0 + (rightButtonCount - 1) * 12.0
-        : 0.0;
-    final double availableTitleWidth = (MediaQuery.of(context).size.width -
-            (16.0 + leftCutoutInset) -
-            (isPictureInPicture ? 0.0 : 116.0) -
-            (16.0 + rightCutoutInset) -
-            rightButtonsWidth -
-            (globals.isMobilePlatform ? 86.0 : 0.0) -
-            24.0)
-        .clamp(80.0, 600.0)
-        .toDouble();
+    final double availableTitleWidth = playerTopBarTitleMaxWidth(
+      windowWidth: MediaQuery.of(context).size.width,
+      leftInset: leftCutoutInset,
+      rightInset: rightCutoutInset,
+      rightButtonCount: rightButtonCount,
+      isPictureInPicture: isPictureInPicture,
+      isMobilePlatform: globals.isMobilePlatform,
+    );
 
     return Stack(
       clipBehavior: Clip.none,

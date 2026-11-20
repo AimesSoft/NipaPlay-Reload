@@ -19,6 +19,46 @@ Widget _testApp({required Widget home}) {
 }
 
 void main() {
+  testWidgets('directional focus scrolls every ordinary action into view',
+      (tester) async {
+    final controller = ScrollController();
+    final nodes = List.generate(16, (_) => FocusNode());
+    addTearDown(controller.dispose);
+    addTearDown(() {
+      for (final node in nodes) {
+        node.dispose();
+      }
+    });
+    await tester.pumpWidget(_testApp(
+        home: Scaffold(
+            body: Align(
+      alignment: Alignment.topLeft,
+      child: SizedBox(
+          width: 300,
+          height: 180,
+          child: ListView(
+            controller: controller,
+            children: List.generate(
+                nodes.length,
+                (index) => SizedBox(
+                    height: 70,
+                    child: NipaplayLargeScreenFocusableAction(
+                        focusNode: nodes[index],
+                        onActivate: () {},
+                        child: Text('Action $index')))),
+          )),
+    ))));
+    nodes.first.requestFocus();
+    await tester.pumpAndSettle();
+    for (var index = 1; index < nodes.length; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(nodes[index].hasFocus, isTrue,
+          reason: 'Action $index must be reachable');
+    }
+    expect(controller.offset, greaterThan(800));
+  });
+
   testWidgets('mouse tap activates once when child also handles the tap',
       (tester) async {
     var activationCount = 0;
