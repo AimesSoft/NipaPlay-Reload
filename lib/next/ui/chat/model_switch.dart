@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -364,7 +365,7 @@ class _ModelMenuState extends State<ModelMenu> {
         current(m) ? 0 : m.model == service.choice.model ? 1 : 2;
     models.sort((a, b) => rank(a).compareTo(rank(b)));
     return [
-      for (final m in models.take(listed == null ? 1 : 8))
+      for (final m in models)
         _ModelRow(
             key: Key(services.where((s) => s.choice.provider == service.choice.provider).length > 1
                 ? 'chat.model.service.${service.choice.provider}.${service.choice.baseUrl}.${m.model}'
@@ -407,11 +408,21 @@ class _ModelMenuState extends State<ModelMenu> {
           model
     ].take(5).toList();
     final services = _services;
+    // What the services list themselves, by model, so the runtime's own
+    // catalog does not repeat them.
+    final serviceModels = {
+      for (final listed in _byService.values)
+        for (final c in listed.choices) c.model,
+      for (final service in services ?? const <UiModelService>[])
+        service.choice.model,
+    };
     final others = [
       for (final choice in _listed?.choices ?? const <UiModelChoice>[])
         // With services, each lists its own models; the runtime's catalog
         // stays here.
-        if ((services == null || choice.catalog != null) &&
+        if ((services == null ||
+                (choice.catalog != null &&
+                    !serviceModels.contains(choice.model))) &&
             seen.add(_key(choice)))
           choice
     ];
@@ -430,7 +441,10 @@ class _ModelMenuState extends State<ModelMenu> {
               child: Center(child: ThinkingDots()))
         else
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 360),
+            // Every model is listed; a long list scrolls inside the menu.
+            constraints: BoxConstraints(
+                maxHeight: math.max(
+                    240, MediaQuery.sizeOf(context).height * 0.6 - 160)),
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 if (setup.source == UiModelSource.codex ||
