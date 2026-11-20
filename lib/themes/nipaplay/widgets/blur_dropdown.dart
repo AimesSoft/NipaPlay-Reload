@@ -522,7 +522,6 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
 
     final right = screenWidth - position.dx - size.width;
     final safeRight = (right < 10.0) ? 10.0 : right;
-    final left = position.dx;
 
     // 菜单宽度按最长项文本实测自适应：旧逻辑 maxWidth 兜底是触发控件
     // 宽度的 1.5 倍（如设置页的窄 chip），"ArtCNN C4F16 DS" 这类长档位
@@ -541,9 +540,11 @@ class _BlurDropdownState<T> extends State<BlurDropdown<T>>
       }
       painter.dispose();
     }
-    final availableWidth = screenWidth - left - safeRight;
-    final double maxAllowed =
-        availableWidth > 100 ? availableWidth : size.width * 1.5;
+    // 菜单由 Positioned(right: safeRight) 右锚定，宽度增大时向左伸展，
+    // 因此最大可用宽 = 全屏宽 − 右锚点 − 左边距 10；不能只算触发点右侧
+    // 空间——播放器/设置页里菜单贴屏幕右缘触发时右侧只剩百来像素，
+    // 会把"ArtCNN C4F16 DS"这类长档位名整列截成"ArtCN..."。
+    final double maxAllowed = screenWidth - safeRight - 10;
     double desiredMenuWidth = widget.menuWidth ?? 0;
     if (desiredMenuWidth <= 0) {
       desiredMenuWidth = longestTitleWidth + 32; // 项内 horizontal padding 16*2
