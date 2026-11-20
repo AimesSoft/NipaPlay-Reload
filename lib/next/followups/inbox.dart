@@ -172,10 +172,11 @@ extension AgentInbox on Followups {
   }
 
   /// The runner of this device's conversation host stopped ([message] is its
-  /// own words): one reminder for that run of the host.
+  /// own words): one reminder for each thing it said in that run of the host.
   Future<void> _reportHostStopped(String repository, int run, String message) =>
       publishInbox({
-        'requestId': 'host-$run',
+        'requestId':
+            'host-$run-${sha256.convert(utf8.encode(message)).toString().substring(0, 16)}',
         'title': '梨花运行失败',
         'body': message,
         'severity': 'error',

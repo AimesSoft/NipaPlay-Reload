@@ -149,9 +149,6 @@ final class Followups {
   static const _retryDelay = Duration(seconds: 2);
   int _sweeps = 0, _decoded = 0;
 
-  /// Counts the hosts attached, so each run of one is told apart.
-  int _hostRuns = 0;
-
   /// Sweeps run and stored followups decoded so far, for measuring what a
   /// sweep costs.
   int get sweeps => _sweeps;
@@ -234,7 +231,8 @@ final class Followups {
       }
     }
     _unavailable = reason ?? 'Embedded chat host is not running.';
-    final run = ++_hostRuns;
+    // This run of the host, told apart from the runs before it.
+    final run = DateTime.now().microsecondsSinceEpoch;
     _chatEvents = host?.events.listen((message) {
       final params = message['params'] as Map?;
       if (message['method'] == 'turn/completed') {
