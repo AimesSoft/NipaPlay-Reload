@@ -231,16 +231,33 @@ final class Followups {
       }
     }
     _unavailable = reason ?? 'Embedded chat host is not running.';
+    // This run of the host, told apart from the runs before it.
+    final run = DateTime.now().microsecondsSinceEpoch;
     _chatEvents = host?.events.listen((message) {
+      final params = message['params'] as Map?;
       if (message['method'] == 'turn/completed') {
-        final turn = (message['params'] as Map?)?['turn'];
+        final turn = params?['turn'];
         if (turn is Map && turn['id'] is String) {
           _ended[turn['id'] as String] = {
             'status': turn['status'],
             'error': turn['error']
           };
           if (_ended.length > 64) _ended.remove(_ended.keys.first);
+          if (turn['status'] == 'failed') {
+            unawaited(_reportFailedTurn(host.repository.path,
+                    params!['threadId'] as String?, turn)
+                .catchError((Object error) =>
+                    stderr.writeln('[Followups] failed turn not reported: $error')));
+          }
         }
+      }
+      final stopped = params?['message'];
+      if (message['method'] == 'host/error' &&
+          stopped is String &&
+          stopped.isNotEmpty) {
+        unawaited(_reportHostStopped(host.repository.path, run, stopped)
+            .catchError((Object error) =>
+                stderr.writeln('[Followups] host stop not reported: $error')));
       }
       // A turn ended, the host failed, or it came back with another model:
       // what waited for an idle host may go now.

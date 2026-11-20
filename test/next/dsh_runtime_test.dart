@@ -10,6 +10,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:nipaplay/next/agent_endpoint.dart';
 import 'package:nipaplay/next/chat/chat_host.dart';
 import 'package:nipaplay/next/chat/dsh_runtime.dart';
+import 'package:nipaplay/next/chat/handover.dart';
 import 'package:nipaplay/next/settings/dsh_config_store.dart';
 import 'package:nipaplay/next/chat/helpers.dart';
 import 'package:nipaplay/next/chat/memory_stale.dart';
@@ -551,6 +552,93 @@ trust_level = "trusted"
       expect(sources.length, greaterThanOrEqualTo(3), reason: 'start, resume, compaction');
     });
 
+    test('a conversation handed over to DSH still opens after its first turn and a restart', () async {
+      await open([_Rule(when: ['AFTER_HANDOVER_QX'], text: 'ANSWER_AFTER_HANDOVER')]);
+      await migrateHandover(lab.store.database);
+      var host = await lab.start();
+      final payload = HandoverPayload.build([
+        ConversationTurn('before', 'completed', [
+          ConversationTurn.message('user', 'BEFORE_HANDOVER_QX'),
+          ConversationTurn.message('assistant', 'ANSWER_BEFORE_HANDOVER'),
+        ]),
+      ]);
+      await host.receiveHandover(payload, () async {});
+      final thread = host.mainThreadId!;
+      await host.startTurn('AFTER_HANDOVER_QX');
+      final ended = await lab.next((e) => e['method'] == 'turn/completed');
+      expect(ended['params']['turn']['status'], 'completed');
+      // The model was given the conversation it continues, after its own
+      // system prompt.
+      final input = fake.requests.last['input'] as List;
+      expect((input.first as Map)['role'], 'system');
+      expect(jsonEncode(input), contains('ANSWER_BEFORE_HANDOVER'));
+      await lab.stop();
+
+      host = await lab.start();
+      await host.getMainSession();
+      expect(host.mainThreadId, thread);
+      final replies = [
+        for (final turn in (await host.readThread(thread, withProcess: false))['turns'] as List)
+          for (final item in turn['items'] as List)
+            if (item['type'] == 'agentMessage') item['text'],
+      ];
+      expect(replies, containsAll(['ANSWER_BEFORE_HANDOVER', 'ANSWER_AFTER_HANDOVER']));
+    });
+
+    test('a conversation an earlier build handed over without the system head opens again', () async {
+      await open([
+        _Rule(when: ['AFTER_HANDOVER_QX'], unless: ['LATER_QX'], text: 'ANSWER_AFTER_HANDOVER'),
+        _Rule(when: ['LATER_QX'], text: 'ANSWER_LATER'),
+      ]);
+      await migrateHandover(lab.store.database);
+      // The handover of an earlier build: the history without the head.
+      final earlier = await Directory('${lab.dir.path}/earlier-dsh').create();
+      for (final file in Directory('assets/next/agent/dsh').listSync().whereType<File>()) {
+        await file.copy('${earlier.path}/${file.uri.pathSegments.last}');
+      }
+      final script = File('${earlier.path}/nipa-handover.mjs');
+      const head = 'for (const [type, data, intent] of systemHead()) session.append(type, data, intent);';
+      final source = await script.readAsString();
+      expect(source, contains(head));
+      await script.writeAsString(source.replaceFirst(head, '').replaceFirst('step = 1;', ''));
+      lab.plugins = earlier;
+      var host = await lab.start();
+      await host.receiveHandover(HandoverPayload.build([
+        ConversationTurn('before', 'completed', [
+          ConversationTurn.message('user', 'BEFORE_HANDOVER_QX'),
+          ConversationTurn.message('assistant', 'ANSWER_BEFORE_HANDOVER'),
+        ]),
+      ]), () async {});
+      final thread = host.mainThreadId!;
+      await host.startTurn('AFTER_HANDOVER_QX');
+      await lab.next((e) => e['method'] == 'turn/completed');
+      await lab.stop();
+
+      lab.plugins = null;
+      for (var restart = 0; restart < 2; restart++) {
+        host = await lab.start();
+        // Read first, as another device reading this one does; then resumed.
+        await host.readThread(thread, withProcess: false);
+        await host.getMainSession();
+        expect(host.mainThreadId, thread);
+        final replies = [
+          for (final turn in (await host.readThread(thread, withProcess: false))['turns'] as List)
+            for (final item in turn['items'] as List)
+              if (item['type'] == 'agentMessage') item['text'],
+        ];
+        expect(replies, containsAll(['ANSWER_BEFORE_HANDOVER', 'ANSWER_AFTER_HANDOVER']));
+        if (restart == 0) {
+          await host.startTurn('LATER_QX');
+          final ended = await lab.next((e) => e['method'] == 'turn/completed');
+          expect(ended['params']['turn']['status'], 'completed');
+          expect(jsonEncode(fake.requests.last['input']), contains('ANSWER_BEFORE_HANDOVER'));
+        } else {
+          expect(replies, contains('ANSWER_LATER'));
+        }
+        await lab.stop();
+      }
+    });
+
     test('a DSH subagent is a native helper task, uses its own origin and returns through DSH', () async {
       await open([
         _Rule(when: ['CHILD_TASK do it'], unless: ['started subagent', 'CHILDCHAT'],
@@ -833,6 +921,46 @@ trust_level = "trusted"
       final history = ((await host.readThread(thread))['turns'] as List).single as Map;
       expect(history['status'], 'failed');
       expect(jsonEncode(history['error']), contains('429'));
+      // One reminder on this device, about that followup, in the turn's words.
+      final reminders = (await lab.until(() async {
+        final items = (await lab.followups.inboxList())['items'] as List;
+        return items.isEmpty ? null : items;
+      }));
+      expect(reminders, hasLength(1));
+      final reminder = reminders.single as Map;
+      expect(reminder['severity'], 'error');
+      expect(reminder['title'], endsWith('投递失败'));
+      expect((reminder['request'] as Map)['followupId'], retry['id']);
+      expect(reminder['body'], contains('429'));
+      expect((reminder['target'] as Map)['threadId'], thread);
+    });
+
+    test("a failed turn is one reminder here; liveness repeating it adds none, and closed it stays closed", () async {
+      await open([_Rule(when: ['OWN_TURN_FAILS_QX'], status: 429, once: false)]);
+      final host = await lab.start();
+      await lab.attachFollowups(host);
+      await host.getMainSession();
+      final thread = host.mainThreadId!;
+      await host.startTurn('OWN_TURN_FAILS_QX');
+      final ended = await lab.next((e) => e['method'] == 'turn/completed');
+      expect(ended['params']['turn']['status'], 'failed');
+      final reminder = (await lab.until(() async {
+        final items = (await lab.followups.inboxList())['items'] as List;
+        return items.isEmpty ? null : items.single as Map;
+      }));
+      expect(reminder['title'], '梨花运行失败');
+      expect((reminder['request'] as Map).containsKey('followupId'), isFalse);
+      expect(reminder['body'], contains('429'));
+      expect((reminder['target'] as Map)['threadId'], thread);
+      // The host repeats the failed turn in its liveness every second.
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
+      expect((await lab.followups.inboxList())['items'], hasLength(1));
+      await lab.followups.dismissInbox(reminder['id'] as String);
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
+      expect((await lab.followups.inboxList())['items'], isEmpty);
+      final all = (await lab.followups.inboxList(includeResolved: true))['items'] as List;
+      expect(all, hasLength(1));
+      expect((all.single as Map)['state'], 'read');
     });
   }, skip: missing);
 }
