@@ -1,3 +1,4 @@
+import 'package:nipaplay/models/media_library_scope.dart';
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
@@ -1047,6 +1048,9 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                       imageUrl: posterUrl,
                       fit: BoxFit.cover,
                       loadMode: CachedImageLoadMode.hybrid,
+                      // 海报 URL 为 700 宽；限制解码尺寸避免电视上整图解码。
+                      memCacheWidth: 700,
+                      memCacheHeight: 1050,
                     ),
             ),
           ),
@@ -1343,6 +1347,9 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
                       ? CachedNetworkImageWidget(
                           imageUrl: episodeImageUrl,
                           fit: BoxFit.cover,
+                          // 剧集缩略图 URL 为 300 宽；限制解码尺寸，
+                          // 避免网格里每张缩略图都按原始分辨率解码。
+                          memCacheWidth: 300,
                         )
                       : ColoredBox(
                           color: _largeScreenChipColor,
@@ -1914,6 +1921,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       final selected = await EpisodeFileSelectionService.select(
         context,
         PlayableItem(
+          mediaLibraryScope: MediaLibraryScope(
+              widget.serverType == MediaServerType.jellyfin
+                  ? MediaLibraryScopeKind.jellyfin
+                  : MediaLibraryScopeKind.emby),
           videoPath: playableHistoryItem.filePath,
           historyItem: playableHistoryItem,
           animeId: playableHistoryItem.animeId,
@@ -1936,8 +1947,8 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
       }
       playableHistoryItem = selected.historyItem ?? playableHistoryItem;
 
-      final startPositionMs = playableHistoryItem.lastPosition > 0
-          ? playableHistoryItem.lastPosition
+      final startPositionMs = playableHistoryItem.resumePosition > 0
+          ? playableHistoryItem.resumePosition
           : null;
 
       if (playableHistoryItem.filePath.startsWith('emby://')) {
@@ -2011,6 +2022,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         Provider.of<SettingsProvider>(context, listen: false);
     if (settingsProvider.useExternalPlayer) {
       final playableItem = PlayableItem(
+        mediaLibraryScope: MediaLibraryScope(
+            widget.serverType == MediaServerType.jellyfin
+                ? MediaLibraryScopeKind.jellyfin
+                : MediaLibraryScopeKind.emby),
         videoPath: historyItem.filePath,
         title: historyItem.animeName,
         subtitle: historyItem.episodeTitle,
@@ -2050,6 +2065,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         try {
           await videoPlayerState.initializePlayer(
             historyItem.filePath,
+            mediaLibraryScope: MediaLibraryScope(
+                widget.serverType == MediaServerType.jellyfin
+                    ? MediaLibraryScopeKind.jellyfin
+                    : MediaLibraryScopeKind.emby),
             historyItem: historyItem,
             playbackSession: playbackSession,
             episodeFileSelectionHandled: true,
@@ -2069,6 +2088,10 @@ class _MediaServerDetailPageState extends State<MediaServerDetailPage>
         await initializeEmbyPlayerAttempt(
           initialize: () => videoPlayerState.initializePlayer(
             historyItem.filePath,
+            mediaLibraryScope: MediaLibraryScope(
+                widget.serverType == MediaServerType.jellyfin
+                    ? MediaLibraryScopeKind.jellyfin
+                    : MediaLibraryScopeKind.emby),
             historyItem: historyItem,
             playbackSession: playbackSession,
             embyTrackSelection: embyTrackSelection,

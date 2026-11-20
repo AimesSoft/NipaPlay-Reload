@@ -43,14 +43,17 @@ public class VideoOutputManager: NSObject {
     )
   }
 
+  // Calls `completion` on the main thread once the output's mpv render
+  // context is freed.
   public func destroy(
-    handle: Int64
+    handle: Int64,
+    completion: @escaping () -> Void
   ) {
-    let videoOutput = self.videoOutputs[handle]
-    if videoOutput == nil {
+    guard let videoOutput = self.videoOutputs.removeValue(forKey: handle) else {
+      completion()
       return
     }
 
-    self.videoOutputs[handle] = nil
+    videoOutput.dispose(completion)
   }
 }

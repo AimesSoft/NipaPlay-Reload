@@ -122,24 +122,56 @@ class Smb2Stat {
 class _Smb2Worker {
   SendPort? _sendPort;
   Isolate? _isolate;
-  final ReceivePort _receivePort = ReceivePort();
+  ReceivePort? _receivePort;
+  StreamSubscription<dynamic>? _subscription;
+  Completer<SendPort>? _startCompleter;
+  Future<void>? _starting;
   final Map<int, Completer<Object?>> _pending = <int, Completer<Object?>>{};
   int _nextId = 1;
 
   Future<void> _ensureStarted() async {
     if (_sendPort != null) return;
+    final pendingStart = _starting ??= _startWorker();
+    try {
+      await pendingStart;
+    } finally {
+      if (identical(_starting, pendingStart)) _starting = null;
+    }
+  }
 
+  Future<void> _startWorker() async {
+    if (_sendPort != null) return;
+
+    final receivePort = ReceivePort();
     final completer = Completer<SendPort>();
-    _receivePort.listen((message) {
+    _receivePort = receivePort;
+    _startCompleter = completer;
+
+    _subscription = receivePort.listen((message) {
       if (message is SendPort && !completer.isCompleted) {
         completer.complete(message);
+        return;
+      }
+      if (message == null) {
+        if (!completer.isCompleted) {
+          completer.completeError(StateError('SMB2 worker exited'));
+        }
+        _handleWorkerExit();
+        return;
+      }
+      if (message is List && message.length == 2) {
+        final error = StateError('SMB2 worker error: ${message[0]}');
+        if (!completer.isCompleted) {
+          completer.completeError(error);
+        }
+        _failAllPending(error);
         return;
       }
       if (message is Map) {
         final id = message['id'];
         if (id is! int) return;
         final pending = _pending.remove(id);
-        if (pending == null) return;
+        if (pending == null || pending.isCompleted) return;
         if (message['ok'] == true) {
           pending.complete(message['result']);
         } else {
@@ -148,22 +180,57 @@ class _Smb2Worker {
       }
     });
 
-    _isolate = await Isolate.spawn(_smb2WorkerMain, _receivePort.sendPort);
-    _sendPort = await completer.future;
+    try {
+      _isolate = await Isolate.spawn(
+        _smb2WorkerMain,
+        receivePort.sendPort,
+        onExit: receivePort.sendPort,
+        onError: receivePort.sendPort,
+        debugName: 'Smb2Worker',
+      );
+      _sendPort = await completer.future;
+    } catch (e) {
+      dispose();
+      rethrow;
+    }
+  }
+
+  void _failAllPending(Object error) {
+    for (final completer in _pending.values) {
+      if (!completer.isCompleted) {
+        completer.completeError(error);
+      }
+    }
+    _pending.clear();
+  }
+
+  void _handleWorkerExit() {
+    _sendPort = null;
+    _isolate = null;
+    _subscription?.cancel();
+    _subscription = null;
+    _receivePort?.close();
+    _receivePort = null;
+    _failAllPending(StateError('SMB2 worker exited'));
   }
 
   /// Kill the worker isolate and close the receive port.
   /// Must be called on app exit to prevent the process from lingering.
   void dispose() {
+    final startCompleter = _startCompleter;
+    _startCompleter = null;
+    if (startCompleter != null && !startCompleter.isCompleted) {
+      startCompleter.completeError(StateError('SMB2 worker disposed'));
+    }
     _isolate?.kill(priority: Isolate.immediate);
     _isolate = null;
-    _receivePort.close();
+    _subscription?.cancel();
+    _subscription = null;
+    _receivePort?.close();
+    _receivePort = null;
     _sendPort = null;
     // Fail all pending requests so callers don't hang forever.
-    for (final completer in _pending.values) {
-      completer.completeError(StateError('SMB2 worker disposed'));
-    }
-    _pending.clear();
+    _failAllPending(StateError('SMB2 worker disposed'));
   }
 
   Future<String> requestList({
@@ -175,10 +242,14 @@ class _Smb2Worker {
     required String path,
   }) async {
     await _ensureStarted();
+    final sendPort = _sendPort;
+    if (sendPort == null) {
+      throw StateError('SMB2 worker is not running');
+    }
     final id = _nextId++;
     final completer = Completer<Object?>();
     _pending[id] = completer;
-    _sendPort!.send({
+    sendPort.send({
       'id': id,
       'op': 'list',
       'host': host,
@@ -204,10 +275,14 @@ class _Smb2Worker {
     required String path,
   }) async {
     await _ensureStarted();
+    final sendPort = _sendPort;
+    if (sendPort == null) {
+      throw StateError('SMB2 worker is not running');
+    }
     final id = _nextId++;
     final completer = Completer<Object?>();
     _pending[id] = completer;
-    _sendPort!.send({
+    sendPort.send({
       'id': id,
       'op': 'stat',
       'host': host,
@@ -234,7 +309,7 @@ void _smb2WorkerMain(SendPort mainPort) {
   final ReceivePort workerPort = ReceivePort();
   mainPort.send(workerPort.sendPort);
 
-  final native = _Smb2Native();
+  _Smb2Native? native;
 
   workerPort.listen((message) {
     if (message is! Map) return;
@@ -243,8 +318,9 @@ void _smb2WorkerMain(SendPort mainPort) {
     if (id is! int || op is! String) return;
 
     try {
+      final resolvedNative = native ??= _Smb2Native();
       if (op == 'list') {
-        final result = native.listEntriesJson(
+        final result = resolvedNative.listEntriesJson(
           host: (message['host'] ?? '').toString(),
           port: message['port'] is int
               ? message['port'] as int
@@ -258,7 +334,7 @@ void _smb2WorkerMain(SendPort mainPort) {
         return;
       }
       if (op == 'stat') {
-        final result = native.stat(
+        final result = resolvedNative.stat(
           host: (message['host'] ?? '').toString(),
           port: message['port'] is int
               ? message['port'] as int

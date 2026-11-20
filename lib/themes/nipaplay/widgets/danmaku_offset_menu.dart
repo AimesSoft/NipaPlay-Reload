@@ -287,7 +287,7 @@ class _DanmakuOffsetMenuState extends State<DanmakuOffsetMenu> {
                     ),
                     const SizedBox(height: 8),
                     const SettingsHintText(
-                      '输入任意秒数的精确值，负数表示弹幕提前，正数表示延迟',
+                      '输入任意秒数的精确值，正数表示弹幕提前，负数表示延后',
                     ),
                     const SizedBox(height: 12),
                     Row(

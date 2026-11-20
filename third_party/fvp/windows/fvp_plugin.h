@@ -46,6 +46,7 @@ class FvpPlugin : public flutter::Plugin {
   ComPtr<IDXGIAdapter> adapter_;
 
   std::unordered_map<int64_t, std::shared_ptr<Player>> players_;
+  std::unordered_map<int64_t, int64_t> handles_; // texture id -> native player handle
 };
 
 }  // namespace fvp

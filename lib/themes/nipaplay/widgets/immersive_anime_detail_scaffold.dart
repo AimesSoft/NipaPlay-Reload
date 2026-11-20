@@ -1,10 +1,14 @@
+import 'package:nipaplay/themes/nipaplay/widgets/media_detail_poster.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:nipaplay/utils/image_cache_manager.dart';
 import 'package:kmbal_ionicons/kmbal_ionicons.dart';
 import 'package:nipaplay/app/app_display_surface.dart';
 import 'package:nipaplay/app/app_display_surface_scope.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/cached_network_image_widget.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/immersive_portrait_backdrop_color.dart';
 import 'package:nipaplay/utils/app_accent_color.dart';
@@ -56,6 +60,10 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
     required this.episodeRail,
     this.subtitle,
     this.backdropUrl,
+    this.logoUrl,
+    this.posterUrl,
+    this.posterHeroTag,
+    this.fallbackBackdropUrls = const [],
     this.metadata = const <String>[],
     this.rating,
     this.description,
@@ -69,6 +77,10 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
   final String title;
   final String? subtitle;
   final String? backdropUrl;
+  final List<String> fallbackBackdropUrls;
+  final String? logoUrl;
+  final String? posterUrl;
+  final Object? posterHeroTag;
   final List<String> metadata;
   final double? rating;
   final String? description;
@@ -124,27 +136,27 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
   Widget _buildLandscape(BuildContext context, BoxConstraints constraints) {
     final compact = constraints.maxHeight < 720;
     final horizontalPadding = constraints.maxWidth >= 1400 ? 54.0 : 34.0;
-    final infoWidth =
-        (constraints.maxWidth * (constraints.maxWidth >= 1100 ? 0.42 : 0.48))
-            .clamp(420.0, 650.0);
-    // The episode rail grows smoothly with the viewport instead of taking a
-    // 45px step at 720px, which used to steal a full summary line on tablets.
     final railHeight = (constraints.maxHeight * 0.29).clamp(165.0, 235.0);
     final infoHeight = constraints.maxHeight -
         MediaQuery.paddingOf(context).vertical -
-        30 - // SafeArea child padding (12 top, 18 bottom).
+        30 -
         railHeight -
         (compact ? 14 : 22);
-    // Move the title further into the artwork as height grows, but always
-    // leave a useful minimum for the header, summary and action row.
-    final titleTop = (infoHeight * 0.23)
-        .clamp(48.0, 190.0)
-        .clamp(24.0, (infoHeight - 255).clamp(24.0, double.infinity));
+    final infoTop = (infoHeight * 0.14).clamp(62.0, 96.0);
+    final availableHeight =
+        (infoHeight - infoTop).clamp(160.0, double.infinity);
+    final posterHeight = (constraints.maxHeight * 0.4)
+        .clamp(240.0, 360.0)
+        .clamp(0.0, availableHeight);
+    final posterWidth = posterHeight * 0.7;
+    final gap = constraints.maxWidth < 1000 ? 20.0 : 30.0;
+    final textWidth = (constraints.maxWidth * 0.38).clamp(300.0, 540.0).clamp(
+        0.0, constraints.maxWidth - horizontalPadding * 2 - posterWidth - gap);
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        _Backdrop(url: backdropUrl),
+        _Backdrop(url: backdropUrl, fallbacks: fallbackBackdropUrls),
         const _CinematicGradients(),
         SafeArea(
           child: Padding(
@@ -154,43 +166,49 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
               children: [
                 Align(
                   alignment: Alignment.topLeft,
-                  child: _BackButton(onPressed: onBack),
+                  child: _DetailTopBar(title: title, onBack: onBack),
                 ),
                 Positioned(
                   left: 0,
-                  top: titleTop,
-                  width: infoWidth,
+                  top: infoTop,
+                  width: posterWidth + gap + textWidth,
                   bottom: railHeight + (compact ? 14 : 22),
-                  child: Column(
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _InformationHeader(
-                        title: title,
-                        subtitle: subtitle,
-                        metadata: metadata,
-                        rating: rating,
-                        compact: compact,
-                      ),
-                      if (description?.trim().isNotEmpty == true) ...[
-                        SizedBox(height: compact ? 8 : 16),
-                        // 简介按剩余空间自适应行数（loose）：操作按钮紧跟
-                        // 简介下方；展开时简介把按钮行往下顶，空间不足则
-                        // 简介区内部滚动、按钮停留在剧集栏上方。
-                        Flexible(
-                          fit: FlexFit.loose,
-                          child: _DescriptionBlock(
-                            description: description!,
-                            expanded: descriptionExpanded,
-                            onToggle: onToggleDescription,
-                            compact: compact,
-                          ),
-                        ),
-                      ],
-                      SizedBox(height: compact ? 6 : 14),
-                      KeyedSubtree(
-                        key: const ValueKey('immersive-fixed-actions'),
-                        child: actions,
-                      ),
+                      SizedBox(
+                          width: posterWidth,
+                          height: posterHeight,
+                          child: MediaDetailPoster(
+                              key: const ValueKey('immersive-detail-poster'),
+                              url: posterUrl,
+                              heroTag: posterHeroTag)),
+                      SizedBox(width: gap),
+                      Expanded(
+                          child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _InformationHeader(
+                              title: title,
+                              logoUrl: logoUrl,
+                              subtitle: subtitle,
+                              metadata: metadata,
+                              rating: rating,
+                              compact: compact),
+                          if (description?.trim().isNotEmpty == true) ...[
+                            SizedBox(height: compact ? 10 : 16),
+                            Flexible(
+                                fit: FlexFit.loose,
+                                child: _limitedDescription(context,
+                                    compact: compact)),
+                          ],
+                          SizedBox(height: compact ? 10 : 16),
+                          KeyedSubtree(
+                              key: const ValueKey('immersive-fixed-actions'),
+                              child: actions),
+                        ],
+                      )),
                     ],
                   ),
                 ),
@@ -209,26 +227,55 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
     );
   }
 
+  Widget _limitedDescription(BuildContext context, {bool compact = false}) {
+    final fontSize = MediaQuery.textScalerOf(context).scale(compact ? 13 : 14);
+    return ConstrainedBox(
+      key: const ValueKey('immersive-description-width'),
+      constraints: BoxConstraints(maxWidth: 32 * fontSize),
+      child: _DescriptionBlock(
+          description: description!,
+          expanded: descriptionExpanded,
+          onToggle: onToggleDescription,
+          compact: compact),
+    );
+  }
+
   Widget _buildPortrait(BuildContext context, BoxConstraints constraints) {
     final heroHeight = constraints.maxHeight / 2;
     final phone =
         AppDisplaySurfaceScope.of(context) == AppDisplaySurface.phone ||
             constraints.maxWidth < 600;
     final safeTop = MediaQuery.paddingOf(context).top;
-    final heroLead = (heroHeight - safeTop - 54 - (phone ? 140 : 180))
-        .clamp(0.0, double.infinity);
+    final posterWidth = (constraints.maxWidth * (phone ? 0.34 : 0.23))
+        .clamp(phone ? 120.0 : 140.0, phone ? 156.0 : 190.0);
+    final posterHeight = posterWidth / 0.7;
+    final heroLead =
+        (heroHeight - safeTop - 64 - posterHeight.clamp(180.0, 280.0))
+            .clamp(0.0, double.infinity);
     final backButton = Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-      child: _BackButton(onPressed: onBack, onImage: true),
+      child: _DetailTopBar(title: title, onBack: onBack),
     );
     final header = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: _InformationHeader(
-        title: title,
-        subtitle: subtitle,
-        metadata: metadata,
-        rating: rating,
-      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(
+            width: posterWidth,
+            height: posterHeight,
+            child: MediaDetailPoster(
+                key: const ValueKey('immersive-detail-poster'),
+                url: posterUrl,
+                heroTag: posterHeroTag)),
+        SizedBox(width: phone ? 16 : 24),
+        Expanded(
+            child: _InformationHeader(
+                title: title,
+                logoUrl: logoUrl,
+                subtitle: subtitle,
+                metadata: metadata,
+                rating: rating,
+                compact: phone)),
+      ]),
     );
     final actionRow = Padding(
       key: const ValueKey('immersive-fixed-actions'),
@@ -241,6 +288,7 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
         _PortraitBackdropSurface(
           url: backdropUrl,
           heroHeight: heroHeight,
+          fallbacks: fallbackBackdropUrls,
         ),
         SafeArea(
           child: phone
@@ -257,11 +305,7 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                         const SizedBox(height: 16),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: _DescriptionBlock(
-                            description: description!,
-                            expanded: descriptionExpanded,
-                            onToggle: onToggleDescription,
-                          ),
+                          child: _limitedDescription(context),
                         ),
                       ],
                       actionRow,
@@ -282,11 +326,7 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
                         fit: FlexFit.loose,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: _DescriptionBlock(
-                            description: description!,
-                            expanded: descriptionExpanded,
-                            onToggle: onToggleDescription,
-                          ),
+                          child: _limitedDescription(context),
                         ),
                       ),
                     ],
@@ -302,10 +342,12 @@ class ImmersiveAnimeDetailScaffold extends StatelessWidget {
 }
 
 class _PortraitBackdropSurface extends StatefulWidget {
-  const _PortraitBackdropSurface({required this.url, required this.heroHeight});
+  const _PortraitBackdropSurface(
+      {required this.url, required this.heroHeight, this.fallbacks = const []});
 
   final String? url;
   final double heroHeight;
+  final List<String> fallbacks;
 
   @override
   State<_PortraitBackdropSurface> createState() =>
@@ -364,6 +406,7 @@ class _PortraitBackdropSurfaceState extends State<_PortraitBackdropSurface> {
                   height: widget.heroHeight,
                   child: _Backdrop(
                     url: widget.url,
+                    fallbacks: widget.fallbacks,
                     alignment: snapshot.data?.alignment ?? Alignment.center,
                   ),
                 ),
@@ -414,9 +457,10 @@ class _PortraitBackdropSurfaceState extends State<_PortraitBackdropSurface> {
 }
 
 class _Backdrop extends StatefulWidget {
-  const _Backdrop({this.url, this.alignment});
+  const _Backdrop({this.url, this.alignment, this.fallbacks = const []});
 
   final String? url;
+  final List<String> fallbacks;
   final Alignment? alignment;
 
   @override
@@ -441,6 +485,12 @@ class _BackdropState extends State<_Backdrop> {
         ),
       ),
     );
+    if (widget.fallbacks.isNotEmpty) {
+      fallback = _Backdrop(
+          url: widget.fallbacks.first,
+          fallbacks: widget.fallbacks.skip(1).toList(),
+          alignment: widget.alignment);
+    }
     if (value.isEmpty) return fallback;
 
     return LayoutBuilder(
@@ -557,29 +607,124 @@ class _CinematicGradients extends StatelessWidget {
   }
 }
 
-class _BackButton extends StatelessWidget {
-  const _BackButton({required this.onPressed, this.onImage = false});
+class _DetailTopBar extends StatelessWidget {
+  const _DetailTopBar({required this.title, required this.onBack});
+  final String title;
+  final VoidCallback onBack;
 
-  final VoidCallback onPressed;
-  final bool onImage;
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          _BackButton(onPressed: onBack),
+          const SizedBox(width: 14),
+          Expanded(
+              child: Text(
+            title,
+            key: const ValueKey('immersive-top-title'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                height: 1.2,
+                fontWeight: FontWeight.w700),
+          )),
+        ],
+      );
+}
+
+/// Same contain bounds and missing-artwork fallback as Erika's detail hero.
+class _TitleArtwork extends StatefulWidget {
+  const _TitleArtwork(
+      {required this.url,
+      required this.title,
+      required this.compact,
+      required this.fallback});
+  final String? url;
+  final String title;
+  final bool compact;
+  final Widget fallback;
+
+  @override
+  State<_TitleArtwork> createState() => _TitleArtworkState();
+}
+
+class _TitleArtworkState extends State<_TitleArtwork> {
+  String? _svgUrl;
+  Future<Uint8List>? _svgBytes;
 
   @override
   Widget build(BuildContext context) {
+    final value = widget.url?.trim() ?? '';
+    if (value.isEmpty) return widget.fallback;
+    final uri = Uri.tryParse(value);
+    final imagePath =
+        Uri.tryParse(uri?.queryParameters['url'] ?? value)?.path ?? '';
+    final height = widget.compact ? 72.0 : 88.0;
+    Widget image;
+    if (imagePath.endsWith('.svg')) {
+      if (_svgUrl != value) {
+        _svgUrl = value;
+        _svgBytes = ImageCacheManager.instance.loadImageBytes(value);
+      }
+      image = FutureBuilder<Uint8List>(
+        key: ValueKey(value),
+        future: _svgBytes,
+        builder: (context, snapshot) => snapshot.hasData
+            ? SvgPicture.memory(snapshot.data!,
+                width: 320,
+                height: height,
+                fit: BoxFit.contain,
+                alignment: Alignment.centerLeft,
+                errorBuilder: (_, __, ___) => widget.fallback)
+            : widget.fallback,
+      );
+    } else {
+      image = CachedNetworkImageWidget(
+        key: ValueKey(value),
+        imageUrl: value,
+        width: 320,
+        height: height,
+        fit: BoxFit.contain,
+        alignment: Alignment.centerLeft,
+        memCacheWidth: 1000,
+        filterQuality: FilterQuality.high,
+        placeholderBuilder: (_) => widget.fallback,
+        errorBuilder: (_, __) => widget.fallback,
+      );
+    }
     return Semantics(
-      button: true,
-      label: '返回',
-      child: TextButton.icon(
+      image: true,
+      label: widget.title,
+      child: ExcludeSemantics(
+          child: ConstrainedBox(
+        key: const ValueKey('immersive-title-logo'),
+        constraints: BoxConstraints(maxWidth: 320, maxHeight: height),
+        child: image,
+      )),
+    );
+  }
+}
+
+class _BackButton extends StatelessWidget {
+  const _BackButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (AdaptiveMediaDetailActionButton.useNativeLiquidGlass(context)) {
+      return AdaptiveMediaDetailActionButton(
+        icon: Ionicons.chevron_back,
+        label: '返回',
+        iconOnly: true,
         onPressed: onPressed,
-        style: TextButton.styleFrom(
-          foregroundColor: Colors.white,
-          backgroundColor:
-              onImage ? Colors.black.withValues(alpha: 0.58) : null,
-          minimumSize: const Size(48, 44),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        ),
-        icon: const Icon(Ionicons.chevron_back, size: 20),
-        label: const Text('返回', style: TextStyle(fontSize: 15)),
-      ),
+      );
+    }
+    return AdaptiveMediaDetailIconButton(
+      icon: Ionicons.chevron_back,
+      tooltip: '返回',
+      onPressed: onPressed,
     );
   }
 }
@@ -591,9 +736,11 @@ class _InformationHeader extends StatelessWidget {
     required this.metadata,
     required this.rating,
     this.compact = false,
+    this.logoUrl,
   });
 
   final String title;
+  final String? logoUrl;
   final String? subtitle;
   final List<String> metadata;
   final double? rating;
@@ -605,16 +752,22 @@ class _InformationHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          maxLines: compact ? 1 : 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: compact ? 34 : 42,
-            height: 1.08,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.7,
+        _TitleArtwork(
+          url: logoUrl,
+          title: title,
+          compact: compact,
+          fallback: Text(
+            title,
+            key: const ValueKey('immersive-hero-title'),
+            maxLines: compact ? 1 : 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: compact ? 34 : 42,
+              height: 1.08,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.7,
+            ),
           ),
         ),
         if (cleanSubtitle?.isNotEmpty == true && cleanSubtitle != title) ...[
@@ -753,6 +906,7 @@ class _DescriptionBlock extends StatelessWidget {
         }
 
         return Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(

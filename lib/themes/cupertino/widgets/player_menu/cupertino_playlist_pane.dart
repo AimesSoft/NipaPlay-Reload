@@ -99,6 +99,11 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
       } else if (MediaSourceUtils.isWebDavPath(path)) {
         _dataSourceType = 'webdav';
         await _loadWebDavEpisodes(path);
+      } else if (Uri.tryParse(path)?.scheme == 'http' ||
+          Uri.tryParse(path)?.scheme == 'https') {
+        // A standalone stream has no local sibling directory to enumerate.
+        _dataSourceType = 'stream';
+        _episodes = [path];
       } else {
         _dataSourceType = 'filesystem';
         await _loadFileSystemEpisodes(path);
@@ -192,6 +197,9 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
     final matches = SMBService.instance.connections.where((connection) {
       if (connection.host == connName) return true;
       if ('${connection.host}:${connection.port}' == connName) return true;
+      if (connection.wanHost == connName) return true;
+      if ('${connection.wanHost}:${connection.wanPort}' == connName)
+        return true;
       return false;
     }).toList();
     if (matches.length == 1) return matches.first;
@@ -530,6 +538,8 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         return 'WebDAV';
       case 'smb':
         return 'SMB';
+      case 'stream':
+        return '当前播放 · ${Uri.parse(path).host}';
       default:
         return path;
     }
@@ -551,6 +561,7 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
       case 'shared_anime':
       case 'webdav':
       case 'smb':
+      case 'stream':
         return CupertinoIcons.cloud;
       default:
         return CupertinoIcons.folder;
@@ -571,6 +582,8 @@ class _CupertinoPlaylistPaneState extends State<CupertinoPlaylistPane> {
         return 'WebDAV';
       case 'smb':
         return 'SMB';
+      case 'stream':
+        return '网络串流';
       default:
         return '本地文件';
     }

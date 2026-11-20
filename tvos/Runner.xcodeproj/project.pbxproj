@@ -141,6 +141,7 @@
 				A12000000000000000000001 /* Use AOT Flutter engine on Release simulator */,
 				AAF50000000000000000F00D /* Sign Flutter.framework */,
 				673C87D86BD3FB0C35538A8B /* [CP] Embed Pods Frameworks */,
+				A12000000000000000000002 /* Embed vendor privacy manifests */,
 			);
 			buildRules = (
 			);
@@ -207,6 +208,18 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		A12000000000000000000002 /* Embed vendor privacy manifests */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Embed vendor privacy manifests";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/usr/bin/python3 \"${PROJECT_DIR}/../tool/copy_tvos_privacy_manifests.py\" --app \"${CODESIGNING_FOLDER_PATH}\" --plugins \"${PROJECT_DIR}/../.flutter-plugins-dependencies\"\n";
+		};
 		31241E5E0EDE223C8AE2968B /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -278,7 +291,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "#!/bin/sh\n# Embed App.framework (AOT Dart snapshots) into the app bundle.\n# Present only for release/profile (AOT) builds; debug/JIT has no App.framework.\n# Runs for build, run, AND archive, so TestFlight/App Store builds get it too.\nAPP_FRAMEWORK_SRC=\"${PROJECT_DIR}/Flutter/App.framework\"\nDEST_FRAMEWORKS=\"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Frameworks\"\nif [ -d \"${APP_FRAMEWORK_SRC}\" ]; then\n  echo \"Embedding App.framework...\"\n  mkdir -p \"${DEST_FRAMEWORKS}\"\n  rsync -av --delete \"${APP_FRAMEWORK_SRC}\" \"${DEST_FRAMEWORKS}/\"\n  if [ \"${CODE_SIGNING_REQUIRED}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY}\" ]; then\n    echo \"Codesigning App.framework with ${EXPANDED_CODE_SIGN_IDENTITY}...\"\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none --generate-entitlement-der \"${DEST_FRAMEWORKS}/App.framework\"\n  fi\nelse\n  echo \"No App.framework to embed (debug/JIT build).\"\nfi\n";
+			shellScript = "#!/bin/sh\n# Embed App.framework (AOT Dart snapshots) into the app bundle.\n# Present only for release/profile (AOT) builds; debug/JIT has no App.framework.\n# Runs for build, run, AND archive, so TestFlight/App Store builds get it too.\nAPP_FRAMEWORK_SRC=\"${PROJECT_DIR}/Flutter/App.framework\"\nDEST_FRAMEWORKS=\"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Frameworks\"\nif [ \"${CONFIGURATION}\" = \"Debug\" ]; then\n  # A previous release build leaves an AOT framework in Flutter/. Do not let\n  # the debug engine load that stale snapshot instead of the current kernel.\n  rm -rf \"${DEST_FRAMEWORKS}/App.framework\"\n  exit 0\nfi\nif [ -d \"${APP_FRAMEWORK_SRC}\" ]; then\n  echo \"Embedding App.framework...\"\n  mkdir -p \"${DEST_FRAMEWORKS}\"\n  rsync -av --delete \"${APP_FRAMEWORK_SRC}\" \"${DEST_FRAMEWORKS}/\"\n  if [ \"${CODE_SIGNING_REQUIRED}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY}\" ]; then\n    echo \"Codesigning App.framework with ${EXPANDED_CODE_SIGN_IDENTITY}...\"\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" --timestamp=none --generate-entitlement-der \"${DEST_FRAMEWORKS}/App.framework\"\n  fi\nelse\n  echo \"No App.framework to embed (debug/JIT build).\"\nfi\n";
 		};
 		AAF50000000000000000F00D /* Sign Flutter.framework */ = {
 			isa = PBXShellScriptBuildPhase;

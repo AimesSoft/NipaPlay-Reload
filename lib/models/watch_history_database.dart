@@ -47,6 +47,8 @@ class EpisodeMatchRestoreItem {
 
 class WatchHistoryDatabase {
   static Database? _database;
+  static Future<Database>? _opening;
+  Future<List<WatchHistoryItem>>? _readingHistory;
   static final WatchHistoryDatabase instance = WatchHistoryDatabase._init();
   static const String _dbName = 'watch_history.db';
   static const int _dbVersion = 2;
@@ -64,8 +66,12 @@ class WatchHistoryDatabase {
   Future<Database> get database async {
     if (_database != null) return _database!;
 
-    _database = await _initDB();
-    return _database!;
+    final opening = _opening ??= _initDB();
+    try {
+      return _database = await opening;
+    } finally {
+      if (identical(_opening, opening)) _opening = null;
+    }
   }
 
   // 初始化数据库
@@ -196,6 +202,12 @@ class WatchHistoryDatabase {
     if (_migrationCompleted) return;
 
     try {
+      final jsonPath = await _getJsonFilePath();
+      if (jsonPath != null &&
+          !await io.File(path.join(path.dirname(jsonPath), 'watch_history.db'))
+              .exists()) {
+        await WatchHistoryManager.initialize();
+      }
       final db = await database;
       // 检查是否已经有数据
       final count = Sqflite.firstIntValue(
@@ -649,8 +661,8 @@ class WatchHistoryDatabase {
 
     final db = await database;
     return db.transaction((txn) async {
-      final existing =
-          await _prefetchByFilePaths(txn, incomingMatches.map((e) => e.filePath));
+      final existing = await _prefetchByFilePaths(
+          txn, incomingMatches.map((e) => e.filePath));
       var restored = 0;
       var skipped = 0;
       final writes = txn.batch();
@@ -751,8 +763,56 @@ class WatchHistoryDatabase {
         'is_from_scan': item.isFromScan ? 1 : 0,
       };
 
+  /// A remote request may finish after local playback saved a new position.
+  /// Only replace the progress we actually fetched, in one atomic SQL update.
+  Future<bool> updateRemoteProgressIfUnchanged(
+    WatchHistoryItem original,
+    WatchHistoryItem updated,
+  ) async {
+    if (kIsWeb) return false;
+    final db = await database;
+    final count = await db.update(
+      'watch_history',
+      {
+        'watch_progress': updated.watchProgress,
+        'last_position': updated.lastPosition,
+        'duration': updated.duration,
+        'last_watch_time': updated.lastWatchTime.toIso8601String(),
+      },
+      where: 'file_path = ? AND last_watch_time = ? AND last_position = ? '
+          'AND duration = ? AND watch_progress = ?',
+      whereArgs: [
+        original.filePath,
+        original.lastWatchTime.toIso8601String(),
+        original.lastPosition,
+        original.duration,
+        original.watchProgress,
+      ],
+    );
+    return count == 1;
+  }
+
+  Future<List<WatchHistoryItem>> getRecentWatchHistory({int limit = 40}) async {
+    if (limit <= 0) return [];
+    if (kIsWeb) return (await getAllWatchHistory()).take(limit).toList();
+    final db = await database;
+    final maps = await db.query('watch_history',
+        orderBy: 'last_watch_time DESC', limit: limit);
+    return maps.map(_mapToWatchHistoryItem).toList();
+  }
+
   // 获取所有观看历史，按最后观看时间排序
   Future<List<WatchHistoryItem>> getAllWatchHistory() async {
+    final reading = _readingHistory ??= _readAllWatchHistory();
+    try {
+      // Consumers receive independent objects (iOS path repair can mutate them).
+      return (await reading).map((item) => item.copyWith()).toList();
+    } finally {
+      if (identical(_readingHistory, reading)) _readingHistory = null;
+    }
+  }
+
+  Future<List<WatchHistoryItem>> _readAllWatchHistory() async {
     if (kIsWeb) {
       await _ensureWebStoreLoaded();
       final items = _webStore.values.toList();
@@ -1310,9 +1370,7 @@ class WatchHistoryDatabase {
     final uniqueReferences = references.toSet().toList();
     final rows = await db.query(
       'watch_history',
-      where: uniqueReferences
-          .map((_) => 'file_path LIKE ?')
-          .join(' OR '),
+      where: uniqueReferences.map((_) => 'file_path LIKE ?').join(' OR '),
       whereArgs: uniqueReferences.map((ref) => '$scheme://$ref/%').toList(),
     );
     for (final row in rows) {

@@ -170,7 +170,7 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       option: _currentOption!,
       createdController: (controller) {
         _controller = controller;
-        if (!widget.isPlaying) {
+        if (!widget.isPlaying || !widget.visible) {
           controller.pause();
         }
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -224,10 +224,6 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.visible) {
-      return const SizedBox.shrink();
-    }
-
     // 如果配置发生变化，重新创建DanmakuScreen；仅倍速变化则只同步动画时长，
     // 不重建屏幕（避免长按倍速/松手时弹幕闪没重滑入）。
     if (_needsScreenRecreation()) {
@@ -237,18 +233,27 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       _syncPlaybackRateOnly();
     }
 
-    // 确保弹幕播放状态与视频播放状态同步
+    // 确保弹幕播放状态与视频播放状态同步；隐藏时弹幕时钟保持暂停
+    final shouldRun = widget.isPlaying && widget.visible;
     if (_controller != null) {
-      if (widget.isPlaying && !_controller!.running) {
+      if (shouldRun && !_controller!.running) {
         //print('Canvas弹幕: Consumer检测到需要恢复播放');
         _controller!.resume();
-      } else if (!widget.isPlaying && _controller!.running) {
+      } else if (!shouldRun && _controller!.running) {
         //print('Canvas弹幕: Consumer检测到需要暂停播放');
         _controller!.pause();
       }
     }
 
-    return _danmakuScreen!;
+    // 隐藏时保留 DanmakuScreen（控制器与轨道布局），只停止绘制和动画，
+    // 重新显示不再冷启动整块屏幕。
+    return Offstage(
+      offstage: !widget.visible,
+      child: TickerMode(
+        enabled: widget.visible,
+        child: _danmakuScreen!,
+      ),
+    );
   }
 
   @override
@@ -267,6 +272,8 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
     super.didUpdateWidget(oldWidget);
 
     if (!widget.visible && oldWidget.visible) {
+      // 隐藏：保留屏幕与控制器，停掉恢复排空、暂停时钟并清空已上屏弹幕，
+      // 隐藏期间不再处理弹幕。
       _restorationGeneration++;
       _pendingRestoration = const [];
       _pendingRestorationIndex = 0;
@@ -274,16 +281,17 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
       _addedDanmakuTimes.clear();
       _restorationRetryCounts.clear();
       _restorationTime = null;
-      _controller = null;
+      _controller?.pause();
+      _controller?.clear();
     } else if (widget.visible && !oldWidget.visible) {
-      _prepareForScreenRecreation();
-      _initializeDanmakuScreen();
+      // 重新显示：隐藏期间时间仍在推进，按当前时间窗恢复。
+      _forceTimelineRestore = true;
     }
 
     // 处理播放/暂停状态变化
     if (widget.isPlaying != oldWidget.isPlaying && _controller != null) {
       //print('Canvas弹幕: 播放状态变化 ${oldWidget.isPlaying} -> ${widget.isPlaying}');
-      if (widget.isPlaying) {
+      if (widget.isPlaying && widget.visible) {
         _controller!.resume();
       } else {
         _controller!.pause();
@@ -332,7 +340,7 @@ class _CanvasDanmakuRendererState extends State<CanvasDanmakuRenderer> {
 
   void _processAndAddDanmaku(
       List<Map<String, dynamic>> danmakuList, double currentTime) {
-    if (_controller == null) return;
+    if (_controller == null || !widget.visible) return;
 
     final hasPreviousTime = !_lastCurrentTime.isNaN;
     final timeDiff = hasPreviousTime

@@ -536,50 +536,11 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         MediaServerMenuSurface.nipaplaySubtitle,
         isEmby,
         () async {
-          // SRT 走 App 叠层渲染，与内嵌轨道可共存：只清理 ASS/SSA 类外部字幕
-          final activeExternal = videoState.getActiveExternalSubtitlePath();
-          final activeIsSrt = activeExternal != null &&
-              p.extension(activeExternal).toLowerCase() == '.srt';
-          if (!activeIsSrt) {
-            // 禁用外部字幕 (如果之前有外部 ASS 字幕激活)
-            videoState.setExternalSubtitle(
-                ""); // Clears external subtitle path in manager
-
-            // 将所有外部字幕设为非激活 (UI state for external subtitles list)
-            for (var subtitle in _externalSubtitles) {
-              subtitle['isActive'] = false;
-            }
+          // 同一时间只显示一条字幕：选内嵌轨或关闭字幕都会摘掉所有外挂字幕
+          for (var subtitle in _externalSubtitles) {
+            subtitle['isActive'] = false;
           }
-
-          // 如果指定了轨道索引，切换到该内嵌字幕
-          if (trackIndex >= 0) {
-            // 核心：告诉播放器切换到指定的内嵌字幕轨道索引
-            // Note: `activeSubtitleTracks` in `MediaKitPlayerAdapter` expects an index
-            // that corresponds to its `_mediaInfo.subtitle` list.
-            videoState.player.activeSubtitleTracks = [trackIndex];
-            debugPrint(
-                '_SubtitleTracksMenu: Switched to embedded subtitle, player instructed with mediaInfo index: $trackIndex');
-
-            // 不需要在此处手动更新SubtitleManager的title/language或调用updateDanmakuTrackInfo。
-            // MediaKitPlayerAdapter监听到播放器轨道变化后，会更新其_mediaInfo，
-            // 进而触发SubtitleManager通过Player实例的mediaInfo更新其_subtitleTrackInfo。
-            // UI应该响应SubtitleManager通过ChangeNotifier发出的更新。
-          } else {
-            // 关闭字幕 (trackIndex is -1 or invalid)
-            videoState.player.activeSubtitleTracks =
-                []; // Tell player to use "no" subtitle
-            debugPrint(
-                '_SubtitleTracksMenu: Turned off subtitles, player instructed.');
-
-            // 清除所有字幕轨道信息 (这部分可能需要审视，是否真的需要清除所有"Danmaku"信息)
-            // videoState.clearDanmakuTrackInfo(); // Commenting out for now, as it might be too broad.
-
-            // 明确清除外部字幕的手动设置标记 (这应该由SubtitleManager内部逻辑处理)
-            // videoState.updateDanmakuTrackInfo('external_subtitle', {
-            //   'isActive': false,
-            //   'isManualSet': false
-            // });
-          }
+          videoState.selectEmbeddedSubtitleTrack(trackIndex);
 
           if (mounted) {
             setState(

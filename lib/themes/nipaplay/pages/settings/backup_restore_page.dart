@@ -387,13 +387,13 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       context: context,
       title: '确认恢复',
       content: '恢复操作将合并备份数据到当前记录中。已有的本地数据不会被删除，仅更新或新增。是否继续？',
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.pop(context, false),
+          onPressed: () => Navigator.pop(dialogContext, false),
           child: const Text('取消'),
         ),
         HoverScaleTextButton(
-          onPressed: () => Navigator.pop(context, true),
+          onPressed: () => Navigator.pop(dialogContext, true),
           child: const Text('确认'),
         ),
       ],
@@ -537,13 +537,13 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
         context: context,
         title: '确认恢复',
         content: '恢复操作将会合并备份文件中的观看进度（包括截图）到当前记录中，且只会恢复本地存在的媒体文件的进度。是否继续？',
-        actions: [
+        actionsBuilder: (dialogContext) => [
           HoverScaleTextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('取消'),
           ),
           HoverScaleTextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('确认'),
           ),
         ],

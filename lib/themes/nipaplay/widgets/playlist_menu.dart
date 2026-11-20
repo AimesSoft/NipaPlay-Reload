@@ -295,6 +295,12 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       if ('${connection.host}:${connection.port}' == connName) {
         return true;
       }
+      if (connection.wanHost == connName) {
+        return true;
+      }
+      if ('${connection.wanHost}:${connection.wanPort}' == connName) {
+        return true;
+      }
       return false;
     }).toList();
 
@@ -679,6 +685,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
       final selected = await EpisodeFileSelectionService.select(
         context,
         PlayableItem(
+          mediaLibraryScope:
+              videoState.playbackDetailContext?.mediaLibraryScope,
           videoPath: filePath,
           historyItem: _remoteHistoryCache[filePath],
           detailContext: videoState.playbackDetailContext,
@@ -738,7 +746,11 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (!selectionHandled) {
             final mappedSelection = await EpisodeFileSelectionService.select(
               context,
-              PlayableItem(videoPath: filePath, historyItem: historyItem),
+              PlayableItem(
+                  videoPath: filePath,
+                  historyItem: historyItem,
+                  mediaLibraryScope:
+                      videoState.playbackDetailContext?.mediaLibraryScope),
             );
             if (mappedSelection == null || !mounted) return;
             if (!MediaIdentityResolver.samePath(
@@ -759,6 +771,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           );
 
           final playableItem = PlayableItem(
+            mediaLibraryScope:
+                videoState.playbackDetailContext?.mediaLibraryScope,
             videoPath: filePath,
             mediaKey: MediaIdentityResolver.forPath(filePath),
             title: historyItem.animeName,
@@ -786,6 +800,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             mediaKey: MediaIdentityResolver.forPath(filePath),
             historyItem: historyItem,
             playbackSession: playbackSession,
+            mediaLibraryScope:
+                videoState.playbackDetailContext?.mediaLibraryScope,
             playbackDetailContext: videoState.playbackDetailContext,
             episodeFileSelectionHandled: selectionHandled,
           );
@@ -832,7 +848,11 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           if (!selectionHandled) {
             final mappedSelection = await EpisodeFileSelectionService.select(
               context,
-              PlayableItem(videoPath: filePath, historyItem: historyItem),
+              PlayableItem(
+                  videoPath: filePath,
+                  historyItem: historyItem,
+                  mediaLibraryScope:
+                      videoState.playbackDetailContext?.mediaLibraryScope),
             );
             if (mappedSelection == null || !mounted) return;
             if (!MediaIdentityResolver.samePath(
@@ -853,6 +873,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
           );
 
           final playableItem = PlayableItem(
+            mediaLibraryScope:
+                videoState.playbackDetailContext?.mediaLibraryScope,
             videoPath: filePath,
             mediaKey: MediaIdentityResolver.forPath(filePath),
             title: historyItem.animeName,
@@ -880,6 +902,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             mediaKey: MediaIdentityResolver.forPath(filePath),
             historyItem: historyItem,
             playbackSession: playbackSession,
+            mediaLibraryScope:
+                videoState.playbackDetailContext?.mediaLibraryScope,
             playbackDetailContext: videoState.playbackDetailContext,
             episodeFileSelectionHandled: selectionHandled,
           );
@@ -900,12 +924,17 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
                 pathSegments.isNotEmpty ? pathSegments.last : filePath;
             final fallbackTitle = _remoteDisplayNameCache[filePath] ??
                 p.basenameWithoutExtension(_safeDecode(lastSegment));
-            final actualPlayUrl =
-                MediaSourceUtils.resolveRemotePathToUrl(filePath);
+            // WebDAV 需要时走本地认证代理；SMB/HTTP 仍按原来的统一解析。
+            final actualPlayUrl = MediaSourceUtils.isNewWebDavPath(filePath)
+                ? await MediaSourceUtils.resolveWebDavPathToUrlInitialized(
+                    filePath)
+                : MediaSourceUtils.resolveRemotePathToUrl(filePath);
             if (actualPlayUrl == null || actualPlayUrl.isEmpty) {
               throw Exception('无法解析远程媒体路径: $filePath');
             }
             final playableItem = PlayableItem(
+              mediaLibraryScope:
+                  videoState.playbackDetailContext?.mediaLibraryScope,
               videoPath: filePath,
               mediaKey: MediaIdentityResolver.forPath(filePath),
               title: cachedHistory?.animeName ?? fallbackTitle,
@@ -933,6 +962,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
               mediaKey: MediaIdentityResolver.forPath(filePath),
               historyItem: cachedHistory,
               actualPlayUrl: actualPlayUrl,
+              mediaLibraryScope:
+                  videoState.playbackDetailContext?.mediaLibraryScope,
               playbackDetailContext: videoState.playbackDetailContext,
               episodeFileSelectionHandled: selectionHandled,
             );
@@ -945,6 +976,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             }
 
             final playableItem = PlayableItem(
+              mediaLibraryScope:
+                  videoState.playbackDetailContext?.mediaLibraryScope,
               videoPath: filePath,
               mediaKey: MediaIdentityResolver.forPath(filePath),
             );
@@ -963,6 +996,8 @@ class _PlaylistMenuState extends State<PlaylistMenu> {
             await videoState.initializePlayer(
               filePath,
               mediaKey: MediaIdentityResolver.forPath(filePath),
+              mediaLibraryScope:
+                  videoState.playbackDetailContext?.mediaLibraryScope,
               playbackDetailContext: videoState.playbackDetailContext,
               episodeFileSelectionHandled: selectionHandled,
             );

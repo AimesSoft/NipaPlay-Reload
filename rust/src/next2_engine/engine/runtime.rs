@@ -4,12 +4,29 @@ use std::ffi::c_void;
 use std::ffi::{c_char, CString};
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
+
+static LOG_FILE: OnceLock<Mutex<std::fs::File>> = OnceLock::new();
+
+pub(crate) fn n2log(msg: &str) {
+    let file = LOG_FILE.get_or_init(|| {
+        let path = std::env::temp_dir().join("next2_debug.log");
+        Mutex::new(std::fs::File::create(path).unwrap())
+    });
+    if let Ok(mut f) = file.lock() {
+        let _ = writeln!(f, "[next2] {}", msg);
+        // Don't flush per-call: a synchronous fsync on every log line was a
+        // stall source on the MSDF rasterization hot path (5+ logs per new
+        // glyph). The OS buffers the write and flushes on drop/close. Error
+        // and panic paths still log, just without forcing an fsync.
+    }
+}
 
 use base64::Engine as _;
 use bytemuck::{Pod, Zeroable};

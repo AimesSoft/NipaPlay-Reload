@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.11.10
+version: 1.11.12
 
 environment:
   sdk: ^3.5.3
@@ -44,7 +44,9 @@ dependencies:
   
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  window_manager: ^0.4.3
+  # In 0.4.3, a null titleBarStyle skips setTitleBarStyle on macOS.
+  # That setter forces NSWindow.isOpaque to false. Recheck when upgrading.
+  window_manager: 0.4.3
   screen_retriever: ^0.2.0
   tray_manager: ^0.5.2
   shared_preferences: ^2.2.2
@@ -132,7 +134,7 @@ dependencies:
     path: packages/media_kit_video
   media_kit_libs_video:
     path: third_party/media-kit-upstream/libs/universal/media_kit_libs_video
-  erika_flutter: 0.2.1
+  erika_flutter: 0.3.5
   qr_flutter: ^4.1.0  # 用于生成二维码
   mobile_scanner: ^7.2.0
   flutter_svg: ^2.0.14  # 用于显示SVG图标

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:nipaplay/settings/about_settings_data.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
@@ -69,7 +70,7 @@ class StartupNotificationController {
   }) async {
     if (isMounted != null && !isMounted()) return;
     final now = DateTime.now();
-    const donateEligible = true;
+    final donateEligible = AboutSettingsData.showSponsorship;
     final options = <_MessagePayload>[
       for (final message in _genericMessages) _MessagePayload(message),
       for (final template in _timeGreetingTemplates)
@@ -102,10 +103,7 @@ class StartupNotificationController {
       context: context,
       title: '赞赏码',
       contentWidget: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 300,
-          maxHeight: 400,
-        ),
+        constraints: const BoxConstraints(maxWidth: 300, maxHeight: 400),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Image.asset(
@@ -137,13 +135,10 @@ class StartupNotificationController {
           ),
         ),
       ),
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(
-            '关闭',
-            style: TextStyle(color: colorScheme.onSurface),
-          ),
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text('关闭', style: TextStyle(color: colorScheme.onSurface)),
         ),
       ],
     );

@@ -1227,15 +1227,15 @@ class _RemoteMediaLibrarySettingsContentState
             ],
           ),
         ),
-        actions: [
+        actionsBuilder: (dialogContext) => [
           HoverScaleTextButton(
             text: context.l10n.cancel,
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
           ),
           HoverScaleTextButton(
             text: context.l10n.save,
             onPressed: () {
-              Navigator.of(context).pop(
+              Navigator.of(dialogContext).pop(
                 _SharedHostEditResult(
                   displayName: nameController.text,
                   baseUrl: urlController.text,
@@ -1340,14 +1340,14 @@ class _RemoteMediaLibrarySettingsContentState
               Text(l10n.deviceIdDialogValidationHint),
             ],
           ),
-          actions: [
+          actionsBuilder: (dialogContext) => [
             HoverScaleTextButton(
               text: l10n.cancel,
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             HoverScaleTextButton(
               text: l10n.save,
-              onPressed: () => Navigator.of(context).pop(controller.text),
+              onPressed: () => Navigator.of(dialogContext).pop(controller.text),
             ),
           ],
         );
@@ -1413,13 +1413,13 @@ class _RemoteMediaLibrarySettingsContentState
       context: context,
       title: title,
       content: content,
-      actions: [
+      actionsBuilder: (dialogContext) => [
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
           child: Text(context.l10n.cancel),
         ),
         HoverScaleTextButton(
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
           child: Text(
             destructiveText,
             style: const TextStyle(color: Colors.red),

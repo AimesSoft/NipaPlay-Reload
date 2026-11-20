@@ -38,6 +38,17 @@ end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
+    # The tvOS plugin ports ship vendor privacy manifests but some podspecs
+    # omit their resource declarations. Embed them in the SDK frameworks so
+    # App Store submissions satisfy ITMS-91061.
+    plugin_root = installer.sandbox.development_pods[target.name]
+    if plugin_root
+      manifest = File.join(plugin_root.to_s, 'Resources', 'PrivacyInfo.xcprivacy')
+      if File.file?(manifest)
+        reference = installer.pods_project.main_group.new_file(manifest)
+        target.resources_build_phase.add_file_reference(reference, true)
+      end
+    end
     target.build_configurations.each do |config|
       config.build_settings['TVOS_DEPLOYMENT_TARGET'] = '13.0'
       if target.name == 'erika_flutter'

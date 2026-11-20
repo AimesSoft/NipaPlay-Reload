@@ -732,6 +732,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get webdavAddress => 'WebDAV Address';
 
   @override
+  String get addressAtLeastOne =>
+      'Please fill in at least one of the internal or public address';
+
+  @override
+  String get webdavLanAddress => 'Internal Address';
+
+  @override
+  String get webdavWanAddress => 'Public Address';
+
+  @override
+  String get smbLanHost => 'Internal Host / IP';
+
+  @override
+  String get smbWanHost => 'Public Host / IP';
+
+  @override
   String get smbAddServer => 'Add SMB Server';
 
   @override

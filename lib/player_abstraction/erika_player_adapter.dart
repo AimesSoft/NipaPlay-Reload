@@ -1073,7 +1073,78 @@ class ErikaPlayerAdapter
             }),
           );
         }
+      case final style when _subtitleStyleKeys.contains(style):
+        // NipaPlay sets the subtitle style one mpv property at a time; Erika
+        // takes it whole, once per batch.
+        if (_subtitleStyleQueued) return;
+        _subtitleStyleQueued = true;
+        scheduleMicrotask(() {
+          _subtitleStyleQueued = false;
+          unawaited(_applySubtitleStyle());
+        });
     }
+  }
+
+  /// The mpv subtitle properties NipaPlay sets on a kernel that draws the
+  /// subtitles itself, which Erika takes as one `setSubtitleStyle`. It has no
+  /// subtitle position (`sub-pos`) nor a shadow colour, and liberika 0.2.1 no
+  /// subtitle delay.
+  static const _subtitleStyleKeys = {
+    'sub-color',
+    'sub-border-color',
+    'sub-opacity',
+    'sub-border-size',
+    'sub-shadow-offset',
+    'sub-bold',
+    'sub-italic',
+    'sub-align-x',
+    'sub-align-y',
+    'sub-margin-x',
+    'sub-margin-y',
+    'sub-font',
+    'sub-fonts-dir',
+    'sub-ass-override',
+  };
+  bool _subtitleStyleQueued = false;
+
+  Future<void> _applySubtitleStyle() async {
+    if (!_isSupported || _disposed) return;
+    final force = _properties['sub-ass-override'] == 'force';
+    final fontFile = await _subtitleFontFile(
+        force ? _properties['sub-font'] ?? '' : '',
+        _properties['sub-fonts-dir'] ?? '');
+    if (_disposed) return;
+    final style = erikaSubtitleStyleFromMpv(_properties, fontFile: fontFile);
+    try {
+      await _player.setSubtitleStyle(
+        primaryColorRgba: style['primaryColorRgba'] as int?,
+        outlineColorRgba: style['outlineColorRgba'] as int?,
+        outlineWidth: style['outlineWidth'] as double?,
+        shadowDepth: style['shadowDepth'] as double?,
+        bold: style['bold'] as bool?,
+        italic: style['italic'] as bool?,
+        alignment: style['alignment'] as int?,
+        marginLeft: style['marginLeft'] as int?,
+        marginRight: style['marginRight'] as int?,
+        marginVertical: style['marginVertical'] as int?,
+        fontFamily: style['fontFamily'] as String?,
+        fontFilePath: style['fontFilePath'] as String?,
+        overrideMask: style['overrideMask'] as int?,
+      );
+    } catch (error) {
+      debugPrint('Erika: set subtitle style failed: $error');
+    }
+  }
+
+  /// [font]'s file in [dir], when the custom fonts folder has one by that
+  /// name.
+  static Future<String?> _subtitleFontFile(String font, String dir) async {
+    if (font.isEmpty || dir.isEmpty) return null;
+    for (final ext in const ['ttf', 'otf', 'ttc']) {
+      final file = File('$dir${Platform.pathSeparator}$font.$ext');
+      if (await file.exists()) return file.path;
+    }
+    return null;
   }
 
   @override
@@ -1122,6 +1193,11 @@ class ErikaPlayerAdapter
 
   @override
   void setPlaybackRate(double rate) {
+    // Settle elapsed playback at the old rate before changing the slope.
+    // Otherwise releasing a long press recalculates that same interval at
+    // normal speed and moves the displayed position (and relative seeks) back.
+    _lastPositionMs = position;
+    _lastPositionUpdate = DateTime.now();
     _playbackRate = rate <= 0 ? 1.0 : rate;
     if (_isSupported) {
       unawaited(_player.setPlaybackRate(_playbackRate));
@@ -1235,9 +1311,34 @@ class ErikaPlayerAdapter
     }
   }
 
+  // Neural modes remain hidden on Android/OHOS pending phone performance
+  // validation. FSR 1.0 is available there without a neural network.
+  static bool get supportsNeuralUpscaler =>
+      _isSupported && defaultTargetPlatform != TargetPlatform.android && !_isHarmonyOS;
+
+  static List<PlayerUpscalerMode> get availableUpscalerModes {
+    final apple = defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final desktop = defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        (defaultTargetPlatform == TargetPlatform.linux && !_isHarmonyOS);
+    return PlayerUpscalerMode.values.where((mode) {
+      if (mode == PlayerUpscalerMode.off) return true;
+      if (!_isSupported) return false;
+      if (mode == PlayerUpscalerMode.erikaFsr1) return true;
+      if (mode == PlayerUpscalerMode.erikaPlatformVideo) {
+        return apple || defaultTargetPlatform == TargetPlatform.windows;
+      }
+      if (mode == PlayerUpscalerMode.erikaMetalFxSpatial) return apple;
+      if (mode == PlayerUpscalerMode.erikaArtCnnR8F64) return desktop;
+      return supportsNeuralUpscaler;
+    }).toList(growable: false);
+  }
+
   bool get supportsUpscaler => _isSupported;
 
   Future<void> setUpscaler(PlayerUpscalerMode mode) async {
+    if (!availableUpscalerModes.contains(mode)) return;
     _lastUpscalerStatus = PlayerUpscalerStatus(
       requestedMode: mode,
       activeBackend: mode == PlayerUpscalerMode.off
@@ -1256,6 +1357,20 @@ class ErikaPlayerAdapter
       debugPrint('Erika: set upscaler failed: $error');
     }
   }
+
+  Future<void> loadUpscalerModelFile(String path) async {
+    if (defaultTargetPlatform == TargetPlatform.linux && !_isHarmonyOS) {
+      final response = await _player.invokeJson('loadUpscalerModelFile', {'path': path});
+      if (response['ok'] != true) {
+        throw StateError('${response['error'] ?? response['status']}');
+      }
+    } else {
+      await _player.loadUpscalerModel(await File(path).readAsBytes(),
+          name: path.split(RegExp(r'[/\\]')).last);
+    }
+  }
+
+  Future<void> clearUpscalerModel() => _player.clearUpscalerModel();
 
   Future<PlayerUpscalerStatus> getUpscalerStatus() async {
     if (!_isSupported) {
@@ -1563,48 +1678,15 @@ class ErikaPlayerAdapter
     };
   }
 
-  ErikaUpscalerMode _toNativeUpscalerMode(PlayerUpscalerMode mode) {
-    switch (mode) {
-      case PlayerUpscalerMode.erikaArtCnnC4F16:
-        return ErikaUpscalerMode.artCnnC4F16;
-      case PlayerUpscalerMode.erikaArtCnnC4F32:
-        return ErikaUpscalerMode.artCnnC4F32;
-      case PlayerUpscalerMode.erikaArtCnnC4F16Ds:
-        return ErikaUpscalerMode.artCnnC4F16Ds;
-      case PlayerUpscalerMode.off:
-        return ErikaUpscalerMode.off;
-    }
-  }
+  ErikaUpscalerMode _toNativeUpscalerMode(PlayerUpscalerMode mode) =>
+      ErikaUpscalerMode.values.byName(mode.nativeName);
 
-  PlayerUpscalerMode _fromNativeUpscalerMode(ErikaUpscalerMode mode) {
-    switch (mode) {
-      case ErikaUpscalerMode.artCnnC4F16:
-        return PlayerUpscalerMode.erikaArtCnnC4F16;
-      case ErikaUpscalerMode.artCnnC4F32:
-        return PlayerUpscalerMode.erikaArtCnnC4F32;
-      case ErikaUpscalerMode.artCnnC4F16Ds:
-        return PlayerUpscalerMode.erikaArtCnnC4F16Ds;
-      case ErikaUpscalerMode.off:
-        return PlayerUpscalerMode.off;
-    }
-  }
+  PlayerUpscalerMode _fromNativeUpscalerMode(ErikaUpscalerMode mode) =>
+      PlayerUpscalerMode.values.firstWhere((value) => value.nativeName == mode.name);
 
   PlayerUpscalerBackendStatus _fromNativeUpscalerBackend(
     ErikaUpscalerBackendStatus status,
-  ) {
-    switch (status) {
-      case ErikaUpscalerBackendStatus.off:
-        return PlayerUpscalerBackendStatus.off;
-      case ErikaUpscalerBackendStatus.inactive:
-        return PlayerUpscalerBackendStatus.inactive;
-      case ErikaUpscalerBackendStatus.building:
-        return PlayerUpscalerBackendStatus.building;
-      case ErikaUpscalerBackendStatus.scalar:
-        return PlayerUpscalerBackendStatus.scalar;
-      case ErikaUpscalerBackendStatus.simdgroupMatrix:
-        return PlayerUpscalerBackendStatus.simdgroupMatrix;
-    }
-  }
+  ) => PlayerUpscalerBackendStatus.values.byName(status.name);
 
   PlayerUpscalerStatus _convertUpscalerStatus(ErikaUpscalerStatus status) {
     return PlayerUpscalerStatus(
@@ -1648,6 +1730,9 @@ class ErikaPlayerAdapter
       final decoderName = switch (decoder.activeBackend) {
         'cuda' => 'CUDA / NVDEC',
         'vaapi' => 'VA-API',
+        'videotoolbox' => 'VideoToolbox',
+        'd3d11va' => 'D3D11VA',
+        'mediacodec' => 'MediaCodec',
         'software' => 'FFmpeg (software)',
         final backend => backend,
       };
@@ -1742,18 +1827,22 @@ class ErikaPlayerAdapter
         duration: event.duration.inMilliseconds,
       );
     }
+    // The video's parameters follow its track list; they give the size of
+    // tracks that state none, and stand alone only until the list arrives.
     if (event.video.width > 0 && event.video.height > 0) {
       updatedInfo = updatedInfo.copyWith(
-        video: <PlayerVideoStreamInfo>[
-          PlayerVideoStreamInfo(
-            codec: PlayerVideoCodecParams(
-              width: event.video.width,
-              height: event.video.height,
-              name: 'Erika Video',
-            ),
-            codecName: 'unknown',
-          ),
-        ],
+        video: _videoTrackInfos.isEmpty
+            ? <PlayerVideoStreamInfo>[
+                PlayerVideoStreamInfo(
+                  codec: PlayerVideoCodecParams(
+                    width: event.video.width,
+                    height: event.video.height,
+                    name: 'Erika Video',
+                  ),
+                  codecName: 'unknown',
+                ),
+              ]
+            : _videoStreams(event.video.width, event.video.height),
       );
     }
     // Erika emits the full descriptor list (with native ids, titles and the
@@ -1779,21 +1868,7 @@ class ErikaPlayerAdapter
       updatedInfo = updatedInfo.copyWith(
         video: videoInfos.isEmpty
             ? null
-            : <PlayerVideoStreamInfo>[
-                for (var i = 0; i < videoInfos.length; i++)
-                  PlayerVideoStreamInfo(
-                    codec: PlayerVideoCodecParams(
-                      width: videoInfos[i].width > 0
-                          ? videoInfos[i].width
-                          : event.video.width,
-                      height: videoInfos[i].height > 0
-                          ? videoInfos[i].height
-                          : event.video.height,
-                      name: _formatErikaVideoCodecParams(videoInfos[i]),
-                    ),
-                    codecName: videoInfos[i].codec ?? 'unknown',
-                  ),
-              ],
+            : _videoStreams(event.video.width, event.video.height),
         audio: <PlayerAudioStreamInfo>[
           for (var i = 0; i < audioInfos.length; i++)
             PlayerAudioStreamInfo(
@@ -1804,6 +1879,7 @@ class ErikaPlayerAdapter
                 sampleRate: audioInfos[i].sampleRate > 0
                     ? audioInfos[i].sampleRate
                     : null,
+                bitRate: audioInfos[i].bitRate,
               ),
               title: audioInfos[i].title ?? 'Audio ${i + 1}',
               language: audioInfos[i].language,
@@ -1854,12 +1930,26 @@ class ErikaPlayerAdapter
         : 'Erika 播放失败：${details.join('；')}';
   }
 
+  List<PlayerVideoStreamInfo> _videoStreams(int width, int height) => [
+        for (final track in _videoTrackInfos)
+          PlayerVideoStreamInfo(
+            codec: PlayerVideoCodecParams(
+              width: track.width > 0 ? track.width : width,
+              height: track.height > 0 ? track.height : height,
+              name: _formatErikaVideoCodecParams(track),
+            ),
+            codecName: track.codec ?? 'unknown',
+          ),
+      ];
+
   static String _formatErikaVideoCodecParams(ErikaTrackInfo track) {
     final parts = <String>[
       if (track.codec != null) 'codec: ${track.codec}',
       if (track.profile != null) 'profile: ${track.profile}',
       if (track.level > 0) 'level: ${track.level}',
+      if (track.bitRate != null) 'bitRate: ${track.bitRate}',
       if (track.width > 0 && track.height > 0) '${track.width}x${track.height}',
+      if (track.framesPerSecond case final fps?) '${fps}fps',
       if (track.pixelFormat != null) 'format: ${track.pixelFormat}',
     ];
     return parts.isEmpty ? 'Erika Video' : parts.join(', ');
@@ -1883,6 +1973,8 @@ class ErikaPlayerAdapter
       if (track.sampleFormat != null) 'sampleFormat': track.sampleFormat,
       if (track.profile != null) 'profile': track.profile,
       if (track.level > 0) 'level': track.level,
+      if (track.bitRate != null) 'bitRate': track.bitRate,
+      if (track.framesPerSecond case final fps?) 'frameRate': fps,
     };
   }
 
@@ -1920,4 +2012,52 @@ class ErikaPlayerAdapter
       );
     }
   }
+}
+
+/// What Erika's `setSubtitleStyle` takes from the mpv subtitle properties
+/// NipaPlay sets, by argument name: colours `#RRGGBB` with `sub-opacity`
+/// (0–255) as their alpha, mpv alignment as the ASS numpad, the font only in
+/// the custom style (`sub-ass-override=force`, which also pushes the style
+/// onto ASS dialogue), as [fontFile] when the fonts folder holds it.
+@visibleForTesting
+Map<String, Object?> erikaSubtitleStyleFromMpv(Map<String, String> p,
+    {String? fontFile}) {
+  int? rgb(String? value) => value == null
+      ? null
+      : int.tryParse(value.replaceFirst('#', ''), radix: 16);
+  int? whole(String? value) => value == null ? null : int.tryParse(value);
+  double? number(String? value) =>
+      value == null ? null : double.tryParse(value);
+  bool? yes(String? value) => value == null ? null : value == 'yes';
+  final alpha = (whole(p['sub-opacity']) ?? 255).clamp(0, 255);
+  final color = rgb(p['sub-color']);
+  final border = rgb(p['sub-border-color']);
+  final row = switch (p['sub-align-y']) {
+    'top' => 6,
+    'center' => 3,
+    _ => 0,
+  };
+  final column = switch (p['sub-align-x']) {
+    'left' => 1,
+    'right' => 3,
+    _ => 2,
+  };
+  final force = p['sub-ass-override'] == 'force';
+  final font = force ? p['sub-font'] ?? '' : '';
+  final marginX = whole(p['sub-margin-x']);
+  return {
+    'primaryColorRgba': color == null ? null : (color << 8) | alpha,
+    'outlineColorRgba': border == null ? null : (border << 8) | alpha,
+    'outlineWidth': number(p['sub-border-size']),
+    'shadowDepth': number(p['sub-shadow-offset']),
+    'bold': yes(p['sub-bold']),
+    'italic': yes(p['sub-italic']),
+    'alignment': row + column,
+    'marginLeft': marginX,
+    'marginRight': marginX,
+    'marginVertical': whole(p['sub-margin-y']),
+    'fontFamily': fontFile == null ? font : '',
+    'fontFilePath': fontFile ?? '',
+    'overrideMask': force ? kErikaSubtitleOverrideAll : 0,
+  };
 }
