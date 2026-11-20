@@ -211,6 +211,86 @@ void main() {
   });
 
   group('npm packages', () {
+    Future<InstalledItem> install(String name,
+            {StoreKind kind = StoreKind.plugin}) =>
+        store.installNpm(name, version: '1.0.0', kind: kind);
+
+    test(
+        'preview reports both types without writing; installation uses the chosen type',
+        () async {
+      final tarball =
+          _tgz({'SKILL.md': 'A test skill', 'index.js': 'export {}'});
+      (server, registry) = await _registry({
+        'dual': (
+          _manifest('dual', tarball, extra: {
+            'keywords': ['dsh-plugin'],
+            'deprecated': 'test notice',
+          }),
+          tarball
+        ),
+        'dual-blocked': (
+          _manifest('dual-blocked', tarball, extra: {
+            'keywords': ['dsh-plugin'],
+            'dependencies': {'missing': '*'},
+          }),
+          tarball
+        ),
+      });
+      final preview = await store.resolveNpm('dual');
+      expect((
+        preview.requested,
+        preview.version,
+        preview.hasSkill,
+        preview.isPlugin
+      ), (
+        'latest',
+        '1.0.0',
+        true,
+        true
+      ));
+      expect(preview.deprecated, 'test notice');
+      expect(preview.options.values.every((option) => option.item != null),
+          isTrue);
+      expect(await store.root.exists(), isFalse);
+      final blocked = await store.resolveNpm('dual-blocked@1.0.0');
+      expect(blocked.options[StoreKind.plugin]!.reason, contains('missing'));
+      expect((await install('dual-blocked', kind: StoreKind.skill)).item.kind,
+          StoreKind.skill);
+      final plugin = await install('dual');
+      final skill = await install('dual', kind: StoreKind.skill);
+      expect(skill.item.id, plugin.item.id);
+      expect(skill.item.kind, StoreKind.skill);
+    });
+
+    test('legacy IDs belong to the original npm package, including on update',
+        () async {
+      final tarball = _tgz({'SKILL.md': 'A test skill'});
+      (server, registry) = await _registry({
+        for (final name in ['demo.part', 'demo-part'])
+          name: (_manifest(name, tarball), tarball),
+      });
+      final old = await install('demo.part', kind: StoreKind.skill);
+      final record = File(p.join(store.root.path, 'installed.json'));
+      final raw = jsonDecode(await record.readAsString()) as Map;
+      final legacy = (raw['items'] as List).single as Map;
+      legacy
+        ..['id'] = 'npm-demo-part'
+        ..['enabled'] = false
+        ..remove('npmPackage');
+      await record.writeAsString(jsonEncode(raw));
+      await Directory(p.join(store.root.path, 'skills', old.item.id))
+          .rename(p.join(store.root.path, 'skills', 'npm-demo-part'));
+      final other = await install('demo-part', kind: StoreKind.skill);
+      final updated = await install('demo.part', kind: StoreKind.skill);
+      expect(other.item.id, isNot(updated.item.id));
+      expect(other.enabled, isTrue);
+      expect(updated.item.id, 'npm-demo-part');
+      expect(updated.enabled, isFalse);
+      expect((await store.installed()).map((entry) => entry.item.npmPackage),
+          unorderedEquals(['demo.part', 'demo-part']));
+      expect(
+          await record.readAsString(), contains('"npmPackage": "demo.part"'));
+    });
     test(
         'a DSH plugin installs, links the runtime packages it shares, and '
         'is loaded by its own patch row', () async {
@@ -237,8 +317,9 @@ void main() {
           tarball
         ),
       });
-      final installed = await store.installNpm('dsh-example');
-      expect(installed.item.id, 'npm-dsh-example');
+      final installed = await install('dsh-example');
+      final id = NpmPackages.idFor('dsh-example');
+      expect(installed.item.id, id);
       expect(installed.item.reviewed, isFalse);
       expect(installed.item.category, 'model');
       expect(installed.item.notices.first, contains('没有经过审核'));
@@ -246,8 +327,7 @@ void main() {
       expect(facts.skipped, isEmpty);
       final row = facts.dshPlugins.single;
       expect(row['id'], 'llm-example');
-      final modules = p.join(
-          temp.path, 'store', 'plugins', 'npm-dsh-example', 'node_modules');
+      final modules = p.join(temp.path, 'store', 'plugins', id, 'node_modules');
       expect(row['name'], p.join(modules, 'dsh-example', 'lib', 'index.js'));
       for (final peer in ['@deepseek-ai/cordis', '@deepseek-ai/schemastery']) {
         final link = Link(p.joinAll([modules, ...peer.split('/')]));
@@ -258,7 +338,7 @@ void main() {
       // Under Codex no plugin loads; it says why.
       final codex = await store.hostFacts();
       expect(codex.dshPlugins, isEmpty);
-      expect(codex.skipped.keys, ['npm-dsh-example']);
+      expect(codex.skipped.keys, [id]);
     });
 
     test('a package with SKILL.md installs as a skill', () async {
@@ -270,7 +350,7 @@ void main() {
       (server, registry) = await _registry({
         'rika-skill-x': (_manifest('rika-skill-x', tarball), tarball),
       });
-      final installed = await store.installNpm('rika-skill-x@1.0.0');
+      final installed = await install('rika-skill-x', kind: StoreKind.skill);
       expect(installed.item.kind, StoreKind.skill);
       expect(installed.item.files.map((f) => f.path), ['SKILL.md', 'x.py']);
       expect((await store.hostFacts()).instructions,
@@ -292,7 +372,7 @@ void main() {
         ),
       });
       try {
-        await store.installNpm('bad-plugin');
+        await install('bad-plugin');
         return null;
       } on StoreFormatException catch (error) {
         return error.message;
@@ -330,7 +410,7 @@ void main() {
       expect(
           await refusal({'package.json': '{"name":"bad-plugin"}'},
               extra: {'keywords': <String>[]}),
-          contains('SKILL.md'));
+          contains('未声明'));
       expect(await store.installed(), isEmpty);
     });
 
@@ -346,7 +426,7 @@ void main() {
         ),
       });
       await expectLater(
-          store.installNpm('bad-plugin'), throwsA(isA<StoreFetchException>()));
+          install('bad-plugin'), throwsA(isA<StoreFetchException>()));
     });
 
     test('links and symlinks in a tarball are never written', () {
@@ -363,8 +443,11 @@ void main() {
       expect(NpmPackages.parseSpec('dsh-x'), ('dsh-x', 'latest'));
       expect(() => NpmPackages.parseSpec('../evil'),
           throwsA(isA<StoreFormatException>()));
-      expect(NpmPackages.idFor('@huai_xin/dsh-workbuddy'),
-          'npm-huai-xin-dsh-workbuddy');
+      expect(storeId(NpmPackages.idFor('@huai_xin/dsh-workbuddy')), isTrue);
+      expect(NpmPackages.idFor('demo.part'),
+          isNot(NpmPackages.idFor('demo-part')));
+      expect(NpmPackages.idFor('${'a' * 60}-a'),
+          isNot(NpmPackages.idFor('${'a' * 60}-b')));
     });
   });
 
@@ -394,18 +477,19 @@ void main() {
           tarball
         ),
       });
-      final installed = await store.installNpm('nipa-evil');
-      expect(installed.item.dsh.single.id, 'npm-nipa-evil');
+      final installed = await store.installNpm('nipa-evil',
+          version: '1.0.0', kind: StoreKind.plugin);
+      final id = NpmPackages.idFor('nipa-evil');
+      expect(installed.item.dsh.single.id, id);
       // A record this version cannot read (written by another, or damaged).
       final file = File(p.join(temp.path, 'store', 'installed.json'));
       final raw = jsonDecode(await file.readAsString()) as Map;
       (raw['items'] as List).add({'id': 'broken', 'kind': 'theme'});
       await file.writeAsString(jsonEncode(raw));
-      expect(
-          (await store.installed()).map((i) => i.item.id), ['npm-nipa-evil']);
+      expect((await store.installed()).map((i) => i.item.id), [id]);
       expect(store.unreadable.keys, ['broken']);
       // Saving keeps it; removing it drops it.
-      await store.setEnabled('npm-nipa-evil', false);
+      await store.setEnabled(id, false);
       expect(await file.readAsString(), contains('"broken"'));
       await store.remove('broken');
       expect(await file.readAsString(), isNot(contains('"broken"')));
@@ -457,8 +541,9 @@ void main() {
       expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
 
       // An install stuck in a download, and a host starting meanwhile.
-      unawaited(
-          store.installNpm('stuck').then<void>((_) {}, onError: (Object _) {}));
+      unawaited(store
+          .installNpm('stuck', version: '1.0.0', kind: StoreKind.skill)
+          .then<void>((_) {}, onError: (Object _) {}));
       await Future<void>.delayed(const Duration(milliseconds: 200));
       final facts = await store
           .hostFacts(runtimeModules: runtime)

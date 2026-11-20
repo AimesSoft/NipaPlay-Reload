@@ -15,6 +15,7 @@ void main() {
   late RikaStore store;
   late Harness harness;
   var restarts = 0;
+  late StoreApplyResult restartResult;
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('store-capability-');
@@ -62,8 +63,12 @@ void main() {
         registries: () async => ['http://127.0.0.1:9'],
         provided: () async => null);
     restarts = 0;
+    restartResult = const StoreApplyResult.restarted();
     harness = Harness([
-      StoreCapability(store, restart: () async => restarts++),
+      StoreCapability(store, restart: () async {
+        restarts++;
+        return restartResult;
+      }),
     ]);
   });
   tearDown(() async {
@@ -85,8 +90,9 @@ void main() {
     expect(item['id'], 'dmhy');
     expect(item['reviewed'], isTrue);
     expect(item['installedVersion'], isNull);
-    expect(value(await call('store.readme', {'id': 'dmhy'}))['readme'],
-        contains('动漫花园'));
+    expect(value(await call('store.readme', {'id': 'dmhy'})),
+        containsPair('version', '1.1.0'));
+    expect(item['versionSource'], 'officialIndex');
 
     final installed = value(await call(
         'store.install', {'id': 'dmhy', 'version': '1.1.0'},
@@ -96,6 +102,8 @@ void main() {
     final after = value(await call('store.list', {}));
     expect(((after['official'] as List).single as Map)['installedVersion'],
         '1.1.0');
+    expect((after['official'] as List).single,
+        containsPair('installedVersionSource', 'installedRecord'));
 
     await store.hostFacts();
     final started = value(await call('store.list', {}, origin: 'agent:x'));
@@ -112,14 +120,33 @@ void main() {
   });
 
   test('agent reaches the npm registry and can restart 梨花', () async {
-    final npm =
-        await call('store.install', {'npm': 'some-plugin'}, origin: 'agent:x');
+    final preview = value(await call(
+        'store.resolve_npm', {'npm': 'some-plugin'},
+        origin: 'agent:x'));
+    expect(preview, containsPair('requested', 'latest'));
+    expect(preview, containsPair('installable', false));
+    final npm = await call(
+        'store.install',
+        {
+          'npm': 'some-plugin',
+          'version': '1.0.0',
+          'kind': 'plugin',
+        },
+        origin: 'agent:x');
     expect((npm as Failed).failure.code, FailureCode.unavailable);
     expect(value(await call('store.apply', {}, origin: 'agent:x')),
-        {'restarted': true});
+        {'status': 'restarted', 'restarted': true});
     expect(restarts, 1);
-    expect(value(await call('store.apply', {})), {'restarted': true});
-    expect(restarts, 2);
+    restartResult = const StoreApplyResult.notRun('endpoint not running');
+    expect(value(await call('store.apply', {})), {
+      'status': 'notRun',
+      'restarted': false,
+      'reason': 'endpoint not running'
+    });
+    restartResult = const StoreApplyResult.failed('startup failed');
+    expect(value(await call('store.apply', {})),
+        {'status': 'failed', 'restarted': false, 'error': 'startup failed'});
+    expect(restarts, 3);
   });
 
   test('exactly one of id or npm', () async {

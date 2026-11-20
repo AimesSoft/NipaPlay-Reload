@@ -16,7 +16,8 @@ final class UiStoreItem {
     this.notices = const [],
     this.installedVersion,
     this.enabled,
-    this.updateAvailable = false,
+    this.versionDiffers = false,
+    this.versionSource,
     this.notLoaded,
   });
 
@@ -28,7 +29,8 @@ final class UiStoreItem {
   /// Null when not installed.
   final String? installedVersion;
   final bool? enabled;
-  final bool updateAvailable;
+  final bool versionDiffers;
+  final String? versionSource;
 
   /// Why the last start of 梨花 left this plugin out.
   final String? notLoaded;
@@ -55,7 +57,8 @@ final class UiStoreItem {
             ? raw['version'] as String
             : raw['installedVersion'] as String?,
         enabled: raw['enabled'] as bool?,
-        updateAvailable: raw['updateAvailable'] == true,
+        versionDiffers: raw['versionDiffers'] == true,
+        versionSource: raw['versionSource'] as String?,
         notLoaded: notLoaded,
       );
 }
@@ -96,23 +99,34 @@ final class NextRikaStore {
       official: official,
       fromNpm: [
         for (final raw in (r['installed'] as List).cast<Map>())
-          if (!listed.contains(raw['id']))
-            UiStoreItem.from(raw, installed: true, notLoaded: notLoaded[raw['id']])
+          if (raw['reviewed'] != true || !listed.contains(raw['id']))
+            UiStoreItem.from(raw,
+                installed: true, notLoaded: notLoaded[raw['id']])
       ],
       listProblem: r['listProblem'] as String?,
     );
   }
 
-  Future<String?> readme(String id) async =>
-      (await calls.call('store.readme', {'id': id}))['readme'] as String?;
+  Future<({String version, String? text})> readme(String id) async {
+    final result = await calls.call('store.readme', {'id': id});
+    return (
+      version: result['version'] as String,
+      text: result['readme'] as String?
+    );
+  }
+
+  Future<JsonMap> resolveNpm(String spec) =>
+      calls.call('store.resolve_npm', {'npm': spec});
 
   /// From the list ([id] at the [version] whose notices were shown), or the
   /// npm package [npm].
-  Future<JsonMap> install({String? id, String? version, String? npm}) =>
+  Future<JsonMap> install(
+          {String? id, String? version, String? npm, String? kind}) =>
       calls.call('store.install', {
         if (id != null) 'id': id,
         if (version != null) 'version': version,
         if (npm != null) 'npm': npm,
+        if (kind != null) 'kind': kind,
       });
 
   Future<void> setEnabled(String id, bool enabled) =>
@@ -121,5 +135,5 @@ final class NextRikaStore {
   Future<void> remove(String id) => calls.call('store.remove', {'id': id});
 
   /// Restarts 梨花 so what changed takes effect.
-  Future<void> apply() => calls.call('store.apply', {});
+  Future<JsonMap> apply() => calls.call('store.apply', {});
 }

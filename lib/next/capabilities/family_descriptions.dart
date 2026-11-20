@@ -368,10 +368,10 @@ Classic 与 Next 使用各自的播放会话；部分设置、观看记录和进
   'discover': r'''弹弹play 每日放送与推荐。''',
   'plugins': r'''应用插件。''',
   'store': r'''梨花的商店：技能（说明加脚本，装在本机 store/skills/<id>/）和 DeepSeek Harness 插件（store/plugins/<id>/，只在 DSH 下加载）。
-- list 读取官方列表与本机已装条目，含版本、启用、可更新和上次启动没加载的插件及原因；readme 读取官方条目的说明。
-- install 只装用户要求的扩展。安装前告诉用户官方条目的 notices，或说明 npm 包未经审核、以用户账户权限运行，能读写文件和联网。官方条目的 version 对应已告知须知的版本，版本变化会返回冲突。
-- enable 开关、remove 卸载。apply 立即重启宿主，结束所有进行中的回合及会话子任务。已保存的对话、跟进记录和定时保留；成功重启发布可供跟进订阅的 store.applied（objectId 为 local）。list 区分已装状态与上次启动的加载选择及跳过原因。
-- 已装技能的说明路径在你的提示里；运行技能脚本取得的是证据，保存、下载、订阅仍按授权规则经 nipa 进行。''',
+- list 报告已装版本、列表版本及来源、启用状态和上次启动的加载选择及跳过原因。版本不同不代表升级。readme 带说明对应的版本。
+- resolve_npm 只读解析标签或版本，报告实际版本、弃用信息、根目录 SKILL.md、DSH 插件声明以及各类型是否可装和原因。install 按用户要求安装；安装前告知官方条目的 notices，或 npm 包未经审核、以用户账户权限运行，能读写文件和联网。官方安装指定 ID 与版本；npm 安装指定原始包名、确切版本和类型。
+- enable 开关、remove 卸载。apply 立即重启正在运行的宿主，结束进行中的回合及会话子任务；回执区分已重启、未执行及原因、失败及错误。已保存的对话、跟进记录和定时保留；成功重启发布可供跟进订阅的 store.applied（objectId 为 local）。
+- 已装技能的说明文件为 store/skills/<id>/SKILL.md，提示中包含实际路径。''',
   'media.sources': r'''SMB、WebDAV 文件来源。
 - list 读取配置与已有观察，不联系来源、不读取凭据。add/update 配置地址和用户名，login 单独登录；可在明确用户授权后使用 password 与 userAuthorization，未提供密码时打开登录窗口。任务输入和回执不保存秘密。
 - browse/sync 发现文件并保留来源目录事实；原生身份命名空间是 https://sources.nipaplay.app，已有 ID 格式保持不变。用户与梨花通过明确匹配建立作品身份，刷新不改人工绑定和覆盖。

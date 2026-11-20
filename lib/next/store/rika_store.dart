@@ -101,6 +101,8 @@ final class RikaStore {
   /// Why the official list could not be read last time (shown with the copy
   /// kept from before, if any).
   String? get listProblem => _listProblem;
+  String get listVersionSource =>
+      _listProblem == null ? 'officialIndex' : 'cachedOfficialIndex';
 
   /// The official list: fetched at most every [cacheFor], else the copy
   /// from the last fetch.
@@ -243,23 +245,54 @@ final class RikaStore {
         return _install(item, null);
       });
 
-  /// Installs the npm package [spec] (`name` or `name@version`), unreviewed.
-  Future<InstalledItem> installNpm(String spec) => _serial(() async {
-        final resolution =
-            await NpmPackages(fetch, registries: await registries())
-                .resolve(spec, provided: await provided?.call());
-        final existing = (await installed())
-            .where((i) => i.item.id == resolution.item.id)
-            .firstOrNull;
-        if (existing != null && existing.item.origin != StoreOrigin.npm) {
-          throw StoreFormatException('已经装了同名的官方条目 ${existing.item.id}');
-        }
-        return _install(resolution.item, resolution.tarball);
+  Future<NpmResolution> resolveNpm(String spec, {String? exactVersion}) async {
+    final (name, _) = NpmPackages.parseSpec(spec);
+    final items = await installed();
+    final id = items
+            .where((entry) => entry.item.npmPackage == name)
+            .firstOrNull
+            ?.item
+            .id ??
+        NpmPackages.idFor(name);
+    final problem = _identityProblem(id, StoreOrigin.npm, name, items);
+    return NpmPackages(fetch, registries: await registries()).resolve(spec,
+        provided: await provided?.call(),
+        exactVersion: exactVersion,
+        id: id,
+        identityProblem: problem);
+  }
+
+  Future<InstalledItem> installNpm(String name,
+          {required String version, required StoreKind kind}) =>
+      _serial(() async {
+        final resolution = await resolveNpm(name, exactVersion: version);
+        final choice = resolution.options[kind]!;
+        final item =
+            choice.item ?? (throw StoreFormatException(choice.reason!));
+        return _install(item, resolution.files);
       });
 
-  Future<InstalledItem> _install(StoreItem item, List<int>? tarball) async {
+  String? _identityProblem(String id, StoreOrigin origin, String? npmPackage,
+      List<InstalledItem> items) {
+    if (_unreadable.containsKey(id) ||
+        items.any((entry) =>
+            entry.item.id == id &&
+            (entry.item.origin != origin ||
+                entry.item.npmPackage != npmPackage))) {
+      return '条目 ID $id 已由其他或不可读取的条目占用';
+    }
+    return null;
+  }
+
+  Future<InstalledItem> _install(
+      StoreItem item, Map<String, Uint8List>? npmFiles) async {
     // What is saved must read back: checked before anything is written.
     StoreItem.parse(item.toJson(), origin: item.origin);
+    final items = await installed();
+    final problem =
+        _identityProblem(item.id, item.origin, item.npmPackage, items);
+    if (problem != null) throw StoreChanged(problem);
+    final before = items.where((entry) => entry.item.id == item.id).firstOrNull;
     final folder = Directory(p.join(
         item.kind == StoreKind.skill ? _skills.path : _plugins.path, item.id));
     final staging = Directory('${folder.path}.pending');
@@ -267,10 +300,9 @@ final class RikaStore {
     await staging.create(recursive: true);
     try {
       if (item.kind == StoreKind.skill) {
-        if (tarball != null) {
-          final files = readPackageTarball(tarball);
+        if (npmFiles != null) {
           await writePackageFiles({
-            for (final f in item.files) f.path: files[f.path]!,
+            for (final f in item.files) f.path: npmFiles[f.path]!,
           }, staging);
         } else {
           for (final file in item.files) {
@@ -286,15 +318,14 @@ final class RikaStore {
       } else {
         final registries = await this.registries();
         for (final package in item.packages) {
-          final bytes = tarball != null && item.packages.length == 1
-              ? tarball
-              : await fetch.bytes(
+          final files = npmFiles ??
+              readPackageTarball(await fetch.bytes(
                   [for (final r in registries) Uri.parse('$r/${package.url}')],
                   sha256Hex: package.sha256,
                   integrity: package.integrity,
                   size: package.bytes,
-                  maxBytes: maxPackageBytes);
-          await writePackageFiles(readPackageTarball(bytes),
+                  maxBytes: maxPackageBytes));
+          await writePackageFiles(files,
               Directory(p.joinAll([staging.path, ...package.path.split('/')])));
         }
         for (final row in item.dsh) {
@@ -308,8 +339,6 @@ final class RikaStore {
       if (await staging.exists()) await staging.delete(recursive: true);
       rethrow;
     }
-    final items = await installed();
-    final before = items.where((i) => i.item.id == item.id).firstOrNull;
     final installed_ = InstalledItem(item,
         enabled: before?.enabled ?? true, at: DateTime.now().toUtc());
     // The old files stay until the record of the new ones is saved; if it
@@ -336,6 +365,16 @@ final class RikaStore {
       await old
           .delete(recursive: true)
           .then<void>((_) {}, onError: (Object _) {});
+    }
+    if (before != null && before.item.kind != item.kind) {
+      final previous = Directory(p.join(
+          before.item.kind == StoreKind.skill ? _skills.path : _plugins.path,
+          item.id));
+      if (await previous.exists()) {
+        await previous
+            .delete(recursive: true)
+            .then<void>((_) {}, onError: (Object _) {});
+      }
     }
     _changes.add(null);
     return installed_;
@@ -377,35 +416,8 @@ final class RikaStore {
   /// `main`, then `index.js`, always inside the package.
   static Future<File> _entry(Directory package) async {
     final manifest = File(p.join(package.path, 'package.json'));
-    String? relative;
-    if (await manifest.exists()) {
-      final raw = jsonDecode(await manifest.readAsString());
-      if (raw is Map) {
-        Object? exported = raw['exports'];
-        if (exported is Map && exported.containsKey('.'))
-          exported = exported['.'];
-        if (exported is Map) {
-          exported = exported['import'] ??
-              exported['node'] ??
-              exported['default'] ??
-              exported['require'];
-          if (exported is Map) exported = exported['default'];
-        }
-        relative = exported is String
-            ? exported
-            : raw['main'] is String
-                ? raw['main'] as String
-                : null;
-      }
-    }
-    relative ??= 'index.js';
-    final candidates = [
-      relative,
-      if (p.extension(relative).isEmpty) ...[
-        '$relative.js',
-        '$relative/index.js'
-      ],
-    ];
+    final candidates = packageEntryCandidates(
+        await manifest.exists() ? await manifest.readAsBytes() : null);
     for (final candidate in candidates) {
       final file = File(p.normalize(p.join(package.path, candidate)));
       if (p.isWithin(package.path, file.path) && await file.exists()) {
@@ -510,10 +522,8 @@ final class RikaStore {
     final lines = [
       '## 已安装的扩展技能',
       '',
-      '这些技能是用户从梨花的商店安装的，各在自己的文件夹里。用到时先读它的 SKILL.md，'
-          '按说明运行，把说明里的 `<skill>` 换成技能的文件夹。技能取得的结果同样是证据，'
-          '保存、下载、订阅仍按上面的授权规则经 `nipa` 进行。标为“未审核”的技能来自用户'
-          '自己指定的 npm 包，运行前先确认它做的事符合用户的请求。',
+      '这些技能来自梨花的商店。各自的目录和 SKILL.md 路径列在下方。'
+          '未审核技能来自 npm，其脚本以用户账户权限运行。',
       '',
     ];
     for (final skill in skills) {

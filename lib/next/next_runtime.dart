@@ -6,7 +6,7 @@ import 'knowledge/capability.dart';
 import 'dart:io';
 import 'followups/service.dart';
 import 'store/capability.dart'
-    show storeAppliedEvent, storeAppliedObject, storeAppliedFacts;
+    show StoreApplyResult, storeAppliedEvent, storeAppliedObject, storeAppliedFacts;
 import 'platform/background_activity.dart';
 import 'platform/loop_lag.dart';
 import 'player/classic/classic_boundary.dart';
@@ -623,7 +623,7 @@ final class NextRuntime extends ChangeNotifier {
                 File('${labRoot.path}/codex-home/config.toml').existsSync()
             ? AgentRuntimeKind.codex
             : AgentRuntimeKind.dsh,
-        runtimeChanged: _restartChat,
+        runtimeChanged: () async { await _restartChat(); },
         codex: LabProfile.active || !desktop
             ? null
             : CodexRuntime.desktop(
@@ -830,6 +830,7 @@ final class NextRuntime extends ChangeNotifier {
       if (await _hostSettings!.effectiveRuntime() == AgentRuntimeKind.dsh) {
         dsh = await _hostSettings!.dshLaunchRuntime();
         if (dsh == null) {
+          chatError = 'The runtime is not installed.';
           // Nothing to start until the runtime is there; settings say so.
           await ServiceProvider.nextCore.followups
               .attach(null, reason: 'The runtime is not installed.');
@@ -926,12 +927,22 @@ final class NextRuntime extends ChangeNotifier {
   }
 
   /// The runtime was switched: the running host goes, the other one starts.
-  Future<void> _restartChat({bool applyStore = false}) async {
-    if (_disposed || !_open) return;
-    var restarted = false;
-    _operations = _operations.then((_) async {
-      if (_disposed || !_open) return;
-      if (_endpointStatus case AgentEndpointRunning(:final repository)) {
+  Future<StoreApplyResult> _restartChat({bool applyStore = false}) async {
+    if (_disposed || !_open) {
+      return const StoreApplyResult.notRun('The host is closed.');
+    }
+    final operation = _operations.then((_) async {
+      if (_disposed || !_open) {
+        return const StoreApplyResult.notRun('The host is closed.');
+      }
+      final endpoint = _endpointStatus;
+      if (endpoint is! AgentEndpointRunning) {
+        return const StoreApplyResult.notRun('The agent endpoint is not running.');
+      }
+      if (applyStore && chat?.available != true) {
+        return StoreApplyResult.notRun(chatError ?? 'The conversation host is not running.');
+      }
+      try {
         final followups = ServiceProvider.nextCore.followups;
         final selected = applyStore ? chat?.threadId : null;
         await followups.attach(null,
@@ -941,20 +952,26 @@ final class NextRuntime extends ChangeNotifier {
         await chat?.close();
         chat = null;
         chatError = null;
-        await _startChat(repository, resumeThreadId: selected);
-        restarted = chat?.available == true && chatError == null;
-        notifyListeners();
+        await _startChat(endpoint.repository, resumeThreadId: selected);
+        if (!_disposed) notifyListeners();
+        if (chat?.available != true || chatError != null) {
+          return StoreApplyResult.failed(chatError ?? 'The conversation host did not start.');
+        }
+        if (applyStore) {
+          try {
+            await followups.hookEvent(storeAppliedEvent, storeAppliedObject, storeAppliedFacts());
+          } catch (error) {
+            return StoreApplyResult.restarted(eventError: redactHarnessText('$error'));
+          }
+        }
+        return const StoreApplyResult.restarted();
+      } catch (error) {
+        if (!applyStore) rethrow;
+        return StoreApplyResult.failed(redactHarnessText('$error'));
       }
     });
-    await _operations;
-    if (applyStore) {
-      if (!restarted) {
-        throw Failure(FailureCode.unavailable,
-            chatError ?? 'The conversation host did not restart.');
-      }
-      await ServiceProvider.nextCore.followups.hookEvent(storeAppliedEvent,
-          storeAppliedObject, storeAppliedFacts());
-    }
+    _operations = operation.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return operation;
   }
 
   Future<UiModelCheck> _checkCodexModel() async {

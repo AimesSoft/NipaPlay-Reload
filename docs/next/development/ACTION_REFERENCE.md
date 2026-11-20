@@ -362,12 +362,13 @@ errors 为字符串数组。时间为 ISO-8601。所有判断归巡查脚本，�
 
 | Action | Effect | 用途或限制 | 宿主代码 | Mesh | 定义 |
 | --- | --- | --- | --- | --- | --- |
-| `store.list` | read | 官方与已装条目、版本、启用、更新、须知和上次启动的加载选择与跳过原因；插件交给 DSH 不等于通过健康检查。refresh 立即重读列表 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
-| `store.readme` | read | id；官方条目的说明，按列表的 SHA-256 校验 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
-| `store.install` | write | id + version（官方列表；须知对应的版本，版本变化则冲突）或 npm（`name`/`name@version`）二选一；只装用户要求的扩展，安装前告知须知或 npm 未审核及用户权限风险；不运行安装脚本 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.list` | read | 官方与已装条目、版本及来源、版本差异、启用、须知和上次启动的加载选择与跳过原因；插件交给 DSH 不等于通过健康检查。refresh 立即重读列表 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.readme` | read | id；官方条目的说明及内容对应版本，按列表的 SHA-256 校验 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.resolve_npm` | read | npm（`name` 或 `name@tag/version`）；返回请求、解析版本、根目录 SKILL.md、DSH 插件声明、弃用信息及各类型的可安装性和原因；不安装 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.install` | write | id + version（官方列表；须知对应的版本，版本变化则冲突）或 npm + version + kind（包名、确切版本、skill/plugin）；按用户要求安装，安装前告知须知或 npm 未审核及用户权限风险；不运行安装脚本 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
 | `store.enable` | write | id、enabled；不卸载地停用或启用 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
 | `store.remove` | destructive | id；删除条目及其文件，插件存在 DSH 自己数据里的设置和登录保留 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
-| `store.apply` | write | 立即重启对话宿主，结束进行中的回合和会话子任务；保存的对话、跟进记录和定时保留。成功后发布可订阅的 `store.applied`（`objectId: local`） | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
+| `store.apply` | write | 立即重启正在运行的对话宿主，结束进行中的回合和会话子任务；保存的对话、跟进记录和定时保留。回执为 `restarted`、`notRun`（reason）或 `failed`（error）。重启成功后发布可订阅的 `store.applied`（`objectId: local`）；事件发布错误单独报告 | GUI Core / Headless | 本地 | [源码](../../../lib/next/store/capability.dart) |
 
 改动在对话宿主下次启动时生效。技能装在 `<Next 数据>/store/skills/<id>/`，启动时把名称、说明和 SKILL.md 路径写进梨花的提示；
 插件装在 `store/plugins/<id>/`，运行环境提供的包以链接接入，只在 DeepSeek Harness 下加载。格式与审核规则见

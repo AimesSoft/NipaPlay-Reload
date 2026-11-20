@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../store/rika_store.dart';
 import '../store/capability.dart'
-    show storeAppliedEvent, storeAppliedObject, storeAppliedFacts;
+    show StoreApplyResult, storeAppliedEvent, storeAppliedObject, storeAppliedFacts;
 
 import '../agent_endpoint.dart';
 import '../chat/chat_host.dart';
@@ -171,22 +171,32 @@ final class HeadlessNipa {
   /// reaches it at its next turn).
   /// Stops a running host and brings Nipa up again, so what the store
   /// changed takes effect.
-  Future<void> restart() async {
+  Future<StoreApplyResult> restart() async {
     final next = _chain.then((_) async {
-      final selected = host?.threadId;
-      await _stopHost('Restarting for store changes.');
-      await _reconcile(resumeThreadId: selected);
-    }).catchError((Object error, StackTrace stack) {
-      _fail('Nipa could not be brought up: ${redactHarnessText('$error')}');
+      if (_closed) return const StoreApplyResult.notRun('The host is closed.');
+      final running = host;
+      if (running == null) {
+        return StoreApplyResult.notRun(_reason ?? 'The conversation host is not running.');
+      }
+      try {
+        final selected = running.threadId;
+        await _stopHost('Restarting for store changes.');
+        await _reconcile(resumeThreadId: selected);
+      } catch (error) {
+        _fail('Nipa could not be brought up: ${redactHarnessText('$error')}');
+      }
+      if (host == null) {
+        return StoreApplyResult.failed(_reason ?? 'The conversation host did not restart.');
+      }
+      try {
+        await followups.hookEvent(storeAppliedEvent, storeAppliedObject, storeAppliedFacts());
+      } catch (error) {
+        return StoreApplyResult.restarted(eventError: redactHarnessText('$error'));
+      }
+      return const StoreApplyResult.restarted();
     });
-    _chain = next;
-    await next;
-    if (host == null) {
-      throw Failure(FailureCode.unavailable,
-          _reason ?? 'The conversation host did not restart.');
-    }
-    await followups.hookEvent(
-        storeAppliedEvent, storeAppliedObject, storeAppliedFacts());
+    _chain = next.then<void>((_) {});
+    return next;
   }
 
   Future<void> reload() {
