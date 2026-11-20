@@ -260,7 +260,8 @@ class LocalMediaManagementApi {
     }
 
     try {
-      final files = await _collectWebDavVideoFiles(connection, folderPath);
+      final files =
+          await _webdavService.collectLibraryVideos(connection, folderPath);
       if (files.isEmpty) {
         return _jsonOk({
           'success': true,
@@ -427,7 +428,8 @@ class LocalMediaManagementApi {
 
     try {
       await SMBProxyService.instance.initialize();
-      final files = await _collectSmbVideoFiles(connection, folderPath);
+      final files =
+          await _smbService.collectLibraryVideos(connection, folderPath);
       if (files.isEmpty) {
         return _jsonOk({
           'success': true,
@@ -471,49 +473,6 @@ class LocalMediaManagementApi {
     if (value is double) return value.toInt();
     if (value is String) return int.tryParse(value);
     return null;
-  }
-
-  Future<List<WebDAVFile>> _collectWebDavVideoFiles(
-    WebDAVConnection connection,
-    String folderPath,
-  ) async {
-    final List<WebDAVFile> videoFiles = [];
-    try {
-      final files = await _webdavService.listDirectory(connection, folderPath);
-      for (final file in files) {
-        if (file.isDirectory) {
-          final subFiles =
-              await _collectWebDavVideoFiles(connection, file.path);
-          videoFiles.addAll(subFiles);
-        } else if (_webdavService.isVideoFile(file.name)) {
-          videoFiles.add(file);
-        }
-      }
-    } catch (e) {
-      print('获取WebDAV视频文件失败: $e');
-    }
-    return videoFiles;
-  }
-
-  Future<List<SMBFileEntry>> _collectSmbVideoFiles(
-    SMBConnection connection,
-    String folderPath,
-  ) async {
-    final List<SMBFileEntry> videoFiles = [];
-    try {
-      final files = await _smbService.listDirectory(connection, folderPath);
-      for (final file in files) {
-        if (file.isDirectory) {
-          final nested = await _collectSmbVideoFiles(connection, file.path);
-          videoFiles.addAll(nested);
-        } else if (_smbService.isVideoFile(file.name)) {
-          videoFiles.add(file);
-        }
-      }
-    } catch (e) {
-      print('获取SMB视频文件失败: $e');
-    }
-    return videoFiles;
   }
 
   Future<_RemoteScrapeResult> _scrapeRemoteFiles({

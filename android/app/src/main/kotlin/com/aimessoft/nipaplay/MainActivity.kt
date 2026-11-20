@@ -829,25 +829,35 @@ class MainActivity: FlutterActivity() {
         }
 
         val output = mutableListOf<Map<String, Any>>()
-        collectSafVideoFiles(root, "", output)
+        collectSafVideoFiles(root.listFiles(), "", output)
         return output.sortedBy { it["relativePath"] as String }
     }
 
+    private fun hasSafBdmvMarker(entries: Array<DocumentFile>): Boolean = entries.any { entry ->
+        val name = entry.name
+        ("index.bdmv".equals(name, ignoreCase = true) ||
+            "MovieObject.bdmv".equals(name, ignoreCase = true)) && entry.isFile
+    }
+
     private fun collectSafVideoFiles(
-        current: DocumentFile,
+        entries: Array<DocumentFile>,
         relativePrefix: String,
         output: MutableList<Map<String, Any>>
     ) {
-        for (entry in current.listFiles()) {
+        val directories = mutableListOf<Pair<String, DocumentFile>>()
+        val bdmvListings = mutableMapOf<DocumentFile, Array<DocumentFile>>()
+        var hasDisc = false
+        for (entry in entries) {
             val name = entry.name ?: continue
-            val relativePath = if (relativePrefix.isEmpty()) {
-                name
-            } else {
-                "$relativePrefix$name"
-            }
+            val relativePath = "$relativePrefix$name"
 
             if (entry.isDirectory) {
-                collectSafVideoFiles(entry, "$relativePath/", output)
+                directories.add(name to entry)
+                if (name.equals("BDMV", ignoreCase = true)) {
+                    val listing = entry.listFiles()
+                    bdmvListings[entry] = listing
+                    hasDisc = hasDisc || hasSafBdmvMarker(listing)
+                }
                 continue
             }
 
@@ -869,6 +879,17 @@ class MainActivity: FlutterActivity() {
                     "modifiedMillis" to modifiedMillis,
                     "fileHash" to fileHash
                 )
+            )
+        }
+
+        for ((name, directory) in directories) {
+            if (hasDisc &&
+                    (name.equals("CERTIFICATE", ignoreCase = true) ||
+                        name.equals("menu", ignoreCase = true))) continue
+            collectSafVideoFiles(
+                bdmvListings[directory] ?: directory.listFiles(),
+                "$relativePrefix$name/",
+                output
             )
         }
     }
