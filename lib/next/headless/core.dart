@@ -85,6 +85,7 @@ import '../mesh/library_capability.dart';
 import '../mesh/capability.dart';
 import '../mesh/delivery.dart';
 import '../mesh/chat_guest_host.dart';
+import '../mesh/chat_attachment.dart';
 import '../mesh/delegation.dart';
 import '../mesh/delegation_host.dart';
 import '../mesh/delegation_wiring.dart';
@@ -425,6 +426,7 @@ final class HeadlessCore {
         DanmakuCapability(danmaku),
         SettingsCapability(settings),
         FollowupCapability(followups),
+        ChatAttachmentCapability(mesh.rpc),
         StoreCapability(store, restart: () => nipa.restart()),
         UiDataCapability(uiData),
         LibraryCapability(libraryData),

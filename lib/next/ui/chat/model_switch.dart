@@ -167,7 +167,7 @@ class ModelSheet extends StatefulWidget {
 
 class _ModelSheetState extends State<ModelSheet> {
   UiModelSetup? _setup;
-  List<String>? _listed;
+  UiModelCandidates? _listed;
   bool _busy = false;
   String? _said;
 
@@ -182,12 +182,8 @@ class _ModelSheetState extends State<ModelSheet> {
       final setup = await widget.host.model();
       if (!mounted) return;
       setState(() => _setup = setup);
-      if (setup.source == UiModelSource.nipaplay && setup.hasKey) {
-        final listed = await widget.host.providerModels();
-        if (mounted) setState(() => _listed = listed);
-      } else {
-        setState(() => _listed = const []);
-      }
+      final listed = await widget.host.providerModels();
+      if (mounted) setState(() => _listed = listed);
     } catch (error) {
       if (mounted) setState(() => _said = callFailure(error));
     }
@@ -232,16 +228,15 @@ class _ModelSheetState extends State<ModelSheet> {
             model.api != UiModelApi.chat)
           model
     ];
-    final others = setup == null
-        ? const <String>[]
-        : [
-            for (final id in _listed ?? const <String>[])
-              if (!recent.any((r) =>
-                  r.model == id &&
-                  r.provider == setup.provider &&
-                  r.baseUrl == setup.baseUrl))
-                id
-          ];
+    final others = [
+      for (final choice in _listed?.choices ?? const <UiModelChoice>[])
+        if (!recent.any((saved) =>
+            saved.model == choice.model &&
+            saved.provider == choice.provider &&
+            saved.baseUrl == choice.baseUrl &&
+            (saved.api ?? UiModelApi.responses) == choice.api))
+          choice
+    ];
     return SheetSurface(
       padding: const EdgeInsets.fromLTRB(24, 20, 18, 20),
       child: Column(
@@ -259,10 +254,7 @@ class _ModelSheetState extends State<ModelSheet> {
                 glyph: NextGlyph.close, label: '关闭', onTap: widget.onClose),
           ]),
           const SizedBox(height: 4),
-          Text(
-              widget.chat.running
-                  ? '这一轮说完后换用，正在进行的不受影响。'
-                  : '从下一句开始换用。',
+          Text(widget.chat.running ? '这一轮说完后换用，正在进行的不受影响。' : '从下一句开始换用。',
               style: NextText.sans(12.5, color: NextColors.p3)),
           if (_said case final said?) ...[
             const SizedBox(height: 10),
@@ -306,26 +298,40 @@ class _ModelSheetState extends State<ModelSheet> {
                                   ? null
                                   : () => _choose(choiceOf(model))),
                       ],
-                      if (setup.source == UiModelSource.nipaplay &&
-                          setup.hasKey) ...[
-                        _Heading('${setup.provider ?? '这个服务'}还提供'),
+                      ...[
+                        const _Heading('候选模型'),
                         if (_listed == null)
                           const Padding(
                               padding: EdgeInsets.symmetric(vertical: 10),
                               child: ThinkingDots())
-                        else if (others.isEmpty)
+                        else if (_listed!.status !=
+                                UiModelQueryStatus.succeeded ||
+                            others.isEmpty)
                           Padding(
                               padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text('没有列出别的模型',
+                              child: Text(
+                                  switch (_listed!.status) {
+                                    UiModelQueryStatus.succeeded => '没有列出别的模型',
+                                    UiModelQueryStatus.failed =>
+                                      '候选查询失败：${_listed!.reason}',
+                                    UiModelQueryStatus.unavailable =>
+                                      '候选查询不可用：${_listed!.reason}',
+                                  },
                                   style: NextText.sans(12.5,
                                       color: NextColors.p4)))
                         else
-                          for (final id in others)
+                          for (final choice in others)
                             _Row(
-                                key: Key('chat.model.listed.$id'),
-                                title: id,
-                                onTap: () => _choose(
-                                    currentChoice(setup, model: id))),
+                                key: Key('chat.model.listed.${choice.model}'),
+                                title: choice.model ?? '',
+                                detail: choice.provider,
+                                onTap: () => _choose(choice.source ==
+                                            setup.source &&
+                                        choice.provider == setup.provider &&
+                                        choice.baseUrl == setup.baseUrl &&
+                                        choice.api == setup.api
+                                    ? currentChoice(setup, model: choice.model)
+                                    : choiceOf(choice))),
                       ],
                       if (setup.source == UiModelSource.nipaplay &&
                           setup.runtime == UiAgentRuntimeKind.dsh) ...[
@@ -360,8 +366,8 @@ class _ModelSheetState extends State<ModelSheet> {
           const SizedBox(height: 14),
           Align(
             alignment: Alignment.centerLeft,
-            child: NextButton.ghost(
-                label: '添加或修改模型…', onTap: widget.onSettings),
+            child:
+                NextButton.ghost(label: '添加或修改模型…', onTap: widget.onSettings),
           ),
         ],
       ),

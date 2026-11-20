@@ -59,6 +59,7 @@ import 'mesh/delivery.dart';
 import 'mesh/join_prompt.dart';
 import 'mesh/delegation.dart';
 import 'mesh/chat_guest_host.dart';
+import 'mesh/chat_attachment.dart';
 import 'mesh/delegation_host.dart';
 import 'mesh/delegation_wiring.dart';
 import 'mesh/capability.dart';
@@ -639,6 +640,7 @@ final class NextCore {
       programs.capability,
       programRepository,
       FollowupCapability(followups),
+      ChatAttachmentCapability(mesh.rpc),
       StoreCapability(store, restart: () async {
         final restart = restartAgent ??
             (throw const Failure(FailureCode.unavailable,

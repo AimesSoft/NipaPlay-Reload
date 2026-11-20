@@ -4,11 +4,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nipa_harness/nipa_harness.dart' hide Invocation;
+import 'package:nipa_harness/nipa_harness.dart' hide Action, Invocation;
+import 'package:nipa_harness/nipa_harness.dart' as harness_api show Invocation;
+import 'package:nipaplay/next/mesh/chat_attachment.dart';
 import 'package:nipaplay/next/mesh/chat_guest_host.dart';
 import 'package:nipaplay/next/mesh/nipa_peers.dart';
 import 'package:nipaplay/next/ui/chat/attach_button.dart';
-import 'package:nipaplay/next/ui/conversation/chat_port.dart' show ChatUnavailable;
+import 'package:nipaplay/next/ui/conversation/chat_port.dart'
+    show ChatUnavailable;
 import 'package:nipaplay/next/ui/conversation/mesh_chat_port.dart';
 import 'package:nipaplay/next/ui/conversation/nipa_chat.dart';
 import 'package:nipaplay/next/ui/widgets/sheet.dart';
@@ -98,7 +101,8 @@ void main() {
       expect(attached.last, ['/tmp/log.txt']);
     });
 
-    testWidgets('disabled button does not open picker; picker errors are caught',
+    testWidgets(
+        'disabled button does not open picker; picker errors are caught',
         (tester) async {
       final picker = _FakePicker()..fail = true;
       final attached = <List<String>>[];
@@ -199,7 +203,8 @@ void main() {
     test('stages multi-chunk files across mesh and sanitizes filenames',
         () async {
       // Larger than chatAttachmentChunk (384 KiB) to exercise multi-chunking.
-      final payload = List<int>.generate(chatAttachmentChunk + 4096, (i) => i % 251);
+      final payload =
+          List<int>.generate(chatAttachmentChunk + 4096, (i) => i % 251);
       final local = File('${dir.path}/..evil:clip.bin');
       await local.writeAsBytes(payload, flush: true);
 
@@ -246,7 +251,8 @@ void main() {
       }
       expect(old.filesRefused, contains('需要更新'));
       final file = File('${dir.path}/a.txt')..writeAsStringSync('x');
-      await expectLater(old.stage([file.path]), throwsA(isA<ChatUnavailable>()));
+      await expectLater(
+          old.stage([file.path]), throwsA(isA<ChatUnavailable>()));
       expect(attaches, 0);
     });
 
@@ -256,7 +262,8 @@ void main() {
       final now = DateTime.now();
       final aged = File('${folder.path}/old-shot.png')..writeAsStringSync('o');
       aged.setLastModifiedSync(now.subtract(const Duration(days: 31)));
-      final recent = File('${folder.path}/new-shot.png')..writeAsStringSync('n');
+      final recent = File('${folder.path}/new-shot.png')
+        ..writeAsStringSync('n');
       recent.setLastModifiedSync(now.subtract(const Duration(days: 2)));
       final part = File('${folder.path}/.abcdefghijkl.part')
         ..writeAsStringSync('p');
@@ -267,7 +274,12 @@ void main() {
       sent.setLastModifiedSync(now.subtract(const Duration(hours: 2)));
       await guests.handle(
           'mesh/chat/attach',
-          {'name': 'today.txt', 'size': 1, 'offset': 0, 'data': base64Encode([7])},
+          {
+            'name': 'today.txt',
+            'size': 1,
+            'offset': 0,
+            'data': base64Encode([7])
+          },
           'ipad');
       expect(aged.existsSync(), isFalse);
       expect(part.existsSync(), isFalse);
@@ -309,11 +321,12 @@ void main() {
             'data': base64Encode([5, 6])
           },
           'ipad');
-      expect(await File(done['path'] as String).readAsBytes(),
-          [1, 2, 3, 4, 5, 6]);
+      expect(
+          await File(done['path'] as String).readAsBytes(), [1, 2, 3, 4, 5, 6]);
     });
 
-    test('rejects cross-peer hijack, invalid offsets, and cleans .part on close',
+    test(
+        'rejects cross-peer hijack, invalid offsets, and cleans .part on close',
         () async {
       final first = await guests.handle(
         'mesh/chat/attach',
@@ -362,8 +375,8 @@ void main() {
       );
 
       // Closing removes abandoned .part files.
-      final partFile = File(
-          '${dir.path}/host/chat-attachments/guests/ipad/.$uploadId.part');
+      final partFile =
+          File('${dir.path}/host/chat-attachments/guests/ipad/.$uploadId.part');
       expect(await partFile.exists(), isTrue);
       await guests.close();
       expect(await partFile.exists(), isFalse);
@@ -390,7 +403,53 @@ void main() {
       nipa.attach([empty.path]);
       await nipa.say('发空文件');
       expect(nipa.attachments, [empty.path]);
-      expect(nipa.rawError.value, contains('空的'));
+      expect(nipa.rawError.value?.message, contains('空的'));
+    });
+
+    test('attachment action returns landed bytes or unknown final outcome',
+        () async {
+      final thread = await chat.delegationThread('attachment', '目标会话');
+      final file = File('${dir.path}/attachment.bin');
+      final payload = List<int>.filled(chatAttachmentChunk + 13, 42);
+      await file.writeAsBytes(payload);
+      var loseReceipt = false;
+      final harness = Harness([
+        ChatAttachmentCapability((peer, method, params) async {
+          expect(peer, 'mac');
+          final result = await guests.handle(method, params, 'ipad');
+          if (loseReceipt &&
+              method == 'mesh/chat/attach' &&
+              result['path'] != null) {
+            throw const Failure(FailureCode.unavailable, 'lost receipt',
+                details: {'reason': 'outcome_unknown'});
+          }
+          return result;
+        })
+      ]);
+      Future<JsonMap> send() async {
+        final result = await harness.invokeJson(
+            'chat.attachment.send',
+            {
+              'path': file.path,
+              'deviceId': 'mac',
+              'threadId': thread,
+            },
+            harness_api.Invocation(origin: 'test'));
+        expect(result, isA<Completed<JsonEncodable>>());
+        return (result as Completed<JsonEncodable>).value.toJson() as JsonMap;
+      }
+
+      final delivered = await send();
+      expect(delivered['status'], 'delivered');
+      expect(delivered['threadId'], thread);
+      expect(delivered['received'], payload.length);
+      expect(await File(delivered['path'] as String).readAsBytes(), payload);
+      expect(chat.started, isEmpty);
+      loseReceipt = true;
+      final unknown = await send();
+      expect(unknown['status'], 'outcomeUnknown');
+      expect(unknown['received'], chatAttachmentChunk);
+      expect(unknown['path'], isNull);
     });
   });
 }

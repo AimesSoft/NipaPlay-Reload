@@ -178,7 +178,7 @@ abstract interface class NextHostSettings {
   /// The models the provider set up here lists (`GET {address}/models`,
   /// with its stored key), to pick another of them where the conversation
   /// is; empty when it lists none or cannot be asked.
-  Future<List<String>> providerModels();
+  Future<UiModelCandidates> providerModels();
 
   /// What the Codex configuration on this computer holds (without its key),
   /// or null when there is none to read.
@@ -275,6 +275,16 @@ final class UiModelSetup {
 }
 
 enum UiModelApi { responses, chat }
+
+enum UiModelQueryStatus { succeeded, failed, unavailable }
+
+final class UiModelCandidates {
+  const UiModelCandidates(this.status, {this.choices = const [], this.reason});
+
+  final UiModelQueryStatus status;
+  final List<UiModelChoice> choices;
+  final String? reason;
+}
 
 final class UiModelChoice {
   const UiModelChoice({

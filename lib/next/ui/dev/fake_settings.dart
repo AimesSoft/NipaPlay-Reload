@@ -1088,12 +1088,19 @@ final class FakeHostSettings
       orElse: () => _fallback);
 
   @override
-  Future<List<String>> providerModels() async {
+  Future<UiModelCandidates> providerModels() async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    return switch (_current.provider) {
+    final models = switch (_current.provider) {
       'DeepSeek' => const ['deepseek-flash', 'deepseek-pro', 'deepseek-reasoner'],
-      _ => const [],
+      _ => const <String>[],
     };
+    return UiModelCandidates(UiModelQueryStatus.succeeded, choices: [
+      for (final model in models)
+        UiModelChoice(source: _current.source, model: model,
+            provider: _current.provider, baseUrl: _current.baseUrl,
+            api: _current.api ?? dshApi, reasoning: dshReasoning,
+            compat: _current.compat)
+    ]);
   }
 
   UiModelApi dshApi = UiModelApi.responses;

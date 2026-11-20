@@ -109,6 +109,7 @@ import 'state/change_history.dart';
 import 'settings/host_settings_service.dart';
 import 'ui_data/host_settings.dart';
 import 'settings/debug_host_settings.dart';
+import 'settings/model_capability.dart';
 import 'player/features/external_handoff.dart';
 import 'player/features/ui_capture_layers.dart';
 import 'player/features/local_operations.dart';
@@ -559,6 +560,7 @@ final class NextRuntime extends ChangeNotifier {
             DownloadPlaybackCapability(
                 core.downloads, (item) => playback.openItem(item)),
             core.media.service.store),
+        InvocationScopeCapability(ChatModelCapability(hostSettings)),
         ...core.capabilities
       ]),
       observers: [

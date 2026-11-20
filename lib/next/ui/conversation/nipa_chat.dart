@@ -298,7 +298,11 @@ class NipaChat extends ChangeNotifier {
 
   /// Something went wrong that the conversation says once.
   String? trouble;
-  final rawError = ValueNotifier<String?>(null);
+  final rawError = ValueNotifier<ChatFailureEvent?>(null);
+
+  void reportError(String message, {String? turnId}) {
+    rawError.value = ChatFailureEvent(message, turnId: turnId);
+  }
 
   /// Bumps whenever another session is shown; late results are dropped.
   int _generation = 0;
@@ -351,7 +355,7 @@ class NipaChat extends ChangeNotifier {
       if (generation != _generation) return;
       loading = false;
       trouble = '这段对话没打开，再试一次？';
-      rawError.value = rawFailureText(error);
+      reportError(rawFailureText(error));
       _notify();
       return;
     }
@@ -617,7 +621,7 @@ class NipaChat extends ChangeNotifier {
         debugPrint('[NextUi] steer failed: $error');
         said.echoed = true;
         trouble = '这句没送到，等这一轮结束再说一次？';
-        rawError.value = rawFailureText(error);
+        reportError(rawFailureText(error));
         _notify();
       }
       return;
@@ -698,7 +702,7 @@ class NipaChat extends ChangeNotifier {
   }
 
   void _fail(ChatTurn turn, String why) {
-    rawError.value = why;
+    reportError(why, turnId: turn.id);
     turn
       ..status = 'failed'
       ..endedAt = DateTime.now();

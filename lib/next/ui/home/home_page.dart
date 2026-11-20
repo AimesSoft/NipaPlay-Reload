@@ -695,7 +695,7 @@ class _EmptyStart extends StatelessWidget {
       final added = await folders.add();
       if (added.isNotEmpty) await folders.scan(added, true);
     } catch (error) {
-      if (error is! Failure) shell.chat.rawError.value = '$error';
+      if (error is! Failure) shell.chat.reportError('$error');
     }
   }
 

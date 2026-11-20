@@ -342,7 +342,8 @@ final class UnavailableHostSettings implements NextHostSettings {
       const UiModelCheck(ok: false, message: _problem);
 
   @override
-  Future<List<String>> providerModels() async => const [];
+  Future<UiModelCandidates> providerModels() async => const UiModelCandidates(
+      UiModelQueryStatus.unavailable, reason: '此设备没有本机模型设置');
 
   @override
   Future<UiModelChoice?> codexModel() async => null;

@@ -148,7 +148,7 @@ final class _FollowupAction extends Action<_Json, _Json> {
           'cancel' =>
             'Cancel waiting, ready or failed delivery; does not interrupt an already started turn.',
           'retry' =>
-            'Deliver a followup again now: one waiting for its next automatic delivery after the model provider failed (retryAt), or one whose delivery failed (execution_failed). For the person who asked (the reminder of a failed background followup); do not loop on it: a provider that keeps failing fails again.',
+            'Queue immediate redelivery on the device that delivers the followup, from ready with retryAt or execution_failed. Does not interrupt an active turn. The returned followup records acceptance, not delivery or turn completion; read followup.list for later state.',
           'wake' =>
             'Queue a new Agent turn with instruction and trigger facts. The host-configured agent device receives wakes from headless hooks and schedules; no conversation runs on the transfer device. Defaults to that Agent host’s main thread; optional threadId targets a conversation there. Busy turns are never interrupted. Uses the durable followup dispatcher.',
           'discover' =>

@@ -229,8 +229,9 @@ Future<List<String>> listProviderModels(
   }
   final decoded = jsonDecode(body);
   final data = decoded is Map ? decoded['data'] : null;
+  if (data is! List) throw const FormatException('Expected a model list');
   return {
-    for (final entry in data is List ? data : const [])
+    for (final entry in data)
       if (entry is Map &&
           entry['id'] is String &&
           (entry['id'] as String).isNotEmpty)

@@ -6,6 +6,10 @@
 
 `chat` 族管理对话，`followup.register` 登记事件或任务的后续；检查 `followup` 状态与目标会话。后台结果可能排队，宿主不可用时等待，不应将尚未交付说成已回复。Mesh 委托要求目标梨花运行，见[跨设备](mesh.md)。
 
+`chat.model.status` 区分宿主报告的 `inUse` 与 `configured`，并列出最近的模型。`chat.model.candidates` 的 `succeeded` 可带空列表；`failed`、`unavailable` 附不含秘密的原因。`chat.model.set` 接收返回的 `choiceId`，或只传 `reasoning`（支持的运行时可选 `off`、`low`、`medium`、`high`）。保存不会打断正在执行的回合，在下一回合边界读取；保存不证明服务可连接。
+
+`chat.attachment.send` 在文件所在设备调用，传绝对 `path`、目标 `deviceId` 和已有 `threadId`。`delivered` 返回目标设备的 `path`、`uploadId` 和确认字节数 `received`，可在目标会话的消息中引用；暂存本身不发送消息或开启回合。`notDelivered` 表示未完成交付，`outcomeUnknown` 表示最后一块可能已落地但未收到有效回执。沿用对话附件的文件大小和保留约束。
+
 ## 批量工作与并行分工
 
 多作品、多集的资料、字幕和已授权弹幕准备默认优先采用对应族已有的批量接口；先 `describe` 确认输入上限、原子性、返回任务还是结果。独立且耗时的工作按作品、设备或文件集合交给当前运行器支持的子代理，用户马上要看的集优先。小任务无需强行拆分，批量接口内部已有并发时不要无限叠加子代理。

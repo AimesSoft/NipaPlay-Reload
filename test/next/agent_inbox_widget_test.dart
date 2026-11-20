@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart' hide Action;
 import 'package:nipaplay/next/capabilities/classic_action.dart';
+import 'package:nipaplay/next/ui/conversation/chat_port.dart'
+    show ChatFailureEvent;
 import 'package:nipaplay/next/ui/data/gui_calls.dart';
 import 'package:nipaplay/next/ui/shell/agent_inbox.dart';
 import 'package:nipaplay/next/ui/widgets/buttons.dart';
@@ -49,11 +51,15 @@ void main() {
   });
 
   for (final closeWithX in [true, false]) {
-    testWidgets('notice is cleared durably, closeWithX=$closeWithX', (tester) async {
+    testWidgets('notice is cleared durably, closeWithX=$closeWithX',
+        (tester) async {
       final world = _Inbox();
       world.rows.single.addAll({
-        'kind': 'notice', 'state': 'unread', 'title': '普通提醒',
-        'body': '任务结果', 'options': <String>[],
+        'kind': 'notice',
+        'state': 'unread',
+        'title': '普通提醒',
+        'body': '任务结果',
+        'options': <String>[],
       });
       await tester.pumpWidget(world.widget());
       await tester.pump();
@@ -180,7 +186,7 @@ void main() {
 
   testWidgets('one failure arriving in two forms is one reminder (#1122)',
       (tester) async {
-    final errors = ValueNotifier<String?>(null);
+    final errors = ValueNotifier<ChatFailureEvent?>(null);
     final world = _Inbox();
     await tester.pumpWidget(world.widget(errors: errors));
     await tester.pump();
@@ -192,6 +198,7 @@ void main() {
       'method': 'turn/completed',
       'params': {
         'turn': {
+          'id': 'same-turn',
           'status': 'failed',
           'error': {
             'message': message,
@@ -202,17 +209,19 @@ void main() {
       }
     });
     await tester.pump();
-    errors.value = message;
+    errors.value = ChatFailureEvent(message, turnId: 'same-turn');
     await tester.pump();
     world.events.add({
       'method': 'host/liveness',
       'params': {
+        'turnId': 'same-turn',
+        'status': 'failed',
         'latestError': {'message': message}
       }
     });
     await tester.pump();
     expect(world.notices, 1);
-    errors.value = 'a different failure';
+    errors.value = ChatFailureEvent(message);
     await tester.pump();
     expect(world.notices, 2);
     // Starting a new turn resets dedupe so a later recurrence is still shown.
@@ -222,8 +231,9 @@ void main() {
       'method': 'turn/completed',
       'params': {
         'turn': {
+          'id': 'new-turn',
           'status': 'failed',
-          'error': {'message': 'a different failure', 'codexErrorInfo': 'other'}
+          'error': {'message': message, 'codexErrorInfo': 'other'}
         }
       }
     });
@@ -237,7 +247,7 @@ void main() {
       'failures kept by conversations in their liveness reports are each '
       'reported once, and a new turn elsewhere does not repeat them',
       (tester) async {
-    final errors = ValueNotifier<String?>(null);
+    final errors = ValueNotifier<ChatFailureEvent?>(null);
     final world = _Inbox();
     await tester.pumpWidget(world.widget(errors: errors));
     await tester.pump();
@@ -247,12 +257,13 @@ void main() {
       for (final (thread, error) in [
         ('main', null),
         ('helper-a', 'model returned no content'),
-        ('helper-b', 'rate limited (429)'),
+        ('helper-b', 'model returned no content'),
       ]) {
         world.events.add({
           'method': 'host/liveness',
           'params': {
             'threadId': thread,
+            'turnId': 'turn-$thread',
             'status': error == null ? 'inProgress' : 'failed',
             'latestError': error
           }
@@ -269,7 +280,10 @@ void main() {
     // news.
     world.events.add({
       'method': 'turn/started',
-      'params': {'threadId': 'main', 'turn': {'id': 't2'}}
+      'params': {
+        'threadId': 'main',
+        'turn': {'id': 't2'}
+      }
     });
     for (var i = 0; i < 3; i++) {
       tick();
@@ -279,7 +293,10 @@ void main() {
     // A helper tries again and fails the same way: that is news.
     world.events.add({
       'method': 'turn/started',
-      'params': {'threadId': 'helper-a', 'turn': {'id': 't3'}}
+      'params': {
+        'threadId': 'helper-a',
+        'turn': {'id': 't3'}
+      }
     });
     await tester.pump();
     world.events.add({
@@ -304,17 +321,18 @@ void main() {
   testWidgets(
       "the conversation's text arriving before the runner's report is still "
       'one reminder', (tester) async {
-    final errors = ValueNotifier<String?>(null);
+    final errors = ValueNotifier<ChatFailureEvent?>(null);
     final world = _Inbox();
     await tester.pumpWidget(world.widget(errors: errors));
     await tester.pump();
-    errors.value = 'connection reset';
+    errors.value = ChatFailureEvent('connection reset', turnId: 't1');
     await tester.pump();
     world.events.add({
       'method': 'turn/completed',
       'params': {
         'threadId': 'main',
         'turn': {
+          'id': 't1',
           'status': 'failed',
           'error': {'message': 'connection reset'}
         }
@@ -327,10 +345,9 @@ void main() {
   });
 
   testWidgets(
-      'a failed background followup says which task, once while retried and '
-      'once when it gives up, and can be retried now or stopped (#1122)',
+      'distinct failed deliveries stay distinct and controls track live state',
       (tester) async {
-    final world = _Inbox();
+    final world = _Inbox()..rows.clear();
     final followup = <String, Object?>{
       'id': 'f1',
       'state': 'started',
@@ -364,14 +381,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(world.notified, hasLength(1));
     expect(world.notified.single['followupId'], 'f1');
-    expect(world.notified.single['requestId'], 'followup-f1-retrying');
+    final firstReceipt = world.notified.single['requestId'];
     expect(world.notified.single['title'], contains('「帮手找到的番」'));
-    expect(world.notified.single['body'], contains('model returned no content'));
+    expect(
+        world.notified.single['body'], contains('model returned no content'));
 
-    // Its next delivery fails too: no second reminder while it is retried.
+    // The same message on the next delivery is a distinct event.
     world.events.add({
       'method': 'turn/started',
-      'params': {'threadId': 'main', 'turn': {'id': 't2'}}
+      'params': {
+        'threadId': 'main',
+        'turn': {'id': 't2'}
+      }
     });
     followup['turnId'] = 't2';
     followup['state'] = 'started';
@@ -383,12 +404,11 @@ void main() {
       ..['failedTurns'] = ['t1', 't2'];
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(world.notified, hasLength(1));
+    expect(world.notified, hasLength(2));
+    expect(world.notified.last['requestId'], isNot(firstReceipt));
 
     // The reminder offers to deliver it now, or to stop it.
     await tester.pump(const Duration(seconds: 2));
-    await tester.pump();
-    await tester.tap(find.text('「帮手找到的番」暂时没能完成'));
     await tester.pump();
     expect(find.text('立即重试'), findsOneWidget);
     expect(find.text('停止'), findsOneWidget);
@@ -400,7 +420,10 @@ void main() {
     // Given up for good: one more reminder, which can only be retried.
     world.events.add({
       'method': 'turn/started',
-      'params': {'threadId': 'main', 'turn': {'id': 't3'}}
+      'params': {
+        'threadId': 'main',
+        'turn': {'id': 't3'}
+      }
     });
     followup
       ..['state'] = 'execution_failed'
@@ -411,10 +434,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(seconds: 2));
     await tester.pump();
-    expect(world.notified, hasLength(2));
-    expect(world.notified.last['requestId'], 'followup-f1-failed');
-    await tester.tap(find.text('「帮手找到的番」没能完成'));
-    await tester.pump();
+    expect(world.notified, hasLength(3));
+    expect(world.notified.last['requestId'], isNot(firstReceipt));
     expect(find.text('停止'), findsNothing);
     await tester.tap(find.text('立即重试'));
     await tester.pump();
@@ -424,7 +445,10 @@ void main() {
     // Retried by hand and failed for good again: said again, not swallowed.
     world.events.add({
       'method': 'turn/started',
-      'params': {'threadId': 'main', 'turn': {'id': 't4'}}
+      'params': {
+        'threadId': 'main',
+        'turn': {'id': 't4'}
+      }
     });
     followup
       ..['state'] = 'execution_failed'
@@ -435,8 +459,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(seconds: 2));
     await tester.pump();
-    expect(world.notified, hasLength(3));
-    expect(world.notified.last['requestId'], 'followup-f1-1-failed');
+    expect(world.notified, hasLength(4));
+    expect(world.notified.map((row) => row['requestId']).toSet(), hasLength(4));
     await tester.pumpWidget(const SizedBox());
     await world.events.close();
   });
@@ -486,12 +510,12 @@ class _Inbox {
   final followups = <JsonMap>[];
   final followupCalls = <String>[];
   final changes = StreamController<void>.broadcast();
-  late final calls =
-      GuiCalls(() async => Harness([_Capability(this)]), changes: changes.stream);
+  late final calls = GuiCalls(() async => Harness([_Capability(this)]),
+      changes: changes.stream);
   Widget widget(
           {String? peer,
           double bottomInset = 0,
-          ValueListenable<String?>? errors}) =>
+          ValueListenable<ChatFailureEvent?>? errors}) =>
       MaterialApp(
           home: Scaffold(
               body: Stack(children: [
@@ -558,7 +582,9 @@ class _Capability implements Capability {
                 (input, _) async {
               if (op == 'list') return {'followups': world.followups};
               world.followupCalls.add('$op ${input['id']}');
-              return {'followup': {'id': input['id']}};
+              return {
+                'followup': {'id': input['id']}
+              };
             }),
           for (final op in ['list', 'respond', 'dismiss'])
             ClassicAction(
