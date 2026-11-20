@@ -28,7 +28,8 @@ class WebDAVProxyService {
 
   static final WebDAVProxyService instance = WebDAVProxyService._();
 
-  final _diagnostics = RemoteProxyDiagnostics('WebDAV');
+  late final _diagnostics =
+      RemoteProxyDiagnostics('WebDAV', onResume: _onResume);
   HttpServer? _server;
   int _port = 0;
   bool _isRunning = false;
@@ -37,15 +38,36 @@ class WebDAVProxyService {
   int get port => _port;
 
   Future<void>? _initializing;
+  Future<void>? _stopping;
+
+  @visibleForTesting
+  Future<void> closeListenerForTesting() async {
+    await _server!.close(force: true);
+  }
 
   Future<void> initialize() async {
+    if (kIsWeb) return;
     _diagnostics
         .log('initialize running=$_isRunning pending=${_initializing != null}');
-    if (_isRunning || kIsWeb) {
-      if (_isRunning) unawaited(_diagnostics.probe('initialize-reuse'));
-      return;
+    // A proxy that is stopping must not be handed out again: wait for the
+    // stop, then start a fresh one. A stop that begins while this call waits
+    // on a shared start or health probe is waited for as well.
+    do {
+      while (_stopping != null) {
+        await _stopping;
+      }
+      await _ensureListener('initialize-reuse');
+    } while (_stopping != null);
+  }
+
+  Future<void> _onResume() async {
+    if (_stopping == null && _isRunning) {
+      await _ensureListener('lifecycle-resumed');
     }
-    final pending = _initializing ??= _initialize();
+  }
+
+  Future<void> _ensureListener(String reason) async {
+    final pending = _initializing ??= _initialize(reason);
     try {
       await pending;
     } finally {
@@ -53,15 +75,26 @@ class WebDAVProxyService {
     }
   }
 
-  Future<void> _initialize() async {
-    if (_isRunning) return;
+  Future<void> _initialize(String reason) async {
+    int? previousPort;
+    if (_isRunning) {
+      if (!await _diagnostics.probe(reason) || _stopping != null) return;
+      previousPort = _port;
+      _diagnostics.log('heal-start reason=$reason');
+      await _closeListener();
+    }
 
+    final healthToken = RemoteProxyDiagnostics.newHealthToken();
     // shelf_router 会给每个 GET 路由自动加一个去 body 的 HEAD 路由（并把
     // Content-Length 改成 0），显式的 HEAD 处理必须先于 GET 注册才会生效。
     final router = Router()
       ..add('HEAD', '/webdav/stream', _handleStreamHead)
       ..add('GET', '/webdav/stream', _handleStream)
-      ..get('/webdav/health', (Request request) => Response.ok('ok'));
+      ..get(
+          '/webdav/health',
+          (Request request) => Response.ok('ok', headers: {
+                RemoteProxyDiagnostics.healthHeader: healthToken,
+              }));
 
     final handler = _diagnostics.wrap(const Pipeline().addHandler(router.call));
 
@@ -75,7 +108,8 @@ class WebDAVProxyService {
       portsToTry.add(value);
     }
 
-    addPort(savedPort);
+    addPort(previousPort);
+    if (previousPort == null || savedPort != 0) addPort(savedPort);
     addPort(_defaultPort);
     addPort(0);
 
@@ -87,13 +121,17 @@ class WebDAVProxyService {
           InternetAddress.loopbackIPv4,
           candidatePort,
         );
-        shelf_io.serveRequests(_diagnostics.observe(_server!), handler);
+        shelf_io.serveRequests(
+            _diagnostics.observe(_server!, healthToken: healthToken), handler);
         _port = _server!.port;
         _isRunning = true;
         try {
           await prefs.setInt(_portKey, _port);
         } catch (error) {
           debugPrint('WebDAV proxy port preference could not be saved: $error');
+        }
+        if (previousPort != null) {
+          _diagnostics.log('heal-complete previousPort=$previousPort');
         }
         return;
       } catch (e) {
@@ -107,13 +145,32 @@ class WebDAVProxyService {
   }
 
   Future<void> stop() async {
+    final stopping = _stopping ??= _stopInternal();
+    try {
+      await stopping;
+    } finally {
+      if (identical(_stopping, stopping)) _stopping = null;
+    }
+  }
+
+  Future<void> _stopInternal() async {
     _diagnostics.log('stop-request running=$_isRunning');
-    await _initializing;
-    await _server?.close(force: true);
+    // Nothing may treat the proxy as usable once a stop has begun.
+    _isRunning = false;
+    try {
+      await _initializing;
+    } catch (_) {}
+    await _closeListener();
+    _diagnostics.log('stop-complete');
+  }
+
+  Future<void> _closeListener() async {
+    final server = _server;
     _server = null;
     _port = 0;
     _isRunning = false;
-    _diagnostics.log('stop-complete');
+    _diagnostics.detach();
+    await server?.close(force: true);
   }
 
   /// 解析稳定路径（webdav://conn/rel 或旧式直链）并生成代理流地址。
@@ -128,7 +185,7 @@ class WebDAVProxyService {
 
   /// 生成指定连接文件的回环代理 URL。
   String buildStreamUrl(WebDAVConnection connection, String relativePath) {
-    if (!_isRunning) {
+    if (!_isRunning || _stopping != null) {
       throw StateError(
           'WebDAV proxy must be initialized before building a stream URL');
     }
