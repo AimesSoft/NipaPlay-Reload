@@ -9,6 +9,7 @@ import 'package:nipaplay/providers/service_provider.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/services/single_instance_service.dart';
 import 'package:nipaplay/services/smb2_native_service_ffi.dart';
+import 'package:nipaplay/services/smb_proxy_service.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_dialog.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/hover_scale_text_button.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/settings_no_ripple_theme.dart';
@@ -423,6 +424,10 @@ class DesktopExitHandler
 
     try {
       ServiceProvider.serverHistorySyncService.dispose();
+    } catch (_) {}
+
+    try {
+      await SMBProxyService.instance.stop();
     } catch (_) {}
 
     try {
