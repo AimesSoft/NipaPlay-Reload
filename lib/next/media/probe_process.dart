@@ -116,7 +116,7 @@ final class MediaProbeProcess {
     final probe = _Probe(id, path, process);
     _active[id] = probe;
     void stop(String reason) {
-      if (!identical(_active[id], probe)) return;
+      if (!identical(_active[id], probe) || probe.exitCode != null) return;
       probe.reason ??= reason;
       process.kill(ProcessSignal.sigkill);
     }
@@ -140,6 +140,7 @@ final class MediaProbeProcess {
     try {
       final code =
           await process.exitCode.timeout(timeout + const Duration(seconds: 3));
+      probe.exitCode = code;
       await drains.timeout(const Duration(seconds: 1));
       final stderr = utf8.decode(errors.takeBytes(), allowMalformed: true);
       if (probe.reason != null || code != 0) {
@@ -148,19 +149,28 @@ final class MediaProbeProcess {
             stderr.isEmpty
                 ? 'Media probe ${probe.reason ?? "failed"}: $path'
                 : stderr,
-            details: {...probe.json(), 'exitCode': code, 'stderr': stderr});
+            details: {...probe.json(), 'state': 'failed', 'stderr': stderr});
       }
       final json = jsonDecode(utf8.decode(output.takeBytes())) as Map;
       final result = ffprobeExecutable == null
           ? parseErikaProbeOutput(json)
           : parseProbeOutput(json);
-      _remember({...probe.json(), 'state': 'succeeded', 'exitCode': code});
+      _remember({...probe.json(), 'state': 'succeeded'});
       return result;
     } catch (error) {
       stop(probe.reason ?? 'failed');
-      final details = {...probe.json(), 'state': 'failed', 'error': '$error'};
-      _remember(details);
-      if (error is Failure) rethrow;
+      final details = {
+        ...probe.json(),
+        if (probe.exitCode != null) 'state': 'failed',
+        if (error is Failure) ...error.details,
+      };
+      _remember({...details, 'error': '$error'});
+      if (error is Failure) {
+        throw Failure(error.code, error.message,
+            details: details,
+            retryable: error.retryable,
+            violations: error.violations);
+      }
       throw Failure(FailureCode.unavailable, 'Media probe failed: $error',
           details: details);
     } finally {
@@ -195,13 +205,19 @@ final class _Probe {
   final Process process;
   final started = DateTime.now().toUtc();
   String? reason;
+  int? exitCode;
   JsonMap json() => {
         'probeId': id,
         'path': path,
         'pid': process.pid,
         'startedAt': started.toIso8601String(),
         'elapsedMs': DateTime.now().toUtc().difference(started).inMilliseconds,
-        'state': reason == null ? 'running' : 'terminating',
+        'state': exitCode != null
+            ? 'exited'
+            : reason == null
+                ? 'running'
+                : 'terminating',
+        if (exitCode != null) 'exitCode': exitCode,
         if (reason != null) 'reason': reason
       };
 }

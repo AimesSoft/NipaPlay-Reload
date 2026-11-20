@@ -8,6 +8,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'media_service.dart';
 import 'identity_store.dart' show decodeMediaJson, stableMediaId;
 import 'metadata_provider.dart';
+import 'scan_disc_structure.dart';
 
 List<JobExecutor> mediaExecutors(MediaService service) => [
       _ScanExecutor(service),
@@ -96,18 +97,16 @@ final class _ScanExecutor implements JobExecutor {
     var discovered = (await db.query('media_scan_items',
             where: 'job_id = ?', whereArgs: [context.job.jobId]))
         .length;
-    var failedProbes = (context.job.checkpoint['failedProbes'] as int?) ?? 0;
-    final probeErrors = [
-      for (final e in context.job.checkpoint['probeErrors'] as List? ?? [])
-        Map<String, Object?>.from(e as Map)
-    ];
+    final probeErrors = <JsonMap>[];
+    final discFiles = <JsonMap>[];
+    final discStructure = ScanDiscStructure(root);
     // A directory that cannot be listed (on Windows one deeper than 259
     // characters, without the system's long path setting) is left out and
     // reported; the rest of the folder is still scanned.
     final unreadable = <String>[];
     var unreadableCount = 0;
     String? unreadableReason;
-    if (context.job.checkpoint['enumerated'] != true) {
+    {
       await for (final entry in Directory(root)
           .list(recursive: true, followLinks: false)
           .handleError((Object error) {
@@ -131,7 +130,11 @@ final class _ScanExecutor implements JobExecutor {
           JOIN media_locations l ON l.file_id=i.file_id
           WHERE i.job_id=? AND l.locator=? LIMIT 1''',
             [context.job.jobId, entry.path]);
-        if (recorded.isNotEmpty) continue;
+        final disc = await discStructure.fileFacts(entry.path);
+        if (recorded.isNotEmpty) {
+          if (disc != null) discFiles.add({'path': entry.path, 'disc': disc});
+          continue;
+        }
         await context
             .report(phase: 'probe', details: {'currentPath': entry.path});
         // Race only read-only work. A cancelled/timed-out probe must never
@@ -152,13 +155,10 @@ final class _ScanExecutor implements JobExecutor {
           }
         } on Failure catch (error) {
           if (await control.stop({'indexed': discovered})) return;
-          failedProbes++;
-          if (probeErrors.length < 10)
-            probeErrors.add({'path': entry.path, 'error': error.toJson()});
-          await context.report(checkpoint: {
-            ...context.job.checkpoint,
-            'failedProbes': failedProbes,
-            'probeErrors': probeErrors
+          probeErrors.add({
+            'path': entry.path,
+            'error': error.toJson(),
+            if (disc != null) 'disc': disc,
           });
           continue;
         }
@@ -179,6 +179,7 @@ final class _ScanExecutor implements JobExecutor {
           return;
         }
         if (fileId == null) return;
+        if (disc != null) discFiles.add({'path': entry.path, 'disc': disc});
         final file = await service.store.entity(fileId);
         await db.insert(
             'media_scan_items',
@@ -193,16 +194,23 @@ final class _ScanExecutor implements JobExecutor {
         await context.report(
             progress: JobProgress(completed: discovered, unit: 'files'));
       }
-      await context
-          .report(checkpoint: {...context.job.checkpoint, 'enumerated': true});
     }
     final items = await db.query('media_scan_items',
         where: 'job_id = ?', whereArgs: [context.job.jobId]);
+    if (await control.stop({'indexed': items.length})) return;
+    final hasErrors = probeErrors.isNotEmpty || unreadableCount > 0;
+    final outcome = !hasErrors
+        ? 'success'
+        : items.isEmpty
+            ? 'failure'
+            : 'partial';
     final receipt =
         JobReceipt(verification: VerificationLevel.verified, details: {
+      'outcome': outcome,
       'indexed': items.length,
-      'failedProbes': failedProbes,
-      if (failedProbes > 0) 'probeErrors': probeErrors,
+      'failedProbes': probeErrors.length,
+      if (probeErrors.isNotEmpty) 'probeErrors': probeErrors,
+      if (discFiles.isNotEmpty) 'discFiles': discFiles,
       'fileIds': [for (final row in items) row['file_id']],
       if (unreadableCount > 0)
         'unreadableDirectories': {
@@ -211,14 +219,12 @@ final class _ScanExecutor implements JobExecutor {
           'reason': unreadableReason,
         },
     });
-    if (failedProbes > 0) {
+    if (outcome == 'failure') {
       await context.fail(
-          Failure(FailureCode.unavailable,
-              '$failedProbes files could not be probed; other files were indexed. See receipt.probeErrors.',
-              details: {
-                'failedProbes': failedProbes,
-                'probeErrors': probeErrors
-              }),
+          Failure(
+              FailureCode.unavailable,
+              'No files were indexed: ${probeErrors.length} probe failures, '
+              '$unreadableCount unreadable directories. See the scan receipt.'),
           receipt);
     } else {
       await context.succeed(receipt);

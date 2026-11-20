@@ -128,7 +128,7 @@ BASELINE_HASHES = {'lib/next/settings/model_capability.dart': '9a9cf6a192ec5abe9
  'lib/next/media/catalog_capability.dart': 'fb4729d8a35c862346496c23283f132e7c26ecd9e5383f72a674d8b0ffa06ec0',
  'lib/next/media/file_indexing.dart': 'e1d72b823f8923988d451024d2a4899711d9ce4372d958b83b91fa278d89a16d',
  'lib/next/media/management.dart': '65d945b4e79e4e38a82c64bfa93dd89b3d97e69f6132ebdc7588b24341dca6b7',
- 'lib/next/media/media_capability.dart': '5c4e624b3a08929ed0bee3798b91d587aca479462d02ffd898fdacfba28c7a8e',
+ 'lib/next/media/media_capability.dart': '7ac40fe8c64994a72c7691a3b4c4a747fecf4a892ad1c867dd4fb25b99c556d8',
  'lib/next/media/work_merge.dart': '0c2f996d0a7f9ecb7858ecf01b96be470ffda37b2dcdb16980b76f9d6a2566f9',
  'lib/next/media_sources/capability.dart': '43b535710ac28c50bfd962e9db62dead59d150a902956b83a2dfa7225d2a99e3',
  'lib/next/media_sources/sync.dart': '24ecd6ca762da36152605b16967680bf44cb4e5e16c7638d4ec5d22a26aa1056',
