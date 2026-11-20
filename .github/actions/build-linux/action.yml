@@ -1,6 +1,9 @@
 name: 'Build Linux Packages'
 description: '构建 Linux 应用并生成多种格式的安装包'
 inputs:
+  web-artifact-name:
+    description: Same-run embedded Web artifact
+    default: ''
   app-version:
     description: '应用版本号'
     required: true
@@ -105,11 +108,9 @@ runs:
         path: build/erika-linux-runtime
         key: ${{ steps.erika-cache.outputs.cache-primary-key }}
 
-    - name: Build Web and copy assets
-      shell: bash
-      run: |
-        chmod +x build_and_copy_web.sh
-        ./build_and_copy_web.sh
+    - uses: ./.github/actions/setup-web-assets
+      with:
+        artifact-name: ${{ inputs.web-artifact-name }}
 
     - name: Download bundled libmpv2
       shell: bash

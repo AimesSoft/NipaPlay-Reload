@@ -1,6 +1,9 @@
 name: 'Build macOS Packages'
 description: '构建 macOS 应用并生成 DMG、ZIP 和 PKG 文件'
 inputs:
+  web-artifact-name:
+    description: Same-run embedded Web artifact
+    default: ''
   app-version:
     description: '应用版本号'
     required: true
@@ -49,11 +52,9 @@ runs:
       run: |
         flutter precache --macos
 
-    - name: Build Web and copy assets
-      shell: bash
-      run: |
-        chmod +x build_and_copy_web.sh
-        ./build_and_copy_web.sh
+    - uses: ./.github/actions/setup-web-assets
+      with:
+        artifact-name: ${{ inputs.web-artifact-name }}
 
     - name: Refresh Pub dependencies (post-web build)
       shell: bash
@@ -132,6 +133,8 @@ runs:
 
     - name: Configure macOS build variants
       shell: bash
+      env:
+        REQUESTED_ARCHITECTURES: ${{ inputs.build-architectures }}
       run: |
         set -euo pipefail
 
@@ -140,7 +143,8 @@ runs:
         mkdir -p "$variants_dir"
         : > "$variants_file"
 
-        for requested_arch in ${{ inputs.build-architectures }}; do
+        read -r -a variants <<< "$REQUESTED_ARCHITECTURES"
+        for requested_arch in "${variants[@]}"; do
           case "$requested_arch" in
             universal)
               echo "universal|x86_64 arm64|Universal|universal" >> "$variants_file"
@@ -169,6 +173,11 @@ runs:
 
         echo "MACOS_VARIANTS_FILE=$variants_file" >> "$GITHUB_ENV"
         echo "MACOS_STAGING_ROOT=build/macos-artifacts" >> "$GITHUB_ENV"
+        if grep '^universal|' "$variants_file" > "$variants_dir/compile.txt"; then
+          echo "MACOS_COMPILE_FILE=$variants_dir/compile.txt" >> "$GITHUB_ENV"
+        else
+          echo "MACOS_COMPILE_FILE=$variants_file" >> "$GITHUB_ENV"
+        fi
 
     - name: Build macOS App
       shell: bash
@@ -242,20 +251,7 @@ runs:
           else
             echo "⚠️ 未找到主程序可执行文件: $executable_path"
           fi
-        done < "$MACOS_VARIANTS_FILE"
-
-    - name: Verify embedded mpv compatibility
-      shell: bash
-      run: |
-        set -euo pipefail
-        while IFS='|' read -r variant_key xcode_archs artifact_label variant_suffix; do
-          arch_args=()
-          for arch in $xcode_archs; do
-            arch_args+=(--require-arch "$arch")
-          done
-          python3 scripts/macos/verify_mpv_compatibility.py \
-            "$MACOS_STAGING_ROOT/$variant_suffix/NipaPlay.app" "${arch_args[@]}"
-        done < "$MACOS_VARIANTS_FILE"
+        done < "$MACOS_COMPILE_FILE"
 
     - name: Copy mdk.framework.dSYM to App Bundle
       shell: bash
@@ -293,11 +289,31 @@ runs:
             echo "Successfully copied mdk.framework.dSYM from $DSYM_SOURCE_PATH."
             echo "Contents of $TARGET_DSYM_DIR after copy:"
             ls -la "$TARGET_DSYM_DIR"
-          done < "$MACOS_VARIANTS_FILE"
+          done < "$MACOS_COMPILE_FILE"
         else
           echo "Warning: mdk.framework.dSYM not found at the revised expected path $DSYM_SOURCE_PATH."
           echo "Symbolicated crash logs for mdk might not be available."
         fi
+
+    - name: Derive and verify macOS build variants
+      shell: bash
+      run: |
+        set -euo pipefail
+        universal_app="$MACOS_STAGING_ROOT/universal/NipaPlay.app"
+        while IFS='|' read -r _ xcode_archs _ variant_suffix; do
+          app="$MACOS_STAGING_ROOT/$variant_suffix/NipaPlay.app"
+          if [[ "$variant_suffix" != universal && -d "$universal_app" ]]; then
+            python3 .github/workflows/scripts/apple_payload.py macos "$universal_app" "$app" "$variant_suffix"
+            mkdir -p "build/symbols-macos/$variant_suffix"
+            cp "build/symbols-macos/universal/app.$variant_suffix.symbols" "build/symbols-macos/$variant_suffix/"
+          fi
+          read -r -a archs <<< "$xcode_archs"
+          arch_args=()
+          for arch in "${archs[@]}"; do
+            arch_args+=(--require-arch "$arch")
+          done
+          python3 scripts/macos/verify_mpv_compatibility.py "$app" "${arch_args[@]}"
+        done < "$MACOS_VARIANTS_FILE"
 
     - name: Sign macOS App
       shell: bash

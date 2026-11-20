@@ -70,6 +70,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-in-progress:
+    name: Check for an active release on push
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+    outputs:
+      active: ${{ steps.release.outputs.active }}
+    steps:
+      - name: Look for active main.yml runs on this branch
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for status in in_progress queued requested waiting pending; do
+            if ! count=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/main.yml/runs" \
+              -f branch="$GITHUB_REF_NAME" -f event=workflow_dispatch -f status="$status" \
+              -F per_page=1 --jq .total_count); then
+              echo "::warning::Could not query release runs for status $status."
+              continue
+            fi
+            if [[ "$count" =~ ^[1-9][0-9]*$ ]]; then
+              echo "Skipping push-triggered tvOS build: $status release on $GITHUB_REF_NAME."
+              echo 'active=true' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo 'active=false' >> "$GITHUB_OUTPUT"
+
   changes:
     name: Detect tvOS build inputs
     if: github.event_name == 'pull_request'
@@ -89,8 +119,8 @@ jobs:
 
   build:
     name: Build tvOS package
-    needs: changes
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.build != 'false') }}
+    needs: [changes, release-in-progress]
+    if: ${{ !cancelled() && needs.release-in-progress.outputs.active != 'true' && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.build != 'false') }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
