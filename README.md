@@ -187,9 +187,9 @@ Next 还引入个人 Git Harness、跨设备 Mesh、
 
 ### 参与开发者预览
 
-当前版本为 **2.0.0-alpha.6 · Developer Preview**。Alpha 6 让 DeepSeek Harness 和 Codex 两个运行器都可以正式使用：Codex 可以用 ChatGPT 账号登录，切换运行器不丢对话，对话里可以换模型；梨花可以按你的要求从商店安装技能和插件；媒体库扫描如实说明部分成功和原盘结构，SMB 播放不再受界面卡顿影响，播放内核更新到 Erika 0.3.8。
+当前版本为 **2.0.0-alpha.7 · Developer Preview**。Alpha 7 修复 Alpha 6 中的几处严重问题：手机和平板上反复弹出、无法关闭的失败提醒，从 Codex 切换到 DeepSeek Harness 后无法再打开的对话，以及只有一方可达的设备之间送不回去的跟进结果；调用日志和组网记录不再无限增长。
 
-- [Alpha 6 下载与发行说明](https://github.com/AimesSoft/NipaPlay-Reload/releases/tag/v2.0.0-alpha.6)
+- [Alpha 7 下载与发行说明](https://github.com/AimesSoft/NipaPlay-Reload/releases/tag/v2.0.0-alpha.7)
 - [Next 使用文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md)：从安装、配置梨花到第一次使用，以及日常使用、进阶和排障
 - [下载与开启 Next](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/install.md) · [配置梨花](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/setup-nipa.md)
 - [常见问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/faq.md) · [已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/known-issues.md)
