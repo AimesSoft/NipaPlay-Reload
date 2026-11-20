@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:nipa_harness/nipa_harness.dart';
 
 import '../../ui_data/library.dart';
 import '../../ui_data/ui_data.dart';
@@ -35,6 +36,11 @@ class CategoryItems extends ChangeNotifier {
   int _refreshRevision = 0;
   int _failures = 0;
   Timer? _retry;
+  Failure? _failure;
+
+  /// The current category cannot be read. Kept until a different sort is
+  /// requested or the category is reopened.
+  Failure? get failure => _failure;
 
   static const slice = 60;
 
@@ -73,43 +79,57 @@ class CategoryItems extends ChangeNotifier {
   }
 
   Future<void> _load(int n) async {
-    if (!_loading.add(n)) return;
+    if (_gone || _failure != null || _retry != null || !_loading.add(n)) return;
     final asked = sort;
     final revision = _refreshRevision;
-    late final UiSlice got;
+    UiSlice? got;
+    Object? failure;
     try {
       got = await data.items(categoryId,
           offset: n * slice, limit: slice, sort: asked);
-      _failures = 0;
     } catch (error) {
-      // The tiles ask again a little later rather than wait for a change
-      // that may not come (#1125: a failed read left them waiting for good).
-      debugPrint('[NextLibrary] $categoryId slice $n not read: $error');
-      _failures++;
-      _retry ??= Timer(Duration(seconds: 1 << _failures.clamp(1, 5)), () {
-        _retry = null;
-        if (!_gone) notifyListeners();
-      });
-      return;
+      failure = error;
     } finally {
       _loading.remove(n);
     }
-    if (_gone || asked != sort) return;
-    if (revision != _refreshRevision) {
+    if (_gone || _failure != null) return;
+    if (asked != sort || revision != _refreshRevision) {
       // Coalesce refreshes that arrived while this stale read was in flight.
       // An empty response cannot rely on a tile to request the next read.
       unawaited(_load(n));
       return;
     }
-    _slices[n] = got.items;
+    if (failure != null) {
+      debugPrint('[NextLibrary] $categoryId slice $n not read: $failure');
+      if (failure is Failure &&
+          {FailureCode.notFound, FailureCode.conflict, FailureCode.invalidInput}
+              .contains(failure.code)) {
+        _failure = failure;
+        _retry?.cancel();
+        _retry = null;
+        notifyListeners();
+      } else {
+        _retry ??= Timer(Duration(seconds: 1 << (++_failures).clamp(1, 5)), () {
+          _retry = null;
+          if (_gone) return;
+          if (_total == 0) unawaited(_load(0));
+          notifyListeners();
+        });
+      }
+      return;
+    }
+    if (_retry == null) _failures = 0;
+    final page = got!;
+    _slices[n] = page.items;
     _stale.remove(n);
-    _total = got.total ??
-        (got.items.length < slice ? n * slice + got.items.length : _total);
+    _total = page.total ??
+        (page.items.length < slice ? n * slice + page.items.length : _total);
     notifyListeners();
   }
 
   /// Something changed: each slice is asked for again as it is shown.
   void refresh() {
+    if (_failure != null) return;
     _refreshRevision++;
     _stale.addAll(_slices.keys);
     // An empty grid builds no tiles, so none can ask for a stale slice.
@@ -120,6 +140,13 @@ class CategoryItems extends ChangeNotifier {
 
   /// Another order: everything again, from the top.
   void reorder(String id) {
+    if (sort != id) {
+      _failure = null;
+      _retry?.cancel();
+      _retry = null;
+      _failures = 0;
+    }
+    _refreshRevision++;
     sort = id;
     _slices.clear();
     _stale.clear();

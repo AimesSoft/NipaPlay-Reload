@@ -251,8 +251,7 @@ void main() {
     expect(TurnBoundaries.latest(file, 'harness_cli:chat:test'), boundary);
   });
 
-  test('past its size the journal is rotated into archives, whole lines, none '
-      'lost or reordered', () async {
+  test('rotation keeps only the four newest archives, with whole ordered lines', () async {
     final file = File(ppath.join(root.path, 'journal.jsonl'));
     final journal = JsonlJournal(file,
         effects: Effect.values.toSet(), rotateBytes: 4096);
@@ -273,7 +272,7 @@ void main() {
     await Future.wait(marks);
     await journal.drain();
     final segments = await JournalAppender.segments(file);
-    expect(segments.length, greaterThan(5));
+    expect(segments, hasLength(5));
     expect(segments.last.path, file.path);
     final archive = JournalAppender.archiveDirectory(file);
     for (final segment in segments.take(segments.length - 1)) {
@@ -285,7 +284,8 @@ void main() {
         for (final row in _lines(segment))
           '${row['actionId'] ?? row['event']}:${(row['input'] as Map?)?['n'] ?? row['n']}'
     ];
-    expect(seen, expected);
+    expect(seen.length, lessThan(expected.length));
+    expect(seen, expected.sublist(expected.length - seen.length));
     // The hot file and every archive stay within the size.
     for (final segment in segments) {
       expect(segment.lengthSync(), lessThanOrEqualTo(4096));

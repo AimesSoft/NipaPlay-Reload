@@ -63,10 +63,13 @@ List<int> _compactLine(InvocationRecord record) =>
 ///
 /// With [rotateBytes] set, a file that the next text appended would take
 /// past that size is first moved, whole lines only, into [archiveDirectory]
-/// as an immutable segment (`<name>-<UTC time>.jsonl`); segments are kept.
+/// as an immutable segment (`<name>-<UTC time>.jsonl`); the four newest
+/// archives are kept in addition to the live file.
 /// [segments] lists them oldest first, then the file itself.
 final class JournalAppender {
-  JournalAppender._(this.file);
+  JournalAppender._(this.file) {
+    _startupPrune = _pruneArchivesBestEffort();
+  }
 
   static final _byPath = <String, JournalAppender>{};
 
@@ -84,6 +87,7 @@ final class JournalAppender {
       file.absolute.uri.normalizePath().toFilePath();
 
   final File file;
+  late final Future<void> _startupPrune;
   int? rotateBytes;
   final _pending = <_Append>[];
   bool _writing = false;
@@ -109,12 +113,13 @@ final class JournalAppender {
 
   /// Completes once everything appended so far has been written.
   Future<void> drain() {
-    if (!_writing) return Future.value();
+    if (!_writing) return _startupPrune;
     final done = append(const <int>[], durable: false);
     return done.then((_) {}, onError: (_) {});
   }
 
   Future<void> _run() async {
+    await _startupPrune;
     while (_pending.isNotEmpty) {
       final batch = List.of(_pending);
       _pending.clear();
@@ -163,6 +168,7 @@ final class JournalAppender {
           await handle.close();
           try {
             await _archive();
+            await _pruneArchivesBestEffort();
           } catch (_) {
             // The file stays hot (a reader may hold it open); the next
             // batch tries again.
@@ -190,17 +196,38 @@ final class JournalAppender {
   /// [file]'s archived segments, oldest first, then [file] itself; only
   /// those that exist.
   static Future<List<File>> segments(File file) async {
+    await of(file)._startupPrune;
+    return [...await _archives(file), if (await file.exists()) file];
+  }
+
+  static Future<List<File>> _archives(File file) async {
     final (stem, extension) = _split(file);
     final directory = archiveDirectory(file);
-    final archived = <File>[
+    final name = RegExp(
+        '^${RegExp.escape(stem)}-[0-9]{8}T[0-9]{6}\\.[0-9]{6}Z${RegExp.escape(extension)}\$');
+    return <File>[
       if (await directory.exists())
         await for (final entity in directory.list(followLinks: false))
-          if (entity is File &&
-              entity.uri.pathSegments.last.startsWith('$stem-') &&
-              entity.path.endsWith(extension))
+          if (entity is File && name.hasMatch(entity.uri.pathSegments.last))
             entity
     ]..sort((a, b) => a.path.compareTo(b.path));
-    return [...archived, if (await file.exists()) file];
+  }
+
+  Future<void> _pruneArchivesBestEffort() async {
+    try {
+      final archives = await _archives(file);
+      final excess = archives.length - 4;
+      if (excess <= 0) return;
+      for (final archive in archives.take(excess)) {
+        try {
+          await archive.delete();
+        } on FileSystemException {
+          // A reader may still hold it open. Try again on the next rotation.
+        }
+      }
+    } on FileSystemException {
+      // Archive maintenance must not interrupt journaling.
+    }
   }
 
   Future<void> _archive() async {

@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/constants/settings_keys.dart';
 import 'package:nipaplay/next/next_core.dart';
+import 'package:nipaplay/utils/settings_storage.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nipaplay/services/scan_service.dart';
@@ -189,12 +191,12 @@ void main() {
     final backend = FakeDownloadBackend(root)..present = true;
     await backend.finish();
     final library = FakeDownloadLibrary();
-    var enabled = false;
+    SharedPreferences.setMockInitialValues({SettingsKeys.downloaderEnabled: false});
     final runtime = createCore(
         root: root,
         backend: backend,
         library: library,
-        isEnabled: () async => enabled,
+        isEnabled: () => SettingsStorage.loadBool(SettingsKeys.downloaderEnabled),
         loadImportedKeys: () async => library.importedKeys);
     addTearDown(() async {
       await runtime.close();
@@ -203,11 +205,53 @@ void main() {
     await runtime.ready;
     expect(backend.initializations, 0);
     expect(await runtime.engine.list(), isEmpty);
-    enabled = true;
+    await SettingsStorage.saveBool(SettingsKeys.downloaderEnabled, true);
     await runtime.downloads.refresh();
     final job = (await runtime.engine.list()).single;
     await untilState(runtime.engine, job.jobId, JobState.succeeded);
     expect(backend.initializations, greaterThan(0));
+  });
+
+  test('disabled jobs write no retry events and wake on the persisted setting',
+      () async {
+    SharedPreferences.setMockInitialValues({SettingsKeys.downloaderEnabled: false});
+    final root = await Directory.systemTemp.createTemp('download-parked-');
+    final backend = FakeDownloadBackend(root);
+    final library = FakeDownloadLibrary();
+    NextCore open() => createCore(
+        root: root, backend: backend, library: library,
+        isEnabled: () => SettingsStorage.loadBool(SettingsKeys.downloaderEnabled),
+        loadImportedKeys: () async => library.importedKeys);
+    var runtime = open();
+    addTearDown(() async {
+      await runtime.close();
+      await root.delete(recursive: true);
+    });
+    await runtime.ready;
+    Future<Job> submit() => runtime.engine.submit(type: 'download',
+        title: 'Parked', input: testRequest.toJson(),
+        details: {'backend': backend.reference.toJson()});
+    final survivor = await submit();
+    final paused = await submit();
+    final cancelled = await submit();
+    await runtime.downloads.downloads.pause(paused.jobId);
+    await runtime.engine.cancel(cancelled.jobId);
+    await runtime.close();
+    runtime = open();
+    await runtime.ready;
+
+    await Future<void>.delayed(const Duration(milliseconds: 5200));
+    expect(await runtime.engine.store.events(survivor.jobId), hasLength(1));
+    expect((await runtime.engine.get(survivor.jobId)).state, JobState.queued);
+    expect(backend.initializations, 0);
+    expect(backend.additions, 0);
+    expect((await runtime.engine.get(paused.jobId)).state, JobState.paused);
+    expect((await runtime.engine.get(cancelled.jobId)).state, JobState.cancelled);
+    await SettingsStorage.saveBool(SettingsKeys.downloaderEnabled, true);
+    await backend.addEntered.future.timeout(const Duration(seconds: 2));
+    expect((await runtime.engine.get(survivor.jobId)).state, JobState.running);
+    expect((await runtime.engine.get(paused.jobId)).state, JobState.paused);
+    expect((await runtime.engine.get(cancelled.jobId)).state, JobState.cancelled);
   });
 
   test(

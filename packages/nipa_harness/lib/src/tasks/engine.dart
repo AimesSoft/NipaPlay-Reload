@@ -143,6 +143,26 @@ final class TaskEngine {
   final Map<String, Timer> _retries = {};
   final Map<String, int> _capacities = {};
   final Map<String, Job> _waiting = {};
+  final _admissionBlocked = <String>{};
+  final _deferredRecovery = <String>{};
+  final _obsoleteRetries = <String, bool Function(Job)>{};
+
+  /// Gates new workers without changing persisted jobs or stopping existing
+  /// workers. Cancellation reconciliation is admitted even while blocked.
+  /// A supplied [obsoleteRetry] policy ignores legacy retry deadlines for
+  /// that type; all other retry deadlines are retained.
+  void setAdmission(String type,
+      {required bool allowed, bool Function(Job)? obsoleteRetry}) {
+    if (obsoleteRetry != null) _obsoleteRetries[type] = obsoleteRetry;
+    if (allowed) {
+      if (_admissionBlocked.remove(type)) _drain(type);
+    } else {
+      _admissionBlocked.add(type);
+    }
+  }
+
+  bool _isBlocked(Job job) =>
+      job.cancelRequestedAt == null && _admissionBlocked.contains(job.type);
 
   /// Limits newly admitted workers; changing a limit never interrupts work.
   void setCapacity(String type, int capacity) {
@@ -191,6 +211,11 @@ final class TaskEngine {
           if (state == JobState.running ||
               state == JobState.cancelling ||
               state == JobState.waitingUser) {
+            if (_isBlocked(job)) {
+              _deferredRecovery.add(job.jobId);
+              jobs.add(job);
+              continue;
+            }
             final interrupted = _change(job, state: JobState.interrupted);
             await _commit(interrupted, job, 'interrupted');
             jobs.add(interrupted);
@@ -464,6 +489,8 @@ final class TaskEngine {
     });
     _active[jobId]?._signal(retire: true);
     _retries.remove(jobId)?.cancel();
+    _waiting.remove(jobId);
+    _deferredRecovery.remove(jobId);
     return job;
   }
 
@@ -586,17 +613,21 @@ final class TaskEngine {
         !_executors.containsKey(job.type)) {
       return;
     }
-    if (_capacities.containsKey(job.type) &&
-        activeCount(job.type) >= _capacities[job.type]!) {
-      if (_canRun(job.state)) _waiting[job.jobId] = job;
+    if (!_canRun(job.state) && !_deferredRecovery.contains(job.jobId)) return;
+    if (_isBlocked(job) || _atCapacity(job.type)) {
+      _waiting[job.jobId] = job;
       return;
     }
     if (job.state == JobState.waitingRetry) {
+      if (_obsoleteRetries[job.type]?.call(job) == true) {
+        _launch(job, retry: true);
+        return;
+      }
       _retries[job.jobId] =
           Timer(job.retryAt!.difference(DateTime.now().toUtc()), () {
         _launch(job, retry: true);
       });
-    } else if (_canRun(job.state)) {
+    } else {
       _launch(job);
     }
   }
@@ -613,11 +644,13 @@ final class TaskEngine {
     }
   }
 
+  bool _atCapacity(String type) =>
+      _capacities.containsKey(type) && activeCount(type) >= _capacities[type]!;
+
   void _launch(Job job, {bool retry = false}) {
     if (_closed || _active.containsKey(job.jobId)) return;
-    if (_capacities.containsKey(job.type) &&
-        activeCount(job.type) >= _capacities[job.type]!) {
-      if (_canRun(job.state)) _waiting[job.jobId] = job;
+    if (_isBlocked(job) || _atCapacity(job.type)) {
+      _waiting[job.jobId] = job;
       return;
     }
     final context = JobContext._(this, job);
@@ -628,19 +661,40 @@ final class TaskEngine {
 
   Future<void> _run(JobContext context, {required bool retry}) async {
     final action = _ExecutorAction(() async {
-      final current = await get(context.job.jobId);
-      context._job = current;
-      if (current.state.isTerminal || current.state == JobState.paused) return;
-      final executor = _executors[current.type]!;
-      if (current.state == JobState.queued ||
-          (retry && current.state == JobState.waitingRetry)) {
-        if (retry) {
-          await context._update('retry_due', state: JobState.interrupted);
-          await executor.recover(context);
-        } else {
-          await context.running();
-          await executor.execute(context);
+      final execute = await _serial<bool?>(() async {
+        if (_closed) return null;
+        final current = await _get(context.job.jobId);
+        context._job = current;
+        if (current.ownerDeviceId != ownerDeviceId ||
+            current.state.isTerminal || current.state == JobState.paused ||
+            context._retired || _isBlocked(current)) {
+          return null;
         }
+        if (current.cancelRequestedAt != null) context._signal();
+        final deferred = _deferredRecovery.remove(current.jobId);
+        final queued = current.state == JobState.queued;
+        String? kind;
+        if (queued) {
+          kind = 'running';
+        } else if (retry && current.state == JobState.waitingRetry) {
+          kind = 'retry_due';
+        } else if (deferred &&
+            (current.state == JobState.running ||
+                current.state == JobState.waitingUser)) {
+          kind = 'interrupted';
+        }
+        if (kind != null) {
+          final next = _change(current,
+              state: queued ? JobState.running : JobState.interrupted);
+          await _commit(next, current, kind);
+          context._job = next;
+        }
+        return queued;
+      }, allowClosed: true);
+      if (execute == null || context._retired) return;
+      final executor = _executors[context.job.type]!;
+      if (execute) {
+        await executor.execute(context);
       } else {
         await executor.recover(context);
       }

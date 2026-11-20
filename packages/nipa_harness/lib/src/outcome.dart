@@ -109,6 +109,9 @@ final class Failure implements Exception, JsonEncodable {
   final JsonMap details;
 
   @override
+  String toString() => '${code.wireName}: $message';
+
+  @override
   JsonMap toJson() => {
         'code': code.wireName,
         'message': message,

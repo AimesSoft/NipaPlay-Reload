@@ -227,6 +227,43 @@ void main() {
     expect(executor.executions, 1);
   });
 
+  for (final cancel in [false, true]) {
+    test('blocked restart preserves a running snapshot until '
+        '${cancel ? 'cancel' : 'enabled'}', () async {
+      await engine.start();
+      final job = await engine.submit(type: 'test', title: 'Recover later');
+      await executor.entered.future;
+      await engine.close();
+      executor.release.complete();
+      final second = FakeExecutor(onRecover: (context) async {
+        if (cancel) {
+          await context.stopRequested;
+          await context.cancelled(verified());
+        } else {
+          expect(context.job.state, JobState.interrupted);
+          await context.succeed(verified());
+        }
+      });
+      engine = TaskEngine(
+          store: store, ownerDeviceId: 'device-test', executors: [second]);
+      engine.setAdmission('test', allowed: false);
+      await engine.start();
+      expect((await store.events(job.jobId)).map((event) => event.kind),
+          ['submitted', 'running']);
+      expect(second.recoveries, 0);
+      if (cancel) {
+        await engine.cancel(job.jobId);
+      } else {
+        engine.setAdmission('test', allowed: true);
+        engine.setAdmission('test', allowed: true);
+      }
+      await untilState(engine, job.jobId,
+          cancel ? JobState.cancelled : JobState.succeeded);
+      expect(second.recoveries, 1);
+      expect(second.executions, 0);
+    });
+  }
+
   test('worker exceptions persist failures and never become success', () async {
     engine = TaskEngine(store: store, ownerDeviceId: 'device-test', executors: [
       FakeExecutor(onExecute: (_) async => throw StateError('broken')),
