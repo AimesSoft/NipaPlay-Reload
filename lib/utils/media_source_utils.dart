@@ -485,6 +485,27 @@ class MediaSourceUtils {
         .buildStreamUrl(connection, parsed.relativePath);
   }
 
+  /// 同 [resolveSmbPathToUrl]，但会先确保 SMB 连接配置已加载、本地代理已启动，
+  /// 并把已解析的凭据同步到代理 isolate。
+  static Future<String?> resolveSmbPathToUrlInitialized(String filePath) async {
+    await prepareSmbPath(filePath);
+    return resolveSmbPathToUrl(filePath);
+  }
+
+  /// 加载 SMB 连接配置、启动本地代理，并在交给播放器之前把已解析的凭据同步到
+  /// 代理 isolate，使代理处理请求时不必回到 root isolate 查询凭据。
+  static Future<void> prepareSmbPath(String filePath) async {
+    await SMBService.instance.initialize();
+    await SMBProxyService.instance.initialize();
+    final parsed = parseSmbPath(filePath);
+    if (parsed == null) return;
+    final connection =
+        SMBService.instance.getConnectionByIdOrName(parsed.connectionName);
+    if (connection != null) {
+      await SMBProxyService.instance.prepareConnection(connection);
+    }
+  }
+
   /// Resolve stable remote-library paths while leaving regular URLs alone.
   static String? resolveRemotePathToUrl(String filePath) {
     if (isNewWebDavPath(filePath)) {
