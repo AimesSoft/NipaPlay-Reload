@@ -682,6 +682,8 @@ void main() {
         'followup_objects': {'kind': 'download', 'object': 'o', 'followup_id': 'f1'},
         'harness_sessions': {'repository': 'r', 'main_thread': 'm', 'current_thread': 'c'},
         'harness_discoveries': {'at': 't', 'origin': 'o', 'invocation_id': 'i', 'repository': 'r', 'title': 't', 'source': 's', 'facts': '{}'},
+        'conversation_turns': {'thread': 'th', 'turn': 'tu', 'record': '{}'},
+        'conversation_prefixes': {'thread': 'th', 'record': '[]'},
         'body_changes': {'at': 't', 'type': 'x', 'subject_id': 's', 'actor': 'a', 'origin': 'o', 'facts': '{}'},
         'settings_changes': {'key': 'k', 'previous_value': '1', 'value': '2', 'changed_at': 't', 'changed_by': 'u', 'origin': 'gui', 'invocation_id': 'i', 'revision': 1},
         'media_metadata_edits': {'entity_id': 'w1', 'field': 'title', 'value': '"x"', 'mode': 'persistent', 'actor': 'user', 'origin': 'gui', 'invocation_id': 'i', 'changed_at': 't'},

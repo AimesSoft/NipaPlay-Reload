@@ -24,10 +24,10 @@ Future<List<ConversationTurn>> _decodePrefix(String encoded) => _work(
         .toList());
 
 Future<void> migrateHandover(Database db) async {
-  await db.execute('''CREATE TABLE conversation_turns (
+  await db.execute('''CREATE TABLE IF NOT EXISTS conversation_turns (
     sequence INTEGER PRIMARY KEY AUTOINCREMENT, thread TEXT NOT NULL,
     turn TEXT NOT NULL, record TEXT NOT NULL, UNIQUE(thread, turn))''');
-  await db.execute('''CREATE TABLE conversation_prefixes (
+  await db.execute('''CREATE TABLE IF NOT EXISTS conversation_prefixes (
     thread TEXT PRIMARY KEY, record TEXT NOT NULL)''');
 }
 
@@ -219,18 +219,51 @@ final class HandoverPayload {
         outputs[id] = (outputs[id] ?? 0) + 1;
       }
     }
-    return [
-      for (final (index, item) in items.indexed)
-        if (item['type'] == 'message')
-          item
-        else if (counts[item['call_id']] == 1 &&
-            outputs[item['call_id']] == 1 &&
-            (item['type'] == 'function_call' ||
-                index > pending[item['call_id']]!))
-          item
-        else if (item['type'] == 'function_call')
-          ConversationTurn.message('assistant', ConversationTurn.incomplete),
-    ];
+    // A placeholder for a call without its result, and a message that sits
+    // between a paired call and its output, wait until no paired call is
+    // open, so every call is followed by its output before anything else.
+    final result = <ConversationJson>[];
+    final open = <Object?>{};
+    final deferred = <ConversationJson>[];
+    var incomplete = false;
+    void settle() {
+      if (open.isNotEmpty) return;
+      if (incomplete) {
+        result.add(
+            ConversationTurn.message('assistant', ConversationTurn.incomplete));
+        incomplete = false;
+      }
+      result.addAll(deferred);
+      deferred.clear();
+    }
+
+    for (final (index, item) in items.indexed) {
+      final id = item['call_id'];
+      if (item['type'] == 'message') {
+        if (open.isEmpty) {
+          settle();
+          result.add(item);
+        } else {
+          deferred.add(item);
+        }
+      } else if (counts[id] == 1 &&
+          outputs[id] == 1 &&
+          (item['type'] == 'function_call' || index > pending[id]!)) {
+        result.add(item);
+        if (item['type'] == 'function_call') {
+          open.add(id);
+        } else {
+          open.remove(id);
+          settle();
+        }
+      } else if (item['type'] == 'function_call') {
+        incomplete = true;
+        settle();
+      }
+    }
+    open.clear();
+    settle();
+    return result;
   }
 
   Iterable<ConversationJson> get responses sync* {

@@ -11,6 +11,8 @@ export function validateHandover(turns) {
   return turns.map((items) => {
     if (!Array.isArray(items) || !items.length) throw new Error('Invalid conversation turn');
     const pending = new Set();
+    // Another runtime may reuse short call ids across turns; keep them unique.
+    const renamed = new Map();
     const segments = [];
     let step;
     const nextStep = () => {
@@ -37,22 +39,33 @@ export function validateHandover(turns) {
           break;
         }
         case 'function_call': {
-          if (typeof item.call_id !== 'string' || !item.call_id || seen.has(item.call_id) ||
+          if (typeof item.call_id !== 'string' || !item.call_id || renamed.has(item.call_id) ||
               typeof item.name !== 'string' || !item.name || typeof item.arguments !== 'string') {
             throw new Error('Invalid conversation tool call');
           }
-          JSON.parse(item.arguments);
+          let args = item.arguments;
+          try {
+            JSON.parse(args);
+          } catch {
+            // Keep a call whose arguments were not valid JSON as recorded text.
+            args = JSON.stringify({ arguments: args });
+          }
+          let id = item.call_id;
+          for (let n = 2; seen.has(id); n++) id = `${item.call_id}~${n}`;
+          renamed.set(item.call_id, id);
           if (!step || step.results.length) nextStep();
-          seen.add(item.call_id);
-          pending.add(item.call_id);
-          const call = { id: item.call_id, name: item.name, arguments: item.arguments };
+          seen.add(id);
+          pending.add(id);
+          const call = { id, name: item.name, arguments: args };
           step.calls.push(call);
           step.content.push({ type: 'tool-call', ...call });
           break;
         }
         case 'function_call_output':
-          if (!pending.delete(item.call_id) || typeof item.output !== 'string') throw new Error('Invalid conversation tool result');
-          step.results.push(item);
+          if (!pending.delete(renamed.get(item.call_id)) || typeof item.output !== 'string') {
+            throw new Error('Invalid conversation tool result');
+          }
+          step.results.push({ ...item, call_id: renamed.get(item.call_id) });
           break;
         default:
           throw new Error('Unsupported conversation item');

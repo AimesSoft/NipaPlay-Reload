@@ -69,6 +69,9 @@ final class HostSettingsService
   }
   final Directory root, codexHome;
   final CodexRuntime? codex;
+  /// With the user's own Codex config, the account is read through a
+  /// write-protected `codex login status`, never signed in or out here.
+  /// Conversations still run on that config.
   final bool externalCodexStatusOnly;
 
   /// The Node.js and DeepSeek Harness NipaPlay fetches for itself.
@@ -355,8 +358,6 @@ final class HostSettingsService
     final host = chat();
     final api = value['api'] == 'chat' ? UiModelApi.chat : UiModelApi.responses;
     final missing = source == UiModelSource.chatgpt ? null : source == UiModelSource.codex
-        && externalCodexStatusOnly ? '已有配置只显示账号状态'
-        : source == UiModelSource.codex
         ? exists
             ? null
             : '这台电脑还没有 Codex 配置'
@@ -746,10 +747,6 @@ final class HostSettingsService
 
   Future<ModelLaunch> launch({AgentRuntimeKind? runtime}) async {
     if ((runtime ?? await effectiveRuntime()) == AgentRuntimeKind.dsh) return _dshLaunch();
-    await _writes;
-    if (externalCodexStatusOnly && _source(await _read('model.json')) == UiModelSource.codex) {
-      throw StateError('已有配置只显示账号状态');
-    }
     // Installation can outlast a settings edit. Read the selected model only
     // after it completes so first-use input takes effect on this launch.
     final executable = await codex?.executable();
@@ -757,7 +754,6 @@ final class HostSettingsService
     final value = await _read('model.json');
     final revision = value['revision'] as int? ?? 0;
     if (_source(value) == UiModelSource.codex) {
-      if (externalCodexStatusOnly) throw StateError('已有配置只显示账号状态');
       return ModelLaunch(revision: revision, executable: executable);
     }
     if (_source(value) == UiModelSource.chatgpt) {
@@ -920,7 +916,7 @@ final class HostSettingsService
     UiModelCheck result;
     final source = _source(value, await effectiveRuntime());
     if (source != UiModelSource.nipaplay) {
-      result = source == UiModelSource.chatgpt || externalCodexStatusOnly
+      result = source == UiModelSource.chatgpt
           ? const UiModelCheck(ok: false, message: '请查看 Codex 账号状态')
           : await checkCodex();
     } else {
