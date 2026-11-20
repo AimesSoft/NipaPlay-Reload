@@ -202,7 +202,7 @@ final class NextCore {
 
   /// Restarts the conversation host so store changes take effect; set by
   /// the interface that runs it.
-  Future<void> Function()? restartAgent;
+  Future<StoreApplyResult> Function()? restartAgent;
   late final SessionStore sessions;
   late final HarnessMemory memory;
   late final CapabilityCatalogChanges catalogChanges;
@@ -641,12 +641,8 @@ final class NextCore {
       programRepository,
       FollowupCapability(followups),
       ChatAttachmentCapability(mesh.rpc),
-      StoreCapability(store, restart: () async {
-        final restart = restartAgent ??
-            (throw const Failure(FailureCode.unavailable,
-                'No conversation host runs here to restart.'));
-        await restart();
-      }),
+      StoreCapability(store, restart: () async => await restartAgent?.call() ??
+          const StoreApplyResult.notRun('No conversation host runs here to restart.')),
       UiDataCapability(uiData),
       LibraryCapability(libraryData),
     ];

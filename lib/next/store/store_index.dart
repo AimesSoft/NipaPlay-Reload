@@ -11,8 +11,7 @@ enum StoreOrigin { official, npm }
 final _id = RegExp(r'^[a-z0-9][a-z0-9-]{0,47}$');
 final _hex = RegExp(r'^[0-9a-f]{64}$');
 final _path = RegExp(r'^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$');
-final _npmName =
-    RegExp(r'^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$');
+final _npmName = RegExp(r'^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$');
 final _semver = RegExp(r'^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$');
 
 const storeCategories = {'bt', 'danmaku', 'model', 'tool'};
@@ -40,6 +39,7 @@ Never _bad(String message) => throw StoreFormatException(message);
 
 bool storeId(String value) => _id.hasMatch(value);
 bool npmName(String value) => value.length <= 214 && _npmName.hasMatch(value);
+bool storeVersion(String value) => _semver.hasMatch(value);
 
 /// A relative path without `.`/`..` segments or anything a file system
 /// might read otherwise.
@@ -109,7 +109,8 @@ final class StorePackage {
     if (version is! String || !_semver.hasMatch(version)) {
       _bad('$where 的 version 无效');
     }
-    if (path != 'node_modules/$name') _bad('$where 的 path 应为 node_modules/$name');
+    if (path != 'node_modules/$name')
+      _bad('$where 的 path 应为 node_modules/$name');
     if (url is! String ||
         !RegExp(r'^[A-Za-z0-9@._/%-]+\.tgz$').hasMatch(url) ||
         url.split('/').contains('..')) {
@@ -231,6 +232,9 @@ final class StoreItem {
   final List<StoreDshRow> dsh;
 
   bool get reviewed => origin == StoreOrigin.official;
+  String? get npmPackage => origin == StoreOrigin.npm && packages.length == 1
+      ? packages.single.name
+      : null;
 
   static StoreItem parse(Object? raw, {required StoreOrigin origin}) {
     if (raw is! Map) _bad('条目应为对象');
@@ -329,8 +333,7 @@ final class StoreItem {
       notices: notices.cast<String>(),
       readme: raw['readme'] == null
           ? null
-          : StoreFile.parse(raw['readme'], '$where 的 readme',
-              needsPath: false),
+          : StoreFile.parse(raw['readme'], '$where 的 readme', needsPath: false),
       files: files,
       packages: packages,
       peers: peers,
@@ -342,6 +345,7 @@ final class StoreItem {
         'id': id,
         'kind': kind.name,
         'origin': origin.name,
+        if (npmPackage != null) 'npmPackage': npmPackage,
         'name': name,
         'version': version,
         'description': description,
@@ -355,7 +359,8 @@ final class StoreItem {
             'sha256': readme!.sha256,
             'bytes': readme!.bytes
           },
-        if (kind == StoreKind.skill) 'files': [for (final f in files) f.toJson()],
+        if (kind == StoreKind.skill)
+          'files': [for (final f in files) f.toJson()],
         if (packages.isNotEmpty)
           'packages': [for (final p in packages) p.toJson()],
         if (kind == StoreKind.plugin) ...{

@@ -397,7 +397,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
             (resolvedActualPlayUrl == null ||
                 resolvedActualPlayUrl.isEmpty)) {
           resolvedActualPlayUrl =
-              MediaSourceUtils.resolveSmbPathToUrl(videoPath);
+              await MediaSourceUtils.resolveSmbPathToUrlInitialized(videoPath);
         }
         if (resolvedActualPlayUrl == null || resolvedActualPlayUrl.isEmpty) {
           _setStatus(PlayerStatus.error, message: '无法解析远程媒体路径，请检查连接配置');

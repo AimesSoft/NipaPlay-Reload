@@ -5,6 +5,8 @@ import 'knowledge/service.dart';
 import 'knowledge/capability.dart';
 import 'dart:io';
 import 'followups/service.dart';
+import 'store/capability.dart'
+    show StoreApplyResult, storeAppliedEvent, storeAppliedObject, storeAppliedFacts;
 import 'platform/background_activity.dart';
 import 'platform/loop_lag.dart';
 import 'player/classic/classic_boundary.dart';
@@ -623,7 +625,7 @@ final class NextRuntime extends ChangeNotifier {
                 File('${labRoot.path}/codex-home/config.toml').existsSync()
             ? AgentRuntimeKind.codex
             : AgentRuntimeKind.dsh,
-        runtimeChanged: _restartChat,
+        runtimeChanged: () async { await _restartChat(); },
         codex: LabProfile.active || !desktop
             ? null
             : CodexRuntime.desktop(
@@ -819,7 +821,7 @@ final class NextRuntime extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _startChat(Directory repository) async {
+  Future<void> _startChat(Directory repository, {String? resumeThreadId}) async {
     chatError = null;
     await _hostEvents?.cancel();
     await _activityEvents?.cancel();
@@ -830,6 +832,7 @@ final class NextRuntime extends ChangeNotifier {
       if (await _hostSettings!.effectiveRuntime() == AgentRuntimeKind.dsh) {
         dsh = await _hostSettings!.dshLaunchRuntime();
         if (dsh == null) {
+          chatError = 'The runtime is not installed.';
           // Nothing to start until the runtime is there; settings say so.
           await ServiceProvider.nextCore.followups
               .attach(null, reason: 'The runtime is not installed.');
@@ -876,10 +879,9 @@ final class NextRuntime extends ChangeNotifier {
         baseInstructions: base,
         dsh: dsh,
         dshPlugins: dsh == null ? null : Directory('$agent/dsh'),
-        extensions: ServiceProvider.nextCore.store.hostFacts,
-        protectedPaths: ServiceProvider.nextCore.store.protectedPaths);
+        extensions: ServiceProvider.nextCore.store.hostFacts);
     final core = ServiceProvider.nextCore;
-    core.restartAgent = _restartChat;
+    core.restartAgent = () => _restartChat(applyStore: true);
     core.jobOrigins.threadFor = host.threadForOrigin;
     core.memory.recent = (current) async {
       final activity = await core.state.views['activity']!.readPage!(0, 5);
@@ -910,7 +912,11 @@ final class NextRuntime extends ChangeNotifier {
     if (kDebugMode && LabProfile.active) recordDebugChat(host);
     try {
       await host.start();
-      await host.getMainSession();
+      if (resumeThreadId == null) {
+        await host.getMainSession();
+      } else {
+        await host.resumeThread(resumeThreadId);
+      }
       await ServiceProvider.nextCore.followups.attach(host);
     } catch (error) {
       chatError = redactHarnessText(error.toString());
@@ -923,21 +929,51 @@ final class NextRuntime extends ChangeNotifier {
   }
 
   /// The runtime was switched: the running host goes, the other one starts.
-  Future<void> _restartChat() async {
-    if (_disposed || !_open) return;
-    _operations = _operations.then((_) async {
-      if (_disposed || !_open) return;
-      if (_endpointStatus case AgentEndpointRunning(:final repository)) {
-        await ServiceProvider.nextCore.followups
-            .attach(null, reason: 'The Nipa runtime changed.');
+  Future<StoreApplyResult> _restartChat({bool applyStore = false}) async {
+    if (_disposed || !_open) {
+      return const StoreApplyResult.notRun('The host is closed.');
+    }
+    final operation = _operations.then((_) async {
+      if (_disposed || !_open) {
+        return const StoreApplyResult.notRun('The host is closed.');
+      }
+      final endpoint = _endpointStatus;
+      if (endpoint is! AgentEndpointRunning) {
+        return const StoreApplyResult.notRun('The agent endpoint is not running.');
+      }
+      if (applyStore && chat?.available != true) {
+        return StoreApplyResult.notRun(chatError ?? 'The conversation host is not running.');
+      }
+      try {
+        final followups = ServiceProvider.nextCore.followups;
+        final selected = applyStore ? chat?.threadId : null;
+        await followups.attach(null,
+            reason: applyStore
+                ? 'Restarting for store changes.'
+                : 'The Nipa runtime changed.');
         await chat?.close();
         chat = null;
         chatError = null;
-        await _startChat(repository);
-        notifyListeners();
+        await _startChat(endpoint.repository, resumeThreadId: selected);
+        if (!_disposed) notifyListeners();
+        if (chat?.available != true || chatError != null) {
+          return StoreApplyResult.failed(chatError ?? 'The conversation host did not start.');
+        }
+        if (applyStore) {
+          try {
+            await followups.hookEvent(storeAppliedEvent, storeAppliedObject, storeAppliedFacts());
+          } catch (error) {
+            return StoreApplyResult.restarted(eventError: redactHarnessText('$error'));
+          }
+        }
+        return const StoreApplyResult.restarted();
+      } catch (error) {
+        if (!applyStore) rethrow;
+        return StoreApplyResult.failed(redactHarnessText('$error'));
       }
     });
-    await _operations;
+    _operations = operation.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return operation;
   }
 
   Future<UiModelCheck> _checkCodexModel() async {

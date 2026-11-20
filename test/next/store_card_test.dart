@@ -11,6 +11,7 @@ import 'package:nipaplay/next/ui/widgets/sheet.dart';
 final class _FakeStore implements Capability {
   final calls = <String>[];
   var installed = false;
+  var notRun = false;
 
   JsonMap get _item => {
         'id': 'dmhy',
@@ -41,15 +42,38 @@ final class _FakeStore implements Capability {
 
   @override
   late final List<Action> actions = [
-    _action('store.list', (_) async => {
-          'official': [_item],
-          'installed': [if (installed) _item],
-        }),
+    _action(
+        'store.list',
+        (_) async => {
+              'official': [_item],
+              'installed': [if (installed) _item],
+            }),
     _action('store.install', (input) async {
       installed = true;
       return {'installed': _item};
     }),
-    _action('store.apply', (_) async => {'restarted': true}),
+    _action(
+        'store.resolve_npm',
+        (_) async => {
+              'npm': 'dsh-example',
+              'requested': 'latest',
+              'version': '1.0.0',
+              'integrity': 'sha512-preview',
+              'hasSkill': true,
+              'declaresDshPlugin': true,
+              'notices': ['没有经过审核'],
+              'kinds': {
+                'skill': {'installable': true},
+                'plugin': {'installable': true}
+              },
+            }),
+    _action(
+        'store.readme', (_) async => {'version': '2.0.0', 'readme': '另一版说明'}),
+    _action(
+        'store.apply',
+        (_) async => notRun
+            ? {'status': 'notRun', 'restarted': false, 'reason': '未运行'}
+            : {'restarted': true}),
   ];
 }
 
@@ -58,8 +82,7 @@ void main() {
 
   Future<void> pumpCard(WidgetTester tester) async {
     fake = _FakeStore();
-    final store =
-        NextRikaStore(GuiCalls(() async => Harness([fake])));
+    final store = NextRikaStore(GuiCalls(() async => Harness([fake])));
     tester.view.physicalSize = const Size(1400, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -81,6 +104,11 @@ void main() {
     expect(find.text('动漫花园'), findsOneWidget);
     expect(find.text('BT 来源'), findsOneWidget);
     expect(find.text('重启梨花'), findsNothing);
+    await tester.tap(find.text('动漫花园'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('说明对应版本 2.0.0'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('store.details.close')));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('安装').first);
     await tester.pumpAndSettle();
@@ -96,6 +124,12 @@ void main() {
     expect(fake.calls, contains('store.install {id: dmhy, version: 1.0.0}'));
     expect(find.text('卸载'), findsOneWidget);
 
+    fake.notRun = true;
+    await tester.tap(find.text('重启梨花'));
+    await tester.pumpAndSettle();
+    expect(find.text('重启梨花'), findsOneWidget);
+    expect(find.textContaining('未重启'), findsOneWidget);
+    fake.notRun = false;
     await tester.tap(find.text('重启梨花'));
     await tester.pumpAndSettle();
     expect(fake.calls, contains('store.apply'));
@@ -105,13 +139,18 @@ void main() {
   testWidgets('an npm package is installed only after the warning',
       (tester) async {
     await pumpCard(tester);
-    await tester.enterText(find.byType(EditableText), 'dsh-example@1.0.0');
+    await tester.enterText(find.byType(EditableText), 'dsh-example');
     await tester.pumpAndSettle();
     await tester.tap(find.text('安装').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('没有经过审核'), findsWidgets);
-    await tester.tap(find.byKey(const Key('store.notice.accept')));
+    expect(find.textContaining('请求：latest · 解析版本：1.0.0'), findsOneWidget);
+    expect(find.text('安装为DSH 插件'), findsOneWidget);
+    await tester.tap(find.text('安装为技能'));
     await tester.pumpAndSettle();
-    expect(fake.calls, contains('store.install {npm: dsh-example@1.0.0}'));
+    expect(
+        fake.calls,
+        contains(
+            'store.install {version: 1.0.0, npm: dsh-example, kind: skill, integrity: sha512-preview}'));
   });
 }

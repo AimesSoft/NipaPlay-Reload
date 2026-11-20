@@ -1,6 +1,7 @@
 import 'package:nipa_harness/nipa_harness.dart';
 
 import '../harness_hooks.dart';
+import '../store/capability.dart' show storeAppliedEvent;
 import 'service.dart';
 import 'inbox_capability.dart';
 
@@ -179,7 +180,7 @@ final class _FollowupAction extends Action<_Json, _Json> {
           'register' => ObjectSchema({
               'when': ObjectSchema({
                 'jobId': const StringSchema(minLength: 1),
-                'event': StringSchema(values: HarnessHooks.events.toList()),
+                'event': StringSchema(values: [...HarnessHooks.events, storeAppliedEvent]),
                 'objectId': const StringSchema(minLength: 1),
               }),
               'instruction': const StringSchema(minLength: 1),

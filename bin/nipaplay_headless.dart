@@ -66,7 +66,7 @@ Future<void> main(List<String> arguments) async {
           '  --agent-enable | --agent-disable | --agent-status --data DIR (the switch that lets Nipa run on this host)\n'
           '  A running host applies these without a restart. Talk to her with ./nipa chat in the host harness.\n'
           '  Nipa\'s store (official items: ./nipa call store.list / store.install in the harness):\n'
-          '  --store-install-npm NAME[@VERSION] --data DIR (an npm skill or DSH plugin nobody reviewed, in an interactive terminal: type its name to confirm; loaded when Nipa next starts)');
+          '  --store-install-npm NAME[@TAG_OR_VERSION] --data DIR (shows the resolved version and available kinds; type the package name and kind to confirm; loaded when Nipa next starts)');
       return;
     }
     if (key == '--enroll-token-stdin') { enroll = true; continue; }

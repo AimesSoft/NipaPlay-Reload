@@ -13,7 +13,6 @@ class RemoteProxyDiagnostics {
 
   static final Map<String, RemoteProxyDiagnostics> _instances = {};
   final String protocol;
-  HttpServer? _server;
   int _port = 0;
   bool _streamEnded = false;
   bool _probing = false;
@@ -31,14 +30,19 @@ class RemoteProxyDiagnostics {
       ? '${error.runtimeType} errno=${error.osError?.errorCode}'
       : '${error.runtimeType}';
 
-  Stream<HttpRequest> observe(HttpServer server) {
-    _server = server;
-    _port = server.port;
+  /// Records the port of a listener served by another isolate, so [probe]
+  /// can reach it over loopback.
+  void attach(int port) {
+    _port = port;
     _streamEnded = false;
     _generation++;
     _uptime
       ..reset()
       ..start();
+  }
+
+  Stream<HttpRequest> observe(HttpServer server) {
+    attach(server.port);
     final generation = _generation;
     log('listener-bound');
     return server.transform(StreamTransformer.fromHandlers(
@@ -86,8 +90,7 @@ class RemoteProxyDiagnostics {
 
   /// Reports whether the cached endpoint is reachable, without repairing it.
   Future<void> probe(String reason) async {
-    final server = _server;
-    if (server == null || _probing || kIsWeb) return;
+    if (_port == 0 || _probing || kIsWeb) return;
     _probing = true;
     final generation = _generation;
     final watch = Stopwatch()..start();
