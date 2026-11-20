@@ -2,7 +2,10 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipa_harness/nipa_harness.dart';
+import 'package:nipaplay/next/events/capability.dart';
+import 'package:nipaplay/next/followups/capability.dart';
 import 'package:nipaplay/next/followups/service.dart';
+import 'package:nipaplay/next/store/capability.dart';
 import 'package:nipaplay/next/chat/session_store.dart';
 import 'package:nipaplay/next/chat/helpers.dart';
 import 'package:nipaplay/next/harness_location.dart';
@@ -75,6 +78,42 @@ void main() {
         where: 'type=?', whereArgs: ['followup.triggered']);
     expect(events, hasLength(1));
     expect(await store.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+  });
+
+  test('store restart is discoverable and triggers a durable followup', () async {
+    final events = BodyEvents(store.database);
+    addTearDown(events.committed.close);
+    final harness = Harness([events, FollowupCapability(followups)]);
+    Future<JsonMap> call(String action, JsonMap input) async {
+      final outcome = await harness.invokeJson(
+          action, input, Invocation(origin: 'harness_cli'));
+      expect(outcome, isA<Completed>());
+      return (outcome as Completed).value.toJson() as JsonMap;
+    }
+
+    final catalog = await call('events.describe', {});
+    final contract = (catalog['events'] as List)
+        .cast<Map>()
+        .singleWhere((event) => event['name'] == storeAppliedEvent);
+    expect(contract['followup'], isTrue);
+    expect(contract['hook'], isFalse);
+    await call('followup.register', {
+      'when': {'event': storeAppliedEvent, 'objectId': storeAppliedObject},
+      'instruction': 'Use the extension in a new turn',
+    });
+    await followups.attach(null, reason: 'Restarting for store changes.');
+    expect((await followups.list()).single['state'], 'waiting');
+    await followups.hookEvent(
+        storeAppliedEvent, storeAppliedObject, storeAppliedFacts());
+    await followups.sweep();
+    expect((await followups.list()).single['state'], 'ready');
+    final replay = await call('events.wait', {
+      'events': [storeAppliedEvent],
+      'entityId': storeAppliedObject,
+      'timeoutMs': 0,
+    });
+    expect(((replay['events'] as List).single as Map)['entityId'],
+        storeAppliedObject);
   });
 
   test('cancel is durable, idempotent and preserves registration history',

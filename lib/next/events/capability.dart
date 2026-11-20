@@ -4,6 +4,7 @@ import 'package:nipa_harness/nipa_harness.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../capabilities/classic_action.dart';
 import '../harness_hooks.dart';
+import '../store/capability.dart' show storeAppliedEvent;
 import 'signals.dart';
 
 /// The followup journal is also the public event cursor; no second event store.
@@ -53,7 +54,8 @@ final class BodyEvents implements Capability {
   Future<JsonMap> wait(JsonMap input) async {
     final names = (input['events'] as List?)?.cast<String>();
     if (names != null &&
-        names.any((name) => !HarnessHooks.events.contains(name))) {
+        names.any((name) =>
+            name != storeAppliedEvent && !HarnessHooks.events.contains(name))) {
       throw const Failure(
           FailureCode.invalidInput, 'Unknown body event; use events.describe.');
     }
@@ -90,14 +92,14 @@ final class BodyEvents implements Capability {
                 id: 'events.describe',
                 title: '身体事件契约',
                 description:
-                    '列出事件与持久游标语义。每个事件均可触发同名 hook 和 followup.register 的 when.event。高频播放位置不发事件。',
+                    '列出事件与持久游标语义。每个事件可作为 followup.register 的 when.event；hook=true 表示兼可触发同名 hook。高频播放位置不发事件。',
                 effect: Effect.read,
                 input: ObjectSchema({}),
                 output: ObjectSchema({}, additionalProperties: true)),
             (_, __) async => {
                   'delivery': BodySignals.deliveryStatus,
                   'events': [
-                    for (final event in HarnessHooks.events)
+                    for (final event in [...HarnessHooks.events, storeAppliedEvent])
                       {
                         'name': event,
                         'payload': [
@@ -109,7 +111,7 @@ final class BodyEvents implements Capability {
                           'changedFields',
                           'facts'
                         ],
-                        'hook': true,
+                        'hook': event != storeAppliedEvent,
                         'followup': true,
                         'replayableFacts': true
                       }

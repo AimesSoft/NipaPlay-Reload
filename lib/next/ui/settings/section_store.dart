@@ -32,6 +32,7 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
   /// Something changed since 梨花 started.
   bool _pending = false;
   bool _applying = false;
+  bool _confirmingNpm = false;
   final _busy = <String>{};
   final _errors = <String, String>{};
   String _npm = '';
@@ -74,10 +75,25 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
   }
 
   Future<void> _apply() async {
-    setState(() => _applying = true);
+    setState(() {
+      _applying = true;
+      _errors.remove('apply');
+    });
     try {
-      await widget.store.apply();
-      if (mounted) setState(() => _pending = false);
+      final result = await widget.store.apply();
+      if (mounted)
+        setState(() {
+          if (result['restarted'] == true) {
+            _pending = false;
+            final eventError = result['eventError'];
+            if (eventError != null)
+              _errors['apply'] = '已重启，但跟进事件发布失败：$eventError';
+          } else {
+            _errors['apply'] = result['status'] == 'notRun'
+                ? '未重启：${result['reason']}'
+                : '重启失败：${result['error']}';
+          }
+        });
     } catch (error) {
       if (mounted) setState(() => _errors['apply'] = callFailure(error));
     }
@@ -91,7 +107,8 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
           (context, close) => _Notices(
               title: '安装「${item.name}」',
               notices: item.notices,
-              onAnswer: close),
+              onCancel: () => close(false),
+              actions: {'我知道了，安装': () => close(true)}),
           width: 460);
       if (go != true) return;
     }
@@ -102,20 +119,65 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
   Future<void> _installNpm() async {
     final spec = _npm.trim();
     if (spec.isEmpty) return;
-    final go = await showNextSheet<bool>(
-        (context, close) => _Notices(
-            title: '安装 npm 包 $spec',
-            notices: const [
-              '这个包没有经过审核。插件在梨花的运行环境里运行，技能的脚本由梨花运行：它们能读写你的账户能访问的文件、连接任意网络地址，也能看到交给它的数据。',
-              '只安装你信任、知道来历的包。商店不运行包的安装脚本，也只接受依赖都由梨花运行环境提供的插件。',
-            ],
-            onAnswer: close),
-        width: 460);
-    if (go != true) return;
-    await _run('npm', () async {
-      await widget.store.install(npm: spec);
-      if (mounted) setState(() => _npm = '');
+    setState(() {
+      _busy.add('npm');
+      _errors.remove('npm');
     });
+    try {
+      final facts = await widget.store.resolveNpm(spec);
+      if (!mounted) return;
+      final name = facts['npm'] as String;
+      final version = facts['version'] as String?;
+      final integrity = facts['integrity'] as String?;
+      final kinds = facts['kinds'] as Map? ?? const {};
+      const labels = {'skill': '技能', 'plugin': 'DSH 插件'};
+      setState(() => _confirmingNpm = true);
+      final kind = await showNextSheet<String>(
+          (context, close) => _Notices(
+                title: '$name${version == null ? '' : ' $version'}',
+                notices: [
+                  '请求：${facts['requested']} · 解析版本：${version ?? '未知'}',
+                  if (facts['hasSkill'] case final bool skill)
+                    '根目录 SKILL.md：${skill ? '有' : '无'}',
+                  if (facts['declaresDshPlugin'] case final bool plugin)
+                    'DSH 插件声明：${plugin ? '有' : '无'}',
+                  for (final notice in facts['notices'] as List? ?? const [])
+                    '$notice',
+                  if (facts['reason'] case final String reason) reason,
+                  for (final entry in labels.entries)
+                    if (kinds[entry.key] case {'reason': final String reason})
+                      '${entry.value}不可安装：$reason',
+                ],
+                onCancel: () => close(),
+                actions: {
+                  for (final entry in labels.entries)
+                    if (kinds[entry.key] case {'installable': true}
+                        when version != null && integrity != null)
+                      '安装为${entry.value}': () => close(entry.key),
+                },
+              ),
+          width: 520);
+      if (kind == null || version == null || integrity == null || !mounted) {
+        return;
+      }
+      setState(() => _confirmingNpm = false);
+      await widget.store.install(
+          npm: name, version: version, kind: kind, integrity: integrity);
+      if (mounted)
+        setState(() {
+          _npm = '';
+          _pending = true;
+        });
+      if (mounted) await _load();
+    } catch (error) {
+      if (mounted) setState(() => _errors['npm'] = callFailure(error));
+    } finally {
+      if (mounted)
+        setState(() {
+          _confirmingNpm = false;
+          _busy.remove('npm');
+        });
+    }
   }
 
   Future<void> _details(UiStoreItem item) async {
@@ -127,16 +189,17 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
         width: 560);
   }
 
-  Widget _mark(UiStoreItem item) => Row(mainAxisSize: MainAxisSize.min, children: [
+  Widget _mark(UiStoreItem item) =>
+      Row(mainAxisSize: MainAxisSize.min, children: [
         Text(item.installedVersion ?? item.version,
             style: NextText.num(11.5, color: NextColors.p4)),
         if (!item.reviewed) ...[
           const SizedBox(width: 8),
           Text('未审核', style: NextText.sans(11.5, color: NextColors.accent2)),
         ],
-        if (item.updateAvailable) ...[
+        if (item.versionDiffers) ...[
           const SizedBox(width: 8),
-          Text('可更新到 ${item.version}',
+          Text('版本不同 · ${item.version}',
               style: NextText.sans(11.5, color: NextColors.mint)),
         ],
         if (item.notLoaded != null) ...[
@@ -157,13 +220,15 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         if (!item.installed)
           PillButton(
-              label: '安装', busy: busy, onTap: busy ? null : () => _install(item))
+              label: '安装',
+              busy: busy,
+              onTap: busy ? null : () => _install(item))
         else ...[
-          if (item.updateAvailable)
+          if (item.versionDiffers)
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: PillButton(
-                  label: '更新',
+                  label: '换用列表版本',
                   busy: busy,
                   onTap: busy ? null : () => _install(item)),
             ),
@@ -172,8 +237,8 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
               label: '启用${item.name}',
               onChanged: busy
                   ? null
-                  : (on) => _run(item.id,
-                      () => widget.store.setEnabled(item.id, on))),
+                  : (on) => _run(
+                      item.id, () => widget.store.setEnabled(item.id, on))),
           const SizedBox(width: 8),
           ConfirmPill(
               label: '卸载',
@@ -212,7 +277,7 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
         ]),
       ),
       if (_errors['apply'] case final error?)
-        SettingsRow(title: '没能重启梨花', subtitle: error, dim: true),
+        SettingsRow(title: '重启结果', subtitle: error, dim: true),
       if (_failed != null)
         SettingsRow(title: '没能读取商店', subtitle: _failed, dim: true)
       else if (store == null)
@@ -250,7 +315,7 @@ class _RikaStoreCardState extends State<RikaStoreCard> {
           const SizedBox(width: 10),
           PillButton(
               label: '安装',
-              busy: _busy.contains('npm'),
+              busy: _busy.contains('npm') && !_confirmingNpm,
               onTap: _busy.contains('npm') || _npm.trim().isEmpty
                   ? null
                   : _installNpm),
@@ -276,10 +341,14 @@ class _Heading extends StatelessWidget {
 /// What an item says of itself before it is installed; yes or no.
 class _Notices extends StatelessWidget {
   const _Notices(
-      {required this.title, required this.notices, required this.onAnswer});
+      {required this.title,
+      required this.notices,
+      required this.onCancel,
+      required this.actions});
   final String title;
   final List<String> notices;
-  final void Function([bool?]) onAnswer;
+  final VoidCallback onCancel;
+  final Map<String, VoidCallback> actions;
 
   @override
   Widget build(BuildContext context) => SheetSurface(
@@ -287,8 +356,7 @@ class _Notices extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: NextText.sans(16, weight: FontWeight.w600)),
+              Text(title, style: NextText.sans(16, weight: FontWeight.w600)),
               const SizedBox(height: 14),
               for (final notice in notices)
                 Padding(
@@ -299,15 +367,21 @@ class _Notices extends StatelessWidget {
                           color: NextColors.p2, height: 1.55)),
                 ),
               const SizedBox(height: 8),
-              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                PillButton(label: '取消', onTap: () => onAnswer(false)),
-                const SizedBox(width: 10),
-                PillButton(
-                    key: const Key('store.notice.accept'),
-                    label: '我知道了，安装',
-                    primary: true,
-                    onTap: () => onAnswer(true)),
-              ]),
+              Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    PillButton(label: '取消', onTap: onCancel),
+                    for (final action in actions.entries)
+                      PillButton(
+                          key: actions.length == 1
+                              ? const Key('store.notice.accept')
+                              : ValueKey(action.key),
+                          label: action.key,
+                          primary: true,
+                          onTap: action.value),
+                  ]),
             ]),
       );
 }
@@ -316,7 +390,7 @@ class _Details extends StatelessWidget {
   const _Details(
       {required this.item, required this.readme, required this.onClose});
   final UiStoreItem item;
-  final Future<String?>? readme;
+  final Future<({String version, String? text})>? readme;
   final VoidCallback onClose;
 
   @override
@@ -331,7 +405,10 @@ class _Details extends StatelessWidget {
                       style: NextText.sans(17, weight: FontWeight.w600)),
                 ),
                 NextIconButton(
-                    glyph: NextGlyph.close, label: '关闭', onTap: onClose),
+                    key: const Key('store.details.close'),
+                    glyph: NextGlyph.close,
+                    label: '关闭',
+                    onTap: onClose),
               ]),
               const SizedBox(height: 6),
               Text(
@@ -339,6 +416,10 @@ class _Details extends StatelessWidget {
                     item.plugin ? '插件' : '技能',
                     item.reviewed ? '官方' : '未审核',
                     item.version,
+                    if (item.versionSource == 'cachedOfficialIndex') '缓存列表',
+                    if (item.versionSource == 'officialIndex') '官方列表',
+                    if (item.installedVersion case final installed?)
+                      '本机已装 $installed',
                     if (item.author != null) item.author!,
                   ].join(' · '),
                   style: NextText.sans(12.5, color: NextColors.p3)),
@@ -353,7 +434,7 @@ class _Details extends StatelessWidget {
                           color: NextColors.accent2, height: 1.5)),
                 ),
               if (readme case final readme?)
-                FutureBuilder<String?>(
+                FutureBuilder<({String version, String? text})>(
                   future: readme,
                   builder: (context, snapshot) => Padding(
                     padding: const EdgeInsets.only(top: 16),
@@ -361,13 +442,12 @@ class _Details extends StatelessWidget {
                       constraints: const BoxConstraints(maxHeight: 360),
                       child: SingleChildScrollView(
                         child: Text(
-                            snapshot.hasError
-                                ? '说明没能取到'
-                                : snapshot.data ??
-                                    (snapshot.connectionState ==
-                                            ConnectionState.done
-                                        ? '没有说明'
-                                        : '正在读取说明…'),
+                            switch (snapshot.data) {
+                              final data? =>
+                                '${data.version == item.version ? '' : '说明对应版本 ${data.version}，与卡片版本 ${item.version} 不同。\n\n'}${data.text ?? '没有说明'}',
+                              _ when snapshot.hasError => '说明没能取到',
+                              _ => '正在读取说明…',
+                            },
                             style: NextText.sans(13,
                                 color: NextColors.p3, height: 1.6)),
                       ),

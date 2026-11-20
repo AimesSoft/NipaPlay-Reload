@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -82,6 +83,35 @@ bool _extractable(String path) =>
     !path.codeUnits.any((c) => c < 0x20) &&
     path.split('/').every((s) => s.isNotEmpty && s != '.' && s != '..');
 
+List<String> packageEntryCandidates(List<int>? manifest) {
+  final raw = manifest == null ? null : jsonDecode(utf8.decode(manifest));
+  String? relative;
+  if (raw is Map) {
+    Object? exported = raw['exports'];
+    if (exported is Map && exported.containsKey('.')) exported = exported['.'];
+    if (exported is Map) {
+      exported = exported['import'] ??
+          exported['node'] ??
+          exported['default'] ??
+          exported['require'];
+      if (exported is Map) exported = exported['default'];
+    }
+    relative = exported is String
+        ? exported
+        : raw['main'] is String
+            ? raw['main'] as String
+            : null;
+  }
+  relative ??= 'index.js';
+  return [
+    relative,
+    if (p.extension(relative).isEmpty) ...[
+      '$relative.js',
+      '$relative/index.js',
+    ]
+  ];
+}
+
 /// Writes [files] (from [readPackageTarball]) under [target].
 Future<void> writePackageFiles(
     Map<String, Uint8List> files, Directory target) async {
@@ -95,9 +125,20 @@ Future<void> writePackageFiles(
   }
 }
 
-/// A package someone named, resolved and fetched: what the store would
-/// install, and its tarball.
-typedef NpmResolution = ({StoreItem item, List<int> tarball});
+typedef NpmOption = ({StoreItem? item, String? reason});
+
+typedef NpmResolution = ({
+  String name,
+  String requested,
+  String version,
+  String integrity,
+  String? deprecated,
+  List<String> notices,
+  bool hasSkill,
+  bool isPlugin,
+  Map<StoreKind, NpmOption> options,
+  Map<String, Uint8List> files,
+});
 
 /// Resolves npm packages nobody reviewed: DSH plugins whose runtime
 /// dependencies the DSH runtime itself provides, or skills (a package with
@@ -118,7 +159,8 @@ final class NpmPackages {
   static (String, String) parseSpec(String spec) {
     final match = _spec.firstMatch(spec.trim());
     if (match == null || !npmName(match[1]!)) {
-      throw const StoreFormatException('请输入 npm 包名，例如 some-package 或 @scope/name@1.2.3');
+      throw const StoreFormatException(
+          '请输入 npm 包名，例如 some-package 或 @scope/name@1.2.3');
     }
     return (match[1]!, match[2] ?? 'latest');
   }
@@ -130,23 +172,34 @@ final class NpmPackages {
 
   /// The store id a package is installed as.
   static String idFor(String name) {
-    final plain = name
-        .replaceAll('@', '')
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-        .replaceAll(RegExp(r'^-+|-+$'), '');
-    final id = 'npm-$plain';
-    return id.length <= 48 ? id : id.substring(0, 48).replaceAll(RegExp(r'-+$'), '');
+    final fingerprint = sha256.convert(utf8.encode(name)).toString();
+    return 'npm-${fingerprint.substring(0, 44)}';
   }
 
   /// [provided]: the packages of the installed DSH runtime, null when none
   /// is installed (a plugin then cannot be checked, nor loaded).
   Future<NpmResolution> resolve(String spec,
-      {required Set<String>? provided}) async {
+      {required Set<String>? provided,
+      String? exactVersion,
+      String? expectedIntegrity,
+      String? id,
+      String? identityProblem}) async {
     final (name, wanted) = parseSpec(spec);
-    final manifestText = await fetch.text([
-      for (final registry in registries)
-        Uri.parse('$registry/${_encoded(name)}/${Uri.encodeComponent(wanted)}')
-    ], maxBytes: 4 << 20, headers: {'accept': 'application/json'});
+    if (exactVersion != null &&
+        (wanted != 'latest' ||
+            name != spec.trim() ||
+            !storeVersion(exactVersion))) {
+      throw const StoreFormatException('安装时须分别提供 npm 包名和确切版本');
+    }
+    final requested = exactVersion ?? wanted;
+    final manifestText = await fetch.text(
+        [
+          for (final registry in registries)
+            Uri.parse(
+                '$registry/${_encoded(name)}/${Uri.encodeComponent(requested)}')
+        ],
+        maxBytes: 4 << 20,
+        headers: {'accept': 'application/json'});
     final Object? manifest;
     try {
       manifest = jsonDecode(manifestText);
@@ -158,47 +211,71 @@ final class NpmPackages {
     }
     final version = manifest['version'];
     final dist = manifest['dist'];
-    if (version is! String || dist is! Map || dist['integrity'] is! String) {
+    if (version is! String ||
+        !storeVersion(version) ||
+        dist is! Map ||
+        dist['integrity'] is! String) {
       throw StoreFormatException('$name 缺少版本或完整性校验信息');
     }
+    if (storeVersion(requested) && requested != version) {
+      throw StoreChanged('$name 请求的版本为 $requested，但镜像返回了 $version');
+    }
     final integrity = dist['integrity'] as String;
+    if (expectedIntegrity != null && integrity != expectedIntegrity) {
+      throw StoreChanged('$name $version 的完整性校验值与预览不符，请重新预览后再安装');
+    }
     final tarball = await fetch.bytes([
       for (final registry in registries)
         Uri.parse('$registry/${tarballPath(name, version)}')
     ], integrity: integrity, maxBytes: maxPackageBytes);
+    final packageId = id ?? idFor(name);
+    return _inspectOffThread(name, requested, version, manifest, tarball,
+        integrity, provided, packageId, identityProblem);
+  }
+
+  static Future<NpmResolution> _inspectOffThread(
+          String name,
+          String requested,
+          String version,
+          Map manifest,
+          List<int> tarball,
+          String integrity,
+          Set<String>? provided,
+          String id,
+          String? identityProblem) =>
+      Isolate.run(() => _inspect(name, requested, version, manifest, tarball,
+          integrity, provided, id, identityProblem));
+
+  static NpmResolution _inspect(
+      String name,
+      String requested,
+      String version,
+      Map manifest,
+      List<int> tarball,
+      String integrity,
+      Set<String>? provided,
+      String id,
+      String? identityProblem) {
     final files = readPackageTarball(tarball);
 
     final keywords = {
-      for (final k in manifest['keywords'] as List? ?? const [])
+      for (final k in manifest['keywords'] is List
+          ? manifest['keywords'] as List
+          : const [])
         if (k is String) k.toLowerCase()
     };
-    final peers = Map<String, Object?>.from(
-        manifest['peerDependencies'] as Map? ?? const {});
-    final optionalPeers = {
-      for (final MapEntry(:key, :value)
-          in (manifest['peerDependenciesMeta'] as Map? ?? const {}).entries)
-        if (value is Map && value['optional'] == true) key as String
-    };
-    final dependencies = Map<String, Object?>.from(
-        manifest['dependencies'] as Map? ?? const {});
-    final bundled = {
-      for (final b in (manifest['bundleDependencies'] ??
-              manifest['bundledDependencies']) as List? ??
-          const [])
-        if (b is String) b
-    };
-    final plugin = peers.containsKey('@deepseek-ai/cordis') ||
+    final declaredPeers = manifest['peerDependencies'];
+    final plugin = (declaredPeers is Map &&
+            declaredPeers.containsKey('@deepseek-ai/cordis')) ||
         keywords.contains('dsh-plugin') ||
         keywords.contains('deepseek-harness');
     final skill = files.containsKey('SKILL.md');
-    if (!plugin && !skill) {
-      throw StoreFormatException(
-          '$name 既不是 DeepSeek Harness 插件，也没有 SKILL.md，不能装给梨花');
-    }
+    final deprecated = manifest['deprecated'] is String
+        ? manifest['deprecated'] as String
+        : null;
     final notices = [
-      '这个包没有经过审核。${plugin ? '插件在梨花的运行环境里运行' : '梨花会运行它的脚本'}，'
-          '能读写你的账户能访问的文件、连接任意网络地址，也能看到交给它的数据。只安装你信任的包。',
-      if (manifest['deprecated'] case final String why) '作者已弃用这个版本：$why',
+      '这个包没有经过审核。插件及技能脚本以用户账户的权限运行，能读写该账户可访问的文件、联网，并看到交给它的数据。',
+      if (deprecated != null) '作者已弃用这个版本：$deprecated',
     ];
     final description = switch (manifest['description']) {
       final String d when d.trim().isNotEmpty =>
@@ -217,12 +294,26 @@ final class NpmPackages {
         url: tarballPath(name, version),
         integrity: integrity,
         bytes: tarball.length);
-    final id = idFor(name);
-    if (plugin) {
+    StoreItem asPlugin() {
+      if (!plugin) throw const StoreFormatException('未声明 DeepSeek Harness 插件');
       if (provided == null) {
-        throw const StoreFormatException(
-            '这是 DeepSeek Harness 插件，请先在梨花的设置里安装运行环境');
+        throw const StoreFormatException('未安装 DeepSeek Harness 运行环境');
       }
+      final peers =
+          Map<String, Object?>.from(declaredPeers as Map? ?? const {});
+      final optionalPeers = {
+        for (final MapEntry(:key, :value)
+            in (manifest['peerDependenciesMeta'] as Map? ?? const {}).entries)
+          if (value is Map && value['optional'] == true) key as String
+      };
+      final dependencies = Map<String, Object?>.from(
+          manifest['dependencies'] as Map? ?? const {});
+      final bundled = {
+        for (final b in (manifest['bundleDependencies'] ??
+                manifest['bundledDependencies']) as List? ??
+            const [])
+          if (b is String) b
+      };
       final scripts = manifest['scripts'] as Map? ?? const {};
       final install = [
         for (final hook in const ['preinstall', 'install', 'postinstall'])
@@ -244,68 +335,102 @@ final class NpmPackages {
             '$name 依赖的 ${missing.join('、')} 不在梨花的运行环境里，目前只能安装依赖都由运行环境提供的插件');
       }
       final rows = _patchRows(name, files['cordis.patch.yml'], id);
-      return (
-        item: StoreItem(
-          id: id,
-          kind: StoreKind.plugin,
-          origin: StoreOrigin.npm,
-          name: name,
-          version: version,
-          description: description,
-          author: author,
-          category: keywords.any((k) => const {
-                    'llm',
-                    'provider',
-                    'model-provider',
-                    'llm-provider'
-                  }.contains(k))
-              ? 'model'
-              : 'tool',
-          notices: notices,
-          packages: [package],
-          peers: [
-            for (final dependency in {...dependencies.keys, ...peers.keys})
-              if (provided.contains(dependency) && !bundled.contains(dependency))
-                dependency
-          ]..sort(),
-          dsh: rows,
-        ),
-        tarball: tarball,
+      if (!packageEntryCandidates(files['package.json']).any(
+          (candidate) => files.containsKey(p.posix.normalize(candidate)))) {
+        throw StoreFormatException('$name 找不到入口文件');
+      }
+      return StoreItem(
+        id: id,
+        kind: StoreKind.plugin,
+        origin: StoreOrigin.npm,
+        name: name.length <= 80 ? name : '${name.substring(0, 79)}…',
+        version: version,
+        description: description,
+        author: author,
+        category: keywords.any((k) => const {
+                  'llm',
+                  'provider',
+                  'model-provider',
+                  'llm-provider'
+                }.contains(k))
+            ? 'model'
+            : 'tool',
+        notices: notices,
+        packages: [package],
+        peers: [
+          for (final dependency in {...dependencies.keys, ...peers.keys})
+            if (provided.contains(dependency) && !bundled.contains(dependency))
+              dependency
+        ]..sort(),
+        dsh: rows,
       );
     }
-    final skillFiles = [
-      for (final MapEntry(key: path, value: bytes) in files.entries)
-        if (path != 'package.json' && safeRelativePath(path))
-          StoreFile(
-              path: path,
-              url: path,
-              sha256: sha256.convert(bytes).toString(),
-              bytes: bytes.length)
-    ]..sort((a, b) => a.path.compareTo(b.path));
-    if (skillFiles.length > maxSkillFiles ||
-        skillFiles.any((f) => f.bytes > maxFileBytes)) {
-      throw StoreFormatException('$name 的文件太多或太大，不像一个技能');
-    }
-    return (
-      item: StoreItem(
+
+    StoreItem asSkill() {
+      if (!skill) throw const StoreFormatException('包根目录没有 SKILL.md');
+      final skillFiles = [
+        for (final MapEntry(key: path, value: bytes) in files.entries)
+          if (path != 'package.json' && safeRelativePath(path))
+            StoreFile(
+                path: path,
+                url: path,
+                sha256: sha256.convert(bytes).toString(),
+                bytes: bytes.length)
+      ]..sort((a, b) => a.path.compareTo(b.path));
+      if (skillFiles.length > maxSkillFiles ||
+          skillFiles.any((f) => f.bytes > maxFileBytes)) {
+        throw StoreFormatException('$name 的文件太多或太大，不像一个技能');
+      }
+      return StoreItem(
         id: id,
         kind: StoreKind.skill,
         origin: StoreOrigin.npm,
-        name: name,
+        name: name.length <= 80 ? name : '${name.substring(0, 79)}…',
         version: version,
         description: description,
         author: author,
         notices: notices,
         files: skillFiles,
         packages: [package],
-      ),
-      tarball: tarball,
+      );
+    }
+
+    NpmOption option(StoreItem Function() build) {
+      if (identityProblem != null) return (item: null, reason: identityProblem);
+      try {
+        final item = build();
+        StoreItem.parse(item.toJson(), origin: item.origin);
+        return (item: item, reason: null);
+      } on StoreFormatException catch (error) {
+        return (item: null, reason: error.message);
+      } on FormatException {
+        return (item: null, reason: '软件包的元数据格式无效');
+      } on TypeError {
+        return (item: null, reason: '软件包的元数据类型无效');
+      }
+    }
+
+    return (
+      name: name,
+      requested: requested,
+      version: version,
+      integrity: integrity,
+      deprecated: deprecated,
+      notices: notices,
+      hasSkill: skill,
+      isPlugin: plugin,
+      options: {
+        StoreKind.skill: option(asSkill),
+        StoreKind.plugin: option(asPlugin)
+      },
+      files: files,
     );
   }
 
   /// The rows of a plugin's own `cordis.patch.yml`, accepted only when each
   /// adds an entry of this package; without one, a single row for it.
-  static List<StoreDshRow> _patchRows(String name, Uint8List? patch, String id) {
+  static List<StoreDshRow> _patchRows(
+      String name, Uint8List? patch, String id) {
     // Without a patch of its own, the plugin is loaded as the store item
     // (`npm-...`), which no plugin of DSH or NipaPlay is called.
     if (patch == null) return [StoreDshRow(id: id, package: name)];
@@ -328,19 +453,22 @@ final class NpmPackages {
         if (row is! YamlMap ||
             row['name'] != name ||
             row['id'] is! String ||
-            row.keys.any((k) => !const {'id', 'name', 'config', 'inject'}
-                .contains(k))) {
+            row.keys.any(
+                (k) => !const {'id', 'name', 'config', 'inject'}.contains(k))) {
           throw StoreFormatException(
               '$name 的 cordis.patch.yml 除了加入它自己，还有别的改动，不能安装');
         }
-        rows.add(StoreDshRow.parse({
-          'id': row['id'],
-          'package': name,
-          if (row['config'] != null)
-            'config': jsonDecode(jsonEncode(row['config'])),
-          if (row['inject'] != null)
-            'inject': jsonDecode(jsonEncode(row['inject'])),
-        }, '$name 的 cordis.patch.yml', {name}));
+        rows.add(StoreDshRow.parse(
+            {
+              'id': row['id'],
+              'package': name,
+              if (row['config'] != null)
+                'config': jsonDecode(jsonEncode(row['config'])),
+              if (row['inject'] != null)
+                'inject': jsonDecode(jsonEncode(row['inject'])),
+            },
+            '$name 的 cordis.patch.yml',
+            {name}));
       }
     }
     if (rows.isEmpty) {
