@@ -50,7 +50,7 @@ Next 启动、扫描与下载完成不会隐式运行 Classic 识别。旧 Class
 ### 扫描在 probe 阶段失败
 
 `task.get` 的 `receipt.details.outcome` 区分完整成功、部分成功和失败；
-`receipt.details.probeErrors` 列出每个失败路径及原始错误，已确认的原盘结构只作为文件路径事实。桌面端使用
+`receipt.details.probeErrors` 列出失败路径、错误码和错误信息（前 200 条，其余计入 `probeErrorsOmitted`），已确认的原盘结构只作为文件路径事实。桌面端使用
 `media.probe.status` 查看独立探测进程；`media.probe.cancel {probeId}` 可终止指定探测并等待退出。
 不需要关闭正在播放的视频。超时会终止对应探测，其他文件继续扫描；有错误但成功索引了其他文件时，回执报告部分成功。处理问题后用新的 requestId 调用 `media.library.scan`，
 再等任务回执。不要重复旧 requestId，也不要直接 SQL 修改任务状态。

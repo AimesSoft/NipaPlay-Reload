@@ -41,7 +41,7 @@
 未确认退出的进程仍占容量并显示在状态中，不能假装已经清理。
 
 一个文件探测失败不会阻止其他文件入库。`receipt.details.outcome` 为 `success`（无探测或枚举错误，可为空目录）、`partial`（有索引结果且有错误）或 `failure`（有错误且无索引结果）；前两种的任务状态均为 `succeeded`，最后一种为 `failed`。取消和任务本身中断仍按各自状态报告。
-`indexed`、`failedProbes`、逐路径的 `probeErrors` 和 `unreadableDirectories` 分别说明已完成部分和错误。扫描范围内，`discFiles` 中的已索引路径和 `probeErrors` 中的失败路径可附带 `disc`（原盘根、所属目录及确认标记文件路径）；它只说明目录结构，不决定文件身份，也不跳过探测。
+`indexed`、`failedProbes`、逐路径的 `probeErrors` 和 `unreadableDirectories` 分别说明已完成部分和错误。`probeErrors` 和 `discFiles` 各列前 200 条，超出的数量记在 `probeErrorsOmitted`、`discFilesOmitted`；每条错误信息最长 512 个字符。扫描范围内，`discFiles` 中的已索引路径和 `probeErrors` 中的失败路径可附带 `disc`（原盘根、所属目录及确认标记文件路径）；它只说明目录结构，不决定文件身份，也不跳过探测。
 处理问题后用新的 requestId 提交 `media.library.scan`，读取新回执；
 重复旧 requestId 只返回旧任务。不会自动重试、删除失败历史、修改媒体身份或撤销已入库文件。
 当前工具不是通用的内核解锁器；其他任务按自己的错误和回执恢复，不能强制标记成功。

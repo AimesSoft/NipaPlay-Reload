@@ -91,7 +91,8 @@ void main() {
     expect(
         errors.singleWhere((error) => error['path'] == ordinary.path)['disc'],
         isNull);
-    expect(errors.first['error']['message'], 'probe fixture failure');
+    expect(errors.first['message'], 'probe fixture failure');
+    expect(errors.first['code'], isA<String>());
     expect((details['discFiles'] as List).single['disc']['directory'],
         '$disc/CERTIFICATE');
   });

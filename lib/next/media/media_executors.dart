@@ -97,8 +97,12 @@ final class _ScanExecutor implements JobExecutor {
     var discovered = (await db.query('media_scan_items',
             where: 'job_id = ?', whereArgs: [context.job.jobId]))
         .length;
+    // Receipts travel to Nipa's turns and across devices: list the first
+    // [_listedScanFacts] of each kind and count the rest.
     final probeErrors = <JsonMap>[];
     final discFiles = <JsonMap>[];
+    var failedProbes = 0;
+    var discFileCount = 0;
     final discStructure = ScanDiscStructure(root);
     // A directory that cannot be listed (on Windows one deeper than 259
     // characters, without the system's long path setting) is left out and
@@ -132,7 +136,12 @@ final class _ScanExecutor implements JobExecutor {
             [context.job.jobId, entry.path]);
         final disc = await discStructure.fileFacts(entry.path);
         if (recorded.isNotEmpty) {
-          if (disc != null) discFiles.add({'path': entry.path, 'disc': disc});
+          if (disc != null) {
+          discFileCount++;
+          if (discFiles.length < _listedScanFacts) {
+            discFiles.add({'path': entry.path, 'disc': disc});
+          }
+        }
           continue;
         }
         await context
@@ -155,11 +164,18 @@ final class _ScanExecutor implements JobExecutor {
           }
         } on Failure catch (error) {
           if (await control.stop({'indexed': discovered})) return;
-          probeErrors.add({
-            'path': entry.path,
-            'error': error.toJson(),
-            if (disc != null) 'disc': disc,
-          });
+          if (probeErrors.length < _listedScanFacts) {
+            final message = error.message;
+            probeErrors.add({
+              'path': entry.path,
+              'code': error.code.name,
+              'message': message.length > 512
+                  ? '${message.substring(0, 512)}…'
+                  : message,
+              if (disc != null) 'disc': disc,
+            });
+          }
+          failedProbes++;
           continue;
         }
         if (info == null) return;
@@ -179,7 +195,12 @@ final class _ScanExecutor implements JobExecutor {
           return;
         }
         if (fileId == null) return;
-        if (disc != null) discFiles.add({'path': entry.path, 'disc': disc});
+        if (disc != null) {
+          discFileCount++;
+          if (discFiles.length < _listedScanFacts) {
+            discFiles.add({'path': entry.path, 'disc': disc});
+          }
+        }
         final file = await service.store.entity(fileId);
         await db.insert(
             'media_scan_items',
@@ -198,7 +219,7 @@ final class _ScanExecutor implements JobExecutor {
     final items = await db.query('media_scan_items',
         where: 'job_id = ?', whereArgs: [context.job.jobId]);
     if (await control.stop({'indexed': items.length})) return;
-    final hasErrors = probeErrors.isNotEmpty || unreadableCount > 0;
+    final hasErrors = failedProbes > 0 || unreadableCount > 0;
     final outcome = !hasErrors
         ? 'success'
         : items.isEmpty
@@ -208,9 +229,13 @@ final class _ScanExecutor implements JobExecutor {
         JobReceipt(verification: VerificationLevel.verified, details: {
       'outcome': outcome,
       'indexed': items.length,
-      'failedProbes': probeErrors.length,
+      'failedProbes': failedProbes,
       if (probeErrors.isNotEmpty) 'probeErrors': probeErrors,
+      if (failedProbes > probeErrors.length)
+        'probeErrorsOmitted': failedProbes - probeErrors.length,
       if (discFiles.isNotEmpty) 'discFiles': discFiles,
+      if (discFileCount > discFiles.length)
+        'discFilesOmitted': discFileCount - discFiles.length,
       'fileIds': [for (final row in items) row['file_id']],
       if (unreadableCount > 0)
         'unreadableDirectories': {
@@ -223,7 +248,7 @@ final class _ScanExecutor implements JobExecutor {
       await context.fail(
           Failure(
               FailureCode.unavailable,
-              'No files were indexed: ${probeErrors.length} probe failures, '
+              'No files were indexed: $failedProbes probe failures, '
               '$unreadableCount unreadable directories. See the scan receipt.'),
           receipt);
     } else {
@@ -231,6 +256,8 @@ final class _ScanExecutor implements JobExecutor {
     }
   }
 }
+
+const _listedScanFacts = 200;
 
 final class _RefreshExecutor implements JobExecutor, JobReconciler {
   const _RefreshExecutor(this.service);
