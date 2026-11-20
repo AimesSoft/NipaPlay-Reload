@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
@@ -12,6 +13,7 @@ import 'package:nipaplay/services/external_player_console_window_service.dart';
 import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/services/playback_source_service.dart';
 import 'package:nipaplay/services/episode_file_selection_service.dart';
+import 'package:nipaplay/utils/message_helper.dart';
 
 class PlaybackService {
   static final PlaybackService _instance = PlaybackService._internal();
@@ -56,6 +58,12 @@ class PlaybackService {
       final playbackContext = globals.navigatorKey.currentContext ?? context;
       if (playbackContext.mounted) {
         AnimeDetailPage.popIfOpen();
+        MessageHelper.showMessage(
+          playbackContext,
+          playbackContext.l10n.externalPlayerLaunchFailed,
+          isError: true,
+          duration: const Duration(seconds: 6),
+        );
         await _playInternally(playbackContext, item);
       }
       return true;
