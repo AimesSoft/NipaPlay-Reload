@@ -4,6 +4,15 @@ import 'package:test/test.dart';
 import 'support.dart';
 
 void main() {
+  test('Failure interpolation includes the wire code and message, not details', () {
+    const failure = Failure(FailureCode.notFound, 'Source was removed.',
+        details: {'internal': 'not for display'});
+    expect('$failure', 'not_found: Source was removed.');
+    expect(failure.toJson(), {
+      'code': 'not_found', 'message': 'Source was removed.',
+      'retryable': false, 'details': {'internal': 'not for display'},
+    });
+  });
   group('registration', () {
     test('rejects duplicate action ids across capabilities', () {
       expect(

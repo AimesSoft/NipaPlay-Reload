@@ -220,7 +220,8 @@ void main() {
 
   testWidgets('CategoryItems recovers with backoff after a read failure (#1125)',
       (tester) async {
-    final data = _FlakyLibraryData();
+    final data = _FlakyLibraryData(failures: 2,
+        error: const Failure(FailureCode.unavailable, 'Temporary outage.'));
     final items = CategoryItems(data, 'all');
     addTearDown(items.dispose);
     await tester.pumpWidget(MaterialApp(
@@ -245,12 +246,45 @@ void main() {
     expect(data.calls, 1);
     expect(find.text('Recovered Work'), findsNothing);
 
-    // First retry fires after 2 seconds (1 << 1).
-    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 1));
+    items.at(0);
+    expect(data.calls, 1);
+    await tester.pump(const Duration(seconds: 1));
     await tester.pump();
     expect(data.calls, 2);
+    expect(items.failure, isNull);
+    await tester.pump(const Duration(seconds: 3));
+    items.at(0);
+    expect(data.calls, 2);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(data.calls, 3);
     expect(find.text('Recovered Work'), findsOneWidget);
   });
+
+  for (final code in [FailureCode.notFound, FailureCode.conflict, FailureCode.invalidInput]) {
+    testWidgets('CategoryItems stops reading a category after ${code.wireName}',
+        (tester) async {
+      final error = Failure(code, 'The category cannot be read.');
+      final data = _FlakyLibraryData(failures: 1, error: error);
+      final items = CategoryItems(data, 'all');
+      addTearDown(items.dispose);
+      items.at(0);
+      await tester.pump();
+      expect(items.failure, same(error));
+      items.refresh();
+      items.at(CategoryItems.slice);
+      await tester.pump(const Duration(seconds: 65));
+      items.at(0);
+      expect(data.calls, 1);
+      items.reorder('other');
+      expect(items.failure, isNull);
+      items.at(0);
+      await tester.pump();
+      expect(data.calls, 2);
+      expect(items.at(0), isA<UiWorkItem>());
+    });
+  }
 }
 
 const _probeTakes = Duration(seconds: 6);
@@ -263,6 +297,9 @@ Future<JsonMap> _slowProbe(String path) async {
 }
 
 final class _FlakyLibraryData implements NextLibraryData {
+  _FlakyLibraryData({required this.failures, required this.error});
+  final int failures;
+  final Object error;
   int calls = 0;
 
   @override
@@ -293,7 +330,7 @@ final class _FlakyLibraryData implements NextLibraryData {
   Future<UiSlice> items(String categoryId,
       {int offset = 0, int limit = 60, String? sort}) async {
     calls++;
-    if (calls == 1) throw StateError('transient read failure');
+    if (calls <= failures) throw error;
     return const UiSlice(
       [UiWorkItem(UiWork(workId: 'w1', title: 'Recovered Work'))],
       total: 1,

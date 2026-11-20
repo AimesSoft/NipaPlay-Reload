@@ -49,13 +49,6 @@ final class DownloadExecutor implements JobExecutor {
     try {
       final ref = DownloadBackendRef.fromJson(
           context.job.details['backend'] as JsonMap);
-      if (!await isEnabled() && context.job.cancelRequestedAt == null) {
-        await context.retryAt(
-            DateTime.now().toUtc().add(pollInterval),
-            const Failure(FailureCode.unavailable, 'Downloader is disabled.',
-                retryable: true));
-        return;
-      }
       final backend = backends.resolve(ref);
       await backend.initialize();
       final request = DownloadRequest.fromJson(context.job.input);

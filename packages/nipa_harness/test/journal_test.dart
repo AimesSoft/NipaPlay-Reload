@@ -140,13 +140,15 @@ void main() {
     ];
     await Future.wait(pending);
     final segments = await JournalAppender.segments(file);
-    expect(segments.length, greaterThan(2));
+    expect(segments, hasLength(5));
     expect(segments.last.path, file.path);
-    expect([
+    final seen = [
       for (final segment in segments)
         for (final line in segment.readAsLinesSync())
           (jsonDecode(line) as JsonMap)['n']
-    ], List.generate(100, (i) => i));
+    ];
+    expect(seen.length, lessThan(100));
+    expect(seen, List.generate(seen.length, (i) => 100 - seen.length + i));
     expect(file.lengthSync(), lessThanOrEqualTo(1024));
   });
 }

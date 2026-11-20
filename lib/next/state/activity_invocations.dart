@@ -308,7 +308,7 @@ final class ActivityInvocations implements InvocationObserver {
         for (final file in await JournalAppender.segments(journal)) file.path
       ];
       if (segments.isEmpty) return;
-      final statements = await _readJournalOffMain(segments);
+      final statements = await _readJournalOffMain(segments, journal.path);
       for (final (sql, args) in statements) {
         if (_closed) return;
         await database.rawInsert(sql, args);
@@ -338,8 +338,22 @@ final class ActivityInvocations implements InvocationObserver {
 Future<Map<String, Object?>?> _rowOffMain(InvocationRecord record) =>
     Isolate.run(() => activityInvocationRow(record.toJson()));
 
-Future<List<(String, List<Object?>)>> _readJournalOffMain(List<String> paths) =>
-    Isolate.run(() => _readJournal(paths));
+Future<List<(String, List<Object?>)>> _readJournalOffMain(
+        List<String> paths, String livePath) =>
+    Isolate.run(() => _readJournal(paths, livePath));
+
+Stream<String> _journalLines(String path, {required bool archive}) async* {
+  try {
+    await for (final line in File(path)
+        .openRead()
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .transform(const LineSplitter())) {
+      yield line;
+    }
+  } on FileSystemException catch (error) {
+    if (!archive || error.osError?.errorCode != 2) rethrow;
+  }
+}
 
 final _header = RegExp(
     r'^\{"invocationId":"((?:[^"\\]|\\.)*)","actionId":"((?:[^"\\]|\\.)*)",'
@@ -349,15 +363,12 @@ final _header = RegExp(
 /// origin of every write in [paths], read in order (a later line with the
 /// same invocation ID replaces an earlier one, as 动态 composed them) and
 /// packed into bounded multi-row INSERT statements.
-Future<List<(String, List<Object?>)>> _readJournal(List<String> paths) async {
+Future<List<(String, List<Object?>)>> _readJournal(
+    List<String> paths, String livePath) async {
   final shown = <String, Map<String, Object?>>{};
   final origins = <String, String>{};
   for (final path in paths) {
-    final lines = File(path)
-        .openRead()
-        .transform(const Utf8Decoder(allowMalformed: true))
-        .transform(const LineSplitter());
-    await for (final line in lines) {
+    await for (final line in _journalLines(path, archive: path != livePath)) {
       if (line.isEmpty) continue;
       // A read 动态 does not show is passed over without decoding it (most
       // of an old journal is reads with large results).

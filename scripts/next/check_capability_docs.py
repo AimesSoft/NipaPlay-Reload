@@ -139,7 +139,7 @@ BASELINE_HASHES = {'lib/next/store/runtime_extensions.dart': '4be923ed0a5a4583a1
  'lib/next/mesh/library_capability.dart': 'd9999630399b9aff79bb10f2f14ff2a902b80c572dc6f30edf8ec2f330b37240',
  'lib/next/mesh/runtime.dart': '5b4cc406e520f22ce058f9f80c27c1649d2f506bfb84dfa9838607b8656d6d56',
  'lib/next/network/capability.dart': '0b12d2f9e1b415cc986e124d016767a5d230d0178a3e19f22fbb8d15481109d8',
- 'lib/next/next_core.dart': '9c5160f8d4a4f7ddb6c42630b93a1e453b9832ffed8a96ed99d1628d5fc7db46',
+ 'lib/next/next_core.dart': '57e88c4e67e114b174d17b3aa79ed3a0f056f82b3c41805d2cb92bdd4f0b19a5',
  'lib/next/next_runtime.dart': 'baae5c5681dcf62ed52042a7e67feb039cabf980c04dc310821e99b1bbf6e2f1',
  'lib/next/player/features/local_operations.dart': '6e1d4e008ebf23f0f62c11abace5e1c10eb355675607d2ee26929b80f362e5b0',
  'lib/next/player/features/operation_specs.dart': '514a6c5049507ee3513bffeb4532d760d03d8f4154a93f00ee680c8af1e3d35a',
@@ -166,7 +166,7 @@ BASELINE_HASHES = {'lib/next/store/runtime_extensions.dart': '4be923ed0a5a4583a1
  'lib/security/credential_capability.dart': '26bc1852bc98ef1c4c21446b165bfb0764bdb7c763fbd16355079ebbd03f32ac',
  'packages/nipa_harness/lib/src/action.dart': 'b80ccb05cb5eb0143290d6750ec8b4557da08511c222dfff06f929d329efcb55',
  'packages/nipa_harness/lib/src/tasks/actions.dart': 'd2ee746ca0224c55c47601ea7893a4ca0aa40604cc7c59499f9e9c5d9ea55f8b',
- 'packages/nipa_harness/lib/src/tasks/engine.dart': 'b8239c6f89d81ee06380696d6e5a61e8047332c216950f7968efaaa730b11509',
+ 'packages/nipa_harness/lib/src/tasks/engine.dart': 'd1bf9a403f94a419b1012ff633c9f2df41044f7b691b49e7bffb8800c66ab8ed',
  'lib/next/secrets/capability.dart': '2fd54d305cd95bf81dd7627b7e1b5c747717dabc8030689e3fda363d72d3bbed',
  'lib/next/subscriptions/capability.dart': '8b7da17a8b14972dd35c618cf62ec24db48d03b84c4b405256878cfe0c229e03'}
 current_files = {str(p.relative_to(root)) for p in paths if '/ui/dev/' not in str(p) and any((t in p.read_text() for t in ('ActionSpec(', 'extends Action<', 'implements Capability')))}

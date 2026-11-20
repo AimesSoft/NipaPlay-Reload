@@ -521,6 +521,9 @@ final class NextCore {
     events = BodyEvents(database);
     followups.eventCommitted = events.changed;
     settings.onChanged = (facts) async {
+      if (facts['key'] == 'download.enabled') {
+        await downloads.updateAdmission(setting: facts['value'] as bool);
+      }
       if (!settingChanges.isClosed) settingChanges.add(facts);
       activityChanged();
       await hooks.emit('settings.changed', facts['key'] as String, facts);
@@ -738,6 +741,7 @@ final class NextCore {
           ..downloadTorrents = downloads.qbittorrentTorrents);
     phase('system views');
     await Future<void>.delayed(Duration.zero);
+    await downloads.updateAdmission();
     await engine.start();
     phase('engine start');
     await Future<void>.delayed(Duration.zero);

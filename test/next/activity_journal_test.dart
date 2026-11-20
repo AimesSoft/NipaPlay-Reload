@@ -112,12 +112,21 @@ void main() {
     expect((shown['rows'] as List).length, greaterThan(25));
   });
 
-  test('an old journal rotated into archives reads the same', () async {
+  test('startup prunes older archives and backfills retained segments in order', () async {
     final journal = File('${root.path}/journal.jsonl');
     await writeJournalFixture(journal, fillerBytes: 400 << 10);
     final lines = await journal.readAsLines();
     final archive = JournalAppender.archiveDirectory(journal);
     await archive.create();
+    final discarded = [
+      for (var day = 26; day <= 30; day++)
+        File('${archive.path}/journal-202609${day}T000000.000000Z.jsonl'),
+    ];
+    for (final file in discarded) {
+      await file.writeAsString('');
+    }
+    final unrelated = File('${archive.path}/journal-notes.jsonl');
+    await unrelated.writeAsString('not a rotated segment');
     final cut = [lines.length ~/ 3, 2 * lines.length ~/ 3];
     await File('${archive.path}/journal-20261001T000000.000000Z.jsonl')
         .writeAsString('${lines.sublist(0, cut[0]).join('\n')}\n');
@@ -126,6 +135,10 @@ void main() {
     await journal.writeAsString('${lines.sublist(cut[1]).join('\n')}\n');
     expect(jsonEncode(await activity(await start())),
         jsonEncode(jsonDecode(await File(_golden).readAsString())));
+    expect(await JournalAppender.segments(journal), hasLength(5));
+    expect(await discarded[2].exists(), isFalse);
+    expect(await discarded[3].exists(), isTrue);
+    expect(await unrelated.exists(), isTrue);
   });
 
   Future<(List<int>, MainThreadProbe)> queries(NextCore core) async {
