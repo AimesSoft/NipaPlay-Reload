@@ -1316,6 +1316,19 @@ class ErikaPlayerAdapter
   static bool get supportsNeuralUpscaler =>
       _isSupported && defaultTargetPlatform != TargetPlatform.android && !_isHarmonyOS;
 
+  /// iOS 主版本号（"Version 15.1 (...)" → 15）；非 iOS 返回 0。
+  /// MetalFX 系统要求 iOS 16+，VideoToolbox 官方超分入口要求 iOS 17+，
+  /// 低于版本的档位在菜单里隐藏，避免"选了没反应"的无效档。
+  static int get _iosMajorVersion {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return 0;
+    final match =
+        RegExp(r'Version (\d+)').firstMatch(Platform.operatingSystemVersion);
+    return int.tryParse(match?.group(1) ?? '') ?? 0;
+  }
+
+  static bool get _iosSupportsMetalFx => _iosMajorVersion >= 16;
+  static bool get _iosSupportsVideoToolboxUpscale => _iosMajorVersion >= 17;
+
   static List<PlayerUpscalerMode> get availableUpscalerModes {
     final apple = defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.iOS;
@@ -1327,9 +1340,14 @@ class ErikaPlayerAdapter
       if (!_isSupported) return false;
       if (mode == PlayerUpscalerMode.erikaFsr1) return true;
       if (mode == PlayerUpscalerMode.erikaPlatformVideo) {
-        return apple || defaultTargetPlatform == TargetPlatform.windows;
+        // iOS 15.x 无 Apple 官方超分入口（VTScaler 需 17+）；macOS 不门控。
+        return (apple && _iosSupportsVideoToolboxUpscale) ||
+            defaultTargetPlatform == TargetPlatform.windows;
       }
-      if (mode == PlayerUpscalerMode.erikaMetalFxSpatial) return apple;
+      if (mode == PlayerUpscalerMode.erikaMetalFxSpatial) {
+        // MetalFX 框架要求 iOS 16+；macOS（Ventura 13+ 均可用）不门控。
+        return apple && _iosSupportsMetalFx;
+      }
       if (mode == PlayerUpscalerMode.erikaArtCnnR8F64) return desktop;
       return supportsNeuralUpscaler;
     }).toList(growable: false);
@@ -1339,6 +1357,11 @@ class ErikaPlayerAdapter
 
   Future<void> setUpscaler(PlayerUpscalerMode mode) async {
     if (!availableUpscalerModes.contains(mode)) return;
+    // 先翻弹幕所有权标志（supportsNativeDanmaku 读它），再调原生；
+    // 调用方在 setUpscaler 返回后做弹幕归属调和。
+    // 放在可用性守卫之后：无效档位（如跨平台残留的桌面专属索引）直接
+    // early-return，不翻转弹幕所有权。
+    _upscalerActiveForDanmaku = mode != PlayerUpscalerMode.off;
     _lastUpscalerStatus = PlayerUpscalerStatus(
       requestedMode: mode,
       activeBackend: mode == PlayerUpscalerMode.off
@@ -1355,6 +1378,20 @@ class ErikaPlayerAdapter
       _lastUpscalerStatus = await getUpscalerStatus();
     } catch (error) {
       debugPrint('Erika: set upscaler failed: $error');
+      // 原生拒绝（如引擎不支持该后端）：超分实际未生效。
+      // 1) 弹幕所有权回到 native——超分没开就无需回退 Flutter 叠层；
+      // 2) 状态置 unknown，播放信息"实际后端"显示"未知"，与成功但未激活
+      //    （inactive）区分；不 rethrow——初始化/换内核路径没有 catch，
+      //    抛出会打断播放流程，设置页的失败可见性由状态回读兜底。
+      _upscalerActiveForDanmaku = false;
+      _lastUpscalerStatus = PlayerUpscalerStatus(
+        requestedMode: mode,
+        activeBackend: PlayerUpscalerBackendStatus.unknown,
+        fallbackCount: _lastUpscalerStatus.fallbackCount,
+        upscaledFrames: _lastUpscalerStatus.upscaledFrames,
+        lastEncodeDuration: _lastUpscalerStatus.lastEncodeDuration,
+        lastGpuDuration: _lastUpscalerStatus.lastGpuDuration,
+      );
     }
   }
 
@@ -1437,8 +1474,16 @@ class ErikaPlayerAdapter
   // driving its own Flutter danmaku overlay. The list uses NipaPlay's standard
   // danmaku maps ({time, content, type, color, ...}); Erika's JSON parser
   // accepts that shape directly, so it is forwarded as-is.
+  //
+  // 例外：luma 超分（ArtCNN/Anime4K）开启时弹幕与视频走同一条合成管线，
+  // 每帧 CNN 推理把 tick 预算吃满，弹幕（逐帧移动、对帧率最敏感）会
+  // 一顿一顿。此时 supportsNativeDanmaku 翻 false → UI 回退 Flutter 弹幕
+  // 叠层（与 CNN 合成解耦，按面板节奏渲染）；关闭超分自动恢复原生。
 
-  bool get supportsNativeDanmaku => _isSupported;
+  /// 最近一次 setUpscaler 是否为非 off 档（决定弹幕所有权，见上）。
+  bool _upscalerActiveForDanmaku = false;
+
+  bool get supportsNativeDanmaku => _isSupported && !_upscalerActiveForDanmaku;
 
   Future<void> loadDanmakuList(List<Map<String, dynamic>> danmakuList) async {
     if (!_isSupported) {

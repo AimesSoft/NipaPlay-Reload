@@ -252,7 +252,7 @@ void main() {
   });
 
   testWidgets(
-      'an external SRT renders once and replaces the embedded text block',
+      'an external SRT renders once and coexists with the embedded text block',
       (tester) async {
     final delegate = _FakeMediaKitDelegate(liveProperties: {
       'sub-text': 'External cue',
@@ -291,11 +291,13 @@ void main() {
     expect(find.text('External cue'), findsNWidgets(2)); // stroke + fill
 
     // The same mounted overlay follows selection changes through listeners.
+    // 多选共存：选内嵌轨不再摘外挂，外挂 SRT 两份 stroke/fill 保持显示；
+    // 内嵌轨改由内核渲染，whole-block 文本块退位（'Embedded cue' 卸载）。
     videoState.selectEmbeddedSubtitleTrack(0);
     videoState.debugSetEmbeddedSubtitleOverlayText('Embedded cue');
     await tester.pump();
-    expect(find.text('External cue'), findsNothing);
-    expect(find.text('Embedded cue'), findsNWidgets(2));
+    expect(find.text('External cue'), findsNWidgets(2));
+    expect(find.text('Embedded cue'), findsNothing);
   });
 
   test('an app-only external stack hides native sidecars until it is removed',
@@ -311,10 +313,11 @@ void main() {
     videoState.addListener(() => notifications++);
 
     // The adapter's cached active list is empty even if mpv selected a
-    // sidecar before publishing its track event. Attaching must still clear it.
+    // sidecar before publishing its track event. 多选共存：挂载外挂不再清
+    // 内嵌轨，因此不会向适配器写入空的 selection。
     expect(delegate.activeSubtitleTracks, isEmpty);
     await videoState.addExternalSubtitleToStack(path);
-    expect(delegate.subtitleSelections, contains(isEmpty));
+    expect(delegate.subtitleSelections, isEmpty);
     expect(delegate.writtenProperties['sub-visibility'], 'no');
     expect(notifications, greaterThan(0));
 
@@ -324,7 +327,8 @@ void main() {
     expect(videoState.shouldRenderEmbeddedSubtitleOverlay, isFalse);
 
     videoState.selectEmbeddedSubtitleTrack(0);
-    expect(videoState.activeExternalSubtitlePaths, isEmpty);
+    // 多选共存：选内嵌轨不再摘外挂。
+    expect(videoState.activeExternalSubtitlePaths, [path]);
     expect(delegate.activeSubtitleTracks, [0]);
     expect(delegate.writtenProperties['sub-visibility'], 'yes');
 
@@ -339,15 +343,21 @@ void main() {
     videoState.setExternalSubtitle(path);
     videoState.subtitleManager.clearExternalSubtitle(notifyListenersToo: false);
     videoState.subtitleManager.setCurrentVideoPath('${dir.path}/next.mkv');
+    // 换视频后内核轨道列表重置（新媒体的 track 事件回写空）——真实内核
+    // 行为，测试替身需显式模拟，否则上一条视频选中的轨道残留会误判
+    // “内嵌轨选中”。
+    delegate.activeSubtitleTracks = [];
     videoState.applyEmbeddedSubtitleOverlayKernelState();
     expect(delegate.writtenProperties['sub-visibility'], 'yes');
     expect(videoState.activeExternalSubtitlePaths, isEmpty);
     videoState.setExternalSubtitle(path);
     expect(delegate.writtenProperties['sub-visibility'], 'no');
     videoState.selectEmbeddedSubtitleTrack(-1);
-    expect(delegate.writtenProperties['sub-visibility'], 'yes');
+    // 多选共存：关闭字幕(<0)只清内嵌侧，外挂仍由 Flutter 叠层渲染，
+    // whole-block 模式继续接管（sub-visibility 保持 no）。
+    expect(delegate.writtenProperties['sub-visibility'], 'no');
     expect(delegate.activeSubtitleTracks, isEmpty);
-    expect(videoState.activeExternalSubtitlePaths, isEmpty);
+    expect(videoState.activeExternalSubtitlePaths, [path]);
   });
 
   test('an ASS and SRT stack retains libass until the native ASS is removed',

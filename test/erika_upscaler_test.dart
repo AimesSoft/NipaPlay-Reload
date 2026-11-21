@@ -85,4 +85,71 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+
+  test('iOS hides desktop-only ArtCNN R8F64 and keeps neural modes visible',
+      () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final modes = ErikaPlayerAdapter.availableUpscalerModes;
+    expect(modes.first, PlayerUpscalerMode.off);
+    expect(modes, contains(PlayerUpscalerMode.erikaArtCnnC4F16));
+    expect(modes, contains(PlayerUpscalerMode.erikaArtCnnC4F16Dn));
+    expect(modes, contains(PlayerUpscalerMode.erikaAnime4kUl));
+    expect(modes, contains(PlayerUpscalerMode.erikaAnime4kDenoiseVl));
+    expect(modes, contains(PlayerUpscalerMode.erikaFsr1));
+    expect(modes, contains(PlayerUpscalerMode.erikaCustom));
+    expect(modes, isNot(contains(PlayerUpscalerMode.erikaArtCnnR8F64)),
+        reason: 'R8F64 是桌面专属档位');
+    // MetalFX 需 iOS 16+、VideoToolbox 超分需 iOS 17+。单元测试跑在宿主
+    // OS 上（override 只改平台枚举），宿主版本解析不出 iOS 主版本时按
+    // 0 处理、两档隐藏；真机高版本会随系统放开，故用条件断言。
+    final iosMajor = int.tryParse(RegExp(r'Version (\d+)')
+            .firstMatch(Platform.operatingSystemVersion)
+            ?.group(1) ??
+        '') ??
+        0;
+    if (iosMajor < 16) {
+      expect(modes, isNot(contains(PlayerUpscalerMode.erikaMetalFxSpatial)),
+          reason: 'MetalFX 需要 iOS 16+');
+    }
+    if (iosMajor < 17) {
+      expect(modes, isNot(contains(PlayerUpscalerMode.erikaPlatformVideo)),
+          reason: 'VideoToolbox 超分入口需要 iOS 17+');
+    }
+  });
+
+  test('native setUpscaler failure leaves status unknown and danmaku native',
+      () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      if (call.method == 'create') return 31;
+      if (call.method == 'setUpscaler') {
+        throw PlatformException(code: 'unsupported');
+      }
+      return null;
+    });
+    final player = ErikaPlayerAdapter();
+    try {
+      await player.setUpscaler(PlayerUpscalerMode.erikaArtCnnC4F16);
+      expect(player.supportsNativeDanmaku, isTrue,
+          reason: '超分未生效时弹幕留在 native，无需回退 Flutter 叠层');
+      final status = await player.getUpscalerStatus();
+      expect(status.requestedMode, PlayerUpscalerMode.erikaArtCnnC4F16);
+      expect(status.activeBackend, PlayerUpscalerBackendStatus.unknown,
+          reason: '失败态与成功未激活（inactive）区分');
+    } finally {
+      await player.disposeAsync();
+      // 恢复 setUp 的默认 mock，避免影响后续测试（若有）。
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'create') return 31;
+        if (call.method == 'setUpscaler') {
+          requested = (call.arguments as Map)['mode'] as int;
+        }
+        if (call.method == 'getUpscalerStatus') {
+          return {'requestedMode': requested, 'activeBackend': 9};
+        }
+        return null;
+      });
+    }
+  });
 }
