@@ -343,6 +343,10 @@ void main() {
     videoState.setExternalSubtitle(path);
     videoState.subtitleManager.clearExternalSubtitle(notifyListenersToo: false);
     videoState.subtitleManager.setCurrentVideoPath('${dir.path}/next.mkv');
+    // 换视频后内核轨道列表重置（新媒体的 track 事件回写空）——真实内核
+    // 行为，测试替身需显式模拟，否则上一条视频选中的轨道残留会误判
+    // “内嵌轨选中”。
+    delegate.activeSubtitleTracks = [];
     videoState.applyEmbeddedSubtitleOverlayKernelState();
     expect(delegate.writtenProperties['sub-visibility'], 'yes');
     expect(videoState.activeExternalSubtitlePaths, isEmpty);
