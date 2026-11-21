@@ -13,8 +13,8 @@ Next 与 Classic 同属一个 NipaPlay 安装包，在 Classic 的实验室中�
 | Windows x64 | `NipaPlay_…_Windows_x64_Setup.exe` | `.zip` 便携包、`.msix` |
 | Linux | `NipaPlay-…-Linux-amd64.deb` 等 | amd64、arm64 的 DEB、RPM、tar.gz；amd64 另有 AppImage |
 | Linux 无界面版 | `NipaPlay-Headless_…_Linux_amd64.tar.gz` | arm64 版本；见 [Linux 无界面版](../advanced/headless.md) |
-| iPhone、iPad | `NipaPlay_…_iOS_arm64.ipa` | 未签名，需自行签名侧载；TestFlight 以发行页说明为准 |
-| Apple TV | `NipaPlay-…-tvOS-arm64-sideload.ipa` | 未签名，需自行签名侧载；TestFlight 与 iPhone 版同属一个 App |
+| iPhone、iPad | [TestFlight](https://testflight.apple.com/join/4JMh3t44) | 也可下载 `NipaPlay_…_iOS_arm64.ipa`：未签名，需自行签名侧载 |
+| Apple TV | [TestFlight](https://testflight.apple.com/join/4JMh3t44) | 与 iPhone 版同属一个 App；也可下载 `NipaPlay-…-tvOS-arm64-sideload.ipa`：未签名，需自行签名侧载 |
 | 鸿蒙 | `NipaPlay-…-HarmonyOS-arm64-signed.hap` | 已签名 |
 
 本次预览不包含 Android。macOS 的 App Sandbox 版本不提供 Next 开关，需使用 GitHub 发行的完整版。

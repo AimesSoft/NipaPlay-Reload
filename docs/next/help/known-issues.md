@@ -38,7 +38,7 @@
 ### 平台
 
 - macOS 和 Windows 为主要验证平台，Linux 构建为实验性质。
-- iPhone、iPad、Apple TV：TestFlight 以[发行页](https://github.com/AimesSoft/NipaPlay-Reload/releases)说明为准；GitHub 上的 IPA 未签名，需自行签名侧载。
+- iPhone、iPad、Apple TV：通过 [TestFlight](https://testflight.apple.com/join/4JMh3t44) 安装；GitHub 上的 IPA 未签名，需自行签名侧载。
 - Apple TV 版只在模拟器上验证，TestFlight 构建是首次在真机上运行；手机界面在模拟器和 iPad 真机上验证。
 - 不分发 Android 和 HarmonyOS 版本。
 
