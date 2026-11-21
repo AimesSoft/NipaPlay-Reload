@@ -1,5 +1,12 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart'
-    show AdaptiveNavigationDestination, IOS26Glass, IOS26NativeTabBar;
+    show
+        AdaptiveNavigationDestination,
+        IOS26Button,
+        IOS26ButtonSize,
+        IOS26ButtonStyle,
+        IOS26Glass,
+        IOS26NativeTabBar,
+        SFSymbol;
 import 'package:flutter/widgets.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
@@ -282,4 +289,53 @@ class PhoneGlassCircle extends StatelessWidget {
           child: child,
         ),
       );
+}
+
+/// Back, or close, at the top of a page on a phone or a tablet. On iOS 26
+/// it is the system's glass button, as the menu across from it is;
+/// elsewhere Next's glass circle.
+class PhoneBackButton extends StatelessWidget {
+  const PhoneBackButton({super.key, this.onTap, this.close = false});
+  final VoidCallback? onTap;
+
+  /// Closes what is open (a panel) rather than going back.
+  final bool close;
+
+  /// The system's bar buttons are this tall; the menu beside matches it.
+  static const size = 44.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = close ? '关闭' : '返回';
+    if (IOS26Glass.supported) {
+      return Semantics(
+        button: true,
+        label: label,
+        child: MediaQuery(
+          // Next is dark whatever the system's appearance.
+          data: MediaQuery.of(context)
+              .copyWith(platformBrightness: Brightness.dark),
+          child: SizedBox(
+            width: size,
+            child: IOS26Button.sfSymbol(
+              onPressed: onTap,
+              sfSymbol: SFSymbol(close ? 'xmark' : 'chevron.left',
+                  size: close ? 15 : 17, color: NextColors.paper),
+              style: IOS26ButtonStyle.glass,
+              size: IOS26ButtonSize.large,
+            ),
+          ),
+        ),
+      );
+    }
+    return PhoneGlassCircle(
+      label: label,
+      onTap: onTap,
+      size: close ? 36 : 40,
+      child: close
+          ? const NextIcon(NextGlyph.close, size: 15, color: NextColors.paper)
+          : const NextIcon(NextGlyph.chevronLeft,
+              size: 22, color: NextColors.paper, stroke: 2),
+    );
+  }
 }

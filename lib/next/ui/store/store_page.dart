@@ -9,7 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/rika_store.dart';
 import '../settings/controls.dart';
 import '../settings/section_accounts.dart' show ConfirmPill;
-import '../shell/phone_dock.dart' show PhoneGlassCircle;
+import '../shell/phone_dock.dart' show PhoneBackButton;
 import '../shell/shell_controller.dart';
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
@@ -247,12 +247,8 @@ class _StorePageState extends State<StorePage> {
           top: NextLayout.barTop(context),
           height: NextMetrics.topBar,
           child: Center(
-            child: PhoneGlassCircle(
-              label: '返回',
-              onTap: () => Navigator.of(context).maybePop(),
-              child: const NextIcon(NextGlyph.chevronLeft,
-                  size: 22, color: NextColors.paper, stroke: 2),
-            ),
+            child: PhoneBackButton(
+                onTap: () => Navigator.of(context).maybePop()),
           ),
         ),
     ]);

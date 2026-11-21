@@ -438,7 +438,7 @@ class _PhoneMenu extends StatelessWidget {
               .copyWith(platformBrightness: Brightness.dark),
           child: AdaptivePopupMenuButton.icon<int>(
             icon: 'ellipsis',
-            size: 40,
+            size: PhoneBackButton.size,
             tint: NextColors.paper,
             items: [
               for (final (label, symbol, _) in entries)

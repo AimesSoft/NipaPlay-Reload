@@ -230,6 +230,19 @@ abstract final class PhoneOrientation {
       ? _set(_sideways, SystemUiMode.immersiveSticky)
       : _set(_upright, SystemUiMode.edgeToEdge);
 
+  /// A tablet's video fills the screen however it is held: the system's
+  /// status bar and home indicator go while it is up, and come back with
+  /// the pages. The orientation is left as it is.
+  static Future<void> tabletVideo(bool on) =>
+      _requests = _requests.then((_) async {
+        try {
+          await _platformCall(SystemChrome.setEnabledSystemUIMode(
+              on ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge));
+        } catch (e) {
+          debugPrint('[NextPlayer] system bars: $e');
+        }
+      });
+
   static Future<void> _set(
       List<DeviceOrientation> orientations, SystemUiMode mode) =>
       _requests = _requests.then((_) async {

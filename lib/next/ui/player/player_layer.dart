@@ -83,6 +83,13 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   /// on glass.
   final bool _phone =
       NextPlayerLayer.debugPhone ?? (!globals.isDesktop && globals.isPhone);
+
+  /// A tablet plays full screen as it is held, without the system's bars
+  /// ([PhoneOrientation.tabletVideo]).
+  final bool _tablet = !globals.isDesktop &&
+      globals.isMobilePlatform &&
+      !globals.isPhone &&
+      !TelevisionFocusable.television;
   _Menu? _menu;
   bool _holding = false;
   final _menuFocus = FocusNode(debugLabel: 'next.player.menu');
@@ -116,6 +123,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
       });
     }
     if (_phone) unawaited(PhoneOrientation.video());
+    if (_tablet) unawaited(PhoneOrientation.tabletVideo(true));
   }
 
   @override
@@ -144,6 +152,7 @@ class _NextPlayerLayerState extends State<NextPlayerLayer> {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
     if (_phone) unawaited(PhoneOrientation.pages());
+    if (_tablet) unawaited(PhoneOrientation.tabletVideo(false));
     _shell?.panelOpen.removeListener(_panelChanged);
     _release();
     _watch?.dispose();
@@ -1073,8 +1082,10 @@ class _BottomBar extends StatelessWidget {
                     onTap: () => onMenu(_Menu.more),
                   ),
                   const SizedBox(width: _gap),
-                  // A television is always full screen.
-                  if (!TelevisionFocusable.television)
+                  // A television, a tablet or a phone is always full
+                  // screen: there is no window to enlarge.
+                  if (!TelevisionFocusable.television &&
+                      !globals.isMobilePlatform)
                   PlaybackSelector<bool>(
                     playback: playback,
                     selector: (s) => s.fullscreen,
