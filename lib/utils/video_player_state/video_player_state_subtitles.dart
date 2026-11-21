@@ -166,9 +166,12 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _notifyListeners();
   }
 
-  // 选内嵌字幕轨（>= 0）或关闭字幕（< 0），同时摘掉外挂字幕
+  // 选内嵌字幕轨（>= 0）或关闭字幕（< 0）。多选共存：不再摘外挂；
+  // 轨道选择改变内核字幕渲染归属（外挂 app 叠层 + 内嵌轨内核渲染可
+  // 共存），kernel 渲染开关必须重算。
   void selectEmbeddedSubtitleTrack(int trackIndex) {
     _subtitleManager.selectEmbeddedSubtitleTrack(trackIndex);
+    applyEmbeddedSubtitleOverlayKernelState();
     _notifyListeners();
   }
 
@@ -301,14 +304,23 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   // auto-select a same-name sidecar after we clear sid, so keep its renderer
   // hidden for as long as the app owns that stack. Mixed native ASS + SRT
   // stacks retain the ASS renderer.
+  //
+  // 多选共存例外：用户显式选中内嵌轨（activeSubtitleTracks 非空）时，
+  // 内嵌字幕由内核渲染、外挂由 Flutter 叠层渲染，画面互不占用——
+  // 此时内核渲染器必须保持可见，否则“外挂 srt + 内嵌轨同挂”场景下
+  // 内嵌轨被 sub-visibility=no 压住不出画面。
   bool get _externalSubtitleOverlayIsExclusive =>
       shouldRenderCurrentExternalSubtitleInApp() &&
+      player.activeSubtitleTracks.isEmpty &&
       !activeExternalSubtitlePaths
           .any((path) => !externalSubtitleRenderedInApp(path));
 
   bool get shouldRenderEmbeddedSubtitleOverlay =>
       _embeddedSubtitleOverlayMode &&
       !isKernelRenderedExternalAssActive &&
+      // 选了内嵌轨由内核直接渲染，whole-block 文本块退位（否则
+      // sub-text 块与内核轨双重显示同一条内嵌字幕）。
+      player.activeSubtitleTracks.isEmpty &&
       !_externalSubtitleOverlayIsExclusive;
 
   Future<void> setEmbeddedSubtitleOverlayMode(bool enabled) async {
@@ -362,8 +374,12 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (kIsWeb || _isDisposed) return;
     try {
       final renderEmbedded = shouldRenderEmbeddedSubtitleOverlay;
+      // 用户显式选中内嵌轨时由内核渲染（多选共存），内核渲染器不隐藏；
+      // 否则维持原逻辑：whole-block 或 app-only 栈隐藏内核字幕。
+      final embeddedTrackSelected = player.activeSubtitleTracks.isNotEmpty;
       if (player.getPlayerKernelName() == 'Media Kit' &&
-          (renderEmbedded || _externalSubtitleOverlayIsExclusive)) {
+          (renderEmbedded || _externalSubtitleOverlayIsExclusive) &&
+          !embeddedTrackSelected) {
         player.setProperty('sub-visibility', 'no');
       } else {
         player.setProperty('sub-visibility', 'yes');

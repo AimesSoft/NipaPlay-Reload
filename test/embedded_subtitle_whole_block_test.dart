@@ -291,13 +291,13 @@ void main() {
     expect(find.text('External cue'), findsNWidgets(2)); // stroke + fill
 
     // The same mounted overlay follows selection changes through listeners.
-    // 多选共存：选内嵌轨不再摘外挂（外挂 SRT 走 Flutter 叠层、内嵌轨由内核
-    // 渲染，画面互不占用），外挂的两份 stroke/fill 文本保持显示。
+    // 多选共存：选内嵌轨不再摘外挂，外挂 SRT 两份 stroke/fill 保持显示；
+    // 内嵌轨改由内核渲染，whole-block 文本块退位（'Embedded cue' 卸载）。
     videoState.selectEmbeddedSubtitleTrack(0);
     videoState.debugSetEmbeddedSubtitleOverlayText('Embedded cue');
     await tester.pump();
     expect(find.text('External cue'), findsNWidgets(2));
-    expect(find.text('Embedded cue'), findsNWidgets(2));
+    expect(find.text('Embedded cue'), findsNothing);
   });
 
   test('an app-only external stack hides native sidecars until it is removed',
