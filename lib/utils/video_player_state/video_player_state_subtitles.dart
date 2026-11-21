@@ -192,12 +192,17 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
       {String? displayName}) async {
     await _subtitleManager.addExternalSubtitleToStack(path,
         displayName: displayName);
+    // 多选共存：挂载/移除改变 app-only 栈的 exclusive 判定，kernel 渲染
+    // 开关（sub-visibility）需重算——旧互斥语义由 setExternalSubtitle
+    // 链路顺带完成，改造后必须显式调。
+    applyEmbeddedSubtitleOverlayKernelState();
     _notifyListeners();
   }
 
   // 桥接方法：取消挂载外部字幕（从叠层/内核移除）
   Future<void> removeExternalSubtitle(String path) async {
     await _subtitleManager.removeExternalSubtitleFromStack(path);
+    applyEmbeddedSubtitleOverlayKernelState();
     _notifyListeners();
   }
 
