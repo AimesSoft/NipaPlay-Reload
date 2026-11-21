@@ -124,8 +124,8 @@ Release 附件提供以下版本：
 - **Windows x64**：安装程序、ZIP 便携包与 MSIX。
 - **Linux**：amd64 和 arm64 的 DEB、RPM 与 tar.gz；amd64 另提供 AppImage。
 - **Linux headless**：amd64、arm64 的无界面宿主包，见 [Headless 指南](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/advanced/headless.md)。
-- **iPhone / iPad**：当前附件为需自行签名侧载的 IPA；TestFlight 测试构建另行上传，开放测试的方式以发行页公告为准。
-- **Apple TV**：需自行签名侧载的 tvOS IPA；TestFlight 测试构建与 iPhone 版同属一个 App。
+- **iPhone / iPad**：通过 [TestFlight](https://testflight.apple.com/join/4JMh3t44) 安装；附件中的 IPA 未签名，需自行签名侧载。
+- **Apple TV**：通过同一个 [TestFlight](https://testflight.apple.com/join/4JMh3t44) 安装（与 iPhone 版同属一个 App）；附件中的 tvOS IPA 未签名，需自行签名侧载。
 - **鸿蒙**：已签名的 arm64 HAP。
 
 本次发行不包含 Android。
