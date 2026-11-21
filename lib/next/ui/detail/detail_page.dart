@@ -12,7 +12,7 @@ import '../../ui_data/work_more.dart' show buildWorkMore;
 import '../data/discover.dart';
 import '../data/work_manage.dart';
 import '../settings/settings_layout.dart' show SettingsSection;
-import '../shell/phone_dock.dart' show PhoneGlassCircle;
+import '../shell/phone_dock.dart' show PhoneBackButton;
 import '../shell/shell_controller.dart';
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
@@ -743,22 +743,20 @@ class _WorkDetailPageState extends State<WorkDetailPage>
                 _removed != null ? const AlwaysStoppedAnimation(0.35) : content,
             child: IgnorePointer(child: _bar(size, column, titleTop, reduced)),
           ),
-          if (compact)
-            // On a phone, a glass circle in the bar's row, across from the
-            // bar's own on the right.
+          if (NextLayout.docked(context))
+            // On a phone or a tablet, back on glass in the bar's row,
+            // across from the bar's own on the right.
             Positioned(
-              left: NextLayout.compactGutter,
+              left: compact
+                  ? NextLayout.compactGutter
+                  : NextLayout.gutter(context) - 6,
               top: NextLayout.barTop(context),
               height: NextMetrics.topBar,
               child: Center(
                 child: FadeTransition(
                   opacity: content,
-                  child: PhoneGlassCircle(
-                    label: '返回',
-                    onTap: () => Navigator.of(context).maybePop(),
-                    child: const NextIcon(NextGlyph.chevronLeft,
-                        size: 22, color: NextColors.paper, stroke: 2),
-                  ),
+                  child: PhoneBackButton(
+                      onTap: () => Navigator.of(context).maybePop()),
                 ),
               ),
             )

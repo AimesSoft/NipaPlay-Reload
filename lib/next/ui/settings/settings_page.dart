@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/tvos_remote_text_input_scope.dart';
 
 import '../data/settings_data.dart';
-import '../shell/phone_dock.dart' show PhoneGlassCircle;
+import '../shell/phone_dock.dart' show PhoneBackButton;
 import '../shell/shell_controller.dart';
 import '../theme/layout.dart';
 import '../theme/tokens.dart';
@@ -424,12 +424,8 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
               padding: const EdgeInsets.only(left: gutter),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: PhoneGlassCircle(
-                  label: '返回',
-                  onTap: () => Navigator.of(context).maybePop(),
-                  child: const NextIcon(NextGlyph.chevronLeft,
-                      size: 22, color: NextColors.paper, stroke: 2),
-                ),
+                child: PhoneBackButton(
+                    onTap: () => Navigator.of(context).maybePop()),
               ),
             ),
           ),
@@ -523,12 +519,8 @@ class _SettingsPageState extends State<SettingsPage> implements SettingsDebug {
     );
   }
 
-  static Widget _back(BuildContext context) => PhoneGlassCircle(
-        label: '返回',
-        onTap: () => Navigator.of(context).maybePop(),
-        child: const NextIcon(NextGlyph.chevronLeft,
-            size: 22, color: NextColors.paper, stroke: 2),
-      );
+  static Widget _back(BuildContext context) =>
+      PhoneBackButton(onTap: () => Navigator.of(context).maybePop());
 
   // —— 调试 ——
 

@@ -287,13 +287,8 @@ class _Sheet extends StatelessWidget {
                 onCancelTask: (t) => actions.cancelTask(t.taskId),
                 onChoose: (answer) => unawaited(shell.chat.say(answer)),
               ),
-              trailing: phone
-                  ? PhoneGlassCircle(
-                      label: '关闭',
-                      size: 36,
-                      onTap: shell.closePanel,
-                      child: const NextIcon(NextGlyph.close,
-                          size: 15, color: NextColors.paper))
+              trailing: NextLayout.docked(context)
+                  ? PhoneBackButton(close: true, onTap: shell.closePanel)
                   : FrameButton(
                       glyph: NextGlyph.close,
                       label: '关闭',
