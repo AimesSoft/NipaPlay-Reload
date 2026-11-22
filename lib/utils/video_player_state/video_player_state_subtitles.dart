@@ -410,12 +410,12 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     final stopwatch = Stopwatch()..start();
 
     while (stopwatch.elapsed < timeout) {
-      // 位置已推进到目标附近（±1 秒），说明首帧已就绪
-      final currentPosition = player.position.inMilliseconds;
-      if (currentPosition >= targetPositionMs - 1000 &&
-          currentPosition <= targetPositionMs + 1000) {
-        return;
-      }
+    // 位置已推进到目标附近（±1 秒），说明首帧已就绪
+    final currentPosition = player.position;
+    if (currentPosition >= targetPositionMs - 1000 &&
+        currentPosition <= targetPositionMs + 1000) {
+      return;
+    }
 
       // 不再 buffering，说明已准备好
       if (!player.buffering.value) {
