@@ -914,6 +914,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               '_lastRawPlayerMs=$_lastRawPlayerMs '
               ' anchor fields NOW updated correctly');
         }
+
+        // Bug-8-3 修复：Erika 内核的 seek() 只下发原生命令，不等首帧解码就绪。
+        // 如果在此处立即 play()，Erika 还没有目标位置的画面，表现为黑屏
+        // + 重新网络加载。在 play() 之前等 Erika 报告不再 buffering，或位置
+        // 已推进到目标位置附近。
+        if (player.getPlayerKernelName() == 'Erika') {
+          await _waitForErikaFrameReady(player, lastPosition);
+        }
       } else {
         _position = Duration.zero;
         _progress = 0.0;

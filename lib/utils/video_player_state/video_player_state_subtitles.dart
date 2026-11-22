@@ -398,6 +398,35 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     }
   }
 
+  /// 等待 Erika 内核在 seek 后准备好首帧。
+  ///
+  /// Erika 的 `seek()` 只下发原生命令，不等首帧解码就绪。如果在此处
+  // 立即调用 `play()`，Erika 还没有目标位置的画面，表现为黑屏 +
+  // 重新网络加载。通过监听 `buffering` 标志和位置推进来判断首帧是否
+  // 就绪。
+  Future<void> _waitForErikaFrameReady(Player player, int targetPositionMs) async {
+    const timeout = Duration(seconds: 5);
+    const pollInterval = Duration(milliseconds: 100);
+    final stopwatch = Stopwatch()..start();
+
+    while (stopwatch.elapsed < timeout) {
+      // 位置已推进到目标附近（±1 秒），说明首帧已就绪
+      final currentPosition = player.position.inMilliseconds;
+      if (currentPosition >= targetPositionMs - 1000 &&
+          currentPosition <= targetPositionMs + 1000) {
+        return;
+      }
+
+      // 不再 buffering，说明已准备好
+      if (!player.buffering.value) {
+        return;
+      }
+
+      await Future.delayed(pollInterval);
+    }
+    // 超时也放行，避免永久卡死
+  }
+
   /// Throttled poll entry from the position ticker (~8Hz, notifies only on
   /// text change).
   void pollEmbeddedSubtitleOverlayText() {
