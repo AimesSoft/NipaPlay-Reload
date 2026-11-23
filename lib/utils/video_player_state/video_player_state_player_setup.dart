@@ -563,7 +563,11 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       final bool kernelSupportsOpenStart =
           player.getPlayerKernelName() == 'Erika';
       int earlyResumePosition = 0;
-      if (kernelSupportsOpenStart && !restartCompleted) {
+      if (kernelSupportsOpenStart) {
+        // 与原调用点（下方 lastPosition）用完全相同的参数读取，保证
+        // startPosition 与后续锚点/UI 位置一致。历史位置在 restartCompleted
+        // 的任一取值下都可能非空（_getVideoPosition 内部两条路径都会查），
+        // 不能只在 !restartCompleted 时读。
         earlyResumePosition = await _getVideoPosition(
           videoPath,
           restartCompleted: restartCompleted,
@@ -573,8 +577,12 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // setMedia 内部会清空 pending 起始位置（换视频时重置），因此
       // setStartPosition 必须在设置 media 之后调用，否则会被清成 null。
       player.media = playUrl;
+      debugPrint('[PlayerSetup] kernelSupportsOpenStart=$kernelSupportsOpenStart '
+          'restartCompleted=$restartCompleted earlyResumePosition=$earlyResumePosition');
       if (earlyResumePosition > 0) {
         player.setStartPosition(earlyResumePosition);
+        debugPrint('[PlayerSetup] setStartPosition($earlyResumePosition) called, '
+            'startPositionTaken now=${player.startPositionTaken}');
       }
       await applyErikaUpscalerModeToCurrentPlayer();
 
@@ -898,16 +906,13 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               '_lastRawPlayerMs=$_lastRawPlayerMs '
               ' player.seek() does NOT update ptm/anchor fields');
         }
-        // 若内核已在 open 时原子就位（Erika startPosition 被原生接受），
-        // 不要再 seek——否则会二次定位、重新触发网络流缓冲。仅当内核未在
-        // open 时就位（非 Erika，或原生拒绝 startPosition）时才走 seek 兜底。
-        final alreadyPositionedAtOpen =
-            kernelSupportsOpenStart && player.startPositionTaken;
-        if (alreadyPositionedAtOpen) {
-          debugPrint('[PlayerSetup] Erika open 已就位 $lastPosition，跳过 open 后 seek');
-        } else {
-          await player.seekAndWait(position: lastPosition);
-        }
+        // 独立探针实测（erika_flutter 0.3.8 + 本机 native runtime）：
+        // open(startPosition:) 会返回 taken=true，但实际仍从 0 播放——
+        // 是假阳性；只有 open 后再显式 seek(lastPosition) 才会真正就位
+        // （探针 position 立即变为 startMs）。因此这里无条件 seek，
+        // 不再信任 startPositionTaken。startPosition 本身仍保留（若某些
+        // 原生真实现，可减少首帧前的无效解码）。
+        await player.seekAndWait(position: lastPosition);
         //  Bug-8-2 修复：player.seek() 只调用底层 API，不更新锚点字段，
         // 导致 Ticker 首帧锚定到 playbackTimeMs=0  弹幕从头播放 + 回弹。
         // 手动更新所有锚点字段，与 seekTo() 保持一致。
