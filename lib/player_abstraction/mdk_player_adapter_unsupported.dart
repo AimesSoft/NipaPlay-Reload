@@ -62,6 +62,16 @@ class MdkPlayerAdapter implements AbstractPlayer {
   void setMedia(String path, PlayerMediaType type) {}
 
   @override
+  @override
+  void setStartPosition(int positionMs) {
+    // 该内核不支持"打开时就位"，忽略；上层仍走 open 后 seek。
+  }
+
+  @override
+  bool get startPositionTaken => true;
+
+  @override
+  
   Future<void> prepare() async {}
 
   @override

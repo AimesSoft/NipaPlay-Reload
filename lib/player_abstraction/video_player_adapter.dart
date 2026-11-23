@@ -454,6 +454,16 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
 
   @override
+  @override
+  void setStartPosition(int positionMs) {
+    // 该内核不支持"打开时就位"，忽略；上层仍走 open 后 seek。
+  }
+
+  @override
+  bool get startPositionTaken => true;
+
+  @override
+  
   Future<void> prepare() async {
     if (_controller == null) {
       print('[VideoPlayerAdapter] prepare方法中发现控制器为空，尝试重新创建');

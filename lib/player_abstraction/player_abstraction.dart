@@ -166,6 +166,13 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
 
   Future<void> prepare() => _delegate.prepare();
 
+  /// 退出播放时释放媒体级原生资源。委托给内核实现（Erika 原生 close；
+  /// 其他内核默认空实现）。
+  
+  void setStartPosition(int positionMs) => _delegate.setStartPosition(positionMs);
+
+  bool get startPositionTaken => _delegate.startPositionTaken;
+
   bool get supportsMediaLoadReadiness =>
       _delegate is core_player.MediaLoadAwarePlayer;
 
