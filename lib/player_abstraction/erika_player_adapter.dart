@@ -964,6 +964,27 @@ class ErikaPlayerAdapter
     await _player.seek(Duration(milliseconds: clamped));
   }
 
+  /// 退出播放时的媒体级清理。
+  ///
+  /// Erika 原生 close 是终止性的（ErikaState_Closed）：close 后 handle
+  /// 无法再次 open（实测报 "player is closed"）。C ABI 没有媒体级卸载
+  /// 接口，因此这里只做 Dart 状态清理；原生 stop 由上层
+  /// player.state=stopped 触发。不调用 close，避免破坏播放器复用。
+  @override
+  Future<void> releaseMedia() async {
+    if (!_isSupported || _disposed) {
+      return;
+    }
+    _media = '';
+    _lastPositionMs = 0;
+    _lastPositionUpdate = DateTime.now();
+    _pendingSeekTargetMs = null;
+    _seekFenceUntil = null;
+    _mediaInfo = PlayerMediaInfo(duration: 0);
+    _buffering.value = false;
+    _state = PlayerPlaybackState.stopped;
+  }
+
   @override
   void dispose() {
     unawaited(

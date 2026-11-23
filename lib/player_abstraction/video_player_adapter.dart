@@ -454,6 +454,9 @@ class VideoPlayerAdapter implements AbstractPlayer, TickerProvider {
   }
 
   @override
+  @override
+  Future<void> releaseMedia() async {}
+
   Future<void> prepare() async {
     if (_controller == null) {
       print('[VideoPlayerAdapter] prepare方法中发现控制器为空，尝试重新创建');
