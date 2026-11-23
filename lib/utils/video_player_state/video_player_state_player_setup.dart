@@ -568,12 +568,14 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           videoPath,
           restartCompleted: restartCompleted,
         );
-        if (earlyResumePosition > 0) {
-          player.setStartPosition(earlyResumePosition);
-        }
       }
 
+      // setMedia 内部会清空 pending 起始位置（换视频时重置），因此
+      // setStartPosition 必须在设置 media 之后调用，否则会被清成 null。
       player.media = playUrl;
+      if (earlyResumePosition > 0) {
+        player.setStartPosition(earlyResumePosition);
+      }
       await applyErikaUpscalerModeToCurrentPlayer();
 
       //debugPrint('4. 准备播放器...');
