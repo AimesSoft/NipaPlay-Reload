@@ -625,6 +625,11 @@ class ErikaPlayerAdapter
   String? _lastNativeError;
   int _lastPositionMs = 0;
   DateTime _lastPositionUpdate = DateTime.now();
+  /// 打开媒体时要原子就位的起始位置（毫秒）；由上层在 setMedia 后、prepare
+  /// 前通过 setStartPosition 写入，prepare 传给 Erika 的 open(startPosition:)。
+  int? _pendingOpenStartPositionMs;
+  /// open(startPosition:) 是否被原生接受；false 时上层需走 seek 兜底。
+  bool _startPositionTaken = true;
   int? _pendingSeekTargetMs;
   DateTime? _seekFenceUntil;
   bool _disposed = false;
@@ -913,6 +918,9 @@ class ErikaPlayerAdapter
       _media = path;
       _lastPositionMs = 0;
       _lastPositionUpdate = DateTime.now();
+      // 新视频：重置上一次的起始位置请求（上层会重新 setStartPosition）。
+      _pendingOpenStartPositionMs = null;
+      _startPositionTaken = true;
       _buffering.value = false;
       _mediaInfo = PlayerMediaInfo(duration: 0);
       _lastPresenterStats = const <String, dynamic>{};
@@ -928,17 +936,46 @@ class ErikaPlayerAdapter
   }
 
   @override
+  void setStartPosition(int positionMs) {
+    // 仅 >0 的恢复位置需要原子就位；0/负数交给从头打开即可。
+    _pendingOpenStartPositionMs = positionMs > 0 ? positionMs : null;
+  }
+
+  @override
+  bool get startPositionTaken => _startPositionTaken;
+
+  @override
   Future<void> prepare() async {
     _ensureSupported();
     if (_media.isEmpty) {
       return;
     }
     await _player.ensureCreated();
-    await _player.open(
-      _media,
-      httpHeaders: _userAgent.isEmpty ? null : {'User-Agent': _userAgent},
-    );
-    _subtitleTrace('prepare open complete media=$_media');
+    final start = _pendingOpenStartPositionMs;
+    if (start == null || start <= 0) {
+      _startPositionTaken = true;
+      await _player.open(
+        _media,
+        httpHeaders: _userAgent.isEmpty ? null : {'User-Agent': _userAgent},
+      );
+    } else {
+      // 让 Erika 在 open 时直接从历史位置开始（引擎在呈现首帧前 seek），
+      // 避免 Windows/macOS 先从头打开、iOS 再 open 后 seek 导致网络流
+      // 重新下载到目标位置的黑屏等待。
+      _startPositionTaken = await _player.open(
+        _media,
+        httpHeaders: _userAgent.isEmpty ? null : {'User-Agent': _userAgent},
+        startPosition: Duration(milliseconds: start),
+      );
+      if (_startPositionTaken) {
+        // 原生已就位：主动同步位置锚点，关闭 positionChanged 事件到达前
+        // 的“返回 0”窗口，避免弹幕/诊断短暂读到错误位置。
+        _lastPositionMs = start;
+        _lastPositionUpdate = DateTime.now();
+      }
+      debugPrint('[Erika] open(startPosition=$start) taken=$_startPositionTaken');
+    }
+    _subtitleTrace('prepare open complete media=$_media startTaken=$_startPositionTaken');
     _state = PlayerPlaybackState.paused;
   }
 

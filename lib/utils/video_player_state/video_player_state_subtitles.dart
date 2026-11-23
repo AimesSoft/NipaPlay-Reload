@@ -398,55 +398,6 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     }
   }
 
-  /// 等待 Erika 内核在 seek 后准备好首帧。
-  ///
-  /// Erika 的 `seek()` 只下发原生命令，不等首帧解码就绪。如果在此处
-  /// 立即调用 `play()`，Erika 还没有目标位置的画面，表现为黑屏 +
-  // 重新网络加载（从头开始下载直到目标位置）。
-  //
-  /// 策略：先等待 `buffering` 变为 true（原生正在处理 seek），再等待
-  // `buffering` 变为 false（原生完成了 seek 和首帧解码），最后验证
-  // `player.position` 已推进到目标位置附近（±1 秒），再额外等待 300ms
-  // 确保首帧已经渲染。如果 `buffering` 从未变为 true（原生未上报缓冲
-  // 状态），则等待 500ms 后放行，避免永久卡死。
-  Future<void> _waitForErikaFrameReady(Player player, int targetPositionMs) async {
-    const timeout = Duration(seconds: 8);
-    const pollInterval = Duration(milliseconds: 200);
-    final stopwatch = Stopwatch()..start();
-
-    // 第一阶段：等待 buffering 开始（原生正在处理 seek）
-    bool bufferingStarted = false;
-    while (stopwatch.elapsed < timeout) {
-      if (player.buffering.value) {
-        bufferingStarted = true;
-        break;
-      }
-      await Future.delayed(pollInterval);
-    }
-
-    // 第二阶段：等待 buffering 结束（原生完成了 seek 和首帧解码）
-    if (bufferingStarted) {
-      while (stopwatch.elapsed < timeout) {
-        if (!player.buffering.value) {
-          // 第三阶段：验证位置已推进到目标位置附近，说明首帧已就绪
-          final currentPosition = player.position;
-          if (currentPosition >= targetPositionMs - 1000 &&
-              currentPosition <= targetPositionMs + 1000) {
-            // 额外等待 300ms，确保首帧已经渲染到屏幕上
-            await Future.delayed(const Duration(milliseconds: 300));
-            return;
-          }
-          // 位置还没推进，继续等
-        }
-        await Future.delayed(pollInterval);
-      }
-    } else {
-      // buffering 从未开始，等待 500ms 后放行
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
-    // 超时也放行，避免永久卡死
-  }
-
   /// Throttled poll entry from the position ticker (~8Hz, notifies only on
   /// text change).
   void pollEmbeddedSubtitleOverlayText() {

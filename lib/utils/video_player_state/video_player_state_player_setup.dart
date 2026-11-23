@@ -557,6 +557,22 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // 优先用一次性 UA（串流菜单设置，仅本次有效，用后即清），否则用持久 UA。
       PlayerFactory.applyUserAgentForNextOpen(player.setUserAgent);
 
+      // 提前读取恢复位置，供支持"打开时就位"的内核（Erika）在 prepare/open
+      // 时原子定位，避免 open 后 seek 导致网络流重新下载到历史位置的黑屏。
+      // 只影响 open 起始点；下面的 lastPosition 仍按原流程读取，用于锚点/UI。
+      final bool kernelSupportsOpenStart =
+          player.getPlayerKernelName() == 'Erika';
+      int earlyResumePosition = 0;
+      if (kernelSupportsOpenStart && !restartCompleted) {
+        earlyResumePosition = await _getVideoPosition(
+          videoPath,
+          restartCompleted: restartCompleted,
+        );
+        if (earlyResumePosition > 0) {
+          player.setStartPosition(earlyResumePosition);
+        }
+      }
+
       player.media = playUrl;
       await applyErikaUpscalerModeToCurrentPlayer();
 
@@ -880,13 +896,16 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               '_lastRawPlayerMs=$_lastRawPlayerMs '
               ' player.seek() does NOT update ptm/anchor fields');
         }
-        // 先设置播放位置
-        // Erika's native seek crosses an asynchronous platform bridge and
-        // performs a frame-output barrier. Wait for that transition to finish
-        // before startup can issue play; otherwise a slow resume seek can race
-        // the first play command and leave the surface without a current frame
-        // until the user seeks again.
-        await player.seekAndWait(position: lastPosition);
+        // 若内核已在 open 时原子就位（Erika startPosition 被原生接受），
+        // 不要再 seek——否则会二次定位、重新触发网络流缓冲。仅当内核未在
+        // open 时就位（非 Erika，或原生拒绝 startPosition）时才走 seek 兜底。
+        final alreadyPositionedAtOpen =
+            kernelSupportsOpenStart && player.startPositionTaken;
+        if (alreadyPositionedAtOpen) {
+          debugPrint('[PlayerSetup] Erika open 已就位 $lastPosition，跳过 open 后 seek');
+        } else {
+          await player.seekAndWait(position: lastPosition);
+        }
         //  Bug-8-2 修复：player.seek() 只调用底层 API，不更新锚点字段，
         // 导致 Ticker 首帧锚定到 playbackTimeMs=0  弹幕从头播放 + 回弹。
         // 手动更新所有锚点字段，与 seekTo() 保持一致。
@@ -915,13 +934,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
               ' anchor fields NOW updated correctly');
         }
 
-        // Bug-8-3 修复：Erika 内核的 seek() 只下发原生命令，不等首帧解码就绪。
-        // 如果在此处立即 play()，Erika 还没有目标位置的画面，表现为黑屏
-        // + 重新网络加载。在 play() 之前等 Erika 报告不再 buffering，或位置
-        // 已推进到目标位置附近。
-        if (player.getPlayerKernelName() == 'Erika') {
-          await _waitForErikaFrameReady(player, lastPosition);
-        }
+        // 已移除原先在此处的 Erika 首帧等待门（_waitForErikaFrameReady）：
+        // Windows 实测 seek 本就能秒开，等待门只会拖慢初始化、并与
+        // "快速开始播放"冲突。iOS 续播黑屏改由 open(startPosition:) 解决。
       } else {
         _position = Duration.zero;
         _progress = 0.0;

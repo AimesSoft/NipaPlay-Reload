@@ -130,6 +130,14 @@ abstract class AbstractPlayer {
 
   void setMedia(String path, PlayerMediaType type);
 
+  /// 打开媒体时的起始位置（毫秒）。仅支持"打开时就位"的内核（Erika）使用；
+  /// 默认空实现，其他内核仍走 open 后 seek 的既有路径。
+  void setStartPosition(int positionMs) {}
+
+  /// 起始位置是否被内核在 open 时接受。默认 true——非 Erika 内核不依赖
+  /// 此标志，调用方仍按既有 seek 流程处理。
+  bool get startPositionTaken => true;
+
   Future<void> prepare();
 
   void seek({required int position});

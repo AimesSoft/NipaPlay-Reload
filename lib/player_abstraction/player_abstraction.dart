@@ -166,6 +166,10 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
 
   Future<void> prepare() => _delegate.prepare();
 
+  void setStartPosition(int positionMs) => _delegate.setStartPosition(positionMs);
+
+  bool get startPositionTaken => _delegate.startPositionTaken;
+
   bool get supportsMediaLoadReadiness =>
       _delegate is core_player.MediaLoadAwarePlayer;
 
