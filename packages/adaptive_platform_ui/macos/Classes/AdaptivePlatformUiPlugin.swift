@@ -444,6 +444,7 @@ private final class SwiftUIMediaActionGroupView: NSView {
     let model = MediaCapsuleModel()
     let hosting: MediaCapsuleHostingView
     private let channel: FlutterMethodChannel
+    private var openMenuActionIndex: Int?
 
     init(_ id: Int64, _ messenger: FlutterBinaryMessenger, _ args: [String: Any]) {
         hosting = MediaCapsuleHostingView(rootView: MediaDetailActionCapsule(model: model))
@@ -462,9 +463,28 @@ private final class SwiftUIMediaActionGroupView: NSView {
         }
         model.update(args)
         channel.setMethodCallHandler { [weak self] call, result in
-            guard call.method == "update" else { result(FlutterMethodNotImplemented); return }
-            if let args = call.arguments as? [String: Any] { self?.model.update(args) }
-            result(nil)
+            guard let self else { result(FlutterMethodNotImplemented); return }
+            switch call.method {
+            case "update":
+                if let args = call.arguments as? [String: Any] { self.model.update(args) }
+                result(nil)
+            case "activate":
+                if let args = call.arguments as? [String: Any],
+                   let index = args["index"] as? Int {
+                    self.activateAction(at: index)
+                }
+                result(nil)
+            case "setInteraction":
+                if let args = call.arguments as? [String: Any] {
+                    let index = args["index"] as? Int
+                    let hovered = args["hovered"] as? Bool ?? false
+                    let pressed = args["pressed"] as? Bool ?? false
+                    self.model.setInteraction(index: index, hovered: hovered, pressed: pressed)
+                }
+                result(nil)
+            default:
+                result(FlutterMethodNotImplemented)
+            }
         }
     }
 
@@ -474,7 +494,40 @@ private final class SwiftUIMediaActionGroupView: NSView {
         hosting.frame = bounds
     }
 
-    // No hitTest override: AppKit must deliver real input to SwiftUI so the
-    // interactive glass, pressed state, Menu and accessibility remain native.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
     deinit { channel.setMethodCallHandler(nil) }
+
+    private func activateAction(at index: Int) {
+        guard model.isEnabled(index) else { return }
+        let action = model.actions[index]
+        if action.items != nil {
+            openMenuActionIndex = index
+            let menu = NSMenu()
+            for (itemIndex, item) in action.items!.enumerated() {
+                let menuItem = NSMenuItem(title: item.label,
+                                          action: #selector(menuItemSelected(_:)),
+                                          keyEquivalent: "")
+                menuItem.target = self
+                menuItem.tag = itemIndex
+                menuItem.isEnabled = item.enabled
+                menu.addItem(menuItem)
+            }
+            menu.autoenablesItems = false
+            let slotCenterX = CGFloat(MediaDetailActionCapsule.inset)
+                + CGFloat(index) * MediaDetailActionCapsule.itemWidth
+                + MediaDetailActionCapsule.itemWidth / 2
+            menu.popUp(positioning: nil,
+                       at: NSPoint(x: slotCenterX, y: bounds.height),
+                       in: self)
+            openMenuActionIndex = nil
+        } else {
+            model.activate(index)
+        }
+    }
+
+    @objc func menuItemSelected(_ item: NSMenuItem) {
+        guard let actionIndex = openMenuActionIndex else { return }
+        model.select(actionIndex, item: item.tag)
+    }
 }

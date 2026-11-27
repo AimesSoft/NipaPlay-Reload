@@ -20,6 +20,8 @@ struct MediaCapsuleAction: Identifiable {
 @available(macOS 11.0, iOS 13.0, tvOS 13.0, *)
 final class MediaCapsuleModel: ObservableObject {
     @Published private(set) var actions: [MediaCapsuleAction] = []
+    @Published var hoveredIndex: Int?
+    @Published var pressedIndex: Int?
     var onPressed: ((Int) -> Void)?
     var onSelected: ((Int, Int) -> Void)?
 
@@ -52,6 +54,10 @@ final class MediaCapsuleModel: ObservableObject {
         onSelected?(index, item)
     }
 
+    func setInteraction(index: Int?, hovered: Bool, pressed: Bool) {
+        hoveredIndex = (hovered && index != nil) ? index : nil
+        pressedIndex = (pressed && index != nil) ? index : nil
+    }
 }
 
 /// Matches Erika's shared HStack + regular interactive glass. Buttons retain
@@ -68,11 +74,29 @@ struct MediaDetailActionCapsule: View {
         HStack(spacing: 0) {
             ForEach(model.actions) { action in
                 control(action)
+                    .frame(width: Self.itemWidth, height: Self.height)
+                    .background {
+                        let isPressed = model.pressedIndex == action.id
+                        let isHovered = model.hoveredIndex == action.id
+                        Group {
+                            if isPressed {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.white.opacity(0.18))
+                            } else if isHovered {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.white.opacity(0.08))
+                            }
+                        }
+                        .animation(reduceMotion ? nil : .snappy(duration: 0.15),
+                                   value: model.pressedIndex)
+                        .animation(reduceMotion ? nil : .snappy(duration: 0.15),
+                                   value: model.hoveredIndex)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .disabled(!action.enabled)
                     .accessibilityLabel(Text(verbatim: action.label))
                     .accessibilityIdentifier("media-detail-action-\(action.id)")
                     .help(action.label)
-
             }
         }
         .font(.system(size: 18, weight: .regular))
