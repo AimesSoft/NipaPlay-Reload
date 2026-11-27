@@ -569,6 +569,8 @@ class _CinematicGradients extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 左→右横向遮罩：仅轻微压暗左侧（海报/标题区），右侧几乎透明，
+    // 让背景图大面积可见。叠加竖向后，左下角最暗约 55%，右上角约 12%。
     return const Stack(
       fit: StackFit.expand,
       children: [
@@ -579,10 +581,10 @@ class _CinematicGradients extends StatelessWidget {
               end: Alignment.centerRight,
               stops: [0, 0.42, 0.75, 1],
               colors: [
-                Color(0xF2080B12),
-                Color(0xC7080B12),
-                Color(0x30080B12),
-                Color(0x26080B12),
+                Color(0x5C080B12),
+                Color(0x3D080B12),
+                Color(0x14080B12),
+                Color(0x0A080B12),
               ],
             ),
           ),
@@ -594,10 +596,10 @@ class _CinematicGradients extends StatelessWidget {
               end: Alignment.bottomCenter,
               stops: [0, 0.48, 0.75, 1],
               colors: [
-                Color(0x5C080B12),
-                Color(0x10080B12),
-                Color(0xC7080B12),
-                Color(0xFF080B12),
+                Color(0x14080B12),
+                Color(0x08080B12),
+                Color(0x30080B12),
+                Color(0x4D080B12),
               ],
             ),
           ),
