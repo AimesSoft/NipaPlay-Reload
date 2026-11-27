@@ -23,6 +23,23 @@ bool shouldBlockDesktopHotkeys({
       playerHotkeysSuppressed;
 }
 
+/// 热键是否应当处于注册状态。
+///
+/// inapp 热键由 hotkey_manager 挂在 [HardwareKeyboard] 上，一旦注册，
+/// 匹配的按键会在到达焦点树之前被直接消费。因此"是否注册"必须成为
+/// 快捷键唯一的作用域边界：
+/// - 仅当处于播放器作用域（播放页或独立播放器窗口）；
+/// - 且没有 overlay 弹层；
+/// - 且没有文本输入框聚焦（让按键直达输入框，例如弹幕偏移秒数输入）。
+@visibleForTesting
+bool shouldRegisterPlayerHotkeys({
+  required bool playerHotkeysAllowed,
+  required bool hasActiveOverlay,
+  required bool isEditableTextFocused,
+}) {
+  return playerHotkeysAllowed && !hasActiveOverlay && !isEditableTextFocused;
+}
+
 /// 热键管理服务，用于替代Flutter内部的键盘事件处理
 class HotkeyService extends ChangeNotifier {
   static final HotkeyService _instance = HotkeyService._internal();
@@ -63,6 +80,16 @@ class HotkeyService extends ChangeNotifier {
 
   // 大屏幕模式拥有独立的焦点与遥控输入层，激活时必须屏蔽全部旧热键。
   bool _isLargeScreenModeActive = false;
+
+  // 播放器热键作用域：由应用外壳（主页面）声明当前是否处于播放器上下文。
+  // 作用域之外一律不注册热键，避免快捷键在首页等非播放页面吞掉按键。
+  bool _playerHotkeysAllowed = false;
+
+  // 是否已挂载主焦点变化监听
+  bool _focusListenerAttached = false;
+
+  // 注册代数：每次注销/重新注册都会递增，用于中止过期的异步注册流程
+  int _registrationGeneration = 0;
 
   // overlay 计数器，>0 时表示有对话框/overlay 在视频播放界面上方
   static int _overlayCount = 0;
@@ -109,6 +136,7 @@ class HotkeyService extends ChangeNotifier {
   // 初始化热键服务
   Future<void> initialize(BuildContext context) async {
     _context = context;
+    _ensureFocusListenerAttached();
 
     if (!_supportsHotkeys) {
       await loadShortcuts();
@@ -121,15 +149,94 @@ class HotkeyService extends ChangeNotifier {
     // 加载快捷键配置
     await loadShortcuts();
 
-    // 不在此处注册热键，等待明确调用
+    // 不在此处注册热键，等待明确调用（须处于播放器作用域）
     ////debugPrint('[HotkeyService] 初始化完成，等待指令注册热键');
+  }
+
+  /// 挂载主焦点变化监听（幂等）。
+  void _ensureFocusListenerAttached() {
+    if (_focusListenerAttached) return;
+    _focusListenerAttached = true;
+    FocusManager.instance.addListener(_handlePrimaryFocusChanged);
+  }
+
+  /// 主焦点变化：文本输入框获得焦点时立即注销热键，让按键直达输入框
+  /// （例如弹幕偏移秒数、SRT 偏移等播放器控件内的输入框）；
+  /// 焦点离开输入框后，若仍处于播放器作用域则恢复注册。
+  void _handlePrimaryFocusChanged() {
+    if (!_supportsHotkeys) return;
+    _syncRegistrationWithUiState();
+  }
+
+  /// 按当前 UI 状态同步热键注册状态。
+  void _syncRegistrationWithUiState() {
+    if (!_supportsHotkeys) return;
+    final bool shouldRegister = shouldRegisterPlayerHotkeys(
+      playerHotkeysAllowed: _playerHotkeysAllowed,
+      hasActiveOverlay: hasActiveOverlay,
+      isEditableTextFocused: _isEditableTextFocused(),
+    );
+    if (shouldRegister && _registeredHotkeys.isEmpty) {
+      registerHotkeys();
+    } else if (!shouldRegister && _registeredHotkeys.isNotEmpty) {
+      _unregisterHotkeysSync();
+    }
+  }
+
+  /// 由应用外壳（主页面）声明当前是否处于播放器作用域。
+  ///
+  /// 作用域依据：正在播放且当前位于播放页，或播放器已拆离到独立窗口。
+  /// 进入作用域时按需注册热键；离开作用域时立即注销，
+  /// 确保快捷键仅在播放器内生效，其他页面的按键不受影响。
+  void setPlayerHotkeysAllowed(bool allowed) {
+    if (_playerHotkeysAllowed == allowed) {
+      return;
+    }
+    _playerHotkeysAllowed = allowed;
+    if (!_supportsHotkeys) {
+      return;
+    }
+    if (allowed) {
+      _syncRegistrationWithUiState();
+    } else {
+      _unregisterHotkeysSync();
+    }
+  }
+
+  /// 同步注销全部热键。
+  ///
+  /// hotkey_manager 对 inapp 热键的注销不经过平台通道，逐个注销可立即
+  /// 生效，避免焦点已切换到文本输入框、或已离开播放器作用域时热键仍
+  /// 短暂吞键。
+  void _unregisterHotkeysSync() {
+    // 使任何仍在进行中的异步注册流程失效
+    _registrationGeneration++;
+    if (!_supportsHotkeys) {
+      _registeredHotkeys.clear();
+      return;
+    }
+    if (_registeredHotkeys.isEmpty) {
+      return;
+    }
+    final pending = List<HotKey>.of(_registeredHotkeys);
+    _registeredHotkeys.clear();
+    for (final hotKey in pending) {
+      // inapp 热键的 unregister 不涉及平台通道，同步完成
+      hotKeyManager.unregister(hotKey);
+    }
   }
 
   // 注册热键
   Future<void> registerHotkeys() async {
     if (!_supportsHotkeys) return;
-    if (hasActiveOverlay) {
-      await unregisterHotkeys();
+    // 仅在播放器作用域内且无 overlay、无文本框聚焦时才注册；
+    // 否则保持注销状态，让按键正常到达页面 UI。
+    if (!shouldRegisterPlayerHotkeys(
+      playerHotkeysAllowed: _playerHotkeysAllowed,
+      hasActiveOverlay: hasActiveOverlay,
+      isEditableTextFocused: _isEditableTextFocused(),
+    )) {
+      _unregisterHotkeysSync();
       return;
     }
     // 先清理已注册的热键，再重新注册
@@ -146,15 +253,9 @@ class HotkeyService extends ChangeNotifier {
       _registeredHotkeys.clear();
       return;
     }
+    // 先同步清掉 inapp 热键，防止注销等待期间继续吞键
+    _unregisterHotkeysSync();
     await hotKeyManager.unregisterAll();
-    if (_registeredHotkeys.isEmpty) {
-      //debugPrint('[HotkeyService] 没有已注册的热键需要注销');
-      return;
-    }
-    //debugPrint('[HotkeyService] 开始注销 ${_registeredHotkeys.length} 个热键');
-    // 清空已注册列表，以便下次可以重新注册
-    _registeredHotkeys.clear();
-    //debugPrint('[HotkeyService] 热键注销完成');
   }
 
   // 加载保存的快捷键配置
@@ -223,13 +324,20 @@ class HotkeyService extends ChangeNotifier {
   // 注册所有热键
   Future<void> registerAllHotkeys() async {
     if (!_supportsHotkeys) return;
-    if (hasActiveOverlay) {
+    // 与 registerHotkeys 相同的作用域门控（本方法也会被 updateShortcut 直接调用）
+    if (!shouldRegisterPlayerHotkeys(
+      playerHotkeysAllowed: _playerHotkeysAllowed,
+      hasActiveOverlay: hasActiveOverlay,
+      isEditableTextFocused: _isEditableTextFocused(),
+    )) {
       await unregisterHotkeys();
       return;
     }
     //debugPrint('[HotkeyService] 开始注册所有热键');
+    final int generation = ++_registrationGeneration;
     // 先清除所有已注册的热键
     await hotKeyManager.unregisterAll();
+    if (generation != _registrationGeneration) return;
     _registeredHotkeys.clear();
 
     // 注册播放/暂停热键
@@ -1034,9 +1142,9 @@ class HotkeyService extends ChangeNotifier {
     ////debugPrint('[HotkeyService] 更新快捷键: $action -> $shortcut');
     _shortcuts[action] = shortcut;
     await saveShortcuts();
-    if (!hasActiveOverlay) {
-      await registerAllHotkeys(); // 重新注册所有热键
-    }
+    // registerAllHotkeys 内部带作用域门控：在快捷键设置页等非播放器
+    // 上下文中不会注册（避免吞键），回到播放器时会以新配置重新注册。
+    await registerAllHotkeys();
     notifyListeners(); // 通知监听者
   }
 
@@ -1056,6 +1164,8 @@ class HotkeyService extends ChangeNotifier {
   // 清理资源
   @override
   Future<void> dispose() async {
+    _focusListenerAttached = false;
+    FocusManager.instance.removeListener(_handlePrimaryFocusChanged);
     _longPressTimer?.cancel();
     if (_supportsHotkeys) {
       await hotKeyManager.unregisterAll();
