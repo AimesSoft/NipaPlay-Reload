@@ -266,7 +266,7 @@ class _CupertinoSubtitleTracksPaneState
 
   Future<bool> _switchToEmbeddedSubtitle(
     int trackIndex, {
-    bool persistEmbyPreference = true,
+    bool clearExternal = false,
   }) async {
     final videoState = widget.videoState;
     final currentPath = videoState.currentVideoPath ?? '';
@@ -286,9 +286,12 @@ class _CupertinoSubtitleTracksPaneState
         MediaServerMenuSurface.cupertinoSubtitle,
         isEmby,
         () async {
-          final path = videoState.currentVideoPath;
-          if (path != null) {
-            await _subtitleService.setExternalSubtitleActive(path, -1, false);
+          if (clearExternal) {
+            videoState.setExternalSubtitle('');
+            final path = videoState.currentVideoPath;
+            if (path != null) {
+              await _subtitleService.setExternalSubtitleActive(path, -1, false);
+            }
           }
 
           videoState.selectEmbeddedSubtitleTrack(trackIndex);
@@ -296,7 +299,7 @@ class _CupertinoSubtitleTracksPaneState
           didApply = true;
         },
         () async {
-          if (!persistEmbyPreference || source == null) return false;
+          if (source == null) return false;
           return videoState.persistCurrentEmbyManualPatch(
             EmbyManualSelectionPatch(subtitle: preference),
             currentSource: source,
@@ -316,12 +319,9 @@ class _CupertinoSubtitleTracksPaneState
     if (index < 0 || index >= _externalSubtitles.length) return;
 
     final subtitle = _externalSubtitles[index];
-    final bool isActive = subtitle['isActive'] == true;
-    if (isActive) {
-      await _switchToEmbeddedSubtitle(
-        -1,
-        persistEmbyPreference: false,
-      );
+    final subtitlePath = subtitle['path'] as String;
+    if (widget.videoState.activeExternalSubtitlePaths.contains(subtitlePath)) {
+      await widget.videoState.removeExternalSubtitle(subtitlePath);
     }
 
     await _subtitleService.removeExternalSubtitle(path, index);
@@ -335,7 +335,13 @@ class _CupertinoSubtitleTracksPaneState
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: widget.videoState.player.subtitleTrackChanges ??
+            widget.videoState.subtitleManager,
+        builder: (context, _) => _buildTracks(context),
+      );
+
+  Widget _buildTracks(BuildContext context) {
     final isLargeScreen = NipaplayLargeScreenModeScope.isActiveOf(context);
     final embeddedTracks = widget.videoState.player.mediaInfo.subtitle;
     final canLoadRemote = !kIsWeb &&
@@ -353,13 +359,13 @@ class _CupertinoSubtitleTracksPaneState
             title: const Text('关闭字幕'),
             subtitle: const Text('停用所有字幕轨道'),
             trailing: widget.videoState.player.activeSubtitleTracks.isEmpty &&
-                    !_externalSubtitles.any((s) => s['isActive'] == true)
+                    widget.videoState.activeExternalSubtitlePaths.isEmpty
                 ? Icon(
                     CupertinoIcons.check_mark_circled_solid,
                     color: CupertinoTheme.of(context).primaryColor,
                   )
                 : null,
-            onTap: () => _switchToEmbeddedSubtitle(-1),
+            onTap: () => _switchToEmbeddedSubtitle(-1, clearExternal: true),
           ),
         ],
       ),
@@ -480,9 +486,8 @@ class _CupertinoSubtitleTracksPaneState
           children: embeddedTracks.asMap().entries.map((entry) {
             final index = entry.key;
             final track = entry.value;
-            final bool hasExternal =
-                _externalSubtitles.any((s) => s['isActive'] == true);
-            final bool isActive = !hasExternal &&
+            final bool isActive =
+                !widget.videoState.hasActiveNativeExternalSubtitle &&
                 widget.videoState.player.activeSubtitleTracks.contains(index);
             final String language = _subtitleService
                 .getLanguageName(track.language ?? track.toString());
@@ -501,7 +506,7 @@ class _CupertinoSubtitleTracksPaneState
               ),
               title: Text(title),
               subtitle: Text('语言：$language'),
-              onTap: () => _switchToEmbeddedSubtitle(index),
+              onTap: () => _switchToEmbeddedSubtitle(isActive ? -1 : index),
             );
           }).toList(),
         ),

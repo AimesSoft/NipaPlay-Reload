@@ -610,6 +610,14 @@ class SubtitleManager extends ChangeNotifier {
     return null;
   }
 
+  bool get hasActiveNativeExternalSubtitle {
+    final currentPath = _currentExternalSubtitlePath;
+    return (currentPath != null &&
+            !_shouldRenderExternalSubtitleInApp(currentPath)) ||
+        _activeExternalSubtitlePaths
+            .any((path) => !_shouldRenderExternalSubtitleInApp(path));
+  }
+
   // 清空外部字幕状态，同时通知播放器关闭外挂轨道
   void _clearExternalSubtitleState({
     bool resetManualFlag = true,
@@ -621,13 +629,7 @@ class SubtitleManager extends ChangeNotifier {
     // resetPlayer clears again on idle and before reopening, while MDK may
     // still be stopping: changing its subtitle tracks then can strand the
     // decoder and make fvp's next prepare wait for Stopped forever.
-    final currentPath = _currentExternalSubtitlePath;
-    final hasNativeExternalSubtitle =
-        (currentPath != null &&
-            !_shouldRenderExternalSubtitleInApp(currentPath)) ||
-        _activeExternalSubtitlePaths
-            .any((path) => !_shouldRenderExternalSubtitleInApp(path));
-    if (clearPlayer && hasNativeExternalSubtitle) {
+    if (clearPlayer && hasActiveNativeExternalSubtitle) {
       try {
         if (_player.supportsExternalSubtitles) {
           _player.setMedia("", MediaType.subtitle);
@@ -712,10 +714,14 @@ class SubtitleManager extends ChangeNotifier {
       if (path.isNotEmpty && File(path).existsSync()) {
         final shouldRenderInApp = _shouldRenderExternalSubtitleInApp(path);
         final shouldFixEncoding = _shouldFixExternalSubtitleEncoding();
+        if (shouldRenderInApp &&
+            !preserveStack &&
+            hasActiveNativeExternalSubtitle) {
+          _clearExternalSubtitleState();
+        }
         _currentExternalSubtitlePath = path;
         if (shouldRenderInApp) {
-          _activateAppRenderedExternalSubtitle(path,
-              keepKernelExternal: preserveStack);
+          _activateAppRenderedExternalSubtitle(path);
         } else if (!shouldFixEncoding) {
           // 设置外部字幕文件
           _loadExternalSubtitleIntoPlayer(
@@ -789,7 +795,8 @@ class SubtitleManager extends ChangeNotifier {
   }
 
   /// 取消挂载一条外部字幕（从叠层/堆栈移除 + 清内核轨）
-  Future<void> removeExternalSubtitleFromStack(String path) async {
+  Future<void> removeExternalSubtitleFromStack(String path,
+      {bool replacingNativeTrack = false}) async {
     if (path.isEmpty) return;
     path = canonicalSubtitlePath(path);
     if (!_shouldRenderExternalSubtitleInApp(path)) ++_subtitleLoadToken;
@@ -800,8 +807,8 @@ class SubtitleManager extends ChangeNotifier {
           ? null
           : _activeExternalSubtitlePaths.last;
     }
-    // 只有非叠层（占内核轨的 ASS/SSA）才清内核轨；叠层 SRT 移除不动内嵌轨
-    if (!_shouldRenderExternalSubtitleInApp(path)) {
+    // Selecting an embedded track replaces the native sid directly.
+    if (!replacingNativeTrack && !_shouldRenderExternalSubtitleInApp(path)) {
       try {
         if (_player.activeSubtitleTracks.isNotEmpty) {
           _player.activeSubtitleTracks = [];
@@ -880,7 +887,7 @@ class SubtitleManager extends ChangeNotifier {
       if (displayName != null) registerPathDisplayName(path, displayName);
       _activeExternalSubtitlePaths.add(path);
       unawaited(_loadPathDisplayState(path));
-      _activateAppRenderedExternalSubtitle(path, keepKernelExternal: true);
+      _activateAppRenderedExternalSubtitle(path);
       if (!_activeExternalSubtitlePaths
           .contains(_currentExternalSubtitlePath)) {
         _currentExternalSubtitlePath = path;
@@ -989,28 +996,26 @@ class SubtitleManager extends ChangeNotifier {
     return false;
   }
 
-  void _activateAppRenderedExternalSubtitle(String path,
-      {bool keepKernelExternal = false}) {
-    // 外挂 SRT/VTT 走 Flutter 叠层渲染、内嵌轨由内核渲染，两者画面互不
-    // 占用，可以共存（多选）：挂载外挂不再关闭内嵌轨。keepKernelExternal
-    // 仅约束内核外挂 ASS/SSA（占 sid）的叠加语义，与内嵌轨无关。
+  void _activateAppRenderedExternalSubtitle(String path) {
     unawaited(preloadSubtitleFile(path));
-    debugPrint(
-      'SubtitleManager: 使用应用内叠层渲染外挂字幕（与内嵌轨共存）: $path'
-      ' 内嵌轨=${_player.activeSubtitleTracks}',
-    );
+    debugPrint('SubtitleManager: 使用应用内叠层渲染外挂字幕: $path');
   }
 
-  /// 在字幕菜单里选内嵌轨（[trackIndex] >= 0）或关闭字幕（< 0）：
-  /// 内嵌轨由内核渲染、外挂 SRT 由叠层渲染，互不占用画面，选择内嵌轨
-  /// 不再摘掉外挂（多选共存）。关闭字幕（< 0）仍只关内嵌轨，不动外挂
-  /// ——外挂的关闭走字幕菜单里的"移除外挂"项。
+  /// Select or disable an embedded track, preserving app-rendered overlays.
   void selectEmbeddedSubtitleTrack(int trackIndex) {
     try {
       if (trackIndex >= 0) {
+        // Embedded tracks share the native subtitle slot with external ASS,
+        // PGS, etc. Keep every app overlay and forget the displaced track.
+        for (final path in _activeExternalSubtitlePaths.toList()) {
+          if (!_shouldRenderExternalSubtitleInApp(path)) {
+            unawaited(removeExternalSubtitleFromStack(path,
+                replacingNativeTrack: true));
+          }
+        }
         _lastSelectedEmbeddedTrackIndex = trackIndex;
         _player.activeSubtitleTracks = [trackIndex];
-      } else {
+      } else if (!hasActiveNativeExternalSubtitle) {
         _player.activeSubtitleTracks = [];
       }
     } catch (e) {

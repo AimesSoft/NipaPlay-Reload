@@ -271,7 +271,8 @@ class MediaKitPlayerAdapter
 
   @override
   ValueListenable<bool> get buffering => _buffering;
-  List<int> _activeSubtitleTracks = [];
+  final _activeSubtitleTracks = ValueNotifier<List<int>>(const []);
+  Listenable get subtitleTrackChanges => _activeSubtitleTracks;
   List<int> _activeAudioTracks = [];
 
   String? _lastKnownActiveSubtitleId;
@@ -1699,6 +1700,7 @@ class MediaKitPlayerAdapter
   }
 
   void _performSubtitleSyncLogic(String? activeMpvSid) {
+    if (_isDisposed) return;
     //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic CALLED. Using MPV SID: "${activeMpvSid ?? "null"}"');
     try {
       // It's crucial to call _ensureDefaultTracksSelected *before* we potentially clear _activeSubtitleTracks
@@ -1745,32 +1747,11 @@ class MediaKitPlayerAdapter
         //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - MPV SID is "${activeMpvSid ?? "null"}" (null, no, auto, or empty). Clearing active tracks.');
       }
 
-      bool hasChanged = false;
-      if (newActiveTrackIndices.length != _activeSubtitleTracks.length) {
-        hasChanged = true;
-      } else {
-        for (int i = 0; i < newActiveTrackIndices.length; i++) {
-          if (newActiveTrackIndices[i] != _activeSubtitleTracks[i]) {
-            hasChanged = true;
-            break;
-          }
-        }
+      if (!listEquals(activeSubtitleTracks, newActiveTrackIndices)) {
+        _activeSubtitleTracks.value = List.unmodifiable(newActiveTrackIndices);
       }
-
-      //debugPrint('MediaKitAdapter: _performSubtitleSyncLogic - Calculated newActiveTrackIndices: $newActiveTrackIndices, Current _activeSubtitleTracks: $_activeSubtitleTracks, HasChanged: $hasChanged');
-
-      if (hasChanged) {
-        _activeSubtitleTracks = List<int>.from(newActiveTrackIndices);
-        //debugPrint('MediaKitAdapter: _activeSubtitleTracks UPDATED (by _performSubtitleSyncLogic). New state: $_activeSubtitleTracks, Based on MPV SID: $activeMpvSid');
-      } else {
-        //debugPrint('MediaKitAdapter: _activeSubtitleTracks UNCHANGED (by _performSubtitleSyncLogic). Current state: $_activeSubtitleTracks, Based on MPV SID: $activeMpvSid');
-      }
-    } catch (e, s) {
-      //debugPrint('MediaKitAdapter: Error in _performSubtitleSyncLogic: $e\nStack trace:\n$s');
-      if (_activeSubtitleTracks.isNotEmpty) {
-        _activeSubtitleTracks = [];
-        //debugPrint('MediaKitAdapter: _activeSubtitleTracks cleared due to error in _performSubtitleSyncLogic.');
-      }
+    } catch (_) {
+      if (activeSubtitleTracks.isNotEmpty) _activeSubtitleTracks.value = const [];
     }
   }
 
@@ -1837,7 +1818,7 @@ class MediaKitPlayerAdapter
         _player.state.track.subtitle.id == 'no') {
       if (_mediaInfo.subtitle != null &&
           _mediaInfo.subtitle!.isNotEmpty &&
-          _activeSubtitleTracks.isEmpty) {
+          activeSubtitleTracks.isEmpty) {
         //debugPrint('MediaKitAdapter: _ensureDefaultTracksSelected - Attempting to select a default subtitle track as current selection is "${_player.state.track.subtitle.id}" and _activeSubtitleTracks is empty.');
         int preferredSubtitleIndex = -1;
         int firstSimplifiedChineseIndex = -1;
@@ -2006,7 +1987,7 @@ class MediaKitPlayerAdapter
   PlayerMediaInfo get mediaInfo => _mediaInfo;
 
   @override
-  List<int> get activeSubtitleTracks => _activeSubtitleTracks;
+  List<int> get activeSubtitleTracks => _activeSubtitleTracks.value;
 
   @override
   set activeSubtitleTracks(List<int> value) {
@@ -2307,7 +2288,7 @@ class MediaKitPlayerAdapter
 
     // --- Original logic for Main Video/Audio Media ---
     _currentMedia = path;
-    _activeSubtitleTracks = [];
+    _activeSubtitleTracks.value = const [];
     _activeAudioTracks = [];
     _lastKnownActiveSubtitleId = null;
     _mediaInfo = PlayerMediaInfo(duration: 0);
@@ -2612,14 +2593,6 @@ class MediaKitPlayerAdapter
   }
 
   @override
-  @override
-  void setStartPosition(int positionMs) {
-    // 该内核不支持"打开时就位"，忽略；上层仍走 open 后 seek。
-  }
-
-  @override
-  bool get startPositionTaken => true;
-
   Future<void> prepare() async {
     if (!_usesPlatformVideoSurface) {
       await updateTexture();
@@ -2658,6 +2631,7 @@ class MediaKitPlayerAdapter
     await _positionSubscription?.cancel();
     await _bufferingSubscription?.cancel();
     _buffering.dispose();
+    _activeSubtitleTracks.dispose();
     _jellyfinRetryTimer?.cancel();
     _chapterRetryTimer?.cancel();
     if (_textureIdListenerAttached && _controller != null) {

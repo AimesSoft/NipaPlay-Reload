@@ -519,14 +519,6 @@ class MdkPlayerAdapter
   }
 
   @override
-  @override
-  void setStartPosition(int positionMs) {
-    // 该内核不支持"打开时就位"，忽略；上层仍走 open 后 seek。
-  }
-
-  @override
-  bool get startPositionTaken => true;
-
   Future<void> prepare() async {
     if (_released('prepare')) return;
     try {

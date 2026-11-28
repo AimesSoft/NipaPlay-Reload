@@ -1,13 +1,18 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit/media_kit.dart' as mk;
 import 'package:nipaplay/player_abstraction/media_kit_player_adapter.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/player_abstraction/player_factory.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:nipaplay/services/subtitle_service.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
+import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_subtitle_tracks_pane.dart';
 import 'package:nipaplay/widgets/embedded_subtitle_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
 import 'package:provider/provider.dart';
@@ -29,6 +34,8 @@ class _FakeMediaKitDelegate extends Fake implements MediaKitPlayerAdapter {
 
   Map<String, String> liveProperties;
   final Map<String, String> writtenProperties = {};
+  @override
+  final ChangeNotifier subtitleTrackChanges = ChangeNotifier();
   final List<List<int>> subtitleSelections = [];
   List<int> selectedSubtitleTracks = [];
   Future<String?> Function(String)? readLiveProperty;
@@ -75,8 +82,40 @@ class _FakeMediaKitDelegate extends Fake implements MediaKitPlayerAdapter {
   ValueListenable<bool> get buffering => ValueNotifier<bool>(false);
 }
 
-Future<VideoPlayerState> _buildVideoPlayerState(
-    AbstractPlayer delegate) async {
+// Keep the real Media Kit adapter and deliver mpv's confirmation separately
+// from its selection request, including events that originate in mpv.
+class _SubtitlePlatform extends mk.PlatformPlayer {
+  _SubtitlePlatform() : super(configuration: const mk.PlayerConfiguration());
+  final properties = <String, String>{};
+  mk.SubtitleTrack? requested;
+
+  @override
+  Future<void> setVolume(double volume) async {}
+
+  @override
+  Future<void> setSubtitleTrack(mk.SubtitleTrack track) async {
+    requested = track;
+  }
+
+  Future<void> setProperty(String name, String value) async {
+    properties[name] = value;
+  }
+
+  Future<void> confirm(mk.SubtitleTrack track) async {
+    state = state.copyWith(track: mk.Track(subtitle: track));
+    trackController.add(state.track);
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
+class _MenuVideoState extends VideoPlayerState {
+  _MenuVideoState(this.currentVideoPath);
+  @override
+  final String currentVideoPath;
+}
+
+Future<VideoPlayerState> _buildVideoPlayerState(AbstractPlayer delegate,
+    {String? videoPath}) async {
   // Construct the state against the inert video_player kernel (no native
   // library loads in the test env); the Media Kit fake delegate is swapped
   // in right after, which is what the assertions below observe.
@@ -84,7 +123,8 @@ Future<VideoPlayerState> _buildVideoPlayerState(
     'player_kernel_type': PlayerKernelType.videoPlayer.index,
   });
   await PlayerFactory.initialize();
-  final videoState = VideoPlayerState();
+  final videoState =
+      videoPath == null ? VideoPlayerState() : _MenuVideoState(videoPath);
   final player = Player.withDelegate(delegate);
   videoState.player = player;
   // In production player_kernel_manager syncs the managers with the player
@@ -265,8 +305,8 @@ void main() {
     addTearDown(() => dir!.delete(recursive: true));
     final path = '${dir!.path}/movie.srt';
     await tester.runAsync(() async {
-      await _prepareSubtitleFixture(videoState, path,
-          '1\n00:00:00,000 --> 00:00:01,000\nExternal cue\n');
+      await _prepareSubtitleFixture(
+          videoState, path, '1\n00:00:00,000 --> 00:00:01,000\nExternal cue\n');
       await videoState.addExternalSubtitleToStack(path);
     });
     (videoState.playbackTimeMs as ValueNotifier<double>).value = 500;
@@ -360,6 +400,112 @@ void main() {
     expect(videoState.activeExternalSubtitlePaths, [path]);
   });
 
+  test('whole-block mode remains active for a confirmed embedded-only track',
+      () async {
+    final delegate = _FakeMediaKitDelegate();
+    final videoState = await _buildVideoPlayerState(delegate);
+    await videoState.setEmbeddedSubtitleOverlayMode(true);
+    videoState.selectEmbeddedSubtitleTrack(0);
+    expect(videoState.shouldRenderEmbeddedSubtitleOverlay, isTrue);
+    expect(delegate.writtenProperties['sub-visibility'], 'no');
+  });
+
+  test('Media Kit reconciles a delayed embedded selection with an SRT overlay',
+      () async {
+    final platform = _SubtitlePlatform();
+    final adapter =
+        MediaKitPlayerAdapter.withPlayer(mk.Player(platformPlayer: platform));
+    addTearDown(adapter.disposeAsync);
+    final videoState = await _buildVideoPlayerState(adapter);
+    const embedded = mk.SubtitleTrack('1', 'English', 'eng');
+    const sidecar = mk.SubtitleTrack('2', 'Sidecar', null, isExternal: true);
+    const tracks = mk.Tracks(subtitle: [embedded, sidecar]);
+    platform.state = platform.state.copyWith(tracks: tracks);
+    platform.tracksController.add(tracks);
+    await Future<void>.delayed(Duration.zero);
+    expect(adapter.mediaInfo.subtitle, hasLength(1));
+    final dir = await Directory.systemTemp.createTemp('delayed_track_');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = '${dir.path}/sample.srt';
+    await _prepareSubtitleFixture(
+        videoState, path, '1\n00:00:00,000 --> 00:00:01,000\nExternal cue\n');
+    await videoState.addExternalSubtitleToStack(path);
+    await platform.confirm(sidecar);
+    expect(adapter.activeSubtitleTracks, isEmpty);
+    expect(platform.properties['sub-visibility'], 'no');
+
+    videoState.selectEmbeddedSubtitleTrack(0);
+    expect(platform.requested, embedded);
+    expect(adapter.activeSubtitleTracks, isEmpty);
+    expect(platform.properties['sub-visibility'], 'no');
+    await platform.confirm(embedded);
+    expect(adapter.activeSubtitleTracks, [0]);
+    expect(platform.properties['sub-visibility'], 'yes');
+    expect(videoState.activeExternalSubtitlePaths, [path]);
+
+    videoState.selectEmbeddedSubtitleTrack(-1);
+    expect(platform.requested, mk.SubtitleTrack.no());
+    await platform.confirm(mk.SubtitleTrack.no());
+    expect(platform.properties['sub-visibility'], 'no');
+    expect(videoState.activeExternalSubtitlePaths, [path]);
+  });
+
+  testWidgets(
+      'Cupertino subtitle menu retains the SRT and shows the confirmed embedded selection',
+      (tester) async {
+    final platform = _SubtitlePlatform();
+    final adapter =
+        MediaKitPlayerAdapter.withPlayer(mk.Player(platformPlayer: platform));
+    addTearDown(adapter.disposeAsync);
+    const embedded = mk.SubtitleTrack('1', 'English', 'eng');
+    const tracks = mk.Tracks(subtitle: [embedded]);
+    platform.state = platform.state.copyWith(tracks: tracks);
+    platform.tracksController.add(tracks);
+    await tester.pump();
+    final dir = (await tester.runAsync(
+        () => Directory.systemTemp.createTemp('cupertino_subtitles_')))!;
+    addTearDown(() => dir.delete(recursive: true));
+    final videoPath = '${dir.path}/movie.mkv';
+    final srt = '${dir.path}/overlay.srt';
+    final videoState =
+        await _buildVideoPlayerState(adapter, videoPath: videoPath);
+    await tester.runAsync(() async {
+      await _prepareSubtitleFixture(
+          videoState, srt, '1\n00:00:00,000 --> 00:00:01,000\nOverlay\n');
+      await videoState.addExternalSubtitleToStack(srt);
+      await SubtitleService().addExternalSubtitle(videoPath, {
+        'path': srt,
+        'name': 'overlay.srt',
+        'type': 'srt',
+        'isActive': true,
+      });
+      await SubtitleService().setExternalSubtitleActive(videoPath, 0, true);
+    });
+    await tester.pumpWidget(
+        _wrap(CupertinoSubtitleTracksPane(videoState: videoState), videoState));
+    await tester.pumpAndSettle();
+    final row = find.widgetWithText(AdaptivePlayerMenuTile, 'English');
+    expect(row, findsOneWidget);
+    await tester.ensureVisible(row);
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    expect(platform.requested, embedded);
+    final persisted = await SubtitleService().loadExternalSubtitles(videoPath);
+    expect(persisted.single['isActive'], true);
+    await tester.runAsync(() => platform.confirm(embedded));
+    await tester.pump();
+    expect(
+        find.descendant(
+            of: row,
+            matching: find.byIcon(CupertinoIcons.check_mark_circled_solid)),
+        findsOneWidget);
+    await tester.ensureVisible(find.text('关闭字幕'));
+    await tester.tap(find.text('关闭字幕'));
+    await tester.pumpAndSettle();
+    expect(videoState.activeExternalSubtitlePaths, isEmpty);
+    expect(platform.requested, mk.SubtitleTrack.no());
+  });
+
   test('an ASS and SRT stack retains libass until the native ASS is removed',
       () async {
     final delegate = _FakeMediaKitDelegate();
@@ -377,8 +523,8 @@ void main() {
       'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
       'Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,ASS cue\n',
     );
-    await _prepareSubtitleFixture(videoState, srtPath,
-        '1\n00:00:00,000 --> 00:00:01,000\nSRT cue\n');
+    await _prepareSubtitleFixture(
+        videoState, srtPath, '1\n00:00:00,000 --> 00:00:01,000\nSRT cue\n');
 
     await videoState.addExternalSubtitleToStack(srtPath);
     expect(delegate.writtenProperties['sub-visibility'], 'no');
@@ -436,8 +582,7 @@ void main() {
 
     // Kana lines are the original (bottom), pure-Han lines the translation
     // (top) — no manual switch needed.
-    expect(videoState.embeddedSubtitleOverlayDisplayText,
-        '中文翻译行\n日本語原文行テスト');
+    expect(videoState.embeddedSubtitleOverlayDisplayText, '中文翻译行\n日本語原文行テスト');
     await tester.pumpWidget(_wrap(
       const SizedBox(
         width: 800,
@@ -453,14 +598,12 @@ void main() {
     // the real clock; tests inject via the debug entry point.)
     videoState.debugSetEmbeddedSubtitleOverlayText('中文翻译行\n日本語原文行テスト');
     await tester.pump();
-    expect(videoState.embeddedSubtitleOverlayDisplayText,
-        '中文翻译行\n日本語原文行テスト');
+    expect(videoState.embeddedSubtitleOverlayDisplayText, '中文翻译行\n日本語原文行テスト');
 
     // All-kana (pure Japanese) block: no evidence to reorder, keep as-is.
     videoState.debugSetEmbeddedSubtitleOverlayText('日本語一行目\n日本語二行目');
     await tester.pump();
-    expect(videoState.embeddedSubtitleOverlayDisplayText,
-        '日本語一行目\n日本語二行目');
+    expect(videoState.embeddedSubtitleOverlayDisplayText, '日本語一行目\n日本語二行目');
   });
 
   testWidgets('bilingual block renders both lines at slider 0 and 100',
@@ -493,10 +636,12 @@ void main() {
     expect(find.textContaining('中文翻译行'), findsNWidgets(2)); // stroke + fill
     expect(find.textContaining('日本語原文行'), findsNWidgets(2));
     final alignAtTop = tester.widget<Align>(
-      find.ancestor(
-        of: find.textContaining('中文翻译行'),
-        matching: find.byType(Align),
-      ).first,
+      find
+          .ancestor(
+            of: find.textContaining('中文翻译行'),
+            matching: find.byType(Align),
+          )
+          .first,
     );
     expect((alignAtTop.alignment as Alignment).y, -1);
 
@@ -506,10 +651,12 @@ void main() {
     expect(find.textContaining('中文翻译行'), findsNWidgets(2));
     expect(find.textContaining('日本語原文行'), findsNWidgets(2));
     final alignAtBottom = tester.widget<Align>(
-      find.ancestor(
-        of: find.textContaining('中文翻译行'),
-        matching: find.byType(Align),
-      ).first,
+      find
+          .ancestor(
+            of: find.textContaining('中文翻译行'),
+            matching: find.byType(Align),
+          )
+          .first,
     );
     expect((alignAtBottom.alignment as Alignment).y, 1);
   });

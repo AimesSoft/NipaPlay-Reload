@@ -536,19 +536,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         MediaServerMenuSurface.nipaplaySubtitle,
         isEmby,
         () async {
-          // 同一时间只显示一条字幕：选内嵌轨或关闭字幕都会摘掉所有外挂字幕
-          for (var subtitle in _externalSubtitles) {
-            subtitle['isActive'] = false;
-          }
           videoState.selectEmbeddedSubtitleTrack(trackIndex);
-
-          if (mounted) {
-            setState(
-                () {}); // UI update for external list, and potentially for embedded list selection state
-          }
-
-          // 保存设置 (主要是保存外部字幕列表的状态，例如哪个是激活的)
-          await _saveExternalSubtitles(videoState.currentVideoPath ?? '');
+          if (mounted) setState(() {});
           didApply = true;
 
           // 通知字幕轨道变化 (This might be redundant if player events drive everything)
@@ -940,18 +929,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                       .key; // This is the original index from player.mediaInfo.subtitle
                   final track = entry.value;
 
-                  // Determine if this track is active.
-                  // Active state is based on player's active tracks and no external subtitle being active.
-                  final bool hasActiveExternal =
-                      _externalSubtitles.any((s) => s['isActive'] == true);
-                  // SRT/VTT 走叠层渲染不占内核字幕轨，与内嵌轨可共存：
-                  // 只有 ASS/SSA 类（占内核轨的）外部字幕才阻止内嵌轨道勾选。
-                  final activeExt = videoState.getActiveExternalSubtitlePath();
-                  final blockByExternal = hasActiveExternal &&
-                      !(activeExt != null &&
-                          (p.extension(activeExt).toLowerCase() == '.srt' ||
-                              p.extension(activeExt).toLowerCase() == '.vtt'));
-                  final isActive = !blockByExternal &&
+                  final isActive = !videoState.hasActiveNativeExternalSubtitle &&
                       videoState.player.activeSubtitleTracks.contains(index);
 
                   // --- Get Title and Language from SubtitleManager ---

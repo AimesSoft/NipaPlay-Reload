@@ -217,7 +217,33 @@ void main() {
       expect(delegate.activeSubtitleTracks, [0]);
     });
 
-    test('stacking an srt keeps a kernel-rendered external track alive', () async {
+    test('replacing a native subtitle with an SRT unloads the native file', () {
+      manager.setExternalSubtitle(ass.path);
+      manager.setExternalSubtitle(srt.path);
+      expect(delegate.mediaSet, [ass.path, '']);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
+    });
+
+    test('turning off embedded tracks leaves the active native external alone',
+        () {
+      manager.setExternalSubtitle(ass.path);
+      final initial = List.of(delegate.activeSubtitleTracks);
+      manager.selectEmbeddedSubtitleTrack(-1);
+      expect(delegate.activeSubtitleTracks, initial);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [ass.path]);
+    });
+
+    test('selecting an embedded track replaces only the native external track',
+        () async {
+      manager.setExternalSubtitle(ass.path);
+      await manager.addExternalSubtitleToStack(srt.path);
+      manager.selectEmbeddedSubtitleTrack(1);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
+      expect(delegate.activeSubtitleTracks, [1]);
+    });
+
+    test('stacking an srt keeps a kernel-rendered external track alive',
+        () async {
       manager.setExternalSubtitle(ass.path);
       await manager.addExternalSubtitleToStack(srt.path);
       expect(manager.getAllActiveExternalSubtitlePaths(),

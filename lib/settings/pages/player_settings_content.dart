@@ -8,7 +8,6 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/settings/adaptive_settings_scope.dart';
-import 'package:nipaplay/settings/widgets/erika_upscaler_group_tile.dart';
 import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:provider/provider.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/blur_snackbar.dart';
@@ -39,6 +38,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   // 为BlurDropdown添加GlobalKey
   final GlobalKey _playerKernelDropdownKey = GlobalKey();
   final GlobalKey _androidAudioOutputDropdownKey = GlobalKey();
+  final GlobalKey _erikaUpscalerDropdownKey = GlobalKey();
   final GlobalKey _erikaAndroidOutputDropdownKey = GlobalKey();
   final GlobalKey _seekStepDropdownKey = GlobalKey();
   final GlobalKey _speedBoostDropdownKey = GlobalKey();
@@ -225,6 +225,7 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
   }
 
   String _getErikaUpscalerTitle(PlayerUpscalerMode mode) => mode.label;
+  String _getErikaUpscalerDescription(PlayerUpscalerMode mode) => mode.description;
 
   Future<void> _selectErikaUpscalerModel(VideoPlayerState state) async {
     try {
@@ -404,26 +405,40 @@ class _PlayerSettingsContentState extends State<PlayerSettingsContent> {
             if (visibleKernelType == PlayerKernelType.erika) ...[
               Consumer<VideoPlayerState>(
                 builder: (context, videoState, child) {
-                  return ErikaUpscalerGroupTile(
-                    currentMode: videoState.erikaUpscalerMode,
-                    availableModes: ErikaPlayerAdapter.availableUpscalerModes,
-                    onModeSelected: (mode) async {
+                  final currentMode = videoState.erikaUpscalerMode;
+                  final items = ErikaPlayerAdapter.availableUpscalerModes
+                      .map(
+                        (mode) => DropdownMenuItemData(
+                          title: _getErikaUpscalerTitle(mode),
+                          value: mode,
+                          isSelected: mode == currentMode,
+                          description: _getErikaUpscalerDescription(mode),
+                        ),
+                      )
+                      .toList();
+                  return AdaptiveSettingsTile.dropdown(
+                    title: 'Erika 超分辨率',
+                    subtitle: 'ArtCNN、Anime4K、FSR 与平台超分；实际后端见播放信息',
+                    icon: Ionicons.sparkles_outline,
+                    items: items,
+                    onChanged: (dynamic value) async {
+                      if (value is! PlayerUpscalerMode) return;
                       try {
-                        await videoState.setErikaUpscalerMode(mode);
-                      } catch (error) {
-                        if (context.mounted) {
-                          BlurSnackBar.show(context, '$error');
+                          await videoState.setErikaUpscalerMode(value);
+                        } catch (error) {
+                          if (context.mounted) BlurSnackBar.show(context, '$error');
+                          return;
                         }
-                        return;
-                      }
                       if (!context.mounted) return;
+                      final option = _getErikaUpscalerTitle(value);
                       BlurSnackBar.show(
                         context,
-                        mode == PlayerUpscalerMode.off
+                        value == PlayerUpscalerMode.off
                             ? '已关闭 Erika 超分辨率'
-                            : 'Erika 超分辨率已切换为${_getErikaUpscalerTitle(mode)}',
+                            : 'Erika 超分辨率已切换为$option',
                       );
                     },
+                    dropdownKey: _erikaUpscalerDropdownKey,
                   );
                 },
               ),
