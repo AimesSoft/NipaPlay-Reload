@@ -820,6 +820,15 @@ class SubtitleManager extends ChangeNotifier {
       await _replaceNativeSubtitle(
           count == 0 ? -1 : _lastSelectedEmbeddedTrackIndex.clamp(0, count - 1));
     } else {
+      if (_isMediaKitKernel() &&
+          !hasActiveNativeExternalSubtitle &&
+          _activeExternalSubtitlePaths.every((active) => active == path)) {
+        final token = _subtitleLoadToken;
+        final sid = await _player.getLiveProperty('sid');
+        if (token != _subtitleLoadToken) return;
+        if (sid != null) await _player.removeNativeSubtitleSidecar(sid);
+        if (token != _subtitleLoadToken) return;
+      }
       _forgetExternalSubtitle(path);
       await _subtitlePersistence;
     }

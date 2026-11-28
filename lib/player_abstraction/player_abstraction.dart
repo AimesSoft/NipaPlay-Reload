@@ -121,6 +121,13 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
         : null;
   }
 
+  Future<void> removeNativeSubtitleSidecar(String id) async {
+    final delegate = _delegate;
+    if (delegate is MediaKitPlayerAdapter) {
+      await delegate.removeNativeSubtitleSidecar(id);
+    }
+  }
+
   List<int> get activeAudioTracks => _delegate.activeAudioTracks;
   set activeAudioTracks(List<int> value) => _delegate.activeAudioTracks = value;
 

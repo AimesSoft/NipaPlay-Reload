@@ -92,6 +92,7 @@ class _SubtitlePlatform extends mk.PlatformPlayer {
   _SubtitlePlatform() : super(configuration: const mk.PlayerConfiguration());
   final properties = <String, String>{};
   mk.SubtitleTrack? requested;
+  final commands = <List<String>>[];
 
   @override
   Future<void> setVolume(double volume) async {}
@@ -103,6 +104,12 @@ class _SubtitlePlatform extends mk.PlatformPlayer {
 
   Future<void> setProperty(String name, String value) async {
     properties[name] = value;
+  }
+
+  Future<String?> getProperty(String name) async => properties[name];
+
+  Future<void> command(List<String> args) async {
+    commands.add(args);
   }
 
   void reportTracks(mk.Tracks tracks) {
@@ -458,6 +465,53 @@ void main() {
     expect(videoState.activeExternalSubtitlePaths, [path]);
   });
 
+  test('removing the last app subtitle only detaches the selected mpv sidecar',
+      () async {
+    final platform = _SubtitlePlatform();
+    final adapter =
+        MediaKitPlayerAdapter.withPlayer(mk.Player(platformPlayer: platform));
+    addTearDown(adapter.disposeAsync);
+    final state = await _buildVideoPlayerState(adapter);
+    final dir = await Directory.systemTemp.createTemp('mpv_sidecar_');
+    addTearDown(() => dir.delete(recursive: true));
+    final srt = '${dir.path}/movie.srt';
+    await _prepareSubtitleFixture(
+        state, srt, '1\n00:00:00,000 --> 00:00:01,000\nCue\n');
+    const embedded = mk.SubtitleTrack('1', 'Embedded', 'eng');
+    const sidecar = mk.SubtitleTrack('2', 'Sidecar', 'eng', isExternal: true);
+    platform.reportTracks(const mk.Tracks(subtitle: [embedded, sidecar]));
+    await platform.confirm(sidecar);
+    platform.properties['sid'] = sidecar.id;
+    await state.addExternalSubtitleToStack(srt);
+    expect(platform.properties['sub-visibility'], 'no');
+
+    await state.removeExternalSubtitle(srt);
+    expect(platform.commands, [
+      ['sub-remove', sidecar.id]
+    ]);
+    expect(state.activeExternalSubtitlePaths, isEmpty);
+    expect(platform.properties['sub-visibility'], 'yes');
+
+    // Repeat with a user selection in flight. Its earlier sid remains
+    // observable until mpv confirms the embedded request.
+    platform.commands.clear();
+    await state.addExternalSubtitleToStack(srt);
+    await state.selectEmbeddedSubtitleTrack(0);
+    await state.removeExternalSubtitle(srt);
+    expect(platform.commands, [
+      ['sub-remove', sidecar.id]
+    ]);
+    expect(platform.requested, embedded);
+    expect(state.activeExternalSubtitlePaths, isEmpty);
+
+    await platform.confirm(embedded);
+    platform.properties['sid'] = embedded.id;
+    await state.addExternalSubtitleToStack(srt);
+    await state.removeExternalSubtitle(srt);
+    expect(platform.commands, hasLength(1));
+    expect(adapter.activeSubtitleTracks, [0]);
+  });
+
   testWidgets(
       'Cupertino subtitle menu retains the SRT and shows the confirmed embedded selection',
       (tester) async {
@@ -474,19 +528,17 @@ void main() {
     addTearDown(() => dir.delete(recursive: true));
     final videoPath = '${dir.path}/movie.mkv';
     final srt = '${dir.path}/overlay.srt';
-    final videoState =
-        await _buildVideoPlayerState(adapter, videoPath: videoPath);
+    final videoState = (await tester.runAsync(
+        () => _buildVideoPlayerState(adapter, videoPath: videoPath)))!;
     await tester.runAsync(() async {
+      videoState.subtitleManager.setCurrentVideoPath(videoPath);
       await _prepareSubtitleFixture(
           videoState, srt, '1\n00:00:00,000 --> 00:00:01,000\nOverlay\n');
       await videoState.addExternalSubtitleToStack(srt);
-      await SubtitleService().addExternalSubtitle(videoPath, {
-        'path': srt,
-        'name': 'overlay.srt',
-        'type': 'srt',
-        'isActive': true,
-      });
-      await SubtitleService().setExternalSubtitleActive(videoPath, 0, true);
+      expect(
+          (await SubtitleService().loadExternalSubtitles(videoPath))
+              .single['isActive'],
+          isTrue);
     });
     await tester.pumpWidget(
         _wrap(CupertinoSubtitleTracksPane(videoState: videoState), videoState));
@@ -507,10 +559,43 @@ void main() {
             matching: find.byIcon(CupertinoIcons.check_mark_circled_solid)),
         findsOneWidget);
     await tester.ensureVisible(find.text('关闭字幕'));
-    await tester.tap(find.text('关闭字幕'));
+    await tester.runAsync(() async {
+      await tester.tap(find.text('关闭字幕'));
+      for (var i = 0; i < 100; i++) {
+        final saved = await SubtitleService().loadExternalSubtitles(videoPath);
+        if (saved.single['isActive'] == false) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
     await tester.pumpAndSettle();
     expect(videoState.activeExternalSubtitlePaths, isEmpty);
     expect(platform.requested, mk.SubtitleTrack.no());
+    final externalRow =
+        find.widgetWithText(AdaptivePlayerMenuTile, 'overlay.srt');
+    expect(
+        find.descendant(
+            of: externalRow, matching: find.byIcon(CupertinoIcons.circle)),
+        findsOneWidget);
+    expect(
+        (await SubtitleService().loadExternalSubtitles(videoPath))
+            .single['isActive'],
+        isFalse);
+    await tester.ensureVisible(externalRow);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('overlay.srt'));
+      for (var i = 0;
+          i < 100 && videoState.activeExternalSubtitlePaths.isEmpty;
+          i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(videoState.activeExternalSubtitlePaths, [srt]);
+    expect(
+        find.descendant(
+            of: externalRow,
+            matching: find.byIcon(CupertinoIcons.check_mark_circled_solid)),
+        findsOneWidget);
   });
 
   testWidgets('NipaPlay embedded row turns off just that track',

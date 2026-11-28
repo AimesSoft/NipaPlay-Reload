@@ -2708,6 +2708,17 @@ class MediaKitPlayerAdapter
     return _properties[name];
   }
 
+  Future<void> removeNativeSubtitleSidecar(String id) async {
+    if (_isDisposed ||
+        !_player.state.tracks.subtitle
+            .any((track) => track.id == id && track.isExternal)) {
+      return;
+    }
+    // Target the auto-loaded sidecar by ID. A pending embedded selection
+    // may already be queued in mpv and must keep its own sid.
+    await (_player.platform as dynamic).command(['sub-remove', id]);
+  }
+
   /// 直读 mpv 实时属性（绕过本地缓存）。media_kit 的 platform.getProperty
   /// 是异步通道，供 sub-text 等需要逐帧新鲜值的调用方使用。
   Future<String?> getLiveProperty(String name) async {
