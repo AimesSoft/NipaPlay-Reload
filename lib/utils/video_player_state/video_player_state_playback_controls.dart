@@ -60,7 +60,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   Future<void> resetPlayer({bool switchingKernel = false}) async {
     final exitGeneration = ++_playbackGeneration;
     try {
-      _resettingGeneration = exitGeneration;
+      _pendingPlayerExit = (
+        generation: exitGeneration,
+        switchingKernel: switchingKernel,
+      );
       _logMacOSHdrResetTrace(
         'resetPlayer start path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
@@ -106,16 +109,6 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
       if (_isDisposed || exitGeneration != _playbackGeneration) return;
 
-      // 恢复播放器音量（handleBackButton 中可能静音了播放器）
-      // 移动端使用系统音量，player.volume 不需要改，但标志位需要重置
-      if (_mutedForExit) {
-        if (!_useSystemVolume) {
-          applyPlayerVolume();
-          _logMacOSHdrResetTrace('restored player volume to $_currentVolume');
-        }
-        _mutedForExit = false;
-      }
-
       // 在停止播放前保存最后的观看记录
       // 截图已完成，_currentThumbnailPath 是最新值，不会被旧缩略图覆盖
       if (_currentVideoPath != null) {
@@ -126,6 +119,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           }),
         );
       }
+
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
 
       // Jellyfin同步：如果是Jellyfin流媒体，停止同步
       if (_currentVideoPath != null &&
@@ -147,6 +142,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           debugPrint('Jellyfin播放停止同步失败: $e');
         }
       }
+
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
 
       // Emby同步：如果是Emby流媒体，停止同步
       if (_currentVideoPath != null &&
@@ -184,14 +181,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 清除字幕设置（同时更新SubtitleManager状态）
       _subtitleManager.clearExternalSubtitle();
 
-      final nextPlayer = player.resetAfterMediaExit(switchingKernel: switchingKernel);
-      if (!identical(nextPlayer, player)) {
-        player = nextPlayer;
-        _subtitleManager.updatePlayer(player);
-        _audioTrackManager.updatePlayer(player);
-        _decoderManager.updatePlayer(player);
-        _restoreErikaSettingsOnOpen = true;
-      }
+      _releasePlayerAfterExit(switchingKernel: switchingKernel);
 
       // 释放纹理，确保资源被正确释放
       if (player.textureId.value != null) {
@@ -264,11 +254,30 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       //debugPrint('重置播放器时出错: $e');
       rethrow;
     } finally {
-      if (_resettingGeneration == exitGeneration) _resettingGeneration = null;
+      if (_pendingPlayerExit?.generation == exitGeneration) {
+        _pendingPlayerExit = null;
+      }
       _logMacOSHdrResetTrace(
         'resetPlayer finally path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
     }
+  }
+
+  void _releasePlayerAfterExit({required bool switchingKernel}) {
+    final next = player.resetAfterMediaExit(switchingKernel: switchingKernel);
+    if (!identical(next, player)) {
+      player = next;
+      // A surface that is still waiting for the old native attach must not
+      // hold the new player behind that in-flight operation.
+      _playerSurfaceGeneration++;
+      _subtitleManager.updatePlayer(next);
+      _audioTrackManager.updatePlayer(next);
+      _decoderManager.updatePlayer(next);
+      _erikaPlayerToConfigure = next;
+    } else if (_mutedForExit && !_useSystemVolume) {
+      applyPlayerVolume();
+    }
+    _mutedForExit = false;
   }
 
   // 帮助释放纹理资源
@@ -756,6 +765,15 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void _clearPreviousVideoState() {
+    final exit = _pendingPlayerExit;
+    if (exit != null) {
+      // A new source was accepted while the old exit was saving its screenshot
+      // or history. Finish retiring its player before assigning the new media.
+      _releasePlayerAfterExit(switchingKernel: exit.switchingKernel);
+      _pendingPlayerExit = null;
+      _isCapturingFrame = false;
+      _screenshotCompleter = null;
+    }
     _cancelDfmStartupGate();
     _isStartupMessageFlowActive = false;
     _playbackGeneration++;

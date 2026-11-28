@@ -171,8 +171,8 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
   /// Native disposal is tracked by disposeAsync(), even when open is pending.
   Player resetAfterMediaExit({bool switchingKernel = false}) {
     final delegate = _delegate;
-    if (delegate is ErikaPlayerAdapter) {
-      final next = delegate.retireMediaAfterExit(switchingKernel: switchingKernel);
+    if (!switchingKernel && delegate is ErikaPlayerAdapter) {
+      final next = delegate.retireMediaAfterExit();
       if (!identical(next, delegate)) return Player._internal(next);
     } else if (state != PlaybackState.stopped) {
       state = PlaybackState.stopped;

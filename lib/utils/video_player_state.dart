@@ -320,6 +320,9 @@ class VideoPlayerState extends ChangeNotifier implements WindowListener {
   Player get player => _player;
   set player(Player value) {
     _playerBuffering?.removeListener(_onPlayerBufferingChanged);
+    if (!identical(value, _erikaPlayerToConfigure)) {
+      _erikaPlayerToConfigure = null;
+    }
     _player = value;
     _playerBuffering = value.buffering;
     _playerBuffering!.addListener(_onPlayerBufferingChanged);
@@ -568,9 +571,9 @@ int _exactEndStreak = 0;
       _isCapturingScreenshot && !_screenshotCaptureIncludesSubtitles;
 
   // 添加重置标志，防止在重置过程中更新历史记录
-  int? _resettingGeneration;
-  bool get _isResetting => _resettingGeneration != null;
-  bool _restoreErikaSettingsOnOpen = false;
+  ({int generation, bool switchingKernel})? _pendingPlayerExit;
+  bool get _isResetting => _pendingPlayerExit != null;
+  Player? _erikaPlayerToConfigure;
   final String _lastVideoKey = 'last_video_path';
   final String _lastPositionKey = 'last_video_position';
   final String _videoPositionsKey = 'video_positions';

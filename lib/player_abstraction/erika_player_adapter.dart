@@ -834,6 +834,7 @@ class ErikaPlayerAdapter
 
   @override
   set activeSubtitleTracks(List<int> value) {
+    if (_disposed) return;
     _activeSubtitleTracks = List<int>.from(value);
     _subtitleTrace(
       'activeSubtitleTracks set value=$value '
@@ -868,6 +869,7 @@ class ErikaPlayerAdapter
 
   @override
   set activeAudioTracks(List<int> value) {
+    if (_disposed) return;
     _activeAudioTracks = List<int>.from(value);
     if (!_isSupported) {
       return;
@@ -962,6 +964,7 @@ class ErikaPlayerAdapter
     unawaited(
       seekAndWait(position: position).catchError(
         (Object error, StackTrace stackTrace) {
+          if (_disposed) return;
           _lastNativeError = 'seek failed: $error';
           debugPrint('[Erika] seek failed: $error');
         },
@@ -971,23 +974,26 @@ class ErikaPlayerAdapter
 
   @override
   Future<void> seekAndWait({required int position}) async {
+    if (_disposed) return;
     final clamped = position < 0 ? 0 : position;
     _lastPositionMs = clamped;
     _lastPositionUpdate = DateTime.now();
     _pendingSeekTargetMs = clamped;
     _seekFenceUntil = DateTime.now().add(const Duration(milliseconds: 1500));
-    await _player.seek(Duration(milliseconds: clamped));
+    try {
+      await _player.seek(Duration(milliseconds: clamped));
+    } catch (_) {
+      if (!_disposed) rethrow;
+    }
   }
 
   /// Erika 0.3.8 identifies callbacks by player ID and has no media unload.
   /// Retire this ID on exit. A fresh adapter first subscribes when given media.
   /// The original dispose future retains ownership of pending native teardown.
-  ErikaPlayerAdapter retireMediaAfterExit({bool switchingKernel = false}) {
-    if (_eventSubscription == null) return this;
+  ErikaPlayerAdapter retireMediaAfterExit() {
+    if (!_disposed && _eventSubscription == null) return this;
     dispose();
-    return switchingKernel
-        ? this
-        : ErikaPlayerAdapter(androidOutputMode: _androidOutputMode);
+    return ErikaPlayerAdapter(androidOutputMode: _androidOutputMode);
   }
 
   @override
@@ -1041,7 +1047,7 @@ class ErikaPlayerAdapter
 
   @override
   Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) async {
-    if (!_isSupported) {
+    if (_disposed || !_isSupported) {
       return null;
     }
     try {
@@ -1051,7 +1057,7 @@ class ErikaPlayerAdapter
         width: captureWidth,
         height: captureHeight,
       );
-      if (bytes == null || bytes.isEmpty) {
+      if (_disposed || bytes == null || bytes.isEmpty) {
         return null;
       }
       if (captureWidth != null && captureHeight != null) {

@@ -560,8 +560,10 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       PlayerFactory.applyUserAgentForNextOpen(player.setUserAgent);
 
       player.media = playUrl;
-      if (_restoreErikaSettingsOnOpen) {
+      final configureErikaPlayer = identical(player, _erikaPlayerToConfigure);
+      if (configureErikaPlayer) {
         applyPlayerVolume();
+        player.setPlaybackRate(_playbackRate);
         _syncErikaDanmakuConfig();
       }
       await applyErikaUpscalerModeToCurrentPlayer();
@@ -852,9 +854,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // refills it).
       _embeddedSubtitleOverlayText = '';
       applyEmbeddedSubtitleOverlayKernelState();
-      if (_restoreErikaSettingsOnOpen ||
+      if (configureErikaPlayer ||
           (previousSubtitleDelay - subtitleDelaySeconds).abs() >= 0.0001) {
-        _restoreErikaSettingsOnOpen = false;
+        _erikaPlayerToConfigure = null;
         unawaited(applySubtitleStylePreference());
       }
       unawaited(_setupTimelinePreviewForVideo(videoPath));
