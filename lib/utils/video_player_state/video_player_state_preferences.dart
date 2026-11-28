@@ -951,10 +951,16 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     final currentPlayer = player;
     final mode = _erikaUpscalerMode;
     if (mode == PlayerUpscalerMode.erikaCustom) {
-      if (_erikaUpscalerModelPath.isEmpty) {
-        throw StateError('请先导入 Erika 自定义超分模型');
+      final path = _erikaUpscalerModelPath;
+      if (path.isEmpty) throw StateError('请先导入 Erika 自定义超分模型');
+      await currentPlayer.loadUpscalerModelFile(path);
+      // Loading an imported model can outlive the selection or the player.
+      if (_isDisposed ||
+          !identical(currentPlayer, player) ||
+          mode != _erikaUpscalerMode ||
+          path != _erikaUpscalerModelPath) {
+        return;
       }
-      await currentPlayer.loadUpscalerModelFile(_erikaUpscalerModelPath);
     }
     final ownerChanged = await currentPlayer.setUpscaler(mode);
     if (ownerChanged && !_isDisposed && identical(currentPlayer, player)) {

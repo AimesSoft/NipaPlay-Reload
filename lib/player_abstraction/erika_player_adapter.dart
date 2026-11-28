@@ -15,7 +15,6 @@ import './player_enums.dart';
 
 class _ErikaDanmakuConfigPatch {
   _ErikaDanmakuConfigPatch({
-    this.enabled,
     this.fontSize,
     this.opacity,
     this.displayArea,
@@ -37,7 +36,6 @@ class _ErikaDanmakuConfigPatch {
   }) : blockWords =
             blockWords == null ? null : List<String>.unmodifiable(blockWords);
 
-  final bool? enabled;
   final double? fontSize;
   final double? opacity;
   final double? displayArea;
@@ -58,7 +56,6 @@ class _ErikaDanmakuConfigPatch {
   final List<String>? blockWords;
 
   bool get isEmpty =>
-      enabled == null &&
       fontSize == null &&
       opacity == null &&
       displayArea == null &&
@@ -80,7 +77,6 @@ class _ErikaDanmakuConfigPatch {
 
   _ErikaDanmakuConfigPatch merge(_ErikaDanmakuConfigPatch other) {
     return _ErikaDanmakuConfigPatch(
-      enabled: other.enabled ?? enabled,
       fontSize: other.fontSize ?? fontSize,
       opacity: other.opacity ?? opacity,
       displayArea: other.displayArea ?? displayArea,
@@ -105,7 +101,6 @@ class _ErikaDanmakuConfigPatch {
 
   _ErikaDanmakuConfigPatch differenceFrom(_ErikaDanmakuConfigPatch? previous) {
     return _ErikaDanmakuConfigPatch(
-      enabled: _changed(enabled, previous?.enabled) ? enabled : null,
       fontSize: _changed(fontSize, previous?.fontSize) ? fontSize : null,
       opacity: _changed(opacity, previous?.opacity) ? opacity : null,
       displayArea:
@@ -1372,6 +1367,7 @@ class ErikaPlayerAdapter
         // A scalar fallback still uses Flutter. Keep the native owner visible
         // to rebuilds until Erika acknowledges that it has stopped drawing.
         await _player.setDanmakuEnabled(false);
+        if (_disposed) return false;
         _flutterOverlayRemoval = null;
       } else {
         // The state notifies its overlay after this call returns. Delay native
@@ -1386,7 +1382,22 @@ class ErikaPlayerAdapter
     }
   }
 
-  Future<void> loadUpscalerModelFile(String path) async {
+  Future<void> _upscalerModelChange = Future<void>.value();
+
+  // Model uploads share one native slot. Preserve import/clear order while
+  // allowing a newer Off or preset selection to take effect immediately.
+  Future<void> _queueUpscalerModelChange(Future<void> Function() change) {
+    final pending = _upscalerModelChange.then((_) async {
+      if (!_disposed) await change();
+    });
+    _upscalerModelChange = pending.catchError((Object _) {});
+    return pending;
+  }
+
+  Future<void> loadUpscalerModelFile(String path) =>
+      _queueUpscalerModelChange(() => _loadUpscalerModelFile(path));
+
+  Future<void> _loadUpscalerModelFile(String path) async {
     if (defaultTargetPlatform == TargetPlatform.linux && !_isHarmonyOS) {
       final response = await _player.invokeJson('loadUpscalerModelFile', {'path': path});
       if (response['ok'] != true) {
@@ -1398,7 +1409,8 @@ class ErikaPlayerAdapter
     }
   }
 
-  Future<void> clearUpscalerModel() => _player.clearUpscalerModel();
+  Future<void> clearUpscalerModel() =>
+      _queueUpscalerModelChange(_player.clearUpscalerModel);
 
   Future<PlayerUpscalerStatus> getUpscalerStatus() async {
     if (!_isSupported) {
@@ -1491,7 +1503,12 @@ class ErikaPlayerAdapter
       final change = _upscalerChange;
       await change;
       final frame = _flutterOverlayRemoval;
-      if (enabled && frame != null) await frame;
+      if (enabled && frame != null) {
+        await frame;
+        if (identical(frame, _flutterOverlayRemoval)) {
+          _flutterOverlayRemoval = null;
+        }
+      }
       // Another mode or a newer visibility preference can arrive during a
       // handoff. Only send the latest preference to the current native owner.
       if (change != _upscalerChange) continue;
@@ -1537,8 +1554,10 @@ class ErikaPlayerAdapter
     if (!_isSupported || _disposed) {
       return;
     }
+    // Visibility must obey renderer ownership even for callers that bundle
+    // it with style. Keep its ordering independent of the coalescing timer.
+    final visibility = enabled == null ? null : setDanmakuEnabled(enabled);
     final patch = _ErikaDanmakuConfigPatch(
-      enabled: enabled,
       fontSize: fontSize,
       opacity: opacity,
       displayArea: displayArea,
@@ -1559,6 +1578,7 @@ class ErikaPlayerAdapter
       blockWords: blockWords,
     );
     if (patch.isEmpty) {
+      await visibility;
       return;
     }
 
@@ -1566,7 +1586,10 @@ class ErikaPlayerAdapter
     _pendingDanmakuConfig = _pendingDanmakuConfig?.merge(patch) ?? patch;
     _pendingDanmakuConfigCompleters.add(completer);
     _scheduleDanmakuConfigFlush();
-    return completer.future;
+    await Future.wait<void>([
+      if (visibility != null) visibility,
+      completer.future,
+    ]);
   }
 
   void _scheduleDanmakuConfigFlush() {
@@ -1612,7 +1635,6 @@ class ErikaPlayerAdapter
     _danmakuConfigInFlight = true;
     try {
       await _player.setDanmakuConfig(
-        enabled: outgoingPatch.enabled,
         fontSize: outgoingPatch.fontSize,
         opacity: outgoingPatch.opacity,
         displayArea: outgoingPatch.displayArea,

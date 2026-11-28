@@ -7,7 +7,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
+import 'package:nipaplay/player_abstraction/player_abstraction.dart'
+    show Player;
 import 'package:nipaplay/player_abstraction/player_data_models.dart';
+import 'package:nipaplay/player_abstraction/player_factory.dart';
+import 'package:nipaplay/utils/storage_service.dart';
+import 'package:nipaplay/utils/video_player_state.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class _ModelFile extends Fake implements File {
+  @override
+  Future<Uint8List> readAsBytes() async => Uint8List.fromList([1]);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +29,9 @@ void main() {
   final calls = <MethodCall>[];
   var requested = 0;
   var rejectMode = false;
+  var rejectStatus = false;
+  Completer<void>? loadingModel;
+  Completer<void>? finishModel;
   Completer<void>? nativeMute;
   var backend = 9;
 
@@ -26,6 +40,9 @@ void main() {
     calls.clear();
     requested = 0;
     rejectMode = false;
+    rejectStatus = false;
+    loadingModel = null;
+    finishModel = null;
     nativeMute = null;
     backend = 9;
     messenger.setMockMethodCallHandler(events, (_) async => null);
@@ -40,7 +57,14 @@ void main() {
           (call.arguments as Map)['enabled'] == false) {
         await nativeMute?.future;
       }
+      if (call.method == 'loadUpscalerModel' && loadingModel != null) {
+        if (!loadingModel!.isCompleted) {
+          loadingModel!.complete();
+          await finishModel!.future;
+        }
+      }
       if (call.method == 'getUpscalerStatus') {
+        if (rejectStatus) throw PlatformException(code: 'no-status');
         return {'requestedMode': requested, 'activeBackend': backend};
       }
       return null;
@@ -158,6 +182,160 @@ void main() {
             .where((call) => call.method == 'setDanmakuEnabled')
             .map((call) => (call.arguments as Map)['enabled']),
         [false, false]);
+  });
+
+  test('disposing during native mute cancels the pending handoff', () async {
+    final facade = Player.withDelegate(ErikaPlayerAdapter());
+    await facade.getUpscalerStatus();
+    nativeMute = Completer<void>();
+    final enable = facade.setUpscaler(PlayerUpscalerMode.erikaArtCnnC4F16);
+    await Future<void>.delayed(Duration.zero);
+    expect(calls.where((c) => c.method == 'setDanmakuEnabled'), hasLength(1));
+    await facade.disposeAsync();
+    nativeMute!.complete();
+    expect(await enable, isFalse);
+  });
+
+  test('native status errors preserve an accepted handoff and cached mode',
+      () async {
+    final facade = Player.withDelegate(ErikaPlayerAdapter());
+    addTearDown(facade.disposeAsync);
+    rejectStatus = true;
+    expect(
+        await facade.setUpscaler(PlayerUpscalerMode.erikaArtCnnC4F16), isTrue);
+    expect(facade.supportsNativeDanmaku, isFalse);
+    expect((await facade.getUpscalerStatus())!.requestedMode,
+        PlayerUpscalerMode.erikaArtCnnC4F16);
+    expect(await facade.setUpscaler(PlayerUpscalerMode.off), isTrue);
+    expect(facade.supportsNativeDanmaku, isTrue);
+  });
+
+  test('config visibility uses the current renderer and still applies styles',
+      () async {
+    final facade = Player.withDelegate(ErikaPlayerAdapter());
+    addTearDown(facade.disposeAsync);
+    await facade.setUpscaler(PlayerUpscalerMode.erikaArtCnnC4F16);
+    await facade.setNativeDanmakuConfig(enabled: true, opacity: 0.7);
+    final visibility = calls
+        .where((c) => c.method == 'setDanmakuEnabled')
+        .map((c) => (c.arguments as Map)['enabled']);
+    expect(visibility, [false]);
+    expect(calls.where((c) => c.method == 'setDanmakuConfig').last.arguments,
+        containsPair('opacity', 0.7));
+    await facade.setUpscaler(PlayerUpscalerMode.off);
+    final enable = facade.setNativeDanmakuConfig(enabled: true);
+    await Future<void>.delayed(Duration.zero);
+    expect(visibility, [false]);
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding.handleBeginFrame(null);
+    binding.handleDrawFrame();
+    await enable;
+    expect(visibility, [false, true]);
+  });
+
+  Future<VideoPlayerState> createStateWithErika() async {
+    final dir = await Directory.systemTemp.createTemp('erika-upscaler-state-');
+    StorageService.debugAppStorageDirectoryOverride = dir;
+    addTearDown(() async {
+      StorageService.debugAppStorageDirectoryOverride = null;
+      await dir.delete(recursive: true);
+    });
+    SharedPreferences.setMockInitialValues(
+        {'player_kernel_type': PlayerKernelType.videoPlayer.index});
+    await PlayerFactory.initialize();
+    // Initialization releases the wakelock after the last preference and
+    // storage read. Let all of them finish before replacing the player.
+    const wakelock =
+        'dev.flutter.pigeon.wakelock_plus_platform_interface.WakelockPlusApi.toggle';
+    final initialized = Completer<void>();
+    messenger.setMockMessageHandler(wakelock, (message) async {
+      if (!initialized.isCompleted) initialized.complete();
+      return const StandardMessageCodec().encodeMessage(<Object?>[]);
+    });
+    addTearDown(() => messenger.setMockMessageHandler(wakelock, null));
+    final state = VideoPlayerState();
+    await initialized.future;
+    final facade = Player.withDelegate(ErikaPlayerAdapter());
+    state.player = facade;
+    addTearDown(() async {
+      state.dispose();
+      await facade.disposeAsync();
+    });
+    return state;
+  }
+
+  test(
+      'state notifies both owners and reloads native danmaku after Flutter yields',
+      () async {
+    final state = await createStateWithErika();
+    state.danmakuList.add({'time': 1, 'content': 'handoff'});
+    final owners = <bool>[];
+    state.addListener(() => owners.add(state.isNativeDanmakuActive));
+    await state.setErikaUpscalerMode(PlayerUpscalerMode.erikaArtCnnC4F16);
+    expect(owners.last, isFalse);
+    expect(state.danmakuList.single['content'], 'handoff');
+    await state.setErikaUpscalerMode(PlayerUpscalerMode.off);
+    expect(owners.last, isTrue);
+    await Future<void>.delayed(Duration.zero);
+    final visibility = calls
+        .where((c) => c.method == 'setDanmakuEnabled')
+        .map((c) => (c.arguments as Map)['enabled']);
+    expect(visibility, [false]);
+    expect(
+        (calls.lastWhere((c) => c.method == 'loadDanmakuJson').arguments
+            as Map)['json'],
+        contains('handoff'));
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding.handleBeginFrame(null);
+    binding.handleDrawFrame();
+    await Future<void>.delayed(Duration.zero);
+    expect(visibility, [false, true]);
+  });
+
+  test('switching Off supersedes a pending custom model load', () async {
+    final state = await createStateWithErika();
+    final dir = StorageService.debugAppStorageDirectoryOverride!;
+    final file = File('${dir.path}/sample.esr');
+    await file.writeAsBytes([1, 2, 3]);
+    await state.setErikaUpscalerModelPath(file.path);
+    loadingModel = Completer<void>();
+    finishModel = Completer<void>();
+    final custom = state.setErikaUpscalerMode(PlayerUpscalerMode.erikaCustom);
+    await loadingModel!.future;
+    try {
+      await state.setErikaUpscalerMode(PlayerUpscalerMode.off);
+    } finally {
+      finishModel!.complete();
+      await custom;
+    }
+    expect(state.erikaUpscalerMode, PlayerUpscalerMode.off);
+    expect((await state.player.getUpscalerStatus())!.requestedMode,
+        PlayerUpscalerMode.off);
+    expect(state.isNativeDanmakuActive, isTrue);
+  });
+
+  test('overlapping model imports reach the native player in request order',
+      () async {
+    final facade = Player.withDelegate(ErikaPlayerAdapter());
+    addTearDown(facade.disposeAsync);
+    loadingModel = Completer<void>();
+    finishModel = Completer<void>();
+    await IOOverrides.runZoned(() async {
+      final first = facade.loadUpscalerModelFile('first.esr');
+      await loadingModel!.future;
+      final second = facade.loadUpscalerModelFile('second.esr');
+      await Future<void>.delayed(Duration.zero);
+      final imports = calls
+          .where((c) => c.method == 'loadUpscalerModel')
+          .map((c) => (c.arguments as Map)['name']);
+      try {
+        expect(imports, ['first.esr']);
+      } finally {
+        finishModel!.complete();
+        await Future.wait([first, second]);
+      }
+      expect(imports, ['first.esr', 'second.esr']);
+    }, createFile: (_) => _ModelFile());
   });
 
   test('custom model bytes are loaded before selecting custom mode', () async {
