@@ -536,7 +536,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         MediaServerMenuSurface.nipaplaySubtitle,
         isEmby,
         () async {
-          videoState.selectEmbeddedSubtitleTrack(trackIndex);
+          await videoState.selectEmbeddedSubtitleTrack(trackIndex);
           if (mounted) setState(() {});
           didApply = true;
 
@@ -571,8 +571,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
 
     // 如果当前字幕是激活的，取消挂载（只卸外部字幕，内嵌轨保持原状；
     // SRT 走叠层不动内嵌，ASS/SSA 才清内核轨）
-    if (subtitleInfo['isActive'] == true) {
-      final filePath = subtitleInfo['path'] as String;
+    final filePath = subtitleInfo['path'] as String;
+    if (videoState.activeExternalSubtitlePaths.contains(filePath)) {
       await videoState.removeExternalSubtitle(filePath);
       subtitleInfo['isActive'] = false;
     }

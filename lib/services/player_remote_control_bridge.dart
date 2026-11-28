@@ -960,7 +960,7 @@ class PlayerRemoteControlBridge {
         return;
       case 'subtitle.activeTrackIndex':
         final index = _asInt(value, fallback: -1);
-        state.selectEmbeddedSubtitleTrack(index);
+        await state.selectEmbeddedSubtitleTrack(index);
         return;
       case 'audio.activeTrackIndex':
         await _setAudioTrack(state, _asInt(value, fallback: -1));

@@ -294,7 +294,7 @@ class _CupertinoSubtitleTracksPaneState
             }
           }
 
-          videoState.selectEmbeddedSubtitleTrack(trackIndex);
+          await videoState.selectEmbeddedSubtitleTrack(trackIndex);
           if (mounted) setState(() {});
           didApply = true;
         },
@@ -336,8 +336,8 @@ class _CupertinoSubtitleTracksPaneState
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: widget.videoState.player.subtitleTrackChanges ??
-            widget.videoState.subtitleManager,
+        listenable: Listenable.merge(
+            [widget.videoState, widget.videoState.subtitleManager]),
         builder: (context, _) => _buildTracks(context),
       );
 

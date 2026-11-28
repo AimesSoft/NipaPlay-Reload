@@ -166,8 +166,8 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _notifyListeners();
   }
 
-  void selectEmbeddedSubtitleTrack(int trackIndex) {
-    _subtitleManager.selectEmbeddedSubtitleTrack(trackIndex);
+  Future<void> selectEmbeddedSubtitleTrack(int trackIndex) async {
+    await _subtitleManager.selectEmbeddedSubtitleTrack(trackIndex);
     _notifyListeners();
   }
 

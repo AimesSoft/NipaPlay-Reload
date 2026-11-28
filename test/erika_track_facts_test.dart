@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:erika_flutter/erika_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
-import 'package:nipaplay/player_abstraction/player_enums.dart';
+import 'package:nipaplay/player_abstraction/player_abstraction.dart';
+import 'package:nipaplay/utils/subtitle_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -83,8 +86,56 @@ void main() {
     return player;
   }
 
-  test('Erika tracks carry their bit rates and frame rate',
+  test(
+      'switching from an Erika external subtitle removes it before selecting the embedded track',
       () async {
+    SharedPreferences.setMockInitialValues({});
+    final enteredRemove = Completer<void>();
+    final finishRemove = Completer<void>();
+    final selections = <int?>[];
+    messenger.setMockMethodCallHandler(playerChannel, (call) async {
+      switch (call.method) {
+        case 'create':
+          return 9;
+        case 'addExternalSubtitle':
+          return 33;
+        case 'removeSubtitleTrack':
+          expect(call.arguments['trackId'], 33);
+          enteredRemove.complete();
+          await finishRemove.future;
+        case 'selectSubtitleTrack':
+          selections.add(call.arguments['trackId'] as int?);
+      }
+      return null;
+    });
+    final player = await opened();
+    addTearDown(player.disposeAsync);
+    await emit({
+      'kind': ErikaEventKind.tracksChanged.index,
+      'trackList': [
+        {'id': 21, 'kind': ErikaTrackKind.subtitle.index, 'selected': false},
+        {'id': 23, 'kind': ErikaTrackKind.subtitle.index, 'selected': false},
+      ],
+    });
+    final manager = SubtitleManager(player: Player.withDelegate(player));
+    final dir = await Directory.systemTemp.createTemp('erika-subtitle-switch-');
+    addTearDown(() => dir.delete(recursive: true));
+    final sup = await File('${dir.path}/track.sup').writeAsBytes([0]);
+    await manager.addExternalSubtitleToStack(sup.path);
+    await Future<void>.delayed(Duration.zero);
+    expect(selections, contains(33));
+    final first = manager.selectEmbeddedSubtitleTrack(0);
+    await Future<void>.delayed(Duration.zero);
+    expect(enteredRemove.isCompleted, isTrue);
+    final last = manager.selectEmbeddedSubtitleTrack(1);
+    expect(selections, [33]);
+    finishRemove.complete();
+    await Future.wait([first, last]);
+    await Future<void>.delayed(Duration.zero);
+    expect(selections, [33, null, 23]);
+  });
+
+  test('Erika tracks carry their bit rates and frame rate', () async {
     final player = await opened();
     try {
       // The parameters event that follows the track list keeps what it said.
@@ -102,5 +153,4 @@ void main() {
       player.dispose();
     }
   });
-
 }

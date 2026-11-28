@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/utils/subtitle_manager.dart';
+import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _UnusedPlayerDelegate extends Fake implements AbstractPlayer {
@@ -38,6 +39,14 @@ class _KernelDelegate extends Fake implements AbstractPlayer {
 
   @override
   void setProperty(String name, String value) {}
+}
+
+class _RejectingDetach extends _KernelDelegate
+    implements AsyncExternalSubtitlePlayer {
+  @override
+  Future<void> setExternalSubtitleAsync(String path) async {
+    throw StateError('native detach rejected');
+  }
 }
 
 void main() {
@@ -237,9 +246,55 @@ void main() {
         () async {
       manager.setExternalSubtitle(ass.path);
       await manager.addExternalSubtitleToStack(srt.path);
-      manager.selectEmbeddedSubtitleTrack(1);
+      await manager.selectEmbeddedSubtitleTrack(1);
       expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
       expect(delegate.activeSubtitleTracks, [1]);
+    });
+
+    test(
+        'deleting a displaced native subtitle preserves the new embedded track',
+        () async {
+      manager.setExternalSubtitle(ass.path);
+      await manager.selectEmbeddedSubtitleTrack(1);
+      await manager.removeExternalSubtitleFromStack(ass.path);
+      expect(delegate.activeSubtitleTracks, [1]);
+    });
+
+    test('a native subtitle recorded only as the current path is displaced',
+        () async {
+      manager.setCurrentExternalSubtitlePath(ass.path);
+      await manager.selectEmbeddedSubtitleTrack(1);
+      expect(manager.hasActiveNativeExternalSubtitle, isFalse);
+      expect(delegate.activeSubtitleTracks, [1]);
+    });
+
+    test('after displacement the persisted stack contains only the active SRT',
+        () async {
+      final video = '${dir.path}/movie.mkv';
+      manager.setCurrentVideoPath(video);
+      await manager.addExternalSubtitleToStack(ass.path);
+      await manager.addExternalSubtitleToStack(srt.path);
+      await manager.selectEmbeddedSubtitleTrack(1);
+      SubtitleService().clearCache(video);
+      final list = await SubtitleService().loadExternalSubtitles(video);
+      expect({
+        for (final entry in list) entry['path']: entry['isActive']
+      }, {
+        ass.path: false,
+        srt.path: true,
+      });
+    });
+
+    test(
+        'a rejected native detach keeps the external selection available for retry',
+        () async {
+      final rejecting = _RejectingDetach();
+      manager.setPlayer(Player.withDelegate(rejecting));
+      await manager.addExternalSubtitleToStack(ass.path);
+      await expectLater(
+          manager.selectEmbeddedSubtitleTrack(1), throwsStateError);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [ass.path]);
+      expect(rejecting.activeSubtitleTracks, [0]);
     });
 
     test('stacking an srt keeps a kernel-rendered external track alive',
