@@ -519,9 +519,6 @@ class MdkPlayerAdapter
   }
 
   @override
-  @override
-  Future<void> releaseMedia() async {}
-
   Future<void> prepare() async {
     if (_released('prepare')) return;
     try {

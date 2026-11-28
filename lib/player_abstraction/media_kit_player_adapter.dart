@@ -2612,9 +2612,6 @@ class MediaKitPlayerAdapter
   }
 
   @override
-  @override
-  Future<void> releaseMedia() async {}
-
   Future<void> prepare() async {
     if (!_usesPlatformVideoSurface) {
       await updateTexture();

@@ -179,18 +179,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 清除字幕设置（同时更新SubtitleManager状态）
       _subtitleManager.clearExternalSubtitle();
 
-      // 先停止播放
-      if (player.state != PlaybackState.stopped) {
-        _logMacOSHdrResetTrace('set player.state=stopped');
-        player.state = PlaybackState.stopped;
-      }
-
-      // 释放内核持有的媒体级资源（原生 stop 不释放解码器/缓冲/HTTP 连接）。
-      // 播放器实例保留，下次 prepare 重新 open。其他内核默认空实现。
       try {
-        await player.releaseMedia();
+        await player.stopAndResetMedia();
       } catch (e) {
-        debugPrint('释放播放器媒体资源失败: $e');
+        debugPrint('退出时停止播放器失败: $e');
       }
 
       // 释放纹理，确保资源被正确释放

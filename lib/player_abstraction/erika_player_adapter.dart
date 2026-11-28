@@ -628,6 +628,14 @@ class ErikaPlayerAdapter
   int? _pendingSeekTargetMs;
   DateTime? _seekFenceUntil;
   bool _disposed = false;
+  int _mediaGeneration = 0;
+  Future<void>? _opening;
+  Future<void>? _exitStop;
+  bool _openedMedia = false;
+  bool _awaitingNewOpen = false;
+  bool _sawStopped = false;
+  Completer<void>? _stopEvent;
+  bool _openingAfterReset = false;
 
   static const Duration _danmakuConfigCoalesceDelay = Duration(
     milliseconds: 50,
@@ -910,6 +918,7 @@ class ErikaPlayerAdapter
     }
     if (type == PlayerMediaType.video || type == PlayerMediaType.unknown) {
       _subtitleTrace('setMedia video path=$path clears external tracks');
+      _mediaGeneration++;
       _media = path;
       _lastPositionMs = 0;
       _lastPositionUpdate = DateTime.now();
@@ -930,16 +939,95 @@ class ErikaPlayerAdapter
   @override
   Future<void> prepare() async {
     _ensureSupported();
-    if (_media.isEmpty) {
-      return;
+    final generation = _mediaGeneration;
+    final stop = _exitStop;
+    if (stop != null) {
+      try {
+        await stop;
+      } catch (_) {
+        // The caller of stopAndResetMedia receives its native stop error.
+      }
     }
+    // Opening a presenter clears events that native code has not polled yet.
+    // Wait before dispatching open, so its queue cannot discard our fence.
+    final stopEvent = _stopEvent;
+    if (stopEvent != null) {
+      await stopEvent.future.timeout(const Duration(seconds: 3));
+    }
+    if (_disposed || generation != _mediaGeneration || _media.isEmpty) return;
+
+    final opening = _openMedia(generation);
+    _opening = opening;
+    try {
+      await opening;
+    } finally {
+      if (identical(_opening, opening)) _opening = null;
+    }
+  }
+
+  Future<void> _openMedia(int generation) async {
     await _player.ensureCreated();
+    if (_disposed || generation != _mediaGeneration) return;
+    _sawStopped = false;
+    _openingAfterReset = _awaitingNewOpen;
+    _openedMedia = true;
     await _player.open(
       _media,
       httpHeaders: _userAgent.isEmpty ? null : {'User-Agent': _userAgent},
     );
+    if (_disposed || generation != _mediaGeneration) return;
     _subtitleTrace('prepare open complete media=$_media');
     _state = PlayerPlaybackState.paused;
+  }
+
+  /// Stop the native presenter and discard this media's adapter state. The
+  /// native handle remains reusable. Erika 0.3.8 has no media unload command.
+  Future<void> stopAndResetMedia() {
+    final pending = _exitStop;
+    if (pending != null) return pending;
+    if (_disposed || !_isSupported) return Future<void>.value();
+
+    final needsStop = _openedMedia;
+    _openedMedia = false;
+    _awaitingNewOpen = _awaitingNewOpen || needsStop;
+    _openingAfterReset = false;
+    setMedia('', PlayerMediaType.video);
+    _pendingSeekTargetMs = null;
+    _seekFenceUntil = null;
+    _videoTrackInfos = const [];
+    _audioTrackInfos = const [];
+    _subtitleTrackInfos = const [];
+    _activeAudioTracks = const [];
+    _activeSubtitleTracks = const [];
+    _state = PlayerPlaybackState.stopped;
+    if (!needsStop) return Future<void>.value();
+
+    if (!_sawStopped) _stopEvent = Completer<void>();
+    return _exitStop = _stopAfterOpen().whenComplete(() {
+      _exitStop = null;
+    });
+  }
+
+  Future<void> _stopAfterOpen() async {
+    // An open already dispatched on the platform may finish after reset.
+    try {
+      await _opening;
+    } catch (_) {
+      // Even a failed open may have left native media attached.
+    }
+    try {
+      await _player.stop();
+    } catch (_) {
+      // A failed/empty native player need not emit Stopped. Its next Opening
+      // still joins the previous producer before publishing new events.
+      _completeStopEvent();
+      rethrow;
+    }
+  }
+
+  void _completeStopEvent() {
+    _stopEvent?.complete();
+    _stopEvent = null;
   }
 
   @override
@@ -964,27 +1052,6 @@ class ErikaPlayerAdapter
     await _player.seek(Duration(milliseconds: clamped));
   }
 
-  /// 退出播放时的媒体级清理。
-  ///
-  /// Erika 原生 close 是终止性的（ErikaState_Closed）：close 后 handle
-  /// 无法再次 open（实测报 "player is closed"）。C ABI 没有媒体级卸载
-  /// 接口，因此这里只做 Dart 状态清理；原生 stop 由上层
-  /// player.state=stopped 触发。不调用 close，避免破坏播放器复用。
-  @override
-  Future<void> releaseMedia() async {
-    if (!_isSupported || _disposed) {
-      return;
-    }
-    _media = '';
-    _lastPositionMs = 0;
-    _lastPositionUpdate = DateTime.now();
-    _pendingSeekTargetMs = null;
-    _seekFenceUntil = null;
-    _mediaInfo = PlayerMediaInfo(duration: 0);
-    _buffering.value = false;
-    _state = PlayerPlaybackState.stopped;
-  }
-
   @override
   void dispose() {
     unawaited(
@@ -1001,6 +1068,7 @@ class ErikaPlayerAdapter
       return existing;
     }
     _disposed = true;
+    _completeStopEvent();
     _buffering.dispose();
     _danmakuConfigTimer?.cancel();
     _danmakuConfigTimer = null;
@@ -1723,6 +1791,24 @@ class ErikaPlayerAdapter
   void _handleEvent(ErikaPlayerEvent event) {
     if (_disposed) {
       return;
+    }
+    final stateChange = event.kind == ErikaEventKind.stateChanged;
+    if (stateChange && event.state == ErikaPlaybackState.stopped) {
+      _sawStopped = true;
+      _completeStopEvent();
+    }
+    if (_awaitingNewOpen) {
+      // Stop's reply and events use different platform channels. Erika emits
+      // Stopped in FIFO order, then joins the old producer before Opening.
+      if (!_openingAfterReset ||
+          !stateChange ||
+          event.state != ErikaPlaybackState.opening) {
+        return;
+      }
+      _awaitingNewOpen = false;
+    }
+    if (stateChange && event.state != ErikaPlaybackState.stopped) {
+      _sawStopped = false;
     }
     if (event.kind == ErikaEventKind.bufferingChanged) {
       // BufferingChanged is a sparse event: its position field defaults to 0.
