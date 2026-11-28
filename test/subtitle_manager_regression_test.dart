@@ -274,15 +274,24 @@ void main() {
       manager.setCurrentVideoPath(video);
       await manager.addExternalSubtitleToStack(ass.path);
       await manager.addExternalSubtitleToStack(srt.path);
+      final service = SubtitleService();
+      final before = await service.loadExternalSubtitles(video);
+      expect(before.where((entry) => entry['isActive'] == true), hasLength(2));
+
       await manager.selectEmbeddedSubtitleTrack(1);
-      SubtitleService().clearCache(video);
-      final list = await SubtitleService().loadExternalSubtitles(video);
+      final list = await service.loadExternalSubtitles(video);
       expect({
         for (final entry in list) entry['path']: entry['isActive']
       }, {
         ass.path: false,
         srt.path: true,
       });
+      final srtIndex = list.indexWhere((entry) => entry['path'] == srt.path);
+      expect(await service.removeExternalSubtitle(video, srtIndex), isTrue);
+      service.clearCache(video);
+      final remaining = (await service.loadExternalSubtitles(video)).single;
+      expect(remaining['path'], ass.path);
+      expect(remaining['isActive'], isFalse);
     });
 
     test(

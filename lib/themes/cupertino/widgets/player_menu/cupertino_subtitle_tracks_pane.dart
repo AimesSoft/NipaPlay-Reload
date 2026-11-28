@@ -287,14 +287,10 @@ class _CupertinoSubtitleTracksPaneState
         isEmby,
         () async {
           if (clearExternal) {
-            videoState.setExternalSubtitle('');
-            final path = videoState.currentVideoPath;
-            if (path != null) {
-              await _subtitleService.setExternalSubtitleActive(path, -1, false);
-            }
+            await videoState.disableAllSubtitles();
+          } else {
+            await videoState.selectEmbeddedSubtitleTrack(trackIndex);
           }
-
-          await videoState.selectEmbeddedSubtitleTrack(trackIndex);
           if (mounted) setState(() {});
           didApply = true;
         },

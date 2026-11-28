@@ -1028,7 +1028,11 @@ class SubtitleManager extends ChangeNotifier {
     await _replaceNativeSubtitle(trackIndex);
   }
 
-  Future<void> _replaceNativeSubtitle(int trackIndex) async {
+  Future<void> disableAllSubtitles() =>
+      _replaceNativeSubtitle(-1, clearExternal: true);
+
+  Future<void> _replaceNativeSubtitle(int trackIndex,
+      {bool clearExternal = false}) async {
     final player = _player;
     final current = _currentExternalSubtitlePath;
     final nativePaths = {
@@ -1048,8 +1052,20 @@ class SubtitleManager extends ChangeNotifier {
     }
     player.activeSubtitleTracks = trackIndex < 0 ? [] : [trackIndex];
     if (trackIndex >= 0) _lastSelectedEmbeddedTrackIndex = trackIndex;
-    for (final path in nativePaths) {
-      _forgetExternalSubtitle(path);
+    if (clearExternal) {
+      _clearExternalSubtitleState(clearPlayer: false);
+      final videoPath = _currentVideoPath;
+      if (videoPath != null && videoPath.isNotEmpty) {
+        _subtitlePersistence = _subtitlePersistence.then((_) async {
+          final service = SubtitleService();
+          await service.setExternalSubtitleActive(videoPath, -1, false);
+          await service.saveLastActiveSubtitleIndex(videoPath, -1);
+        });
+      }
+    } else {
+      for (final path in nativePaths) {
+        _forgetExternalSubtitle(path);
+      }
     }
     onSubtitleTrackChanged();
     notifyListeners();

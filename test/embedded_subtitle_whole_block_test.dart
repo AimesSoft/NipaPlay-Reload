@@ -13,6 +13,10 @@ import 'package:nipaplay/utils/video_player_state.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/adaptive_player_menu_primitives.dart';
 import 'package:nipaplay/themes/cupertino/widgets/player_menu/cupertino_subtitle_tracks_pane.dart';
+import 'package:nipaplay/providers/appearance_settings_provider.dart';
+import 'package:nipaplay/services/player_remote_control_bridge.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/base_settings_menu.dart';
+import 'package:nipaplay/themes/nipaplay/widgets/subtitle_tracks_menu.dart';
 import 'package:nipaplay/widgets/embedded_subtitle_overlay.dart';
 import 'package:nipaplay/widgets/external_subtitle_overlay.dart';
 import 'package:provider/provider.dart';
@@ -99,6 +103,11 @@ class _SubtitlePlatform extends mk.PlatformPlayer {
 
   Future<void> setProperty(String name, String value) async {
     properties[name] = value;
+  }
+
+  void reportTracks(mk.Tracks tracks) {
+    state = state.copyWith(tracks: tracks);
+    tracksController.add(tracks);
   }
 
   Future<void> confirm(mk.SubtitleTrack track) async {
@@ -420,8 +429,7 @@ void main() {
     const embedded = mk.SubtitleTrack('1', 'English', 'eng');
     const sidecar = mk.SubtitleTrack('2', 'Sidecar', null, isExternal: true);
     const tracks = mk.Tracks(subtitle: [embedded, sidecar]);
-    platform.state = platform.state.copyWith(tracks: tracks);
-    platform.tracksController.add(tracks);
+    platform.reportTracks(tracks);
     await Future<void>.delayed(Duration.zero);
     expect(adapter.mediaInfo.subtitle, hasLength(1));
     final dir = await Directory.systemTemp.createTemp('delayed_track_');
@@ -459,8 +467,7 @@ void main() {
     addTearDown(adapter.disposeAsync);
     const embedded = mk.SubtitleTrack('1', 'English', 'eng');
     const tracks = mk.Tracks(subtitle: [embedded]);
-    platform.state = platform.state.copyWith(tracks: tracks);
-    platform.tracksController.add(tracks);
+    platform.reportTracks(tracks);
     await tester.pump();
     final dir = (await tester.runAsync(
         () => Directory.systemTemp.createTemp('cupertino_subtitles_')))!;
@@ -504,6 +511,94 @@ void main() {
     await tester.pumpAndSettle();
     expect(videoState.activeExternalSubtitlePaths, isEmpty);
     expect(platform.requested, mk.SubtitleTrack.no());
+  });
+
+  testWidgets('NipaPlay embedded row turns off just that track',
+      (tester) async {
+    final platform = _SubtitlePlatform();
+    final adapter =
+        MediaKitPlayerAdapter.withPlayer(mk.Player(platformPlayer: platform));
+    addTearDown(adapter.disposeAsync);
+    const embedded = mk.SubtitleTrack('1', 'English', 'eng');
+    const tracks = mk.Tracks(subtitle: [embedded]);
+    platform.reportTracks(tracks);
+    await tester.pump();
+    final dir = (await tester.runAsync(
+        () => Directory.systemTemp.createTemp('nipaplay_subtitles_')))!;
+    addTearDown(() => dir.delete(recursive: true));
+    final videoPath = '${dir.path}/movie.mkv';
+    final srt = '${dir.path}/overlay.srt';
+    final videoState =
+        await _buildVideoPlayerState(adapter, videoPath: videoPath);
+    await tester.runAsync(() async {
+      await _prepareSubtitleFixture(
+          videoState, srt, '1\n00:00:00,000 --> 00:00:01,000\nOverlay\n');
+      await videoState.addExternalSubtitleToStack(srt);
+      await platform.confirm(embedded);
+    });
+    await tester.pumpWidget(_wrap(
+        ChangeNotifierProvider(
+            create: (_) => AppearanceSettingsProvider(),
+            child: SettingsMenuScope(
+                standaloneWindow: true,
+                child: SubtitleTracksMenu(onClose: () {}))),
+        videoState));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('English'));
+    await tester.tap(find.text('English'));
+    await tester.pump();
+    expect(platform.requested, mk.SubtitleTrack.no());
+    expect(videoState.activeExternalSubtitlePaths, [srt]);
+    expect(find.text('已关闭内嵌字幕'), findsOneWidget);
+    await tester.runAsync(() => platform.confirm(mk.SubtitleTrack.no()));
+    await tester.pump();
+    await tester.ensureVisible(find.text('关闭所有字幕'));
+    await tester.tap(find.text('关闭所有字幕'));
+    await tester.pump();
+    expect(videoState.activeExternalSubtitlePaths, isEmpty);
+    expect(find.text('关闭所有字幕'), findsNothing);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
+
+  test('remote close subtitles turns off embedded and external subtitles',
+      () async {
+    final platform = _SubtitlePlatform();
+    final adapter =
+        MediaKitPlayerAdapter.withPlayer(mk.Player(platformPlayer: platform));
+    addTearDown(adapter.disposeAsync);
+    final dir = await Directory.systemTemp.createTemp('remote_subtitles_');
+    addTearDown(() => dir.delete(recursive: true));
+    final videoPath = '${dir.path}/movie.mkv';
+    final srt = '${dir.path}/overlay.srt';
+    final videoState =
+        await _buildVideoPlayerState(adapter, videoPath: videoPath);
+    videoState.subtitleManager.setCurrentVideoPath(videoPath);
+    const embedded = mk.SubtitleTrack('1', 'English', 'eng');
+    const tracks = mk.Tracks(subtitle: [embedded]);
+    platform.reportTracks(tracks);
+    await platform.confirm(embedded);
+    await _prepareSubtitleFixture(
+        videoState, srt, '1\n00:00:00,000 --> 00:00:01,000\nOverlay\n');
+    await videoState.addExternalSubtitleToStack(srt);
+    expect(videoState.player.activeSubtitleTracks, [0]);
+    expect(
+        (await SubtitleService().loadExternalSubtitles(videoPath))
+            .single['isActive'],
+        isTrue);
+    final bridge = PlayerRemoteControlBridge.instance;
+    bridge.attach(videoState);
+    addTearDown(() => bridge.detach(videoState));
+    final response = await bridge.executeCommand(
+        'set_parameter', {'key': 'subtitle.activeTrackIndex', 'value': -1});
+    expect(response['success'], isTrue);
+    expect(platform.requested, mk.SubtitleTrack.no());
+    expect(videoState.activeExternalSubtitlePaths, isEmpty);
+    final persisted =
+        (await SubtitleService().loadExternalSubtitles(videoPath)).single;
+    expect(persisted['isActive'], isFalse);
+    expect(
+        await SubtitleService().getLastActiveSubtitleIndex(videoPath), isNull);
   });
 
   test('an ASS and SRT stack retains libass until the native ASS is removed',

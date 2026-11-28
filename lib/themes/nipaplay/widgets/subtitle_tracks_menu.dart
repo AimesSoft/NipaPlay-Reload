@@ -516,6 +516,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     BuildContext context,
     int trackIndex, {
     bool persistEmbyPreference = true,
+    bool clearExternal = false,
   }) async {
     try {
       if (!mounted) return false; // Add mounted check
@@ -536,7 +537,11 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         MediaServerMenuSurface.nipaplaySubtitle,
         isEmby,
         () async {
-          await videoState.selectEmbeddedSubtitleTrack(trackIndex);
+          if (clearExternal) {
+            await videoState.disableAllSubtitles();
+          } else {
+            await videoState.selectEmbeddedSubtitleTrack(trackIndex);
+          }
           if (mounted) setState(() {});
           didApply = true;
 
@@ -769,6 +774,17 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                 const SizedBox(height: 16),
               ],
 
+              if (videoState.activeExternalSubtitlePaths.isNotEmpty ||
+                  videoState.player.activeSubtitleTracks.isNotEmpty)
+                BlurButton(
+                  icon: Icons.subtitles_off_outlined,
+                  text: '关闭所有字幕',
+                  onTap: () => _switchToEmbeddedSubtitle(context, -1,
+                      clearExternal: true),
+                  expandHorizontally: true,
+                  borderRadius: BorderRadius.zero,
+                ),
+
               // 外部字幕列表
               if (_externalSubtitles.isNotEmpty) ...[
                 Align(
@@ -964,14 +980,12 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                     child: InkWell(
                       onTap: () async {
                         if (isActive) {
-                          // 关闭字幕
                           final switched =
                               await _switchToEmbeddedSubtitle(context, -1);
                           if (switched && context.mounted) {
-                            BlurSnackBar.show(context, '已关闭字幕');
+                            BlurSnackBar.show(context, '已关闭内嵌字幕');
                           }
                         } else {
-                          // 先确保禁用外部字幕
                           final switched =
                               await _switchToEmbeddedSubtitle(context, index);
                           if (switched && context.mounted) {

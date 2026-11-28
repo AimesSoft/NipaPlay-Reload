@@ -171,6 +171,11 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _notifyListeners();
   }
 
+  Future<void> disableAllSubtitles() async {
+    await _subtitleManager.disableAllSubtitles();
+    _notifyListeners();
+  }
+
   // 强制设置外部字幕（手动操作）
   void forceSetExternalSubtitle(String path) {
     _subtitleManager.forceSetExternalSubtitle(path);
