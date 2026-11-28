@@ -536,6 +536,11 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     }
   }
 
+  bool _ownsPlaybackCommand(Player target, int generation) =>
+      !_isDisposed &&
+      identical(player, target) &&
+      _playbackGeneration == generation;
+
   void pause() {
     _playbackIntentGeneration++;
     if (_status == PlayerStatus.playing) {
@@ -551,10 +556,14 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
 
       // 使用直接暂停方法，确保VideoPlayer插件能够暂停视频
-      player.pauseDirectly().then((_) {
+      final target = player;
+      final generation = _playbackGeneration;
+      target.pauseDirectly().then((_) {
+        if (!_ownsPlaybackCommand(target, generation)) return;
         //debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
         _setStatus(PlayerStatus.paused, message: '已暂停');
       }).catchError((e) {
+        if (!_ownsPlaybackCommand(target, generation)) return;
         debugPrint('[VideoPlayerState] pauseDirectly() 调用失败: $e');
         // 尝试使用传统方法
         player.state = PlaybackState.paused;
@@ -644,7 +653,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         _setStatus(PlayerStatus.playing, message: '开始播放');
       }
       // 使用直接播放方法，确保VideoPlayer插件能够播放视频
-      player.playDirectly().then((_) {
+      final target = player;
+      final generation = _playbackGeneration;
+      target.playDirectly().then((_) {
+        if (!_ownsPlaybackCommand(target, generation)) return;
         //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
         // 设置状态
         _setStatus(PlayerStatus.playing, message: '开始播放');
@@ -652,6 +664,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         // 播放开始时提交观看记录到弹弹play
         _submitWatchHistoryToDandanplay();
       }).catchError((e) async {
+        if (!_ownsPlaybackCommand(target, generation)) return;
         debugPrint('[VideoPlayerState] playDirectly() 调用失败: $e');
         // 内核在后台可能进入 idle（erika ErikaStatus 3）：play 无效，需重载 media 再播
         try {
@@ -659,14 +672,16 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           if (kernel.toLowerCase().contains('erika') &&
               _currentVideoPath != null && _currentVideoPath!.isNotEmpty) {
             debugPrint('[VideoPlayerState] erika idle 检测到，重载 media 恢复播放');
-            await player.retryCurrentMediaLoad();
+            await target.retryCurrentMediaLoad();
             await Future<void>.delayed(const Duration(milliseconds: 300));
-            await player.playDirectly();
+            if (!_ownsPlaybackCommand(target, generation)) return;
+            await target.playDirectly();
           }
         } catch (reopenErr) {
           debugPrint('[VideoPlayerState] 重载 media 失败: $reopenErr');
         }
-        player.state = PlaybackState.playing;
+        if (!_ownsPlaybackCommand(target, generation)) return;
+        target.state = PlaybackState.playing;
         _setStatus(PlayerStatus.playing, message: '开始播放');
         _submitWatchHistoryToDandanplay();
       });

@@ -1201,24 +1201,33 @@ class ErikaPlayerAdapter
 
   @override
   Future<void> playDirectly() async {
+    if (_disposed) return;
     _ensureSupported();
-    await _player.ensureCreated();
-    await _player.play();
+    try {
+      await _player.ensureCreated();
+      if (_disposed) return;
+      await _player.play();
+    } catch (_) {
+      if (_disposed) return;
+      rethrow;
+    }
+    if (_disposed) return;
     _state = PlayerPlaybackState.playing;
     _lastPositionUpdate = DateTime.now();
   }
 
   @override
   Future<void> pauseDirectly() async {
+    if (_disposed) return;
     _ensureSupported();
-    if (_state != PlayerPlaybackState.playing) {
-      return;
-    }
-    await _player.ensureCreated();
-    _lastPositionMs = position;
+    if (_state != PlayerPlaybackState.playing) return;
     try {
+      await _player.ensureCreated();
+      if (_disposed) return;
+      _lastPositionMs = position;
       await _player.pause();
     } catch (error) {
+      if (_disposed) return;
       if (_state == PlayerPlaybackState.stopped) {
         debugPrint(
             '[Erika] pause ignored after native playback stopped: $error');
@@ -1226,6 +1235,7 @@ class ErikaPlayerAdapter
       }
       rethrow;
     }
+    if (_disposed) return;
     _state = PlayerPlaybackState.paused;
     _lastPositionUpdate = DateTime.now();
   }

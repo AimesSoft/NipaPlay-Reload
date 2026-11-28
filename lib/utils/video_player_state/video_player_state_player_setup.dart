@@ -857,7 +857,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       if (configureErikaPlayer ||
           (previousSubtitleDelay - subtitleDelaySeconds).abs() >= 0.0001) {
         _erikaPlayerToConfigure = null;
-        unawaited(applySubtitleStylePreference());
+        unawaited(applySubtitleStylePreference(
+          preloadErikaStyle: configureErikaPlayer,
+        ));
       }
       unawaited(_setupTimelinePreviewForVideo(videoPath));
 
