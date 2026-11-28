@@ -1144,111 +1144,107 @@ class _RemoteMediaLibrarySettingsContentState
     BuildContext context, {
     String displayName = '',
     String baseUrl = '',
-  }) async {
-    final nameController = TextEditingController(text: displayName);
-    final urlController = TextEditingController(text: baseUrl);
-    try {
-      if (AdaptiveSettingsScope.isPhoneLayout(context)) {
-        return cupertino.showCupertinoDialog<_SharedHostEditResult>(
-          context: context,
-          builder: (dialogContext) => cupertino.CupertinoAlertDialog(
-            title: Text(_text(context, '共享客户端', '共享客戶端', 'Shared Client')),
-            content: Column(
-              children: [
-                const SizedBox(height: 12),
-                cupertino.CupertinoTextField(
-                  controller: nameController,
-                  placeholder: _text(context, '备注名称', '備註名稱', 'Display name'),
-                ),
-                const SizedBox(height: 8),
-                cupertino.CupertinoTextField(
-                  controller: urlController,
-                  placeholder: _text(
-                    context,
-                    '例如：192.168.1.100:1180',
-                    '例如：192.168.1.100:1180',
-                    'e.g. 192.168.1.100:1180',
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              cupertino.CupertinoDialogAction(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(context.l10n.cancel),
-              ),
-              cupertino.CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: () {
-                  Navigator.of(dialogContext).pop(
-                    _SharedHostEditResult(
-                      displayName: nameController.text,
-                      baseUrl: urlController.text,
-                    ),
-                  );
-                },
-                child: Text(context.l10n.save),
-              ),
-            ],
-          ),
-        );
-      }
+  }) {
+    var editedName = displayName;
+    var editedUrl = baseUrl;
 
-      return BlurDialog.show<_SharedHostEditResult>(
+    void save(BuildContext dialogContext) {
+      Navigator.of(dialogContext).pop(
+        _SharedHostEditResult(displayName: editedName, baseUrl: editedUrl),
+      );
+    }
+
+    if (AdaptiveSettingsScope.isPhoneLayout(context)) {
+      return cupertino.showCupertinoDialog<_SharedHostEditResult>(
         context: context,
-        title: _text(context, '共享客户端', '共享客戶端', 'Shared Client'),
-        contentWidget: TvOSRemoteTextInputGroup(
-          title: _text(context, '共享客户端', '共享客戶端', 'Shared Client'),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        builder: (dialogContext) => cupertino.CupertinoAlertDialog(
+          title: Text(_text(context, '共享客户端', '共享客戶端', 'Shared Client')),
+          content: Column(
             children: [
-              TvOSRemoteTextInputControl(
-                title: _text(context, '备注名称', '備註名稱', 'Display name'),
-                fieldId: 'displayName',
-                child: TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: _text(context, '备注名称', '備註名稱', 'Display name'),
-                  ),
-                ),
+              const SizedBox(height: 12),
+              cupertino.CupertinoTextFormFieldRow(
+                initialValue: displayName,
+                onChanged: (value) => editedName = value,
+                padding: EdgeInsets.zero,
+                decoration: const cupertino.CupertinoTextField().decoration,
+                placeholder: _text(context, '备注名称', '備註名稱', 'Display name'),
               ),
-              TvOSRemoteTextInputControl(
-                title: _text(context, '访问地址', '存取地址', 'Access URL'),
-                fieldId: 'baseUrl',
-                required: true,
-                child: TextField(
-                  controller: urlController,
-                  decoration: InputDecoration(
-                    labelText: _text(context, '访问地址', '存取地址', 'Access URL'),
-                    hintText: '192.168.1.100:1180',
-                  ),
+              const SizedBox(height: 8),
+              cupertino.CupertinoTextFormFieldRow(
+                initialValue: baseUrl,
+                onChanged: (value) => editedUrl = value,
+                padding: EdgeInsets.zero,
+                decoration: const cupertino.CupertinoTextField().decoration,
+                placeholder: _text(
+                  context,
+                  '例如：192.168.1.100:1180',
+                  '例如：192.168.1.100:1180',
+                  'e.g. 192.168.1.100:1180',
                 ),
               ),
             ],
           ),
+          actions: [
+            cupertino.CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(context.l10n.cancel),
+            ),
+            cupertino.CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => save(dialogContext),
+              child: Text(context.l10n.save),
+            ),
+          ],
         ),
-        actionsBuilder: (dialogContext) => [
-          HoverScaleTextButton(
-            text: context.l10n.cancel,
-            onPressed: () => Navigator.of(dialogContext).pop(),
-          ),
-          HoverScaleTextButton(
-            text: context.l10n.save,
-            onPressed: () {
-              Navigator.of(dialogContext).pop(
-                _SharedHostEditResult(
-                  displayName: nameController.text,
-                  baseUrl: urlController.text,
-                ),
-              );
-            },
-          ),
-        ],
       );
-    } finally {
-      nameController.dispose();
-      urlController.dispose();
     }
+
+    return BlurDialog.show<_SharedHostEditResult>(
+      context: context,
+      title: _text(context, '共享客户端', '共享客戶端', 'Shared Client'),
+      contentWidget: TvOSRemoteTextInputGroup(
+        title: _text(context, '共享客户端', '共享客戶端', 'Shared Client'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TvOSRemoteTextInputControl(
+              title: _text(context, '备注名称', '備註名稱', 'Display name'),
+              fieldId: 'displayName',
+              child: TextFormField(
+                initialValue: displayName,
+                onChanged: (value) => editedName = value,
+                decoration: InputDecoration(
+                  labelText: _text(context, '备注名称', '備註名稱', 'Display name'),
+                ),
+              ),
+            ),
+            TvOSRemoteTextInputControl(
+              title: _text(context, '访问地址', '存取地址', 'Access URL'),
+              fieldId: 'baseUrl',
+              required: true,
+              child: TextFormField(
+                initialValue: baseUrl,
+                onChanged: (value) => editedUrl = value,
+                decoration: InputDecoration(
+                  labelText: _text(context, '访问地址', '存取地址', 'Access URL'),
+                  hintText: '192.168.1.100:1180',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actionsBuilder: (dialogContext) => [
+        HoverScaleTextButton(
+          text: context.l10n.cancel,
+          onPressed: () => Navigator.of(dialogContext).pop(),
+        ),
+        HoverScaleTextButton(
+          text: context.l10n.save,
+          onPressed: () => save(dialogContext),
+        ),
+      ],
+    );
   }
 
   Future<void> _confirmRemoveSharedHost(
