@@ -582,11 +582,14 @@ class ErikaPlayerAdapter
   ErikaPlayerAdapter({
     PlayerErikaAndroidOutputMode androidOutputMode =
         PlayerErikaAndroidOutputMode.sdr,
-  }) : _player = ErikaPlayer(
+  })  : _androidOutputMode = androidOutputMode,
+        _player = ErikaPlayer(
           outputMode: _resolveNativeOutputMode(androidOutputMode),
-        ) {
-    if (_isSupported) {
-      _eventSubscription = _player.events.listen(
+        );
+
+  void _listenForEvents() {
+    if (_isSupported && !_disposed) {
+      _eventSubscription ??= _player.events.listen(
         _handleEvent,
         onError: (Object error, StackTrace stackTrace) {
           debugPrint('ErikaPlayerAdapter event error: $error');
@@ -595,6 +598,7 @@ class ErikaPlayerAdapter
     }
   }
 
+  final PlayerErikaAndroidOutputMode _androidOutputMode;
   final ErikaPlayer _player;
   final ValueNotifier<bool> _buffering = ValueNotifier<bool>(false);
 
@@ -761,7 +765,7 @@ class ErikaPlayerAdapter
   set volume(double value) {
     _volume = value.clamp(0.0, 1.0).toDouble();
     if (_isSupported) {
-      unawaited(_player.setVolume(_volume));
+      _dispatchCommand('set volume', () => _player.setVolume(_volume));
     }
   }
 
@@ -783,25 +787,27 @@ class ErikaPlayerAdapter
     }
     switch (value) {
       case PlayerPlaybackState.playing:
-        _dispatchStateCommand('play', playDirectly);
+        _dispatchCommand('play', playDirectly);
         break;
       case PlayerPlaybackState.paused:
-        _dispatchStateCommand('pause', pauseDirectly);
+        _dispatchCommand('pause', pauseDirectly);
         break;
       case PlayerPlaybackState.stopped:
         _state = PlayerPlaybackState.stopped;
         _lastPositionMs = 0;
-        _dispatchStateCommand('stop', _player.stop);
+        _dispatchCommand('stop', _player.stop);
         break;
     }
   }
 
-  void _dispatchStateCommand(
+  void _dispatchCommand(
     String operation,
     Future<void> Function() command,
   ) {
+    if (_disposed) return;
     unawaited(
       command().catchError((Object error, StackTrace stackTrace) {
+        if (_disposed) return;
         final message = '$operation failed: $error';
         _lastNativeError = message;
         debugPrint('[Erika] $message');
@@ -828,6 +834,7 @@ class ErikaPlayerAdapter
 
   @override
   set activeSubtitleTracks(List<int> value) {
+    if (_disposed) return;
     _activeSubtitleTracks = List<int>.from(value);
     _subtitleTrace(
       'activeSubtitleTracks set value=$value '
@@ -862,6 +869,7 @@ class ErikaPlayerAdapter
 
   @override
   set activeAudioTracks(List<int> value) {
+    if (_disposed) return;
     _activeAudioTracks = List<int>.from(value);
     if (!_isSupported) {
       return;
@@ -869,13 +877,15 @@ class ErikaPlayerAdapter
     // Empty selection falls back to the first real audio track.
     if (value.isEmpty) {
       if (_audioTrackInfos.isNotEmpty) {
-        unawaited(_player.selectAudioTrack(_audioTrackInfos.first.id));
+        _dispatchCommand('select audio track',
+            () => _player.selectAudioTrack(_audioTrackInfos.first.id));
       }
       return;
     }
     final index = value.first;
     if (index >= 0 && index < _audioTrackInfos.length) {
-      unawaited(_player.selectAudioTrack(_audioTrackInfos[index].id));
+      _dispatchCommand('select audio track',
+          () => _player.selectAudioTrack(_audioTrackInfos[index].id));
     }
   }
 
@@ -903,6 +913,7 @@ class ErikaPlayerAdapter
 
   @override
   void setMedia(String path, PlayerMediaType type) {
+    if (_disposed) return;
     if (type == PlayerMediaType.subtitle) {
       _subtitleTrace('setMedia subtitle path=${_describeSubtitlePath(path)}');
       _setExternalSubtitle(path);
@@ -910,6 +921,7 @@ class ErikaPlayerAdapter
     }
     if (type == PlayerMediaType.video || type == PlayerMediaType.unknown) {
       _subtitleTrace('setMedia video path=$path clears external tracks');
+      if (path.isNotEmpty) _listenForEvents();
       _media = path;
       _lastPositionMs = 0;
       _lastPositionUpdate = DateTime.now();
@@ -930,14 +942,19 @@ class ErikaPlayerAdapter
   @override
   Future<void> prepare() async {
     _ensureSupported();
-    if (_media.isEmpty) {
-      return;
+    if (_disposed || _media.isEmpty) return;
+    try {
+      await _player.ensureCreated();
+      if (_disposed || _media.isEmpty) return;
+      await _player.open(
+        _media,
+        httpHeaders: _userAgent.isEmpty ? null : {'User-Agent': _userAgent},
+      );
+    } catch (_) {
+      if (_disposed) return;
+      rethrow;
     }
-    await _player.ensureCreated();
-    await _player.open(
-      _media,
-      httpHeaders: _userAgent.isEmpty ? null : {'User-Agent': _userAgent},
-    );
+    if (_disposed) return;
     _subtitleTrace('prepare open complete media=$_media');
     _state = PlayerPlaybackState.paused;
   }
@@ -947,6 +964,7 @@ class ErikaPlayerAdapter
     unawaited(
       seekAndWait(position: position).catchError(
         (Object error, StackTrace stackTrace) {
+          if (_disposed) return;
           _lastNativeError = 'seek failed: $error';
           debugPrint('[Erika] seek failed: $error');
         },
@@ -956,12 +974,26 @@ class ErikaPlayerAdapter
 
   @override
   Future<void> seekAndWait({required int position}) async {
+    if (_disposed) return;
     final clamped = position < 0 ? 0 : position;
     _lastPositionMs = clamped;
     _lastPositionUpdate = DateTime.now();
     _pendingSeekTargetMs = clamped;
     _seekFenceUntil = DateTime.now().add(const Duration(milliseconds: 1500));
-    await _player.seek(Duration(milliseconds: clamped));
+    try {
+      await _player.seek(Duration(milliseconds: clamped));
+    } catch (_) {
+      if (!_disposed) rethrow;
+    }
+  }
+
+  /// Erika 0.3.8 identifies callbacks by player ID and has no media unload.
+  /// Retire this ID on exit. A fresh adapter first subscribes when given media.
+  /// The original dispose future retains ownership of pending native teardown.
+  ErikaPlayerAdapter retireMediaAfterExit() {
+    if (!_disposed && _eventSubscription == null) return this;
+    dispose();
+    return ErikaPlayerAdapter(androidOutputMode: _androidOutputMode);
   }
 
   @override
@@ -999,16 +1031,23 @@ class ErikaPlayerAdapter
   Future<void> _finishDispose(
     StreamSubscription<ErikaPlayerEvent>? eventSubscription,
   ) async {
-    try {
-      await eventSubscription?.cancel();
-    } finally {
-      await _player.dispose();
-    }
+    // Disposal also interrupts a pending cold open on hosts that support it.
+    // The adapter already ignores events; cancelling its stream may settle later.
+    final unsubscribe = eventSubscription?.cancel();
+    await Future.wait([
+      _player.dispose(),
+      if (unsubscribe != null)
+        unsubscribe.catchError((Object error) {
+          // events is an async generator; its initial ensureCreated can race
+          // teardown. Native dispose also closes the player's event controller.
+          debugPrint('Erika: closing event subscription: $error');
+        }),
+    ]);
   }
 
   @override
   Future<PlayerFrame?> snapshot({int width = 0, int height = 0}) async {
-    if (!_isSupported) {
+    if (_disposed || !_isSupported) {
       return null;
     }
     try {
@@ -1018,7 +1057,7 @@ class ErikaPlayerAdapter
         width: captureWidth,
         height: captureHeight,
       );
-      if (bytes == null || bytes.isEmpty) {
+      if (_disposed || bytes == null || bytes.isEmpty) {
         return null;
       }
       if (captureWidth != null && captureHeight != null) {
@@ -1162,24 +1201,33 @@ class ErikaPlayerAdapter
 
   @override
   Future<void> playDirectly() async {
+    if (_disposed) return;
     _ensureSupported();
-    await _player.ensureCreated();
-    await _player.play();
+    try {
+      await _player.ensureCreated();
+      if (_disposed) return;
+      await _player.play();
+    } catch (_) {
+      if (_disposed) return;
+      rethrow;
+    }
+    if (_disposed) return;
     _state = PlayerPlaybackState.playing;
     _lastPositionUpdate = DateTime.now();
   }
 
   @override
   Future<void> pauseDirectly() async {
+    if (_disposed) return;
     _ensureSupported();
-    if (_state != PlayerPlaybackState.playing) {
-      return;
-    }
-    await _player.ensureCreated();
-    _lastPositionMs = position;
+    if (_state != PlayerPlaybackState.playing) return;
     try {
+      await _player.ensureCreated();
+      if (_disposed) return;
+      _lastPositionMs = position;
       await _player.pause();
     } catch (error) {
+      if (_disposed) return;
       if (_state == PlayerPlaybackState.stopped) {
         debugPrint(
             '[Erika] pause ignored after native playback stopped: $error');
@@ -1187,6 +1235,7 @@ class ErikaPlayerAdapter
       }
       rethrow;
     }
+    if (_disposed) return;
     _state = PlayerPlaybackState.paused;
     _lastPositionUpdate = DateTime.now();
   }
@@ -1200,7 +1249,8 @@ class ErikaPlayerAdapter
     _lastPositionUpdate = DateTime.now();
     _playbackRate = rate <= 0 ? 1.0 : rate;
     if (_isSupported) {
-      unawaited(_player.setPlaybackRate(_playbackRate));
+      _dispatchCommand('set playback rate',
+          () => _player.setPlaybackRate(_playbackRate));
     }
   }
 

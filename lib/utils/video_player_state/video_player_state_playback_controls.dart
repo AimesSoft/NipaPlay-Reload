@@ -57,9 +57,13 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     }
   }
 
-  Future<void> resetPlayer() async {
+  Future<void> resetPlayer({bool switchingKernel = false}) async {
+    final exitGeneration = ++_playbackGeneration;
     try {
-      _isResetting = true; // 设置重置标志
+      _pendingPlayerExit = (
+        generation: exitGeneration,
+        switchingKernel: switchingKernel,
+      );
       _logMacOSHdrResetTrace(
         'resetPlayer start path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
@@ -94,7 +98,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           debugPrint('等待截图完成异常: $e');
         } finally {
           // 超时后强制重置截图状态，避免影响后续操作
-          if (_isCapturingFrame) {
+          if (_isCapturingFrame && exitGeneration == _playbackGeneration) {
             _isCapturingFrame = false;
             _screenshotCompleter = null;
             _logMacOSHdrResetTrace(
@@ -103,15 +107,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         }
       }
 
-      // 恢复播放器音量（handleBackButton 中可能静音了播放器）
-      // 移动端使用系统音量，player.volume 不需要改，但标志位需要重置
-      if (_mutedForExit) {
-        if (!_useSystemVolume) {
-          applyPlayerVolume();
-          _logMacOSHdrResetTrace('restored player volume to $_currentVolume');
-        }
-        _mutedForExit = false;
-      }
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
 
       // 在停止播放前保存最后的观看记录
       // 截图已完成，_currentThumbnailPath 是最新值，不会被旧缩略图覆盖
@@ -123,6 +119,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           }),
         );
       }
+
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
 
       // Jellyfin同步：如果是Jellyfin流媒体，停止同步
       if (_currentVideoPath != null &&
@@ -145,6 +143,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         }
       }
 
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
+
       // Emby同步：如果是Emby流媒体，停止同步
       if (_currentVideoPath != null &&
           _currentVideoPath!.startsWith('emby://')) {
@@ -166,6 +166,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         }
       }
 
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
+
       // 重置解码器信息
       SystemResourceMonitor().setActiveDecoder("未知");
 
@@ -179,11 +181,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 清除字幕设置（同时更新SubtitleManager状态）
       _subtitleManager.clearExternalSubtitle();
 
-      // 先停止播放
-      if (player.state != PlaybackState.stopped) {
-        _logMacOSHdrResetTrace('set player.state=stopped');
-        player.state = PlaybackState.stopped;
-      }
+      _releasePlayerAfterExit(switchingKernel: switchingKernel);
 
       // 释放纹理，确保资源被正确释放
       if (player.textureId.value != null) {
@@ -194,6 +192,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
       // 重置状态
       await _clearTimelinePreviewFiles();
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
       _currentVideoPath = null;
       _currentMediaKey = null;
       _macOSWindowHostedVideoRect = null;
@@ -233,6 +232,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         await _restoreSystemUiOverlayStyleIfNeeded();
       }
 
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
       _setStatus(PlayerStatus.idle);
       _logMacOSHdrResetTrace(
         'status set idle path=$_currentVideoPath status=$_status playerState=${player.state}',
@@ -254,11 +254,30 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       //debugPrint('重置播放器时出错: $e');
       rethrow;
     } finally {
-      _isResetting = false; // 清除重置标志
+      if (_pendingPlayerExit?.generation == exitGeneration) {
+        _pendingPlayerExit = null;
+      }
       _logMacOSHdrResetTrace(
         'resetPlayer finally path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
     }
+  }
+
+  void _releasePlayerAfterExit({required bool switchingKernel}) {
+    final next = player.resetAfterMediaExit(switchingKernel: switchingKernel);
+    if (!identical(next, player)) {
+      player = next;
+      // A surface that is still waiting for the old native attach must not
+      // hold the new player behind that in-flight operation.
+      _playerSurfaceGeneration++;
+      _subtitleManager.updatePlayer(next);
+      _audioTrackManager.updatePlayer(next);
+      _decoderManager.updatePlayer(next);
+      _erikaPlayerToConfigure = next;
+    } else if (_mutedForExit && !_useSystemVolume) {
+      applyPlayerVolume();
+    }
+    _mutedForExit = false;
   }
 
   // 帮助释放纹理资源
@@ -517,6 +536,11 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     }
   }
 
+  bool _ownsPlaybackCommand(Player target, int generation) =>
+      !_isDisposed &&
+      identical(player, target) &&
+      _playbackGeneration == generation;
+
   void pause() {
     _playbackIntentGeneration++;
     if (_status == PlayerStatus.playing) {
@@ -532,10 +556,14 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       }
 
       // 使用直接暂停方法，确保VideoPlayer插件能够暂停视频
-      player.pauseDirectly().then((_) {
+      final target = player;
+      final generation = _playbackGeneration;
+      target.pauseDirectly().then((_) {
+        if (!_ownsPlaybackCommand(target, generation)) return;
         //debugPrint('[VideoPlayerState] pauseDirectly() 调用成功');
         _setStatus(PlayerStatus.paused, message: '已暂停');
       }).catchError((e) {
+        if (!_ownsPlaybackCommand(target, generation)) return;
         debugPrint('[VideoPlayerState] pauseDirectly() 调用失败: $e');
         // 尝试使用传统方法
         player.state = PlaybackState.paused;
@@ -625,7 +653,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         _setStatus(PlayerStatus.playing, message: '开始播放');
       }
       // 使用直接播放方法，确保VideoPlayer插件能够播放视频
-      player.playDirectly().then((_) {
+      final target = player;
+      final generation = _playbackGeneration;
+      target.playDirectly().then((_) {
+        if (!_ownsPlaybackCommand(target, generation)) return;
         //debugPrint('[VideoPlayerState] playDirectly() 调用成功');
         // 设置状态
         _setStatus(PlayerStatus.playing, message: '开始播放');
@@ -633,6 +664,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         // 播放开始时提交观看记录到弹弹play
         _submitWatchHistoryToDandanplay();
       }).catchError((e) async {
+        if (!_ownsPlaybackCommand(target, generation)) return;
         debugPrint('[VideoPlayerState] playDirectly() 调用失败: $e');
         // 内核在后台可能进入 idle（erika ErikaStatus 3）：play 无效，需重载 media 再播
         try {
@@ -640,14 +672,16 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           if (kernel.toLowerCase().contains('erika') &&
               _currentVideoPath != null && _currentVideoPath!.isNotEmpty) {
             debugPrint('[VideoPlayerState] erika idle 检测到，重载 media 恢复播放');
-            await player.retryCurrentMediaLoad();
+            await target.retryCurrentMediaLoad();
             await Future<void>.delayed(const Duration(milliseconds: 300));
-            await player.playDirectly();
+            if (!_ownsPlaybackCommand(target, generation)) return;
+            await target.playDirectly();
           }
         } catch (reopenErr) {
           debugPrint('[VideoPlayerState] 重载 media 失败: $reopenErr');
         }
-        player.state = PlaybackState.playing;
+        if (!_ownsPlaybackCommand(target, generation)) return;
+        target.state = PlaybackState.playing;
         _setStatus(PlayerStatus.playing, message: '开始播放');
         _submitWatchHistoryToDandanplay();
       });
@@ -746,6 +780,15 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
   }
 
   void _clearPreviousVideoState() {
+    final exit = _pendingPlayerExit;
+    if (exit != null) {
+      // A new source was accepted while the old exit was saving its screenshot
+      // or history. Finish retiring its player before assigning the new media.
+      _releasePlayerAfterExit(switchingKernel: exit.switchingKernel);
+      _pendingPlayerExit = null;
+      _isCapturingFrame = false;
+      _screenshotCompleter = null;
+    }
     _cancelDfmStartupGate();
     _isStartupMessageFlowActive = false;
     _playbackGeneration++;

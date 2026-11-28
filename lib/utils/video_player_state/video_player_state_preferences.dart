@@ -2563,7 +2563,9 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     return null;
   }
 
-  Future<void> applySubtitleStylePreference() async {
+  Future<void> applySubtitleStylePreference({
+    bool preloadErikaStyle = false,
+  }) async {
     if (kIsWeb || _isDisposed) return;
     // 叠层字幕(SRT/VTT)样式在 Flutter UI 层，不设内核属性（sub-margin-x 限制0~300，拖拽负值报错/卡热切换）；
         // 但混挂内核轨 ASS 时仍需继续设置 sub-pos/sub-delay 等，否则位置滑块/延迟对内核字幕不生效。
@@ -2571,7 +2573,10 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
         final hasKernelExternalSubtitle = activeExternalSubtitlePaths
             .any((p) => !externalSubtitleRenderedInApp(p));
         final hasEmbeddedSubtitleActive = player.activeSubtitleTracks.isNotEmpty;
-        if (!hasKernelExternalSubtitle &&
+        // A fresh Erika player stores style even when its first episode has
+        // no subtitles or the native track list has not arrived yet.
+        if (!preloadErikaStyle &&
+            !hasKernelExternalSubtitle &&
             !hasEmbeddedSubtitleActive) {
           return;
         }

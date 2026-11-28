@@ -181,6 +181,20 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
 
   Future<void> prepare() => _delegate.prepare();
 
+  /// An Erika event identifies its player, not the media on that player. On
+  /// exit, retire that ID so queued callbacks cannot reach the next media.
+  /// Native disposal is tracked by disposeAsync(), even when open is pending.
+  Player resetAfterMediaExit({bool switchingKernel = false}) {
+    final delegate = _delegate;
+    if (!switchingKernel && delegate is ErikaPlayerAdapter) {
+      final next = delegate.retireMediaAfterExit();
+      if (!identical(next, delegate)) return Player._internal(next);
+    } else if (state != PlaybackState.stopped) {
+      state = PlaybackState.stopped;
+    }
+    return this;
+  }
+
   bool get supportsMediaLoadReadiness =>
       _delegate is core_player.MediaLoadAwarePlayer;
 

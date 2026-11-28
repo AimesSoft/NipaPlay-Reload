@@ -188,7 +188,7 @@ class PlayerKernelManager {
 
     // 3. 停止旧播放器：resetPlayer 把内核置 stopped 空态、断开 media 与纹理，
     // 旧内核不再解码/占音频。
-    await videoPlayerState.resetPlayer();
+    await videoPlayerState.resetPlayer(switchingKernel: true);
     if (videoPlayerState.isDisposed) {
       return;
     }
