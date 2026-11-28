@@ -774,8 +774,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                 const SizedBox(height: 16),
               ],
 
-              if (videoState.activeExternalSubtitlePaths.isNotEmpty ||
-                  videoState.player.activeSubtitleTracks.isNotEmpty)
+              if (videoState.hasActiveSubtitles)
                 BlurButton(
                   icon: Icons.subtitles_off_outlined,
                   text: '关闭所有字幕',

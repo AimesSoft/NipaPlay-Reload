@@ -354,8 +354,7 @@ class _CupertinoSubtitleTracksPaneState
             leading: const Icon(CupertinoIcons.multiply_circle),
             title: const Text('关闭字幕'),
             subtitle: const Text('停用所有字幕轨道'),
-            trailing: widget.videoState.player.activeSubtitleTracks.isEmpty &&
-                    widget.videoState.activeExternalSubtitlePaths.isEmpty
+            trailing: !widget.videoState.hasActiveSubtitles
                 ? Icon(
                     CupertinoIcons.check_mark_circled_solid,
                     color: CupertinoTheme.of(context).primaryColor,

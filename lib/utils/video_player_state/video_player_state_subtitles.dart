@@ -304,6 +304,11 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   bool get hasActiveNativeExternalSubtitle =>
       _subtitleManager.hasActiveNativeExternalSubtitle;
 
+  bool get hasActiveSubtitles =>
+      player.activeSubtitleTracks.isNotEmpty ||
+      activeExternalSubtitlePaths.isNotEmpty ||
+      hasActiveNativeExternalSubtitle;
+
   // Media Kit excludes native sidecars from activeSubtitleTracks. An app
   // stack can share the screen with a confirmed embedded track, while an
   // auto-selected native copy of the sidecar must stay hidden.

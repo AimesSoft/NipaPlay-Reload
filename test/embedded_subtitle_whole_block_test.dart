@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:nipaplay/player_abstraction/erika_player_adapter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:nipaplay/player_abstraction/media_kit_player_adapter.dart';
@@ -598,6 +601,90 @@ void main() {
         findsOneWidget);
   });
 
+  for (final cupertino in [false, true]) {
+    final theme = cupertino ? 'Cupertino' : 'NipaPlay';
+    testWidgets(
+        '$theme can turn off an Emby external ASS selected only by the native player',
+        (tester) async {
+      const channel = MethodChannel('erika_flutter/player');
+      const events = MethodChannel('erika_flutter/events');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call);
+        if (call.method == 'create') return 1;
+        if (call.method == 'addExternalSubtitle') return 41;
+        return null;
+      });
+      messenger.setMockMethodCallHandler(events, (_) async => null);
+      final adapter =
+          (await tester.runAsync(() async => ErikaPlayerAdapter()))!;
+      addTearDown(() async {
+        await adapter.disposeAsync();
+        messenger.setMockMethodCallHandler(channel, null);
+        messenger.setMockMethodCallHandler(events, null);
+      });
+      final dir = (await tester
+          .runAsync(() => Directory.systemTemp.createTemp('native_ass_')))!;
+      addTearDown(() => dir.delete(recursive: true));
+      final videoPath = 'emby://native-ass-$theme';
+      final state = (await tester.runAsync(
+          () => _buildVideoPlayerState(adapter, videoPath: videoPath)))!;
+      await tester.runAsync(() async {
+        final path = '${dir.path}/emby.ass';
+        await _prepareSubtitleFixture(
+            state,
+            path,
+            '[Script Info]\nScriptType: v4.00+\n\n[Events]\n'
+            'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
+            'Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,ASS cue\n');
+        await state.subtitleManager.activateEmbyExternalSubtitle(path);
+        expect(state.currentExternalSubtitlePath, path);
+        expect(state.activeExternalSubtitlePaths, isEmpty);
+        expect(state.player.activeSubtitleTracks, isEmpty);
+        expect(state.hasActiveNativeExternalSubtitle, isTrue);
+      });
+      final pane = cupertino
+          ? CupertinoSubtitleTracksPane(videoState: state)
+          : ChangeNotifierProvider(
+              create: (_) => AppearanceSettingsProvider(),
+              child: SettingsMenuScope(
+                  standaloneWindow: true,
+                  child: SubtitleTracksMenu(onClose: () {})));
+      await tester.pumpWidget(_wrap(pane, state));
+      await tester.pumpAndSettle();
+      final off = find.text(cupertino ? '关闭字幕' : '关闭所有字幕');
+      final checked = find.descendant(
+          of: find.widgetWithText(AdaptivePlayerMenuTile, '关闭字幕'),
+          matching: find.byIcon(CupertinoIcons.check_mark_circled_solid));
+      expect(off, findsOneWidget);
+      if (cupertino) expect(checked, findsNothing);
+      await tester.ensureVisible(off);
+      await tester.runAsync(() async {
+        await tester.tap(off);
+        for (var i = 0; i < 100 && state.hasActiveNativeExternalSubtitle; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      await tester.pumpAndSettle();
+      expect(state.hasActiveNativeExternalSubtitle, isFalse);
+      expect(
+          calls
+              .where((c) => c.method == 'removeSubtitleTrack')
+              .single
+              .arguments['trackId'],
+          41);
+      if (cupertino) {
+        expect(checked, findsOneWidget);
+      } else {
+        expect(off, findsNothing);
+      }
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+    });
+  }
+
   testWidgets('NipaPlay embedded row turns off just that track',
       (tester) async {
     final platform = _SubtitlePlatform();
@@ -613,12 +700,26 @@ void main() {
     addTearDown(() => dir.delete(recursive: true));
     final videoPath = '${dir.path}/movie.mkv';
     final srt = '${dir.path}/overlay.srt';
-    final videoState =
-        await _buildVideoPlayerState(adapter, videoPath: videoPath);
+    final videoState = (await tester.runAsync(
+        () => _buildVideoPlayerState(adapter, videoPath: videoPath)))!;
+    Future<bool> persistedActive() async {
+      final prefs = await SharedPreferences.getInstance();
+      final key = prefs
+          .getKeys()
+          .singleWhere((k) => k.startsWith('external_subtitles_'));
+      return (jsonDecode(prefs.getString(key)!) as List).single['isActive']
+          as bool;
+    }
+
     await tester.runAsync(() async {
+      videoState.subtitleManager.setCurrentVideoPath(videoPath);
       await _prepareSubtitleFixture(
           videoState, srt, '1\n00:00:00,000 --> 00:00:01,000\nOverlay\n');
       await videoState.addExternalSubtitleToStack(srt);
+      expect(
+          (await SubtitleService().loadExternalSubtitles(videoPath))
+              .single['isActive'],
+          isTrue);
       await platform.confirm(embedded);
     });
     await tester.pumpWidget(_wrap(
@@ -630,18 +731,62 @@ void main() {
         videoState));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('English'));
-    await tester.tap(find.text('English'));
-    await tester.pump();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('English'));
+      for (var i = 0;
+          i < 100 && platform.requested != mk.SubtitleTrack.no();
+          i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
     expect(platform.requested, mk.SubtitleTrack.no());
     expect(videoState.activeExternalSubtitlePaths, [srt]);
     expect(find.text('已关闭内嵌字幕'), findsOneWidget);
     await tester.runAsync(() => platform.confirm(mk.SubtitleTrack.no()));
     await tester.pump();
     await tester.ensureVisible(find.text('关闭所有字幕'));
-    await tester.tap(find.text('关闭所有字幕'));
-    await tester.pump();
+    final external = find.widgetWithText(InkWell, 'overlay.srt');
+    expect(external, findsOneWidget);
+    final check = find.descendant(
+        of: external, matching: find.byIcon(Icons.check_circle));
+    expect(check, findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('关闭所有字幕'));
+      for (var i = 0; i < 100; i++) {
+        if ((await SubtitleService().loadExternalSubtitles(videoPath))
+                .single['isActive'] ==
+            false) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
     expect(videoState.activeExternalSubtitlePaths, isEmpty);
     expect(find.text('关闭所有字幕'), findsNothing);
+    expect(check, findsNothing);
+    expect(await persistedActive(), isFalse);
+    expect(
+        (await SubtitleService().loadExternalSubtitles(videoPath))
+            .single['isActive'],
+        isFalse);
+    await tester.ensureVisible(external);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('overlay.srt'));
+      for (var i = 0; i < 100; i++) {
+        if ((await SubtitleService().loadExternalSubtitles(videoPath))
+                .single['isActive'] ==
+            true) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(videoState.activeExternalSubtitlePaths, [srt]);
+    expect(await persistedActive(), isTrue);
+    expect(check, findsOneWidget);
+    expect(
+        (await SubtitleService().loadExternalSubtitles(videoPath))
+            .single['isActive'],
+        isTrue);
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
   });
