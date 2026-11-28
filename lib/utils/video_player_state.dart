@@ -568,7 +568,9 @@ int _exactEndStreak = 0;
       _isCapturingScreenshot && !_screenshotCaptureIncludesSubtitles;
 
   // 添加重置标志，防止在重置过程中更新历史记录
-  bool _isResetting = false;
+  int? _resettingGeneration;
+  bool get _isResetting => _resettingGeneration != null;
+  bool _restoreErikaSettingsOnOpen = false;
   final String _lastVideoKey = 'last_video_path';
   final String _lastPositionKey = 'last_video_position';
   final String _videoPositionsKey = 'video_positions';

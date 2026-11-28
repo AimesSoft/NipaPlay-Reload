@@ -57,9 +57,10 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
     }
   }
 
-  Future<void> resetPlayer() async {
+  Future<void> resetPlayer({bool switchingKernel = false}) async {
+    final exitGeneration = ++_playbackGeneration;
     try {
-      _isResetting = true; // 设置重置标志
+      _resettingGeneration = exitGeneration;
       _logMacOSHdrResetTrace(
         'resetPlayer start path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );
@@ -94,7 +95,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           debugPrint('等待截图完成异常: $e');
         } finally {
           // 超时后强制重置截图状态，避免影响后续操作
-          if (_isCapturingFrame) {
+          if (_isCapturingFrame && exitGeneration == _playbackGeneration) {
             _isCapturingFrame = false;
             _screenshotCompleter = null;
             _logMacOSHdrResetTrace(
@@ -102,6 +103,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
           }
         }
       }
+
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
 
       // 恢复播放器音量（handleBackButton 中可能静音了播放器）
       // 移动端使用系统音量，player.volume 不需要改，但标志位需要重置
@@ -166,6 +169,8 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         }
       }
 
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
+
       // 重置解码器信息
       SystemResourceMonitor().setActiveDecoder("未知");
 
@@ -179,10 +184,13 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       // 清除字幕设置（同时更新SubtitleManager状态）
       _subtitleManager.clearExternalSubtitle();
 
-      try {
-        await player.stopAndResetMedia();
-      } catch (e) {
-        debugPrint('退出时停止播放器失败: $e');
+      final nextPlayer = player.resetAfterMediaExit(switchingKernel: switchingKernel);
+      if (!identical(nextPlayer, player)) {
+        player = nextPlayer;
+        _subtitleManager.updatePlayer(player);
+        _audioTrackManager.updatePlayer(player);
+        _decoderManager.updatePlayer(player);
+        _restoreErikaSettingsOnOpen = true;
       }
 
       // 释放纹理，确保资源被正确释放
@@ -194,6 +202,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
 
       // 重置状态
       await _clearTimelinePreviewFiles();
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
       _currentVideoPath = null;
       _currentMediaKey = null;
       _macOSWindowHostedVideoRect = null;
@@ -233,6 +242,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
         await _restoreSystemUiOverlayStyleIfNeeded();
       }
 
+      if (_isDisposed || exitGeneration != _playbackGeneration) return;
       _setStatus(PlayerStatus.idle);
       _logMacOSHdrResetTrace(
         'status set idle path=$_currentVideoPath status=$_status playerState=${player.state}',
@@ -254,7 +264,7 @@ extension VideoPlayerStatePlaybackControls on VideoPlayerState {
       //debugPrint('重置播放器时出错: $e');
       rethrow;
     } finally {
-      _isResetting = false; // 清除重置标志
+      if (_resettingGeneration == exitGeneration) _resettingGeneration = null;
       _logMacOSHdrResetTrace(
         'resetPlayer finally path=$_currentVideoPath status=$_status hasVideo=$hasVideo playerState=${player.state}',
       );

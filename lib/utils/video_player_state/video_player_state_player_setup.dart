@@ -146,6 +146,7 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
           : await PlaybackSourceService.resolve(currentContext, sourceItem);
     }
 
+    if (resolutionCancelled()) return;
     _clearPreviousVideoState(); // 清理旧状态
     _currentEmbyTrackSelection = embyTrackSelection;
     final initializationGeneration = _playbackGeneration;
@@ -555,15 +556,22 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
 
       // 应用自定义 User-Agent（须在打开媒体前设置；空字符串 = 用内核默认 UA）。
       // 优先用一次性 UA（串流菜单设置，仅本次有效，用后即清），否则用持久 UA。
+      if (_isDisposed || initializationGeneration != _playbackGeneration) return;
       PlayerFactory.applyUserAgentForNextOpen(player.setUserAgent);
 
       player.media = playUrl;
+      if (_restoreErikaSettingsOnOpen) {
+        applyPlayerVolume();
+        _syncErikaDanmakuConfig();
+      }
       await applyErikaUpscalerModeToCurrentPlayer();
+      if (_isDisposed || initializationGeneration != _playbackGeneration) return;
 
       //debugPrint('4. 准备播放器...');
       // 准备播放器
       mediaPrepareStarted = true;
       await player.prepare();
+      if (_isDisposed || initializationGeneration != _playbackGeneration) return;
       debugPrint('[PlayerSetup] prepare 完成 kernel=${player.getPlayerKernelName()} '
           'state=${player.state}');
       // 内核 setMedia+prepare 后通常自动进入播放（mdk/media_kit 默认）。
@@ -844,7 +852,9 @@ extension VideoPlayerStatePlayerSetup on VideoPlayerState {
       // refills it).
       _embeddedSubtitleOverlayText = '';
       applyEmbeddedSubtitleOverlayKernelState();
-      if ((previousSubtitleDelay - subtitleDelaySeconds).abs() >= 0.0001) {
+      if (_restoreErikaSettingsOnOpen ||
+          (previousSubtitleDelay - subtitleDelaySeconds).abs() >= 0.0001) {
+        _restoreErikaSettingsOnOpen = false;
         unawaited(applySubtitleStylePreference());
       }
       unawaited(_setupTimelinePreviewForVideo(videoPath));
