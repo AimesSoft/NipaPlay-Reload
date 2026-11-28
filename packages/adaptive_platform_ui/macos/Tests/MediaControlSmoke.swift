@@ -176,11 +176,32 @@ if #available(macOS 26.0, *) {
             ["label": "修改背景图", "enabled": true], ["label": "清理", "enabled": false]]],
     ]])
     capsule.frame = NSRect(x: 0, y: 0, width: 184, height: 44)
+    capsule.layout()
     capsule.layoutSubtreeIfNeeded()
     let model = capsule.model
-    assert(capsule.hosting.superview === capsule)
+    assert(capsule.hosting.isDescendant(of: capsule.glass))
+    assert(capsule.glass.superview === capsule)
+    assert(capsule.glass.contentView === capsule.hosting)
+    assert(capsule.glass.cornerRadius == 22)
+    let reducedEffects = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ||
+        NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+    assert(capsule.glass.style == (reducedEffects ? .regular : .clear))
+    if #available(macOS 27.0, *) {
+        assert((capsule.glass.value(forKey: "effectIsInteractive") as? Bool) == true)
+    }
     assert(capsule.hosting.rootView.model === model)
     assert(capsule.hosting.frame.size == capsule.bounds.size)
+    // Pointer tracking drives the 1pt capsule edge highlight.
+    if let hoverEvent = NSEvent.mouseEvent(with: .mouseMoved,
+        location: NSPoint(x: 92, y: 22), modifierFlags: [], timestamp: 0,
+        windowNumber: 0, context: nil, eventNumber: 1, clickCount: 0, pressure: 0) {
+        capsule.glass.mouseEntered(with: hoverEvent)
+        assert(capsule.hovered)
+        assert(capsule.outline.opacity == 0.16)
+        capsule.glass.mouseExited(with: hoverEvent)
+        assert(!capsule.hovered)
+        assert(capsule.outline.opacity == 0)
+    }
     assert(model.actions.map { $0.id } == [0, 1, 2, 3])
     assert(model.actions[1].selected && !model.actions[2].enabled)
     let before = messenger.events.count

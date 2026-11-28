@@ -22,6 +22,9 @@ final class MediaCapsuleModel: ObservableObject {
     @Published private(set) var actions: [MediaCapsuleAction] = []
     var onPressed: ((Int) -> Void)?
     var onSelected: ((Int, Int) -> Void)?
+    /// macOS presents the "more" menu through AppKit so the slot keeps its
+    /// full 44pt target; other hosts keep SwiftUI's native `Menu`.
+    var onMenu: ((Int) -> Void)?
 
     func update(_ args: [String: Any]) {
         actions = (args["actions"] as? [[String: Any]] ?? []).enumerated().map { index, action in
@@ -43,7 +46,11 @@ final class MediaCapsuleModel: ObservableObject {
 
     func activate(_ index: Int) {
         guard isEnabled(index) else { return }
-        if actions[index].items == nil { onPressed?(index) }
+        if actions[index].items == nil {
+            onPressed?(index)
+        } else {
+            onMenu?(index)
+        }
     }
 
     func select(_ index: Int, item: Int) {
@@ -51,11 +58,10 @@ final class MediaCapsuleModel: ObservableObject {
               items.indices.contains(item), items[item].enabled else { return }
         onSelected?(index, item)
     }
-
 }
 
-/// Matches Erika's shared HStack + regular interactive glass. Buttons retain
-/// independent hit targets, and the system owns the glass's response/animation.
+/// Shared HStack + system glass. Buttons retain independent hit targets and the
+/// system owns the material, specular highlights and interaction animation.
 @available(macOS 26.0, iOS 26.0, tvOS 26.0, *)
 struct MediaDetailActionCapsule: View {
     @ObservedObject var model: MediaCapsuleModel
@@ -68,17 +74,18 @@ struct MediaDetailActionCapsule: View {
         HStack(spacing: 0) {
             ForEach(model.actions) { action in
                 control(action)
+                    .frame(width: Self.itemWidth, height: Self.height)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .disabled(!action.enabled)
                     .accessibilityLabel(Text(verbatim: action.label))
                     .accessibilityIdentifier("media-detail-action-\(action.id)")
                     .help(action.label)
-
             }
         }
         .font(.system(size: 18, weight: .regular))
         .padding(.horizontal, Self.inset)
         .frame(height: Self.height)
-        .glassEffect(.regular.interactive(), in: Capsule())
+        .modifier(MediaCapsuleGlass())
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("作品操作"))
         .preferredColorScheme(.dark)
@@ -88,6 +95,14 @@ struct MediaDetailActionCapsule: View {
     }
 
     @ViewBuilder private func control(_ action: MediaCapsuleAction) -> some View {
+        #if os(macOS)
+        // SwiftUI's borderless `Menu` resolves to an AppKit pop-up button that
+        // ignores the slot frame and collapses to its ~20pt intrinsic width.
+        // The hosting view presents the NSMenu instead, so every slot stays a
+        // plain 44x44 button with the same hit target.
+        Button { model.activate(action.id) } label: { label(action) }
+            .buttonStyle(MediaCapsuleButtonStyle())
+        #else
         if let items = action.items {
             Menu {
                 ForEach(items) { item in
@@ -95,15 +110,12 @@ struct MediaDetailActionCapsule: View {
                         .disabled(!item.enabled)
                 }
             } label: { label(action) }
-            #if os(macOS)
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            #endif
             .buttonStyle(MediaCapsuleButtonStyle())
         } else {
             Button { model.activate(action.id) } label: { label(action) }
                 .buttonStyle(MediaCapsuleButtonStyle())
         }
+        #endif
     }
 
     private func label(_ action: MediaCapsuleAction) -> some View {
@@ -113,6 +125,22 @@ struct MediaDetailActionCapsule: View {
             .foregroundStyle(.primary)
             .frame(width: Self.itemWidth, height: Self.height)
             .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: action.selected)
+    }
+}
+
+/// macOS receives the system glass from `SwiftUIMediaActionGroupView`, which
+/// hosts this content inside a real `NSGlassEffectView` (interactive on
+/// macOS 27) so the capsule gets the native material, specular highlights and
+/// press animation instead of SwiftUI's flat macOS rendering. iOS/tvOS keep the
+/// shared SwiftUI glass.
+@available(macOS 26.0, iOS 26.0, tvOS 26.0, *)
+private struct MediaCapsuleGlass: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+        #else
+        content.glassEffect(.regular.interactive(), in: Capsule())
+        #endif
     }
 }
 

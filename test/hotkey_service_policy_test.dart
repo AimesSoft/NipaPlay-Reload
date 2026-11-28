@@ -43,4 +43,44 @@ void main() {
       );
     }
   });
+
+  test('hotkeys register only inside the player scope', () {
+    expect(
+      shouldRegisterPlayerHotkeys(
+        playerHotkeysAllowed: true,
+        hasActiveOverlay: false,
+        isEditableTextFocused: false,
+      ),
+      isTrue,
+    );
+  });
+
+  test('hotkeys stay unregistered outside the player scope', () {
+    expect(
+      shouldRegisterPlayerHotkeys(
+        playerHotkeysAllowed: false,
+        hasActiveOverlay: false,
+        isEditableTextFocused: false,
+      ),
+      isFalse,
+    );
+  });
+
+  test('overlays and focused text inputs suspend registration', () {
+    // 播放器作用域内：overlay 弹层或文本输入框聚焦时都不注册热键，
+    // 让按键直达 overlay 控件或输入框（例如弹幕偏移秒数输入）。
+    for (final blockedState in <List<bool>>[
+      <bool>[true, true],
+      <bool>[true, false],
+    ]) {
+      expect(
+        shouldRegisterPlayerHotkeys(
+          playerHotkeysAllowed: true,
+          hasActiveOverlay: blockedState[0],
+          isEditableTextFocused: blockedState[1],
+        ),
+        isFalse,
+      );
+    }
+  });
 }

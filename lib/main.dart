@@ -1309,7 +1309,6 @@ class MainPageState extends State<MainPage>
   PluginService? _pluginService;
 
   // 用于热键管理
-  bool _hotkeysAreRegistered = false;
   VideoPlayerState? _videoPlayerState;
   AppearanceSettingsProvider? _appearanceSettingsProvider;
 
@@ -1361,31 +1360,14 @@ class MainPageState extends State<MainPage>
       return;
     }
 
+    // 快捷键作用域：正在播放且当前位于播放页，或播放器已拆离到独立窗口。
+    // HotkeyService 内部以此为唯一注册依据，作用域之外一律不注册热键，
+    // 避免快捷键按键在首页等非播放页面被吞。
     final bool shouldBeRegistered = videoState.hasVideo &&
         (_selectedPageId == AppPageIds.video ||
             DesktopPlayerWindowService.instance.isPlayerDetached);
 
-    //debugPrint('[HotkeyManager] 最终判断: shouldBeRegistered=$shouldBeRegistered, currentlyRegistered=$_hotkeysAreRegistered');
-
-    if (shouldBeRegistered && !_hotkeysAreRegistered) {
-      //debugPrint('[HotkeyManager] 开始注册热键...');
-      HotkeyService().registerHotkeys().then((_) {
-        _hotkeysAreRegistered = true;
-        //debugPrint('[HotkeyManager] 热键注册完成');
-      }).catchError((e) {
-        //debugPrint('[HotkeyManager] 热键注册失败: $e');
-      });
-    } else if (!shouldBeRegistered && _hotkeysAreRegistered) {
-      //debugPrint('[HotkeyManager] 开始注销热键...');
-      HotkeyService().unregisterHotkeys().then((_) {
-        _hotkeysAreRegistered = false;
-        //debugPrint('[HotkeyManager] 热键注销完成');
-      }).catchError((e) {
-        //debugPrint('[HotkeyManager] 热键注销失败: $e');
-      });
-    } else {
-      //debugPrint('[HotkeyManager] 无需更改热键状态');
-    }
+    HotkeyService().setPlayerHotkeysAllowed(shouldBeRegistered);
   }
 
   void _onTabChange() {

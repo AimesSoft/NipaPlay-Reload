@@ -1587,7 +1587,15 @@ class MainFlutterWindow: NSWindow {
     )
 
     RegisterGeneratedPlugins(registry: flutterViewController)
-    
+
+    // desktop_drop installs a window-sized DropTarget into `vc.view`, which in
+    // this multiview engine is FlutterViewWrapper - the parent of FlutterView.
+    // Any AppKit view above a SwiftUI platform view swallows its clicks (even
+    // when hitTest returns nil), so the drop target is parked below FlutterView
+    // where it still receives file drags: AppKit resolves drop destinations
+    // from the registered dragged types rather than from hit testing.
+    parkDesktopDropTargetBelowFlutterView(flutterViewController)
+
     // 注册自定义安全书签插件
     SecurityBookmarkPlugin.register(with: flutterViewController.registrar(forPlugin: "SecurityBookmarkPlugin"))
     PasswordInputModePlugin.register(with: flutterViewController.registrar(forPlugin: "PasswordInputModePlugin"))
@@ -1604,6 +1612,27 @@ class MainFlutterWindow: NSWindow {
       if !self.isVisible {
         self.makeKeyAndOrderFront(nil)
       }
+    }
+  }
+
+  /// Keeps desktop_drop's full-window overlay from blocking platform views.
+  /// Remove once desktop_drop is upgraded past 0.6.1: 0.9.0 ships a different
+  /// macOS drop target, and the multiview wrapper layout must be rechecked.
+  private func parkDesktopDropTargetBelowFlutterView(
+    _ controller: FlutterViewController
+  ) {
+    guard let dropTargetClass = NSClassFromString("desktop_drop.DropTarget") else {
+      return
+    }
+    let root = controller.view
+    guard let flutterView = root.subviews.first(where: {
+      NSStringFromClass(type(of: $0)) == "FlutterView"
+    }) else {
+      return
+    }
+    for target in root.subviews where target.isKind(of: dropTargetClass) {
+      target.removeFromSuperview()
+      root.addSubview(target, positioned: .below, relativeTo: flutterView)
     }
   }
 

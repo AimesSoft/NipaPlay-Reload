@@ -365,6 +365,7 @@ class AppleNativeMediaActionGroup extends StatefulWidget {
 class _AppleNativeMediaActionGroupState
     extends State<AppleNativeMediaActionGroup> {
   MethodChannel? _channel;
+
   Map<String, Object?> get _parameters => {
         'actions': widget.actions.map((action) => action.parameters).toList(),
       };
@@ -425,6 +426,9 @@ class _AppleNativeMediaActionGroupState
       return SizedBox(width: width, height: 44);
     }
     final params = _parameters;
+    // macOS delivers real mouse input to AppKit platform views, so the native
+    // SwiftUI buttons own their own hit targets. iOS needs an eager recognizer
+    // so the single native view receives touches through UiKitView.
     return SizedBox(
       width: width,
       height: 44,

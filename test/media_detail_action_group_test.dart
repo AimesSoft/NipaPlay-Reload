@@ -1,5 +1,6 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart' as native;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show PlatformViewHitTestBehavior;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
@@ -108,13 +109,14 @@ void main() {
   });
 
   testWidgets(
-      'macOS leaves input to SwiftUI and reconnects native callbacks after returning',
+      'macOS lets the native capsule own input and reconnects callbacks after returning',
       (tester) async {
     native.PlatformInfo.setPlatformOverride(native.PlatformOverride.macos);
     messenger.setMockMethodCallHandler(capabilities, (_) async => true);
     await AppleNativeMediaControl.initialize();
     final creations = <Map>[];
     final channels = <MethodChannel>[];
+    final requests = <String>[];
     final callbacks = <int>[];
     messenger.setMockMethodCallHandler(SystemChannels.platform_views,
         (call) async {
@@ -124,7 +126,10 @@ void main() {
         final channel =
             MethodChannel('nipaplay/native_media_control_${args['id']}');
         channels.add(channel);
-        messenger.setMockMethodCallHandler(channel, (_) async => null);
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          requests.add(call.method);
+          return null;
+        });
       }
       return null;
     });
@@ -152,12 +157,24 @@ void main() {
     expect(find.byType(AppleNativeMediaControl), findsNothing);
     final platformView = find.byType(AppKitView);
     expect(platformView, findsOneWidget);
+    final appKitView = tester.widget<AppKitView>(platformView);
+    // The native SwiftUI capsule receives the mouse events itself, so the
+    // platform view must stay hit-testable and must not be wrapped in a
+    // Flutter-side input shim.
+    expect(appKitView.hitTestBehavior, PlatformViewHitTestBehavior.opaque);
     expect(
         tester
             .widgetList<IgnorePointer>(find.ancestor(
                 of: platformView, matching: find.byType(IgnorePointer)))
-            .every((widget) => !widget.ignoring),
-        isTrue);
+            .any((widget) => widget.ignoring),
+        isFalse);
+    // Flutter never synthesizes native activation on macOS.
+    await tester
+        .tapAt(tester.getRect(find.byType(AppleNativeMediaActionGroup)).center);
+    await tester.pumpAndSettle();
+    expect(requests, isNot(contains('activate')));
+    // Native-initiated callbacks reach Flutter independently.
+    callbacks.clear();
     await nativePress(channels.single, 1);
     await nativePress(channels.single, 2);
     await nativePress(channels.single, 99);

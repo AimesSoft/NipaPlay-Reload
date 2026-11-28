@@ -569,35 +569,42 @@ class _CinematicGradients extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 参考 Erika 播放器 details_wash 的三层遮罩结构：
+    // 1. 全局淡色蒙版（20%）——整体轻微压暗，保留背景大面积可见
+    // 2. 左侧横向渐变（左 62% 区域，56% 最大不透明度，向右淡出）——海报/标题区可读性
+    // 3. 底部竖向渐变（下 42% 区域，88% 最大不透明度，向上淡出）——剧集轨道可读性
+    // 右上角仅受全局 20% 蒙版影响，背景图清晰可见。
     return const Stack(
       fit: StackFit.expand,
       children: [
+        // 全局淡色蒙版
+        ColoredBox(color: Color(0x33080B12)),
+        // 左侧横向渐变：左 56% → 62% 处淡出至透明，右侧不受影响
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              stops: [0, 0.42, 0.75, 1],
+              stops: [0, 0.62, 1],
               colors: [
-                Color(0xF2080B12),
-                Color(0xC7080B12),
-                Color(0x30080B12),
-                Color(0x26080B12),
+                Color(0x8F080B12),
+                Color(0x00080B12),
+                Color(0x00080B12),
               ],
             ),
           ),
         ),
+        // 底部竖向渐变：58% 以上透明 → 底部 88%
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: [0, 0.48, 0.75, 1],
+              stops: [0, 0.58, 1],
               colors: [
-                Color(0x5C080B12),
-                Color(0x10080B12),
-                Color(0xC7080B12),
-                Color(0xFF080B12),
+                Color(0x00080B12),
+                Color(0x00080B12),
+                Color(0xE0080B12),
               ],
             ),
           ),
