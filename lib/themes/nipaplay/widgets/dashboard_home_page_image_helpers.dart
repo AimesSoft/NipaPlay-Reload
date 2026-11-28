@@ -1,142 +1,144 @@
 part of dashboard_home_page;
 
-extension DashboardHomePageImageHelpers on _DashboardHomePageState {
-  Future<String?> _getHighQualityImage(
-      int animeId, BangumiAnime animeDetail) async {
+// The same entry is shared by pending requests and successful lookups.
+// Missing covers expire, while temporary failures can retry on the next build.
+final _dashboardCovers = <(String, String), Future<String?>>{};
+
+Future<String?> resolveDashboardCover(
+    int animeId, BangumiAnime animeDetail) async {
+  try {
+    // 优先尝试本地缓存中的 bangumiId/bangumiUrl，避免再请求弹弹play
+    String? cachedBangumiId;
     try {
-      // 优先尝试本地缓存中的 bangumiId/bangumiUrl，避免再请求弹弹play
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final cacheKey = 'bangumi_detail_$animeId';
-        final String? cachedString = prefs.getString(cacheKey);
-        if (cachedString != null) {
-          final data = json.decode(cachedString);
-          final animeData = data['animeDetail'] as Map<String, dynamic>?;
-          final bangumi = data['bangumi'] as Map<String, dynamic>?;
-          String? cachedBangumiId;
-          // 1) 直接字段
-          if (bangumi != null &&
-              bangumi['bangumiId'] != null &&
-              bangumi['bangumiId'].toString().isNotEmpty) {
-            cachedBangumiId = bangumi['bangumiId'].toString();
-          }
-          // 2) 从 bangumiUrl 解析
-          if (cachedBangumiId == null) {
-            final String? bangumiUrl = (bangumi?['bangumiUrl'] as String?) ??
-                (animeData?['bangumiUrl'] as String?);
-            if (bangumiUrl != null &&
-                bangumiUrl.contains('bangumi.tv/subject/')) {
-              final RegExp regex = RegExp(r'bangumi\.tv/subject/(\d+)');
-              final match = regex.firstMatch(bangumiUrl);
-              if (match != null) {
-                cachedBangumiId = match.group(1);
-              }
-            }
-          }
-          if (cachedBangumiId != null && cachedBangumiId.isNotEmpty) {
-            final bangumiImageUrl =
-                await _getBangumiHighQualityImage(cachedBangumiId);
-            if (bangumiImageUrl != null && bangumiImageUrl.isNotEmpty) {
-              return bangumiImageUrl;
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'bangumi_detail_$animeId';
+      final String? cachedString = prefs.getString(cacheKey);
+      if (cachedString != null) {
+        final data = json.decode(cachedString);
+        final animeData = data['animeDetail'] as Map<String, dynamic>?;
+        final bangumi = data['bangumi'] as Map<String, dynamic>?;
+        // 1) 直接字段
+        if (bangumi != null &&
+            bangumi['bangumiId'] != null &&
+            bangumi['bangumiId'].toString().isNotEmpty) {
+          cachedBangumiId = bangumi['bangumiId'].toString();
+        }
+        // 2) 从 bangumiUrl 解析
+        if (cachedBangumiId == null) {
+          final String? bangumiUrl = (bangumi?['bangumiUrl'] as String?) ??
+              (animeData?['bangumiUrl'] as String?);
+          if (bangumiUrl != null &&
+              bangumiUrl.contains('bangumi.tv/subject/')) {
+            final RegExp regex = RegExp(r'bangumi\.tv/subject/(\d+)');
+            final match = regex.firstMatch(bangumiUrl);
+            if (match != null) {
+              cachedBangumiId = match.group(1);
             }
           }
         }
-      } catch (_) {}
-
-      // 首先尝试从弹弹play获取bangumi ID
-      String? bangumiId = await _getBangumiIdFromDandanplay(animeId);
-
-      if (bangumiId != null && bangumiId.isNotEmpty) {
-        // 如果获取到bangumi ID，尝试从Bangumi API获取高清图片
-        final bangumiImageUrl = await _getBangumiHighQualityImage(bangumiId);
-        if (bangumiImageUrl != null && bangumiImageUrl.isNotEmpty) {
-          return bangumiImageUrl;
+        if (cachedBangumiId != null && cachedBangumiId.isNotEmpty) {
+          final bangumiImageUrl =
+              await _getBangumiHighQualityImage(cachedBangumiId);
+          if (bangumiImageUrl != null && bangumiImageUrl.isNotEmpty) {
+            return bangumiImageUrl;
+          }
         }
       }
+    } catch (_) {}
 
-      // 如果Bangumi API失败，回退到弹弹play的图片
-      if (animeDetail.imageUrl.isNotEmpty) {
-        return animeDetail.imageUrl;
+    // 首先尝试从弹弹play获取bangumi ID
+    String? bangumiId = await _getBangumiIdFromDandanplay(animeId);
+
+    if (bangumiId != null &&
+        bangumiId.isNotEmpty &&
+        bangumiId != cachedBangumiId) {
+      // 如果获取到bangumi ID，尝试从Bangumi API获取高清图片
+      final bangumiImageUrl = await _getBangumiHighQualityImage(bangumiId);
+      if (bangumiImageUrl != null && bangumiImageUrl.isNotEmpty) {
+        return bangumiImageUrl;
       }
+    }
 
-      return null;
-    } catch (_) {
-      // 出错时回退到弹弹play的图片
+    // 如果Bangumi API失败，回退到弹弹play的图片
+    if (animeDetail.imageUrl.isNotEmpty) {
       return animeDetail.imageUrl;
     }
+
+    return null;
+  } catch (_) {
+    // 出错时回退到弹弹play的图片
+    return animeDetail.imageUrl;
   }
+}
 
-  // 从弹弹play API获取bangumi ID
-  Future<String?> _getBangumiIdFromDandanplay(int animeId) async {
-    try {
-      // 使用弹弹play的番剧详情API获取bangumi ID
-      final Map<String, dynamic> result =
-          await DandanplayService.getBangumiDetails(animeId);
+// 从弹弹play API获取bangumi ID
+Future<String?> _getBangumiIdFromDandanplay(int animeId) async {
+  try {
+    // 使用弹弹play的番剧详情API获取bangumi ID
+    final Map<String, dynamic> result =
+        await DandanplayService.getBangumiDetails(animeId);
 
-      if (result['success'] == true && result['bangumi'] != null) {
-        final bangumi = result['bangumi'] as Map<String, dynamic>;
+    if (result['success'] == true && result['bangumi'] != null) {
+      final bangumi = result['bangumi'] as Map<String, dynamic>;
 
-        // 检查是否有bangumiUrl，从中提取ID
-        final String? bangumiUrl = bangumi['bangumiUrl'] as String?;
-        if (bangumiUrl != null && bangumiUrl.contains('bangumi.tv/subject/')) {
-          // 从URL中提取bangumi ID: https://bangumi.tv/subject/123456
-          final RegExp regex = RegExp(r'bangumi\.tv/subject/(\d+)');
-          final match = regex.firstMatch(bangumiUrl);
-          if (match != null) {
-            final bangumiId = match.group(1);
-            return bangumiId;
-          }
-        }
-
-        // 也检查是否直接有bangumiId字段
-        final dynamic directBangumiId = bangumi['bangumiId'];
-        if (directBangumiId != null) {
-          final String bangumiIdStr = directBangumiId.toString();
-          if (bangumiIdStr.isNotEmpty && bangumiIdStr != '0') {
-            return bangumiIdStr;
-          }
+      // 检查是否有bangumiUrl，从中提取ID
+      final String? bangumiUrl = bangumi['bangumiUrl'] as String?;
+      if (bangumiUrl != null && bangumiUrl.contains('bangumi.tv/subject/')) {
+        // 从URL中提取bangumi ID: https://bangumi.tv/subject/123456
+        final RegExp regex = RegExp(r'bangumi\.tv/subject/(\d+)');
+        final match = regex.firstMatch(bangumiUrl);
+        if (match != null) {
+          final bangumiId = match.group(1);
+          return bangumiId;
         }
       }
 
-      return null;
-    } catch (_) {
-      return null;
+      // 也检查是否直接有bangumiId字段
+      final dynamic directBangumiId = bangumi['bangumiId'];
+      if (directBangumiId != null) {
+        final String bangumiIdStr = directBangumiId.toString();
+        if (bangumiIdStr.isNotEmpty && bangumiIdStr != '0') {
+          return bangumiIdStr;
+        }
+      }
     }
+
+    return null;
+  } catch (_) {
+    return null;
   }
+}
 
-  // 从Bangumi API获取高清图片
-  Future<String?> _getBangumiHighQualityImage(String bangumiId) async {
+Future<String?> _getBangumiHighQualityImage(String bangumiId) async {
+  final server = await NetworkSettings.getBangumiServer();
+  final key = (server, bangumiId);
+  return _dashboardCovers.putIfAbsent(key, () async {
+    final url = '$server/v0/subjects/$bangumiId/image?type=large';
     try {
-      // 使用Bangumi API的图片接口获取large尺寸的图片
-      // GET /v0/subjects/{subject_id}/image?type=large
-      final bangumiServer = await NetworkSettings.getBangumiServer();
-      final String imageApiUrl =
-          '$bangumiServer/v0/subjects/$bangumiId/image?type=large';
-
       final response = await http.head(
-        WebRemoteAccessService.proxyUri(Uri.parse(imageApiUrl)),
-        headers: {
-          'User-Agent': 'NipaPlay/1.0',
-        },
+        WebRemoteAccessService.proxyUri(Uri.parse(url)),
+        headers: {'User-Agent': 'NipaPlay/1.0'},
       ).timeout(const Duration(seconds: 5));
-
+      if (response.statusCode == 200) return url;
       if (response.statusCode == 302) {
-        // Bangumi API返回302重定向到实际图片URL
-        final String? location = response.headers['location'];
+        final location = response.headers['location'];
         if (location != null && location.isNotEmpty) {
-          return location;
+          return Uri.parse(url).resolve(location).toString();
         }
-      } else if (response.statusCode == 200) {
-        // 有些情况下可能直接返回200
-        return imageApiUrl;
       }
-
-      return null;
+      if (response.statusCode == 404 || response.statusCode == 410) {
+        Timer(const Duration(minutes: 10), () => _dashboardCovers.remove(key));
+        return null;
+      }
     } catch (_) {
-      return null;
+      // A timeout or transport error can be retried on the next request.
     }
-  }
+    _dashboardCovers.remove(key);
+    return null;
+  });
+}
 
+extension DashboardHomePageImageHelpers on _DashboardHomePageState {
   // 升级为高清图片（后台异步处理）
   Future<void> _upgradeToHighQualityImages(
     List<dynamic> candidates,
@@ -297,7 +299,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
               // 获取高清图片
               debugPrint('[Bangumi] 拉取高清封面(本地): animeId=$animeId');
               highQualityImageUrl =
-                  await _getHighQualityImage(animeId, animeDetail);
+                  await resolveDashboardCover(animeId, animeDetail);
               debugPrint(
                   '[Bangumi] 高清封面结果(本地): animeId=$animeId url=$highQualityImageUrl');
 
@@ -354,7 +356,7 @@ extension DashboardHomePageImageHelpers on _DashboardHomePageState {
               final bangumiService = BangumiService.instance;
               final detail = await bangumiService.getAnimeDetails(animeId);
               debugPrint('[Bangumi] 拉取高清封面(弹弹play): animeId=$animeId');
-              hqUrl = await _getHighQualityImage(animeId, detail);
+              hqUrl = await resolveDashboardCover(animeId, detail);
               debugPrint(
                   '[Bangumi] 高清封面结果(弹弹play): animeId=$animeId url=$hqUrl');
               debugPrint('[Dandan封面] Bangumi高清结果: animeId=$animeId url=$hqUrl');

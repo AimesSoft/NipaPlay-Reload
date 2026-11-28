@@ -113,6 +113,21 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
   set activeSubtitleTracks(List<int> value) =>
       _delegate.activeSubtitleTracks = value;
 
+  /// Media Kit confirms its requested subtitle asynchronously via mpv.
+  Listenable? get subtitleTrackChanges {
+    final delegate = _delegate;
+    return delegate is MediaKitPlayerAdapter
+        ? delegate.subtitleTrackChanges
+        : null;
+  }
+
+  Future<void> removeNativeSubtitleSidecar(String id) async {
+    final delegate = _delegate;
+    if (delegate is MediaKitPlayerAdapter) {
+      await delegate.removeNativeSubtitleSidecar(id);
+    }
+  }
+
   List<int> get activeAudioTracks => _delegate.activeAudioTracks;
   set activeAudioTracks(List<int> value) => _delegate.activeAudioTracks = value;
 

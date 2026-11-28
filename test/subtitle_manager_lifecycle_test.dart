@@ -108,6 +108,36 @@ void main() {
     expect(native.poisoned, isFalse);
   });
 
+  test(
+      'MDK detaches the external subtitle stream before selecting an embedded track',
+      () async {
+    final dir = await Directory.systemTemp.createTemp('mdk-subtitle-switch-');
+    addTearDown(() => dir.delete(recursive: true));
+    final sup = await File('${dir.path}/track.sup').writeAsBytes([0]);
+    final native = _StoppingMdk();
+    final manager = SubtitleManager(player: Player.withDelegate(native));
+    addTearDown(manager.dispose);
+    await manager.addExternalSubtitleToStack(sup.path);
+    native.calls.clear();
+    await manager.selectEmbeddedSubtitleTrack(1);
+    expect(native.calls, ['media:', 'tracks:[1]']);
+  });
+
+  test('removing an active MDK subtitle unloads its auxiliary media once',
+      () async {
+    final dir = await Directory.systemTemp.createTemp('mdk-subtitle-remove-');
+    addTearDown(() => dir.delete(recursive: true));
+    final sup = await File('${dir.path}/track.sup').writeAsBytes([0]);
+    final native = _StoppingMdk();
+    final manager = SubtitleManager(player: Player.withDelegate(native));
+    addTearDown(manager.dispose);
+    await manager.addExternalSubtitleToStack(sup.path);
+    native.calls.clear();
+    await manager.removeExternalSubtitleFromStack(sup.path);
+    await manager.removeExternalSubtitleFromStack(sup.path);
+    expect(native.calls.where((e) => e == 'media:'), hasLength(1));
+  });
+
   test('clearing a mixed stack still unloads its native external subtitle',
       () async {
     final dir = await Directory.systemTemp.createTemp('mdk-reopen-mixed-');
