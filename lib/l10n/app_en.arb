@@ -1,4 +1,5 @@
 {
+  "externalPlayerLaunchFailed": "Could not start the external player. Check its path and version. Trying the built-in player instead.",
   "@@locale": "en",
   "appTitle": "NipaPlay",
   "tabHome": "Home",

@@ -127,6 +127,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         if (historyItem != null) {
           // 从数据库找到的剧集，包含完整的历史信息
           final requested = PlayableItem(
+            mediaLibraryScope: _playbackDetailContext?.mediaLibraryScope,
             videoPath: historyItem.filePath,
             historyItem: historyItem,
             detailContext: _playbackDetailContext,
@@ -146,8 +147,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final playbackSession =
                   await JellyfinService.instance.createPlaybackSession(
                 itemId: episodeId,
-                startPositionMs: resolvedHistory.lastPosition > 0
-                    ? resolvedHistory.lastPosition
+                startPositionMs: resolvedHistory.resumePosition > 0
+                    ? resolvedHistory.resumePosition
                     : null,
               );
               debugPrint('[上一话] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
@@ -156,6 +157,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                mediaLibraryScope: selected.mediaLibraryScope,
                 playbackDetailContext: selected.detailContext,
                 actualPlayUrl: selected.actualPlayUrl,
                 episodeFileSelectionHandled: true,
@@ -175,8 +177,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final playbackSession =
                   await EmbyService.instance.createPlaybackSession(
                 itemId: episodeId,
-                startPositionMs: resolvedHistory.lastPosition > 0
-                    ? resolvedHistory.lastPosition
+                startPositionMs: resolvedHistory.resumePosition > 0
+                    ? resolvedHistory.resumePosition
                     : null,
               );
               debugPrint('[上一话] 获取Emby播放会话: ${playbackSession.streamUrl}');
@@ -185,6 +187,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                mediaLibraryScope: selected.mediaLibraryScope,
                 playbackDetailContext: selected.detailContext,
                 actualPlayUrl: selected.actualPlayUrl,
                 episodeFileSelectionHandled: true,
@@ -199,6 +202,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             await initializePlayer(
               resolvedHistory.filePath,
               historyItem: resolvedHistory,
+              mediaLibraryScope: selected.mediaLibraryScope,
               playbackDetailContext: selected.detailContext,
               actualPlayUrl: selected.actualPlayUrl,
               episodeFileSelectionHandled: true,
@@ -403,9 +407,11 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     final selected = await EpisodeFileSelectionService.select(
       _context!,
       PlayableItem(
+        mediaLibraryScope: _playbackDetailContext?.mediaLibraryScope,
         videoPath: episode.videoPath,
         historyItem: historyItem,
-        animeId: historyItem?.animeId ?? episode.animeId ?? detailContext?.animeId,
+        animeId:
+            historyItem?.animeId ?? episode.animeId ?? detailContext?.animeId,
         episodeId: historyItem?.episodeId ?? episode.episodeId,
         actualPlayUrl: episode.actualPlayUrl,
         playbackSession: episode.playbackSession,
@@ -438,7 +444,9 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
           );
     } else if (MediaSourceUtils.isNewSmbPath(episode.videoPath)) {
       actualPlayUrl = episode.actualPlayUrl ??
-          MediaSourceUtils.resolveSmbPathToUrl(episode.videoPath);
+          await MediaSourceUtils.resolveSmbPathToUrlInitialized(
+            episode.videoPath,
+          );
     }
 
     // 当 historyItem 未匹配到番剧（animeId 为空）但当前播放上下文已识别时，
@@ -456,6 +464,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     }
 
     final playableItem = PlayableItem(
+      mediaLibraryScope: _playbackDetailContext?.mediaLibraryScope,
       videoPath: episode.videoPath,
       title: historyItem?.animeName ?? detailContext?.title ?? episode.subtitle,
       subtitle: historyItem?.episodeTitle ?? episode.title,
@@ -578,6 +587,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
         if (historyItem != null) {
           // 从数据库找到的剧集，包含完整的历史信息
           final requested = PlayableItem(
+            mediaLibraryScope: _playbackDetailContext?.mediaLibraryScope,
             videoPath: historyItem.filePath,
             historyItem: historyItem,
             detailContext: _playbackDetailContext,
@@ -597,8 +607,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final playbackSession =
                   await JellyfinService.instance.createPlaybackSession(
                 itemId: episodeId,
-                startPositionMs: resolvedHistory.lastPosition > 0
-                    ? resolvedHistory.lastPosition
+                startPositionMs: resolvedHistory.resumePosition > 0
+                    ? resolvedHistory.resumePosition
                     : null,
               );
               debugPrint('[下一话] 获取Jellyfin播放会话: ${playbackSession.streamUrl}');
@@ -607,6 +617,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                mediaLibraryScope: selected.mediaLibraryScope,
                 playbackDetailContext: selected.detailContext,
                 actualPlayUrl: selected.actualPlayUrl,
                 episodeFileSelectionHandled: true,
@@ -626,8 +637,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
               final playbackSession =
                   await EmbyService.instance.createPlaybackSession(
                 itemId: episodeId,
-                startPositionMs: resolvedHistory.lastPosition > 0
-                    ? resolvedHistory.lastPosition
+                startPositionMs: resolvedHistory.resumePosition > 0
+                    ? resolvedHistory.resumePosition
                     : null,
               );
               debugPrint('[下一话] 获取Emby播放会话: ${playbackSession.streamUrl}');
@@ -636,6 +647,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
                 resolvedHistory.filePath,
                 historyItem: resolvedHistory,
                 playbackSession: playbackSession,
+                mediaLibraryScope: selected.mediaLibraryScope,
                 playbackDetailContext: selected.detailContext,
                 actualPlayUrl: selected.actualPlayUrl,
                 episodeFileSelectionHandled: true,
@@ -650,6 +662,7 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
             await initializePlayer(
               resolvedHistory.filePath,
               historyItem: resolvedHistory,
+              mediaLibraryScope: selected.mediaLibraryScope,
               playbackDetailContext: selected.detailContext,
               actualPlayUrl: selected.actualPlayUrl,
               episodeFileSelectionHandled: true,
@@ -724,7 +737,8 @@ extension VideoPlayerStateNavigation on VideoPlayerState {
     }
     if (MediaSourceUtils.isNewSmbPath(filePath)) {
       try {
-        final url = MediaSourceUtils.resolveSmbPathToUrl(filePath);
+        final url =
+            await MediaSourceUtils.resolveSmbPathToUrlInitialized(filePath);
         if (url != null && url.isNotEmpty) return url;
       } catch (_) {}
     }

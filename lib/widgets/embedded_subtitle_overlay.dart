@@ -16,12 +16,9 @@ class EmbeddedSubtitleOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<VideoPlayerState>(
       builder: (context, videoState, _) {
-        if (!videoState.embeddedSubtitleOverlayMode) {
-          return const SizedBox.shrink();
-        }
-        if (videoState.isKernelRenderedExternalAssActive) {
-          // 外挂 ASS 由内核 libass 按脚本样式渲染（\pos 定位/彩色注解），
-          // sub-text 纯文本块会把它压成白色居中文字，必须整层退位。
+        if (!videoState.shouldRenderEmbeddedSubtitleOverlay) {
+          // External ASS keeps libass styling; app-rendered SRT/VTT already
+          // has its own overlay. Neither should also appear in this block.
           return const SizedBox.shrink();
         }
         if (videoState.shouldHideSubtitlesForScreenshot) {

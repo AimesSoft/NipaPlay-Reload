@@ -1,7 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nipaplay/widgets/media_server_network_image.dart';
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart'
@@ -25,6 +24,10 @@ class ImageCacheManager {
   /// 导致读取到半截文件、解码失败（表现为背景图闪黑/不显示）。
   final Map<String, Future<void>> _diskWrites = {};
   final Map<(String, bool, bool), Future<Uint8List>> _byteLoads = {};
+
+  /// Shared encoded-byte disk cache, also used by SVG logos. Raster artwork
+  /// uses loadImage so different decode sizes still share these original bytes.
+  Future<Uint8List> loadImageBytes(String url) => _loadBytes(url, false, true);
 
   Future<Uint8List> _loadBytes(
       String url, bool forceRefresh, bool cacheOnDisk) async {
@@ -233,17 +236,26 @@ class ImageCacheManager {
     () async {
       try {
         // Different decoded sizes share only the in-flight original bytes.
+        Future<ui.Image> decode(Uint8List bytes) async {
+          final codec = await ui.instantiateImageCodec(bytes,
+              targetWidth: targetWidth, targetHeight: targetHeight);
+          try {
+            return (await codec.getNextFrame()).image;
+          } finally {
+            codec.dispose();
+          }
+        }
+
         final bytes = await _loadBytes(url, forceRefresh, cacheOnDisk);
-        final codec = await ui.instantiateImageCodec(
-          bytes,
-          targetWidth: targetWidth,
-          targetHeight: targetHeight,
-        );
         late final ui.Image uiImage;
         try {
-          uiImage = (await codec.getNextFrame()).image;
-        } finally {
-          codec.dispose();
+          uiImage = await decode(bytes);
+        } catch (_) {
+          // A truncated/old disk entry otherwise fails forever: ordinary UI
+          // retries reload the same bytes. Repair it once, without refreshing
+          // healthy images merely because their source resolution is small.
+          if (forceRefresh || !cacheOnDisk || kIsWeb) rethrow;
+          uiImage = await decode(await _loadBytes(url, true, cacheOnDisk));
         }
 
         // 存入内存缓存
@@ -441,8 +453,9 @@ class ImageCacheManager {
       final next = count - 1;
       if (next <= 0) {
         _refCount.remove(key);
-        // 标记为久未访问，让字节预算与定期清理优先处理它。
-        _lastAccessed[key] = DateTime.now().subtract(const Duration(hours: 1));
+        // Leaving a page is a recent use, not an hour-old entry. Retain it
+        // for ordinary LRU/idle expiry so navigating back can hit memory.
+        _lastAccessed[key] = DateTime.now();
       } else {
         _refCount[key] = next;
       }

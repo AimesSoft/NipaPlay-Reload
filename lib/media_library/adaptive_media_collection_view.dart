@@ -1,3 +1,4 @@
+import 'package:nipaplay/themes/nipaplay/widgets/media_detail_poster.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -830,7 +831,10 @@ class _AdaptiveMediaCollectionViewState
     final result = await ThemedAnimeDetail.show(
       context,
       item.animeId!,
+      mediaLibraryScope: widget.source.mediaLibraryScope,
       sharedSummary: summary,
+      posterHeroTag: mediaLibraryPosterHeroTag(widget.source, item.animeId!),
+      posterImageUrl: summary.imageUrl,
       sharedSourceLabel: _sourceLabel,
       sharedEpisodeLoader: () async => episodes
           .map(
@@ -1242,6 +1246,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
         final detail = details[item.animeId];
         return CupertinoAnimeCard(
           key: _itemKey(item),
+          posterHeroTag: mediaLibraryPosterHeroTag(source, item.animeId!),
           title: _AdaptiveMediaCollectionViewState._title(item, detail),
           imageUrl: _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
           episodeLabel: _episodeLabel(item.animeId!),
@@ -1334,6 +1339,7 @@ class AdaptiveMediaCollectionItems extends material.StatelessWidget {
         final detail = details[item.animeId];
         return HorizontalAnimeCard(
           key: _itemKey(item),
+          posterHeroTag: mediaLibraryPosterHeroTag(source, item.animeId!),
           imageUrl: _AdaptiveMediaCollectionViewState._imageUrl(item, detail),
           title: _AdaptiveMediaCollectionViewState._title(item, detail),
           rating: detail?.rating,

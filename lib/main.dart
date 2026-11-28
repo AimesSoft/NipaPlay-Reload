@@ -58,7 +58,6 @@ import 'package:nipaplay/providers/ui_theme_provider.dart';
 import 'package:nipaplay/providers/remote_access_settings_provider.dart';
 import 'package:nipaplay/providers/jellyfin_transcode_provider.dart';
 import 'package:nipaplay/providers/emby_transcode_provider.dart';
-import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/plugins/plugin_service.dart';
 import 'package:nipaplay/src/rust/api/startup_commands.dart'
     as startup_commands;
@@ -591,12 +590,13 @@ void main(List<String> args) async {
       final startupPosition =
           await DesktopStartupWindowPreferences.loadPosition();
       final startupSize = await DesktopStartupWindowPreferences.loadSize();
-      final transparentWindowBackground = Platform
-              .environment['NIPAPLAY_DISABLE_WINDOWS_TRANSPARENT_BACKGROUND'] !=
-          '1';
+      // The macOS runner manages transparency for native video underlays.
+      final transparentWindowBackground = !Platform.isMacOS &&
+          Platform.environment['NIPAPLAY_DISABLE_WINDOWS_TRANSPARENT_BACKGROUND'] !=
+              '1';
       WindowOptions windowOptions = WindowOptions(
         skipTaskbar: false,
-        titleBarStyle: TitleBarStyle.hidden,
+        titleBarStyle: Platform.isMacOS ? null : TitleBarStyle.hidden,
         backgroundColor:
             transparentWindowBackground ? Colors.transparent : null,
         title: "NipaPlay",
@@ -615,6 +615,13 @@ void main(List<String> args) async {
         }
         await windowManager.show();
         await windowManager.focus();
+        if (Platform.isMacOS) {
+          await WidgetsBinding.instance.waitUntilFirstFrameRasterized.timeout(
+            const Duration(seconds: 2),
+            onTimeout: () {},
+          );
+          await windowManager.setOpacity(1);
+        }
       });
     }
 
@@ -648,7 +655,6 @@ void main(List<String> args) async {
             ChangeNotifierProvider(create: (_) => DeveloperOptionsProvider()),
             ChangeNotifierProvider(create: (_) => AppearanceSettingsProvider()),
             ChangeNotifierProvider(create: (_) => DownloaderSettingsProvider()),
-            ChangeNotifierProvider(create: (_) => LabsSettingsProvider()),
             ChangeNotifierProvider(
                 create: (_) => RemoteAccessSettingsProvider()),
             ChangeNotifierProvider(create: (_) => PluginService()),
@@ -986,6 +992,7 @@ class _NipaPlayAppState extends State<NipaPlayApp> with WidgetsBindingObserver {
       return;
     }
     try {
+      await windowManager.setSkipTaskbar(false);
       final isMinimized = await windowManager.isMinimized();
       if (isMinimized) {
         await windowManager.restore();

@@ -1,63 +1,27 @@
 #!/usr/bin/env bash
-# Build the package-pinned Erika runtime on the same distro as the Flutter app.
+# Fetch the official Erika Linux runtime that matches the package version.
+# The bundled variant embeds FFmpeg and the subtitle stack (LGPL profile) and is
+# built on Ubuntu 22.04 / glibc 2.35, so it runs on that baseline and newer.
 set -euo pipefail
 project_root=$(cd "$(dirname "$0")/.." && pwd)
 output=${1:-"$project_root/build/erika-linux-runtime"}
-mkdir -p "$output"
-output=$(cd "$output" && pwd)
-erika_commit=9afcdd88f1afcd26d8d5c07d3e37b6fbe77e8fd4
-nvcodec_commit=e844e5b26f46bb77479f063029595293aa8f812d
-vulkan_headers_commit=b379292b2ab6df5771ba9870d53cf8b2c9295daf
+erika_version=0.3.8
+case "$(uname -m)" in
+  x86_64|amd64) arch=x64; sha256=269d3ef114905ba2520ad4dbec41e5539f42eeffd8b99c4e47543089df19e19f ;;
+  aarch64|arm64) arch=arm64; sha256=fa9d75186f7f07aaeeaf00eb804869d793be543d4ebdc3e0b842ddc87eb89f78 ;;
+  *) echo "Unsupported Linux architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+name="erika-capi-linux-${arch}-bundled"
 work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/nipaplay-erika.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 
-git clone --depth 1 --branch v0.3.2 https://github.com/AimesSoft/liberika.git "$work/Erika"
-test "$(git -C "$work/Erika" rev-parse HEAD)" = "$erika_commit"
-git -C "$work/Erika" apply "$project_root/.github/patches/erika-linux-native-deps.patch"
-
-git clone --depth 1 --branch n13.0.19.0 https://github.com/FFmpeg/nv-codec-headers.git "$work/nv-codec-headers"
-test "$(git -C "$work/nv-codec-headers" rev-parse HEAD)" = "$nvcodec_commit"
-make -C "$work/nv-codec-headers" install PREFIX="$work/nvcodec"
-export ERIKA_LINUX_PKG_CONFIG_DIRS="$work/nvcodec/lib/pkgconfig:$(pkg-config --variable pc_path pkg-config)"
-# FFmpeg 8 needs newer Vulkan declarations than Ubuntu 22.04/24.04 ship.
-# The Vulkan loader still comes from the target desktop system.
-git clone --depth 1 --branch v1.3.290 https://github.com/KhronosGroup/Vulkan-Headers.git "$work/Vulkan-Headers"
-test "$(git -C "$work/Vulkan-Headers" rev-parse HEAD)" = "$vulkan_headers_commit"
-export CPATH="$work/Vulkan-Headers/include${CPATH:+:$CPATH}"
-export ERIKA_USE_SYSTEM_LIBS=0
-# CMake static dependencies are linked into the shared Erika runtime.
-export CFLAGS="${CFLAGS:-} -fPIC"
-export CXXFLAGS="${CXXFLAGS:-} -fPIC"
-export CARGO_TARGET_DIR="$work/target"
-# Keep native and Rust builds within the memory budget of both hosted runners.
-export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-2}
-cd "$work/Erika"
-cargo run --locked -p xtask -- deps build --all --profile lgpl --jobs "${ERIKA_BUILD_JOBS:-4}"
-cargo rustc --locked --release -p erika_capi --lib -- \
-  -C link-arg=-Wl,-soname,liberika_capi.so -C link-arg=-Wl,-z,defs \
-  -C link-arg=-lva -C link-arg=-lva-drm -C link-arg=-lva-x11 \
-  -C link-arg=-ldrm -C link-arg=-ldl -C link-arg=-lm
-
-# Use Erika's own packaging to include every dependency/asset license.
-GITHUB_SHA="$erika_commit" GITHUB_REF_NAME=v0.3.2 ERIKA_NATIVE_PROFILE=lgpl \
-  bash packaging/bundle.sh erika-linux "$work/erika-linux.zip" "$CARGO_TARGET_DIR/release/liberika_capi.so"
-unzip -q "$work/erika-linux.zip" -d "$work/bundle"
+curl -fsSL --retry 3 -o "$work/$name.zip" \
+  "https://github.com/AimesSoft/liberika/releases/download/v${erika_version}/${name}.zip"
+echo "$sha256  $work/$name.zip" | sha256sum -c -
+unzip -q "$work/$name.zip" -d "$work"
+rm -rf "$output"
 mkdir -p "$output"
-cp -a "$work/bundle/erika-linux/." "$output/"
-cp third_party/src/fribidi-1.0.16/COPYING "$output/licenses/LICENSE.FriBidi"
-cp -a "$work/Vulkan-Headers/LICENSES" "$output/licenses/Vulkan-Headers"
-cp "$work/Vulkan-Headers/LICENSE.md" "$output/licenses/Vulkan-Headers/"
-python3 - "$work/nv-codec-headers/include/ffnvcodec" "$output/licenses/LICENSE.nv-codec-headers" <<'PYLICENSE'
-from pathlib import Path
-import sys
-headers, notice = map(Path, sys.argv[1:])
-notice.write_text("\n\n".join(
-    p.name + "\n" + p.read_text().split("*/", 1)[0] + "*/"
-    for p in sorted(headers.glob("*.h"))
-) + "\n")
-PYLICENSE
-printf 'erika_ref=v0.3.2\nerika_source=%s\nnvcodec_source=%s\nvulkan_headers_source=%s\nnative_deps_patch=%s\n' \
-  "$erika_commit" "$nvcodec_commit" "$vulkan_headers_commit" \
-  "$(sha256sum "$project_root/.github/patches/erika-linux-native-deps.patch" | cut -d ' ' -f1)" \
-  >> "$output/MANIFEST.txt"
+cp -a "$work/$name/." "$output/"
+# Only the shared runtime is loaded by the Flutter plugin.
+rm -f "$output/lib/liberika_capi.a"
 ldd "$output/lib/liberika_capi.so"

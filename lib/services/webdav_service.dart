@@ -12,6 +12,7 @@ import 'package:xml/xml.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:nipaplay/models/media_identity.dart';
+import 'package:nipaplay/services/media_library_scan.dart';
 import 'package:nipaplay/services/process_memory_cache.dart';
 import 'package:nipaplay/utils/network_address_utils.dart';
 import 'package:nipaplay/src/rust/api/webdav_multistatus.dart' as rust_webdav;
@@ -278,6 +279,12 @@ class WebDAVService {
     return _addressReachabilityById[id];
   }
 
+  /// 未检测不算失败；仅在最近一次检测中两侧都失败时返回 true。
+  bool allAddressesUnreachable(String connectionId) {
+    final result = lastAddressReachability(connectionId);
+    return result != null && !result.lan && !result.wan;
+  }
+
   /// 返回该连接当前应使用的地址（内网/公网）。
   ///
   /// 规则：两个地址都配置时按优选结果选择（缺省优先内网）；只配置一个时
@@ -287,6 +294,9 @@ class WebDAVService {
     final hasLan = normalized.url.trim().isNotEmpty;
     final hasWan = normalized.wanUrl.trim().isNotEmpty;
     if (hasLan && hasWan) {
+      if (allAddressesUnreachable(normalized.id)) {
+        return normalized.url;
+      }
       return (_preferWanById[normalized.id] ?? false)
           ? normalized.wanUrl
           : normalized.url;
@@ -320,7 +330,14 @@ class WebDAVService {
               (entry) => entry['id']?.toString().trim().isNotEmpty != true,
             );
         _connections = decoded
-            .map((e) => _normalizeConnection(WebDAVConnection.fromJson(e)))
+            .map((e) {
+              final connection =
+                  _normalizeConnection(WebDAVConnection.fromJson(e));
+              final result = lastAddressReachability(connection.id);
+              return result == null
+                  ? connection
+                  : connection.copyWith(isConnected: result.lan || result.wan);
+            })
             .toList();
         if (needsIdMigration) await _saveConnections();
       }
@@ -436,11 +453,7 @@ class WebDAVService {
   Future<bool> testConnection(WebDAVConnection connection) async {
     final normalized = _normalizeConnection(connection);
     final result = await _validateAddresses(normalized);
-    if (!result.lanSuccess && !result.wanSuccess) {
-      return false;
-    }
-    _preferWanById[normalized.id] = !result.lanSuccess && result.wanSuccess;
-    return true;
+    return result.lanSuccess || result.wanSuccess;
   }
 
   /// 分别校验内网地址与公网地址，返回各自可达情况与经修正后的地址。
@@ -474,6 +487,8 @@ class WebDAVService {
 
     _addressReachabilityById[normalized.id] =
         (lan: lanSuccess, wan: wanSuccess);
+    // A failed recheck must also clear an older WAN preference.
+    _preferWanById[normalized.id] = !lanSuccess && wanSuccess;
 
     return (
       connection: normalized.copyWith(url: url, wanUrl: wanUrl),
@@ -592,6 +607,20 @@ class WebDAVService {
       forceRefresh: forceRefresh,
     );
   }
+
+  Future<List<WebDAVFile>> collectLibraryVideos(
+    WebDAVConnection connection,
+    String path,
+  ) =>
+      collectMediaLibraryVideos<WebDAVFile>(
+        path,
+        listDirectory: (path) => listDirectoryAll(connection, path),
+        nameOf: (entry) => entry.name,
+        pathOf: (entry) => entry.path,
+        isDirectory: (entry) => entry.isDirectory,
+        isVideoFile: isVideoFile,
+        onListError: (error) => debugPrint('获取WebDAV视频文件失败: $error'),
+      );
 
   Future<List<WebDAVFile>> _listDirectoryAllCached(
     WebDAVConnection connection,
@@ -819,10 +848,6 @@ class WebDAVService {
     final normalized = _normalizeConnection(_connections[index]);
     final result = await _validateAddresses(normalized);
     final isConnected = result.lanSuccess || result.wanSuccess;
-    if (isConnected) {
-      _preferWanById[normalized.id] =
-          !result.lanSuccess && result.wanSuccess;
-    }
     final updatedConnection =
         result.connection.copyWith(isConnected: isConnected);
     _connections[index] = updatedConnection;

@@ -99,6 +99,12 @@ abstract class AppLocalizations {
     Locale('en')
   ];
 
+  /// No description provided for @externalPlayerLaunchFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'外部播放器启动失败，请检查播放器路径和版本。已尝试使用内置播放器。'**
+  String get externalPlayerLaunchFailed;
+
   /// No description provided for @appTitle.
   ///
   /// In zh, this message translates to:

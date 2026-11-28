@@ -41,6 +41,13 @@ class PlaybackSourceService {
   ];
 
   static Future<PlaybackDetailContext> resolve(
+      BuildContext context, PlayableItem item) async {
+    final resolved = await _resolve(context, item);
+    return resolved.withMediaLibraryScope(
+        item.mediaLibraryScope ?? resolved.mediaLibraryScope);
+  }
+
+  static Future<PlaybackDetailContext> _resolve(
     BuildContext context,
     PlayableItem item,
   ) async {
@@ -119,6 +126,7 @@ class PlaybackSourceService {
         kind == PlaybackSourceKind.sharedRemoteAnime;
 
     return PlaybackDetailContext(
+      mediaLibraryScope: item.mediaLibraryScope,
       sourceKind: kind,
       sourceLabel: _defaultSourceLabel(kind),
       sourceKey: _sourceKey(path, kind),
@@ -705,6 +713,9 @@ class PlaybackSourceService {
     SMBConnection connection,
     String currentPath,
   ) async {
+    // The episode URLs below point at the local proxy; make sure it is up
+    // (and healed after a suspension) before building them.
+    await SMBProxyService.instance.initialize();
     final entries = await SMBService.instance.listDirectory(
       connection,
       _smbParent(currentPath),

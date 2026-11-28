@@ -1,5 +1,7 @@
 library video_player_state;
 
+import 'package:nipaplay/models/media_library_scope.dart';
+
 export 'video_aspect_geometry.dart' show VideoAspectMode;
 export 'screenshot_encoding.dart' show ScreenshotFormat;
 
@@ -39,6 +41,7 @@ import 'package:path/path.dart' as p;
 
 import 'globals.dart' as globals;
 import 'dart:convert';
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:nipaplay/services/dandanplay_service.dart';
 // 带前缀的完整导入：part 文件里的跳过片头逻辑要用 http.get 直接打
 // Bangumi / AniList 的公开接口（无需令牌，走 WebRemoteAccessService 代理）。
@@ -59,6 +62,7 @@ import 'package:nipaplay/services/emby_player_menu_selection.dart';
 import 'package:nipaplay/services/emby_track_application.dart';
 import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:nipaplay/services/webdav_service.dart';
+import 'package:nipaplay/services/remote_proxy_diagnostics.dart';
 import 'package:nipaplay/services/jellyfin_playback_sync_service.dart';
 import 'package:nipaplay/services/emby_playback_sync_service.dart';
 import 'package:nipaplay/services/shared_remote_playback_sync_service.dart';
@@ -71,6 +75,7 @@ import 'package:nipaplay/services/episode_file_selection_service.dart';
 import 'media_info_helper.dart';
 import 'package:nipaplay/services/danmaku_cache_manager.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
+import 'package:nipaplay/utils/playback_resume_policy.dart';
 import 'package:nipaplay/models/jellyfin_transcode_settings.dart';
 import 'package:nipaplay/models/danmaku_auto_load_strategy.dart';
 import 'package:nipaplay/models/media_server_playback.dart';
@@ -665,6 +670,7 @@ int _exactEndStreak = 0;
   bool _doubleResolutionPlaybackEnabled = false;
   final String _erikaUpscalerModeKey = 'erika_upscaler_mode';
   PlayerUpscalerMode _erikaUpscalerMode = PlayerUpscalerMode.off;
+  String _erikaUpscalerModelPath = '';
   final String _crtProfileKey = 'crt_profile';
   CrtProfile _crtProfile = CrtProfile.off;
   List<String> _crtShaderPaths = const <String>[];
@@ -1698,6 +1704,7 @@ int _exactEndStreak = 0;
   bool get doubleResolutionPlaybackEnabled => _doubleResolutionPlaybackEnabled;
   bool get isDoubleResolutionSupported => _supportsAnime4KForCurrentPlayer();
   PlayerUpscalerMode get erikaUpscalerMode => _erikaUpscalerMode;
+  String get erikaUpscalerModelPath => _erikaUpscalerModelPath;
   bool get isErikaUpscalerSupported => _supportsErikaUpscalerForCurrentPlayer();
   List<String> get anime4kShaderPaths => List.unmodifiable(_anime4kShaderPaths);
   CrtProfile get crtProfile => _crtProfile;

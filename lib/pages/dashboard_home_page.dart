@@ -1,5 +1,7 @@
 library dashboard_home_page;
 
+import 'package:nipaplay/models/media_library_scope.dart';
+
 import 'package:nipaplay/widgets/page_activity_mixin.dart';
 import 'package:nipaplay/widgets/scroll_edge_builder.dart';
 import 'dart:ui';

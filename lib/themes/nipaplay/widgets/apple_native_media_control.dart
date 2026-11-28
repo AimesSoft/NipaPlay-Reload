@@ -14,6 +14,8 @@ class AppleNativeMediaControl extends StatefulWidget {
     required this.label,
     required this.symbol,
     this.detail,
+    this.iconOnly = false,
+    this.plain = false,
     this.primary = false,
     this.color,
     this.onPressed,
@@ -43,6 +45,10 @@ class AppleNativeMediaControl extends StatefulWidget {
 
   final String label;
   final String symbol;
+  final bool iconOnly;
+
+  /// Content inside a shared glass capsule; omit the individual glass surface.
+  final bool plain;
   final String? detail;
   final bool primary;
   final Color? color;
@@ -63,6 +69,7 @@ class _AppleNativeMediaControlState extends State<AppleNativeMediaControl>
   bool _pressed = false;
   bool _trackingPointer = false;
   bool _focused = false;
+  bool _pointerFocus = false;
   bool _appActive = true;
 
   @override
@@ -72,6 +79,11 @@ class _AppleNativeMediaControlState extends State<AppleNativeMediaControl>
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     _appActive = lifecycle == null || lifecycle == AppLifecycleState.resumed;
     _focusNode.onKeyEvent = (_, event) {
+      if (event is KeyDownEvent) {
+        _pointerFocus = false;
+        _focused = _focusNode.hasFocus;
+        _sendInteraction();
+      }
       if (event.logicalKey == LogicalKeyboardKey.enter ||
           event.logicalKey == LogicalKeyboardKey.space) {
         _setPressed(event is! KeyUpEvent);
@@ -127,6 +139,8 @@ class _AppleNativeMediaControlState extends State<AppleNativeMediaControl>
 
   Future<void> _activateNative() async {
     if (!_enabled || !_appActive) return;
+    // Retain keyboard navigation after a click, but draw a focus ring only
+    // when Flutter requests keyboard focus highlighting.
     _focusNode.requestFocus();
     try {
       await _channel?.invokeMethod<void>('activate');
@@ -140,6 +154,8 @@ class _AppleNativeMediaControlState extends State<AppleNativeMediaControl>
   Map<String, Object?> get _parameters => {
         'label': widget.label,
         'symbol': widget.symbol,
+        'iconOnly': widget.iconOnly,
+        'plain': widget.plain,
         'detail': widget.detail,
         'primary': widget.primary,
         'color': widget.color?.toARGB32(),
@@ -214,8 +230,11 @@ class _AppleNativeMediaControlState extends State<AppleNativeMediaControl>
           focusNode: _focusNode,
           enabled: _enabled,
           onFocusChange: (value) {
-            _focused = value;
-            if (!value) _pressed = false;
+            _focused = value && !_pointerFocus;
+            if (!value) {
+              _pointerFocus = false;
+              _pressed = false;
+            }
             _sendInteraction();
           },
           shortcuts: const {
@@ -240,6 +259,9 @@ class _AppleNativeMediaControlState extends State<AppleNativeMediaControl>
             onHover: (_) => _setHovered(true),
             child: Listener(
               onPointerDown: (_) {
+                _pointerFocus = true;
+                _focused = false;
+                _sendInteraction();
                 _trackingPointer = _enabled && _appActive;
                 _setPressed(true);
               },
@@ -299,6 +321,130 @@ class _AppleNativeMediaControlState extends State<AppleNativeMediaControl>
         creationParamsCodec: codec,
         onPlatformViewCreated: _onCreated,
       ),
+    );
+  }
+}
+
+class AppleNativeMediaAction {
+  const AppleNativeMediaAction({
+    required this.label,
+    required this.symbol,
+    this.onPressed,
+    this.items,
+    this.onSelected,
+    this.selected = false,
+  });
+
+  final String label;
+  final String symbol;
+  final bool selected;
+  final VoidCallback? onPressed;
+  final List<Map<String, Object?>>? items;
+  final ValueChanged<int>? onSelected;
+  bool get enabled => onPressed != null || items != null;
+
+  Map<String, Object?> get parameters => {
+        'label': label,
+        'symbol': symbol,
+        'selected': selected,
+        'enabled': enabled,
+        'items': items,
+      };
+}
+
+/// One native hierarchy owns both the glass and all the buttons it contains.
+class AppleNativeMediaActionGroup extends StatefulWidget {
+  const AppleNativeMediaActionGroup({super.key, required this.actions});
+  final List<AppleNativeMediaAction> actions;
+
+  @override
+  State<AppleNativeMediaActionGroup> createState() =>
+      _AppleNativeMediaActionGroupState();
+}
+
+class _AppleNativeMediaActionGroupState
+    extends State<AppleNativeMediaActionGroup> {
+  MethodChannel? _channel;
+  Map<String, Object?> get _parameters => {
+        'actions': widget.actions.map((action) => action.parameters).toList(),
+      };
+
+  void _onCreated(int id) {
+    _channel?.setMethodCallHandler(null);
+    final channel = MethodChannel('nipaplay/native_media_control_$id');
+    channel.setMethodCallHandler((call) async {
+      final arguments = call.arguments;
+      if (arguments is! Map) return;
+      final index = arguments['index'];
+      if (index is! int || index < 0 || index >= widget.actions.length) return;
+      final action = widget.actions[index];
+      if (!action.enabled) return;
+      if (call.method == 'pressed') action.onPressed?.call();
+      if (call.method == 'selected') {
+        final selected = arguments['selected'];
+        if (selected is int &&
+            selected >= 0 &&
+            selected < (action.items?.length ?? 0) &&
+            action.items![selected]['enabled'] != false) {
+          action.onSelected?.call(selected);
+        }
+      }
+    });
+    _channel = channel;
+    _update();
+  }
+
+  Future<void> _update() async {
+    try {
+      await _channel?.invokeMethod<void>('update', _parameters);
+    } on MissingPluginException {
+      // The route can dispose the native group while an update is in flight.
+    } on PlatformException catch (error) {
+      debugPrint('Native media group update failed: $error');
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant AppleNativeMediaActionGroup oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _update();
+  }
+
+  @override
+  void dispose() {
+    _channel?.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final macOS = native.PlatformInfo.isMacOS;
+    // The shared SwiftUI capsule uses the same 44pt hit targets on Apple hosts.
+    final width = widget.actions.length * 44.0 + 8;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return SizedBox(width: width, height: 44);
+    }
+    final params = _parameters;
+    return SizedBox(
+      width: width,
+      height: 44,
+      child: macOS
+          ? AppKitView(
+              viewType: 'nipaplay/native_media_control',
+              hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+              creationParams: params,
+              creationParamsCodec: const StandardMessageCodec(),
+              onPlatformViewCreated: _onCreated,
+            )
+          : UiKitView(
+              viewType: 'nipaplay/native_media_control',
+              gestureRecognizers: {
+                Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+              },
+              creationParams: params,
+              creationParamsCodec: const StandardMessageCodec(),
+              onPlatformViewCreated: _onCreated,
+            ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import QuartzCore
 import FlutterMacOS
 
@@ -18,7 +19,11 @@ private final class MediaControlFactory: NSObject, FlutterPlatformViewFactory {
     init(_ messenger: FlutterBinaryMessenger) { self.messenger = messenger }
     func createArgsCodec() -> (FlutterMessageCodec & NSObjectProtocol)? { FlutterStandardMessageCodec.sharedInstance() }
     func create(withViewIdentifier viewId: Int64, arguments args: Any?) -> NSView {
-        MediaControlView(viewId, messenger, args as? [String: Any] ?? [:])
+        let params = args as? [String: Any] ?? [:]
+        if #available(macOS 26.0, *), params["actions"] != nil {
+            return SwiftUIMediaActionGroupView(viewId, messenger, params)
+        }
+        return MediaControlView(viewId, messenger, params)
     }
 }
 
@@ -68,6 +73,7 @@ private final class MediaContentButton: NSButton {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func updateContent(label: String, detail: String, symbol: String) {
+        titleField.isHidden = label.isEmpty
         titleField.stringValue = label
         detailField.stringValue = detail
         detailField.isHidden = detail.isEmpty
@@ -80,6 +86,11 @@ private final class MediaContentButton: NSButton {
 
     override func layout() {
         super.layout()
+        if titleField.isHidden && detailField.isHidden {
+            iconView.frame = NSRect(x: (bounds.width - 20) / 2,
+                y: (bounds.height - 20) / 2, width: 20, height: 20)
+            return
+        }
         let inset: CGFloat = 16
         let iconWidth: CGFloat = 20
         let spacing: CGFloat = 10
@@ -157,9 +168,10 @@ private final class MediaControlView: NSView {
     private var reducedEffects = false
     var entries: [[String: Any]]?
 
+
     init(_ id: Int64, _ messenger: FlutterBinaryMessenger, _ args: [String: Any]) {
         channel = FlutterMethodChannel(name: "nipaplay/native_media_control_\(id)", binaryMessenger: messenger)
-        if #available(macOS 26.0, *) {
+        if #available(macOS 26.0, *), !(args["plain"] as? Bool ?? false) {
             let glass = TrackingMediaGlassView()
             glass.contentView = button
             MediaGlassInteraction.update(true, on: glass)
@@ -173,6 +185,7 @@ private final class MediaControlView: NSView {
         // of the user's global light/dark appearance.
         appearance = NSAppearance(named: .darkAqua)
         wantsLayer = true
+        glassContainer.wantsLayer = true
         button.target = self
         button.action = #selector(pressed)
         glassContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -272,7 +285,10 @@ private final class MediaControlView: NSView {
 
     func setWindowActive(_ active: Bool) {
         windowActive = active
-        if !active { pressedState = false }
+        if !active {
+            pressedState = false
+            hovered = false
+        }
         if active, let window {
             let point = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
             nativePointerInside = bounds.contains(point)
@@ -372,7 +388,8 @@ private final class MediaControlView: NSView {
         button.isEnabled = args["enabled"] as? Bool ?? false
         if !button.isEnabled { hovered = false; pressedState = false; focused = false }
         entries = args["items"] as? [[String: Any]]
-        button.updateContent(label: label, detail: detail, symbol: args["symbol"] as? String ?? "")
+        let iconOnly = args["iconOnly"] as? Bool ?? false
+        button.updateContent(label: iconOnly ? "" : label, detail: iconOnly ? "" : detail, symbol: args["symbol"] as? String ?? "")
         button.setAccessibilityLabel(label)
         button.setAccessibilityHelp(detail)
         button.isBordered = false
@@ -414,4 +431,50 @@ private final class MediaControlView: NSView {
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.minY), in: button)
     }
     @objc func selected(_ item: NSMenuItem) { channel.invokeMethod("selected", arguments: item.tag) }
+}
+
+
+@available(macOS 26.0, *)
+private final class MediaCapsuleHostingView: NSHostingView<MediaDetailActionCapsule> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+@available(macOS 26.0, *)
+private final class SwiftUIMediaActionGroupView: NSView {
+    let model = MediaCapsuleModel()
+    let hosting: MediaCapsuleHostingView
+    private let channel: FlutterMethodChannel
+
+    init(_ id: Int64, _ messenger: FlutterBinaryMessenger, _ args: [String: Any]) {
+        hosting = MediaCapsuleHostingView(rootView: MediaDetailActionCapsule(model: model))
+        channel = FlutterMethodChannel(name: "nipaplay/native_media_control_\(id)", binaryMessenger: messenger)
+        super.init(frame: .zero)
+        appearance = NSAppearance(named: .darkAqua)
+        hosting.sizingOptions = []
+        hosting.autoresizingMask = [.width, .height]
+        hosting.frame = bounds
+        addSubview(hosting)
+        model.onPressed = { [weak self] index in
+            self?.channel.invokeMethod("pressed", arguments: ["index": index])
+        }
+        model.onSelected = { [weak self] index, selected in
+            self?.channel.invokeMethod("selected", arguments: ["index": index, "selected": selected])
+        }
+        model.update(args)
+        channel.setMethodCallHandler { [weak self] call, result in
+            guard call.method == "update" else { result(FlutterMethodNotImplemented); return }
+            if let args = call.arguments as? [String: Any] { self?.model.update(args) }
+            result(nil)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func layout() {
+        super.layout()
+        hosting.frame = bounds
+    }
+
+    // No hitTest override: AppKit must deliver real input to SwiftUI so the
+    // interactive glass, pressed state, Menu and accessibility remain native.
+    deinit { channel.setMethodCallHandler(nil) }
 }

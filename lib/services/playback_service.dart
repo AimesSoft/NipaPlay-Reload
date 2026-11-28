@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/services/plugin_playback_service.dart';
 import 'package:nipaplay/models/playable_item.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
@@ -12,6 +13,7 @@ import 'package:nipaplay/services/external_player_console_window_service.dart';
 import 'package:nipaplay/services/external_player_service.dart';
 import 'package:nipaplay/services/playback_source_service.dart';
 import 'package:nipaplay/services/episode_file_selection_service.dart';
+import 'package:nipaplay/utils/message_helper.dart';
 
 class PlaybackService {
   static final PlaybackService _instance = PlaybackService._internal();
@@ -39,6 +41,7 @@ class PlaybackService {
     if (item.actualPlayUrl == null &&
         (item.videoPath.startsWith('https://') ||
             item.videoPath.startsWith('http://'))) {
+      final scope = item.mediaLibraryScope;
       item = await PluginPlaybackService.prepare(
             context,
             item.videoPath,
@@ -46,6 +49,7 @@ class PlaybackService {
             historyItem: item.historyItem,
           ) ??
           item;
+      item = item.withMediaLibraryScope(scope);
       if (!context.mounted) return false;
     }
     final launched = await ExternalPlayerService.play(settings, item);
@@ -54,6 +58,12 @@ class PlaybackService {
       final playbackContext = globals.navigatorKey.currentContext ?? context;
       if (playbackContext.mounted) {
         AnimeDetailPage.popIfOpen();
+        MessageHelper.showMessage(
+          playbackContext,
+          playbackContext.l10n.externalPlayerLaunchFailed,
+          isError: true,
+          duration: const Duration(seconds: 6),
+        );
         await _playInternally(playbackContext, item);
       }
       return true;
@@ -112,6 +122,7 @@ class PlaybackService {
       historyItem: item.historyItem,
       actualPlayUrl: item.actualPlayUrl,
       playbackSession: item.playbackSession,
+      mediaLibraryScope: item.mediaLibraryScope,
       playbackDetailContext: detailContext,
       mediaKey: item.mediaKey,
       episodeFileSelectionHandled: true,

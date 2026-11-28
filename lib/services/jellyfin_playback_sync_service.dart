@@ -5,6 +5,7 @@ import 'package:nipaplay/models/media_server_playback.dart';
 import 'package:nipaplay/models/watch_history_model.dart';
 import 'jellyfin_service.dart';
 import 'media_server_transport.dart';
+import 'media_server_watch_history_sync.dart';
 
 /// 简化的Jellyfin播放记录同步服务
 /// 实现最小化的播放记录同步功能
@@ -15,6 +16,47 @@ class JellyfinPlaybackSyncService {
   JellyfinPlaybackSyncService._internal();
 
   final JellyfinService _jellyfinService = JellyfinService.instance;
+
+  MediaServerHistoryConnection? _historyConnection() {
+    if (!_jellyfinService.isConnected || _jellyfinService.userId == null) {
+      return null;
+    }
+    final owner = (
+      _jellyfinService.currentProfile?.id ?? _jellyfinService.serverUrl,
+      _jellyfinService.userId,
+    );
+    return MediaServerHistoryConnection(
+      owner: jsonEncode([owner.$1, owner.$2]),
+      userId: _jellyfinService.userId!,
+      profileId: _jellyfinService.currentProfile?.id,
+      serverUrl: _jellyfinService.serverUrl,
+      session: (
+        owner,
+        _jellyfinService.serverUrl,
+        _jellyfinService.accessToken
+      ),
+    );
+  }
+
+  late final _historySync = MediaServerWatchHistorySync(
+    source: 'jellyfin',
+    connection: _historyConnection,
+    request: (endpoint) => _makeAuthenticatedRequest(endpoint),
+  );
+
+  Object? get historySession => _historyConnection()?.session;
+
+  Future<void> forgetHistoryWhere(bool Function(String) matches) =>
+      _historySync.forgetWhere(matches);
+
+  Future<List<WatchHistoryItem>> refreshHistory(
+          List<WatchHistoryItem> history) =>
+      _historySync.refresh(history, activeItemId: () => _currentItemId);
+
+  bool isCurrentHistoryItem(String filePath) =>
+      filePath.startsWith('jellyfin://') &&
+      filePath.substring('jellyfin://'.length).split('/').last ==
+          _currentItemId;
 
   // 当前播放状态
   String? _currentItemId;
@@ -34,32 +76,11 @@ class JellyfinPlaybackSyncService {
         return localHistory;
       }
 
-      // 1. 获取服务器播放记录
+      await _historySync.bind(localHistory.filePath);
       final serverProgress = await _getServerPlaybackProgress(itemId);
-
-      if (serverProgress == null) {
-        debugPrint('[JellyfinSync] 服务器无播放记录，使用本地记录');
-        return localHistory;
-      }
-
-      // 2. 冲突处理：比较上次播放时间
-      final serverLastWatchTime =
-          DateTime.parse(serverProgress['LastPlayedDate'] ?? '').toUtc();
-      final localLastWatchTime = localHistory.lastWatchTime.toUtc();
-
-      debugPrint('[JellyfinSync] 服务器最后观看时间(UTC): $serverLastWatchTime');
-      debugPrint('[JellyfinSync] 本地最后观看时间(UTC): $localLastWatchTime');
-
-      if (serverLastWatchTime.isAfter(localLastWatchTime)) {
-        // 服务器记录更新，使用服务器记录
-        debugPrint('[JellyfinSync] 使用服务器记录（更新）');
-        return _createHistoryFromServerProgress(
-            itemId, serverProgress, localHistory);
-      } else {
-        // 本地记录更新，使用本地记录
-        debugPrint('[JellyfinSync] 使用本地记录（更新）');
-        return localHistory;
-      }
+      if (serverProgress == null) return localHistory;
+      return mergeMediaServerWatchHistory(localHistory, serverProgress) ??
+          localHistory;
     } catch (e) {
       debugPrint('[JellyfinSync] 同步播放记录失败: $e');
       return localHistory; // 出错时使用本地记录
@@ -99,7 +120,8 @@ class JellyfinPlaybackSyncService {
       // 构建播放开始信息
       final startInfo = {
         'ItemId': itemId,
-        'PositionTicks': (historyItem.lastPosition * 10000).round(), // 转换为ticks
+        'PositionTicks':
+            (historyItem.resumePosition * 10000).round(), // 转换为ticks
         'PlaySessionId': resolvedSessionId,
         'CanSeek': true,
         'IsPaused': false,
@@ -209,12 +231,14 @@ class JellyfinPlaybackSyncService {
       debugPrint(
           '[JellyfinSync] 用户数据: playbackPositionTicks=$playbackPositionTicks, playCount=$playCount, lastPlayedDate=$lastPlayedDate');
 
-      if (playCount == 0 || lastPlayedDate == null) {
+      if (lastPlayedDate == null) {
         debugPrint('[JellyfinSync] 项目从未播放过');
         return null;
       }
 
       return {
+        'Played': userData['Played'] == true,
+        'PlayedPercentage': userData['PlayedPercentage'],
         'PlayCount': playCount,
         'LastPlayedDate': lastPlayedDate,
         'PlaybackPositionTicks': playbackPositionTicks,
@@ -224,30 +248,6 @@ class JellyfinPlaybackSyncService {
       debugPrint('[JellyfinSync] 获取服务器播放进度失败: $e');
       return null;
     }
-  }
-
-  /// 从服务器进度创建历史记录
-  WatchHistoryItem _createHistoryFromServerProgress(String itemId,
-      Map<String, dynamic> serverProgress, WatchHistoryItem originalHistory) {
-    final positionTicks = serverProgress['PlaybackPositionTicks'] ?? 0;
-    // Jellyfin ticks 转换为毫秒：1 tick = 100 nanoseconds = 0.0001 milliseconds
-    final positionMs = (positionTicks / 10000).round(); // 转换为毫秒
-
-    debugPrint(
-        '[JellyfinSync] 服务器播放位置: $positionTicks ticks = $positionMs ms (约${(positionMs / 1000 / 60).toStringAsFixed(1)}分钟)');
-
-    return WatchHistoryItem(
-      filePath: originalHistory.filePath,
-      animeName: originalHistory.animeName,
-      episodeTitle: originalHistory.episodeTitle,
-      episodeId: originalHistory.episodeId,
-      animeId: originalHistory.animeId,
-      watchProgress: originalHistory.watchProgress, // 保持原有的观看进度
-      lastPosition: positionMs, // 使用服务器位置
-      duration: originalHistory.duration, // 保持原有的时长
-      lastWatchTime: DateTime.parse(serverProgress['LastPlayedDate']),
-      thumbnailPath: originalHistory.thumbnailPath, // 保持原有的缩略图
-    );
   }
 
   /// 开始定时同步播放进度

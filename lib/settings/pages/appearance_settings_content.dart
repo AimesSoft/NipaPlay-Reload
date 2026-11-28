@@ -9,7 +9,6 @@ import 'package:nipaplay/l10n/l10n.dart';
 import 'package:nipaplay/models/background_image_render_mode.dart';
 import 'package:nipaplay/providers/appearance_settings_provider.dart';
 import 'package:nipaplay/providers/home_sections_settings_provider.dart';
-import 'package:nipaplay/providers/labs_settings_provider.dart';
 import 'package:nipaplay/providers/settings_provider.dart';
 import 'package:nipaplay/settings/adaptive_settings_widgets.dart';
 import 'package:nipaplay/themes/cupertino/cupertino_adaptive_platform_ui.dart';
@@ -309,19 +308,15 @@ class _AppearanceSettingsContentState extends State<AppearanceSettingsContent> {
             value: appearanceSettings.showMediaLibraryNewBadge,
             onChanged: appearanceSettings.setShowMediaLibraryNewBadge,
           ),
-          if ((context
-                      .watch<LabsSettingsProvider?>()
-                      ?.enableImmersiveAnimeDetail ??
-                  false) &&
-              AdaptiveMediaDetailActionButton.supportsNativeLiquidGlass)
+          if (AdaptiveMediaDetailActionButton.supportsNativeLiquidGlass)
             AdaptiveSettingsTile<bool>.toggle(
               title: _text(context, '媒体信息页液态玻璃', '媒體資訊頁液態玻璃',
                   'Media Detail Liquid Glass'),
               subtitle: _text(
                   context,
-                  '在新版媒体信息页使用系统原生液态玻璃按钮和菜单',
-                  '在新版媒體資訊頁使用系統原生液態玻璃按鈕和選單',
-                  'Use native Liquid Glass buttons and menus on the new media detail page.'),
+                  '在媒体信息页使用系统原生液态玻璃按钮和菜单',
+                  '在媒體資訊頁使用系統原生液態玻璃按鈕和選單',
+                  'Use native Liquid Glass buttons and menus on the media detail page.'),
               icon: Ionicons.sparkles_outline,
               phoneIcon: cupertino.CupertinoIcons.sparkles,
               value: appearanceSettings.enableMediaDetailLiquidGlass,

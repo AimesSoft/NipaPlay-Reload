@@ -1,4 +1,5 @@
 {
+  "externalPlayerLaunchFailed": "外部播放器啟動失敗，請檢查播放器路徑和版本。已嘗試使用內建播放器。",
   "@@locale": "zh_Hant",
   "appTitle": "NipaPlay",
   "tabHome": "主頁",

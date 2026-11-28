@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Analyze and Test
+  analyze:
+    name: Analyze and check documentation
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
 
@@ -33,30 +33,62 @@ jobs:
       - name: Setup Flutter Environment
         uses: ./.github/actions/setup-flutter
 
+      - name: Check Next documentation contracts
+        if: github.base_ref == 'next' || github.ref_name == 'next' || hashFiles('scripts/next/check_docs.py', 'scripts/next/check_capability_docs.py', 'scripts/next/build_knowledge.py', 'scripts/next/test_build_knowledge.py') != ''
+        run: |
+          python3 scripts/next/check_docs.py
+          python3 scripts/next/check_capability_docs.py
+          python3 scripts/next/build_knowledge.py --check
+          python3 -B -m unittest discover -s scripts/next -p 'test_build_knowledge.py'
+          python3 -B -m unittest discover -s test/next -p 'nipa_*test.py'
+
       - name: Generate build info json
         run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
 
       - name: Run flutter analyze
         run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings lib
 
-      - name: Detect root test files
-        id: detect_tests
-        shell: bash
-        run: |
-          if [ -d test ] && find test -type f -name '*_test.dart' -print -quit | grep -q .; then
-            echo "has_tests=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_tests=false" >> "$GITHUB_OUTPUT"
-          fi
+  test:
+    name: Flutter tests (${{ matrix.shard }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Flutter Environment
+        uses: ./.github/actions/setup-flutter
+
+      - name: Generate build info json
+        run: python3 .github/workflows/scripts/generate-build-info-json.py assets/build_info.json
 
       - name: Run flutter test
-        if: steps.detect_tests.outputs.has_tests == 'true'
-        run: flutter test --no-pub --reporter expanded
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+          TOTAL_SHARDS: ${{ strategy.job-total }}
+          NEXT_TEST_POLICY: ${{ github.base_ref == 'next' || github.ref_name == 'next' || (github.event_name == 'workflow_dispatch' && hashFiles('scripts/next/check_docs.py') != '') }}
+        run: |
+          args=(flutter test --no-pub --reporter expanded)
+          if [[ "$NEXT_TEST_POLICY" == true ]]; then
+            args+=(--exclude-tags 'native_integration || codex_integration || performance')
+          fi
+          python3 .github/workflows/scripts/flutter-test-shard.py "$SHARD" "$TOTAL_SHARDS" "${args[@]}"
 
       - name: Verify enabled Linux Erika kernel policy
+        if: matrix.shard == 2
         run: flutter test --no-pub --dart-define=NIPAPLAY_LINUX_ERIKA=true test/linux_erika_kernel_policy_test.dart
 
       - name: Run isolated data preservation tests
+        if: matrix.shard == 1
         env:
           NIPAPLAY_DATA_SAFETY_ROOT: ${{ runner.temp }}/nipaplay-data-safety
           XDG_DATA_HOME: ${{ runner.temp }}/nipaplay-data-safety/xdg-data
@@ -64,6 +96,16 @@ jobs:
           XDG_CONFIG_HOME: ${{ runner.temp }}/nipaplay-data-safety/xdg-config
         run: flutter test --no-pub --reporter expanded test/database/data_safety_test.dart
 
-      - name: Skip flutter test
-        if: steps.detect_tests.outputs.has_tests != 'true'
-        run: echo "No root-level *_test.dart files found. Skipping flutter test."
+  validate:
+    name: Analyze and Test
+    needs: [analyze, test]
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require analysis and all test shards to succeed
+        env:
+          ANALYZE_RESULT: ${{ needs.analyze.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          printf 'Analysis: %s\nTests: %s\n' "$ANALYZE_RESULT" "$TEST_RESULT"
+          [[ "$ANALYZE_RESULT" == success && "$TEST_RESULT" == success ]]

@@ -14,6 +14,7 @@
 ![GitHub downloads](https://img.shields.io/github/downloads/aimessoft/nipaplay-reload/total?style=flat-square&color=green)
 ![Platform support](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20%7C%20tvOS%20%7C%20HarmonyOS-lightgrey?style=flat-square)
 ![License](https://img.shields.io/github/license/aimessoft/nipaplay-reload?style=flat-square)
+[![NipaPlay Next 技术报告 DOI](https://img.shields.io/badge/报告_DOI-10.5281%2Fzenodo.24364872-blue?style=flat-square)](https://doi.org/10.5281/zenodo.24364872)
 
 <br>
 
@@ -184,12 +185,18 @@ Next 还引入个人 Git Harness、跨设备 Mesh、
 这是一次关于 Agentic Native Software 的公开实验，
 其行为、可靠性和安全边界仍在持续研究和验证中。
 
+### 研究与引用
+
+技术报告《Mechanism in the Host, Judgment in the Agent》以 NipaPlay Next 为例，记录了播放器如何与梨花分工，以及梨花在识别媒体文件、匹配剧集和维护媒体库时的实际表现。
+
+[研究站](https://aimes-soft.com/research/) · [报告全文与 BibTeX 引用](https://aimes-soft.com/research/tr-2026-01/) · [DOI 10.5281/zenodo.24364872](https://doi.org/10.5281/zenodo.24364872)
 
 ### 参与开发者预览
 
-当前版本为 **2.0.0-alpha.2 · Developer Preview**。Alpha 2 改进了播放加载反馈，扩充字幕、弹幕与播放设置菜单，将 Erika 纳入常规内核选项，并完善作品详情页及梨花调整资料展示的能力。
+当前版本为 **2.0.0-alpha.7 · Developer Preview**。Alpha 7 修复 Alpha 6 中的几处严重问题：手机和平板上反复弹出、无法关闭的失败提醒，从 Codex 切换到 DeepSeek Harness 后无法再打开的对话，以及只有一方可达的设备之间送不回去的跟进结果；调用日志和组网记录不再无限增长。
 
-- [Alpha 2 下载与发行说明](https://github.com/AimesSoft/NipaPlay-Reload/releases/tag/v2.0.0-alpha.2)
+- [Alpha 7 下载与发行说明](https://github.com/AimesSoft/NipaPlay-Reload/releases/tag/v2.0.0-alpha.7)
+- iPhone、iPad、Apple TV：[TestFlight 公开测试](https://testflight.apple.com/join/4JMh3t44)
 - [Next 使用文档](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/README.md)：从安装、配置梨花到第一次使用，以及日常使用、进阶和排障
 - [下载与开启 Next](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/install.md) · [配置梨花](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/start/setup-nipa.md)
 - [常见问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/faq.md) · [已知问题](https://github.com/AimesSoft/NipaPlay-Reload/blob/next/docs/next/help/known-issues.md)

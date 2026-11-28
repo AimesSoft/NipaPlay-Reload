@@ -22,6 +22,8 @@
 ### nipaplay_installer.nsi（历史遗留）
 旧的 NSIS 脚本已不再被 GitHub Actions 使用（保留仅供参考）。
 
+覆盖安装时，安装器通过 Windows Restart Manager 关闭占用目标安装目录中 `NipaPlay.exe` 的旧实例。若旧实例收到关闭请求后仍留在托盘，安装器会强制结束它；请先保存未完成的播放操作或编辑。安装器不会自动重启被关闭的实例，仍可在完成页手动选择启动。
+
 ### 安装程序生成的文件
 构建过程中会生成：
 - `NipaPlay_{version}_Windows_x64.zip`（绿色版）
