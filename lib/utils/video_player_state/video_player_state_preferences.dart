@@ -948,18 +948,21 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
     if (_isDisposed || !player.supportsUpscaler) {
       return;
     }
-    if (_erikaUpscalerMode == PlayerUpscalerMode.erikaCustom) {
+    final currentPlayer = player;
+    final mode = _erikaUpscalerMode;
+    if (mode == PlayerUpscalerMode.erikaCustom) {
       if (_erikaUpscalerModelPath.isEmpty) {
         throw StateError('请先导入 Erika 自定义超分模型');
       }
-      await player.loadUpscalerModelFile(_erikaUpscalerModelPath);
+      await currentPlayer.loadUpscalerModelFile(_erikaUpscalerModelPath);
     }
-    await player.setUpscaler(_erikaUpscalerMode);
-    // 超分档位决定弹幕所有权（开启→回退 Flutter 叠层；关闭→原生合成），
-    // 这里触发一次调和：Flutter 叠层重新喂当前弹幕列表，原生路径重推配置。
-    try {
+    final ownerChanged = await currentPlayer.setUpscaler(mode);
+    if (ownerChanged && !_isDisposed && identical(currentPlayer, player)) {
+      if (!currentPlayer.supportsNativeDanmaku) {
+        danmakuController?.loadDanmaku(_danmakuList);
+      }
       handleDanmakuRendererChanged();
-    } catch (_) {}
+    }
   }
 
   Future<void> setErikaUpscalerModelPath(String path) async {
@@ -1267,48 +1270,26 @@ extension VideoPlayerStatePreferences on VideoPlayerState {
       final int targetWidth = (snapshot.srcWidth! * factor).round();
       final int targetHeight = (snapshot.srcHeight! * factor).round();
 
-      // 超分纹理尺寸上限：iPad Pro 12.9 一类设备会把 1080p 源抬到
-      // 3840x2160 全量跑 CNN（日志实测 VideoOutput.Resize 3840x2160），
-      // 每帧推理逼近帧预算 → 间断性黑帧 + 弹幕（Flutter 叠层）被渲染
-      // 压力拖着掉帧。2560 宽在 12.9 寸屏上视觉与 4K 等效（超采样边际
-      // 递减），CNN 像素量减 56%。Windows 走下方 4096 保护逻辑不变。
-      int cappedWidth = targetWidth;
-      int cappedHeight = targetHeight;
-      const int maxUpscaleDimension = 2560;
-      if (targetWidth > maxUpscaleDimension ||
-          targetHeight > maxUpscaleDimension) {
-        final double scale =
-            maxUpscaleDimension / (targetWidth > targetHeight
-                ? targetWidth
-                : targetHeight);
-        cappedWidth = (targetWidth * scale).round();
-        cappedHeight = (targetHeight * scale).round();
-        debugPrint(
-          '[VideoPlayerState] Anime4K 目标尺寸 ${targetWidth}x${targetHeight} '
-          '超上限，压到 ${cappedWidth}x${cappedHeight} 保帧率',
-        );
-      }
-
       if (!kIsWeb && Platform.isWindows) {
         const int maxDimension = 4096;
-        if (cappedWidth > maxDimension || cappedHeight > maxDimension) {
+        if (targetWidth > maxDimension || targetHeight > maxDimension) {
           debugPrint(
-            '[VideoPlayerState] Windows Anime4K 目标尺寸过大，跳过放大以避免黑屏: ${cappedWidth}x${cappedHeight}',
+            '[VideoPlayerState] Windows Anime4K 目标尺寸过大，跳过放大以避免黑屏: ${targetWidth}x${targetHeight}',
           );
           await player.setVideoSurfaceSize();
           return;
         }
       }
 
-      if (snapshot.displayWidth == cappedWidth &&
-          snapshot.displayHeight == cappedHeight) {
+      if (snapshot.displayWidth == targetWidth &&
+          snapshot.displayHeight == targetHeight) {
         // 已经是目标尺寸
         return;
       }
 
       await player.setVideoSurfaceSize(
-        width: cappedWidth,
-        height: cappedHeight,
+        width: targetWidth,
+        height: targetHeight,
       );
     } catch (e) {
       if (retry < maxRetry) {

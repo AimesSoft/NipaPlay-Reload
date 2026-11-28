@@ -539,13 +539,13 @@ class Player implements core_player.AsyncExternalSubtitlePlayer {
     }
   }
 
-  Future<void> setUpscaler(PlayerUpscalerMode mode) async {
+  /// Returns whether the kernel transferred danmaku to a different renderer.
+  Future<bool> setUpscaler(PlayerUpscalerMode mode) async {
     try {
-      final result = (_delegate as dynamic).setUpscaler(mode);
-      if (result is Future) {
-        await result;
-      }
-    } catch (_) {}
+      return await (_delegate as dynamic).setUpscaler(mode) == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> loadUpscalerModelFile(String path) async {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -16,19 +17,31 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   final calls = <MethodCall>[];
   var requested = 0;
+  var rejectMode = false;
+  Completer<void>? nativeMute;
+  var backend = 9;
 
   setUp(() {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     calls.clear();
     requested = 0;
+    rejectMode = false;
+    nativeMute = null;
+    backend = 9;
     messenger.setMockMethodCallHandler(events, (_) async => null);
     messenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
       if (call.method == 'create') return 31;
-      if (call.method == 'setUpscaler')
+      if (call.method == 'setUpscaler') {
+        if (rejectMode) throw PlatformException(code: 'rejected');
         requested = (call.arguments as Map)['mode'] as int;
+      }
+      if (call.method == 'setDanmakuEnabled' &&
+          (call.arguments as Map)['enabled'] == false) {
+        await nativeMute?.future;
+      }
       if (call.method == 'getUpscalerStatus') {
-        return {'requestedMode': requested, 'activeBackend': 9};
+        return {'requestedMode': requested, 'activeBackend': backend};
       }
       return null;
     });
@@ -63,6 +76,88 @@ void main() {
     } finally {
       await player.disposeAsync();
     }
+  });
+
+  test('rejected On keeps native ownership', () async {
+    final player = ErikaPlayerAdapter();
+    addTearDown(player.disposeAsync);
+    rejectMode = true;
+    await player.setUpscaler(PlayerUpscalerMode.erikaArtCnnC4F16);
+    expect(player.supportsNativeDanmaku, isTrue);
+  });
+
+  test('rejected Off keeps Flutter ownership', () async {
+    final player = ErikaPlayerAdapter();
+    addTearDown(player.disposeAsync);
+    await player.setUpscaler(PlayerUpscalerMode.erikaArtCnnC4F16);
+    expect(player.supportsNativeDanmaku, isFalse);
+    rejectMode = true;
+    await player.setUpscaler(PlayerUpscalerMode.off);
+    expect(player.supportsNativeDanmaku, isFalse);
+  });
+
+  test('accepted scalar fallback waits for native mute before showing Flutter',
+      () async {
+    final player = ErikaPlayerAdapter();
+    addTearDown(player.disposeAsync);
+    await player.getUpscalerStatus();
+    nativeMute = Completer<void>();
+    backend = ErikaUpscalerBackendStatus.scalar.nativeValue;
+    final update = player.setUpscaler(PlayerUpscalerMode.erikaArtCnnC4F16);
+    await Future<void>.delayed(Duration.zero);
+    try {
+      expect(player.supportsNativeDanmaku, isTrue);
+      expect(calls.where((call) => call.method == 'setDanmakuEnabled'),
+          hasLength(1));
+    } finally {
+      nativeMute!.complete();
+      await update;
+    }
+    expect(player.supportsNativeDanmaku, isFalse);
+    await player.setDanmakuEnabled(true);
+    expect(
+        calls
+            .where((call) => call.method == 'setDanmakuEnabled')
+            .map((call) => (call.arguments as Map)['enabled']),
+        [false]);
+  });
+
+  test('native visibility resumes after Flutter removes its overlay', () async {
+    final player = ErikaPlayerAdapter();
+    addTearDown(player.disposeAsync);
+    final binding = TestWidgetsFlutterBinding.instance;
+    await player.setUpscaler(PlayerUpscalerMode.erikaArtCnnC4F16);
+    await player.setUpscaler(PlayerUpscalerMode.off);
+    expect(player.supportsNativeDanmaku, isTrue);
+    final enable = player.setDanmakuEnabled(true);
+    await Future<void>.delayed(Duration.zero);
+    final visibility = calls
+        .where((call) => call.method == 'setDanmakuEnabled')
+        .map((call) => (call.arguments as Map)['enabled']);
+    expect(visibility, [false]);
+    binding.handleBeginFrame(null);
+    binding.handleDrawFrame();
+    await enable;
+    expect(visibility, [false, true]);
+  });
+
+  test('a newer visibility toggle wins during a return to native', () async {
+    final player = ErikaPlayerAdapter();
+    addTearDown(player.disposeAsync);
+    final binding = TestWidgetsFlutterBinding.instance;
+    await player.setUpscaler(PlayerUpscalerMode.erikaArtCnnC4F16);
+    await player.setUpscaler(PlayerUpscalerMode.off);
+    final enable = player.setDanmakuEnabled(true);
+    await Future<void>.delayed(Duration.zero);
+    await player.setDanmakuEnabled(false);
+    binding.handleBeginFrame(null);
+    binding.handleDrawFrame();
+    await enable;
+    expect(
+        calls
+            .where((call) => call.method == 'setDanmakuEnabled')
+            .map((call) => (call.arguments as Map)['enabled']),
+        [false, false]);
   });
 
   test('custom model bytes are loaded before selecting custom mode', () async {
