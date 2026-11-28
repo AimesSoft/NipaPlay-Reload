@@ -777,7 +777,7 @@ extension DashboardHomePageSectionsBuild on _DashboardHomePageState {
 
     try {
       final detail = await BangumiService.instance.getAnimeDetails(validId);
-      final highQuality = await _getHighQualityImage(validId, detail);
+      final highQuality = await resolveDashboardCover(validId, detail);
       if (highQuality != null && highQuality.isNotEmpty) {
         _localImageCache[validId] = highQuality;
         try {
