@@ -12,6 +12,7 @@ trap 'rm -rf "$native_test_dir"' EXIT
 # One compilation unit permits focused tests of the private AppKit control
 # without starting the app or changing user settings.
 cat "$plugin_root/Classes/AdaptivePlatformUiPlugin.swift" \
+    "$plugin_root/Classes/MediaDetailActionCapsule.swift" \
     "$plugin_root/Tests/MediaControlSmoke.swift" > "$native_test_dir/main.swift"
 xcrun swiftc -sdk "$native_sdk_path" \
   -target "$(uname -m)-apple-macos12.0" \

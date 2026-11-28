@@ -1,5 +1,6 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart' as native;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show PlatformViewHitTestBehavior;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/themes/nipaplay/widgets/adaptive_media_detail_action.dart';
@@ -108,15 +109,15 @@ void main() {
   });
 
   testWidgets(
-      'macOS routes input through Flutter and reconnects native callbacks after returning',
+      'macOS lets the native capsule own input and reconnects callbacks after returning',
       (tester) async {
     native.PlatformInfo.setPlatformOverride(native.PlatformOverride.macos);
     messenger.setMockMethodCallHandler(capabilities, (_) async => true);
     await AppleNativeMediaControl.initialize();
     final creations = <Map>[];
     final channels = <MethodChannel>[];
+    final requests = <String>[];
     final callbacks = <int>[];
-    final activateCalls = <int>[];
     messenger.setMockMethodCallHandler(SystemChannels.platform_views,
         (call) async {
       if (call.method == 'create') {
@@ -126,17 +127,7 @@ void main() {
             MethodChannel('nipaplay/native_media_control_${args['id']}');
         channels.add(channel);
         messenger.setMockMethodCallHandler(channel, (call) async {
-          if (call.method == 'activate') {
-            final index = (call.arguments as Map)['index'] as int;
-            activateCalls.add(index);
-            // Simulate the native view firing its pressed callback for that
-            // action so the round-trip Flutter tap -> channel -> callback works.
-            await messenger.handlePlatformMessage(
-                channel.name,
-                const StandardMethodCodec()
-                    .encodeMethodCall(MethodCall('pressed', {'index': index})),
-                (_) {});
-          }
+          requests.add(call.method);
           return null;
         });
       }
@@ -166,24 +157,23 @@ void main() {
     expect(find.byType(AppleNativeMediaControl), findsNothing);
     final platformView = find.byType(AppKitView);
     expect(platformView, findsOneWidget);
-    // Flutter owns input on macOS: the AppKitView must be wrapped in an active
-    // IgnorePointer so the native view never receives duplicate events.
+    final appKitView = tester.widget<AppKitView>(platformView);
+    // The native SwiftUI capsule receives the mouse events itself, so the
+    // platform view must stay hit-testable and must not be wrapped in a
+    // Flutter-side input shim.
+    expect(appKitView.hitTestBehavior, PlatformViewHitTestBehavior.opaque);
     expect(
         tester
             .widgetList<IgnorePointer>(find.ancestor(
                 of: platformView, matching: find.byType(IgnorePointer)))
             .any((widget) => widget.ignoring),
-        isTrue);
-    // Tapping the capsule at each action's slot sends `activate` with the
-    // matching index and fires the action callback. Slot 2 is disabled.
-    final groupBox = tester.getRect(find.byType(AppleNativeMediaActionGroup));
-    for (final xOffset in [4 + 22, 4 + 44 + 22, 4 + 88 + 22, 4 + 132 + 22]) {
-      await tester.tapAt(groupBox.topLeft + Offset(xOffset.toDouble(), 22));
-      await tester.pumpAndSettle();
-    }
-    expect(activateCalls, [0, 1, 3]); // index 2 is disabled, no activate sent.
-    expect(callbacks, [0, 1, 3]); // index 2 is disabled, no callback.
-    // Native-initiated callbacks still reach Flutter independently.
+        isFalse);
+    // Flutter never synthesizes native activation on macOS.
+    await tester
+        .tapAt(tester.getRect(find.byType(AppleNativeMediaActionGroup)).center);
+    await tester.pumpAndSettle();
+    expect(requests, isNot(contains('activate')));
+    // Native-initiated callbacks reach Flutter independently.
     callbacks.clear();
     await nativePress(channels.single, 1);
     await nativePress(channels.single, 2);

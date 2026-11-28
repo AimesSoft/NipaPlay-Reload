@@ -366,18 +366,6 @@ class _AppleNativeMediaActionGroupState
     extends State<AppleNativeMediaActionGroup> {
   MethodChannel? _channel;
 
-  /// Action index currently hovered by the pointer, or -1 if none. Only used on
-  /// macOS where Flutter owns input; sent to the native view so the SwiftUI
-  /// capsule can highlight the exact button under the cursor.
-  int _hoveredIndex = -1;
-  int _pressedIndex = -1;
-
-  /// Layout constants mirrored from MediaDetailActionCapsule.swift so the
-  /// Flutter hit-test math matches the native capsule slot geometry.
-  static const double _itemWidth = 44;
-  static const double _inset = 4;
-  static const double _height = 44;
-
   Map<String, Object?> get _parameters => {
         'actions': widget.actions.map((action) => action.parameters).toList(),
       };
@@ -429,120 +417,38 @@ class _AppleNativeMediaActionGroupState
     super.dispose();
   }
 
-  /// Maps a pointer x-offset (in local coordinates) to the action slot it
-  /// falls inside. Mirrors the native HStack: inset padding on both sides,
-  /// then fixed-width slots.
-  int _actionIndexAt(double localX) {
-    final index = ((localX - _inset) / _itemWidth).floor();
-    return index.clamp(0, widget.actions.length - 1);
-  }
-
-  Future<void> _sendInteraction() async {
-    try {
-      await _channel?.invokeMethod<void>('setInteraction', {
-        'index': _pressedIndex >= 0
-            ? _pressedIndex
-            : (_hoveredIndex >= 0 ? _hoveredIndex : null),
-        'hovered': _hoveredIndex >= 0,
-        'pressed': _pressedIndex >= 0,
-      });
-    } on MissingPluginException {
-      // The native view may be gone during a route transition.
-    } on PlatformException catch (error) {
-      debugPrint('Native media group interaction failed: $error');
-    }
-  }
-
-  Future<void> _activateAt(int index) async {
-    if (index < 0 || index >= widget.actions.length) return;
-    final action = widget.actions[index];
-    if (!action.enabled) return;
-    try {
-      await _channel?.invokeMethod<void>('activate', {'index': index});
-    } on MissingPluginException {
-      // The native view may be gone during a route transition.
-    } on PlatformException catch (error) {
-      debugPrint('Native media group activation failed: $error');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final macOS = native.PlatformInfo.isMacOS;
     // The shared SwiftUI capsule uses the same 44pt hit targets on Apple hosts.
-    final width = widget.actions.length * _itemWidth + _inset * 2;
+    final width = widget.actions.length * 44.0 + 8;
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
-      return SizedBox(width: width, height: _height);
+      return SizedBox(width: width, height: 44);
     }
     final params = _parameters;
-    if (macOS) {
-      // Flutter's AppKitView embedding does not forward mouse events to the
-      // native SwiftUI buttons on macOS. Own input in Flutter — determine
-      // which action slot was tapped from the pointer position and activate it
-      // through the method channel. The native view's hitTest returns nil so
-      // there is no risk of double activation.
-      return SizedBox(
-        width: width,
-        height: _height,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onHover: (event) {
-            final index = _actionIndexAt(event.localPosition.dx);
-            if (index != _hoveredIndex) {
-              _hoveredIndex = index;
-              _sendInteraction();
-            }
-          },
-          onEnter: (_) {},
-          onExit: (_) {
-            if (_hoveredIndex != -1) {
-              _hoveredIndex = -1;
-              _sendInteraction();
-            }
-          },
-          child: Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: (event) {
-              _pressedIndex = _actionIndexAt(event.localPosition.dx);
-              _sendInteraction();
-            },
-            onPointerUp: (event) {
-              final index = _actionIndexAt(event.localPosition.dx);
-              _pressedIndex = -1;
-              _sendInteraction();
-              _activateAt(index);
-            },
-            onPointerCancel: (_) {
-              _pressedIndex = -1;
-              _sendInteraction();
-            },
-            child: IgnorePointer(
-              child: ExcludeFocus(
-                child: AppKitView(
-                  viewType: 'nipaplay/native_media_control',
-                  hitTestBehavior: PlatformViewHitTestBehavior.transparent,
-                  creationParams: params,
-                  creationParamsCodec: const StandardMessageCodec(),
-                  onPlatformViewCreated: _onCreated,
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
+    // macOS delivers real mouse input to AppKit platform views, so the native
+    // SwiftUI buttons own their own hit targets. iOS needs an eager recognizer
+    // so the single native view receives touches through UiKitView.
     return SizedBox(
       width: width,
-      height: _height,
-      child: UiKitView(
-        viewType: 'nipaplay/native_media_control',
-        gestureRecognizers: {
-          Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
-        },
-        creationParams: params,
-        creationParamsCodec: const StandardMessageCodec(),
-        onPlatformViewCreated: _onCreated,
-      ),
+      height: 44,
+      child: macOS
+          ? AppKitView(
+              viewType: 'nipaplay/native_media_control',
+              hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+              creationParams: params,
+              creationParamsCodec: const StandardMessageCodec(),
+              onPlatformViewCreated: _onCreated,
+            )
+          : UiKitView(
+              viewType: 'nipaplay/native_media_control',
+              gestureRecognizers: {
+                Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
+              },
+              creationParams: params,
+              creationParamsCodec: const StandardMessageCodec(),
+              onPlatformViewCreated: _onCreated,
+            ),
     );
   }
 }

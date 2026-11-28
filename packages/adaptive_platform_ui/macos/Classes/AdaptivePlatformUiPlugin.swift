@@ -439,27 +439,71 @@ private final class MediaCapsuleHostingView: NSHostingView<MediaDetailActionCaps
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
+/// Hosts the same 1pt pointer outline as MediaControlView above the glass.
+@available(macOS 26.0, *)
+private final class HoverFeedbackView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
 @available(macOS 26.0, *)
 private final class SwiftUIMediaActionGroupView: NSView {
-    let model = MediaCapsuleModel()
+    let model: MediaCapsuleModel
     let hosting: MediaCapsuleHostingView
+    /// The system owns the whole capsule material, including the specular
+    /// highlights and - on macOS 27 - the interactive press animation.
+    let glass: TrackingMediaGlassView
+    /// Same white 1pt pointer outline the single glass buttons draw.
+    let outline = CAShapeLayer()
+    private let feedbackView = HoverFeedbackView()
+    private(set) var hovered = false
     private let channel: FlutterMethodChannel
     private var openMenuActionIndex: Int?
 
     init(_ id: Int64, _ messenger: FlutterBinaryMessenger, _ args: [String: Any]) {
+        let model = MediaCapsuleModel()
+        self.model = model
         hosting = MediaCapsuleHostingView(rootView: MediaDetailActionCapsule(model: model))
+        glass = TrackingMediaGlassView()
         channel = FlutterMethodChannel(name: "nipaplay/native_media_control_\(id)", binaryMessenger: messenger)
         super.init(frame: .zero)
         appearance = NSAppearance(named: .darkAqua)
+        let reducedEffects = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ||
+            NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        glass.style = reducedEffects ? .regular : .clear
+        glass.cornerRadius = MediaDetailActionCapsule.height / 2
+        glass.contentView = hosting
+        glass.onPointer = { [weak self] _, inside in
+            self?.setHovered(inside)
+        }
+        MediaGlassInteraction.update(true, on: glass)
+        glass.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(glass)
+        NSLayoutConstraint.activate([
+            glass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            glass.topAnchor.constraint(equalTo: topAnchor),
+            glass.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        feedbackView.wantsLayer = true
+        feedbackView.setAccessibilityElement(false)
+        feedbackView.autoresizingMask = [.width, .height]
+        addSubview(feedbackView, positioned: .above, relativeTo: glass)
+        outline.fillColor = nil
+        outline.strokeColor = NSColor.white.cgColor
+        outline.lineWidth = 1
+        outline.opacity = 0
+        feedbackView.layer?.addSublayer(outline)
         hosting.sizingOptions = []
         hosting.autoresizingMask = [.width, .height]
         hosting.frame = bounds
-        addSubview(hosting)
         model.onPressed = { [weak self] index in
             self?.channel.invokeMethod("pressed", arguments: ["index": index])
         }
         model.onSelected = { [weak self] index, selected in
             self?.channel.invokeMethod("selected", arguments: ["index": index, "selected": selected])
+        }
+        model.onMenu = { [weak self] index in
+            self?.presentMenu(at: index)
         }
         model.update(args)
         channel.setMethodCallHandler { [weak self] call, result in
@@ -468,20 +512,6 @@ private final class SwiftUIMediaActionGroupView: NSView {
             case "update":
                 if let args = call.arguments as? [String: Any] { self.model.update(args) }
                 result(nil)
-            case "activate":
-                if let args = call.arguments as? [String: Any],
-                   let index = args["index"] as? Int {
-                    self.activateAction(at: index)
-                }
-                result(nil)
-            case "setInteraction":
-                if let args = call.arguments as? [String: Any] {
-                    let index = args["index"] as? Int
-                    let hovered = args["hovered"] as? Bool ?? false
-                    let pressed = args["pressed"] as? Bool ?? false
-                    self.model.setInteraction(index: index, hovered: hovered, pressed: pressed)
-                }
-                result(nil)
             default:
                 result(FlutterMethodNotImplemented)
             }
@@ -489,41 +519,59 @@ private final class SwiftUIMediaActionGroupView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
     override func layout() {
         super.layout()
-        hosting.frame = bounds
+        glass.cornerRadius = bounds.height / 2
+        hosting.frame = glass.bounds
+        feedbackView.frame = bounds
+        outline.frame = bounds
+        let inset: CGFloat = 1.5
+        outline.path = CGPath(roundedRect: bounds.insetBy(dx: inset, dy: inset),
+                              cornerWidth: max(0, bounds.height / 2 - inset),
+                              cornerHeight: max(0, bounds.height / 2 - inset),
+                              transform: nil)
     }
 
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    private func setHovered(_ value: Bool) {
+        guard value != hovered else { return }
+        hovered = value
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        CATransaction.begin()
+        CATransaction.setDisableActions(reduceMotion)
+        CATransaction.setAnimationDuration(0.18)
+        outline.opacity = value ? 0.16 : 0
+        CATransaction.commit()
+    }
 
     deinit { channel.setMethodCallHandler(nil) }
 
-    private func activateAction(at index: Int) {
-        guard model.isEnabled(index) else { return }
-        let action = model.actions[index]
-        if action.items != nil {
-            openMenuActionIndex = index
-            let menu = NSMenu()
-            for (itemIndex, item) in action.items!.enumerated() {
-                let menuItem = NSMenuItem(title: item.label,
-                                          action: #selector(menuItemSelected(_:)),
-                                          keyEquivalent: "")
-                menuItem.target = self
-                menuItem.tag = itemIndex
-                menuItem.isEnabled = item.enabled
-                menu.addItem(menuItem)
-            }
-            menu.autoenablesItems = false
-            let slotCenterX = CGFloat(MediaDetailActionCapsule.inset)
-                + CGFloat(index) * MediaDetailActionCapsule.itemWidth
-                + MediaDetailActionCapsule.itemWidth / 2
-            menu.popUp(positioning: nil,
-                       at: NSPoint(x: slotCenterX, y: bounds.height),
-                       in: self)
-            openMenuActionIndex = nil
-        } else {
-            model.activate(index)
+    /// Presents the "more" menu for `index`. The capsule deliberately keeps a
+    /// plain button in every slot on macOS because SwiftUI's borderless `Menu`
+    /// collapses to the AppKit pop-up's intrinsic width.
+    private func presentMenu(at index: Int) {
+        guard model.isEnabled(index),
+              model.actions.indices.contains(index),
+              let items = model.actions[index].items else { return }
+        openMenuActionIndex = index
+        let menu = NSMenu()
+        for (itemIndex, item) in items.enumerated() {
+            let menuItem = NSMenuItem(title: item.label,
+                                      action: #selector(menuItemSelected(_:)),
+                                      keyEquivalent: "")
+            menuItem.target = self
+            menuItem.tag = itemIndex
+            menuItem.isEnabled = item.enabled
+            menu.addItem(menuItem)
         }
+        menu.autoenablesItems = false
+        let slotCenterX = CGFloat(MediaDetailActionCapsule.inset)
+            + CGFloat(index) * MediaDetailActionCapsule.itemWidth
+            + MediaDetailActionCapsule.itemWidth / 2
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: slotCenterX, y: bounds.height),
+                   in: self)
+        openMenuActionIndex = nil
     }
 
     @objc func menuItemSelected(_ item: NSMenuItem) {
