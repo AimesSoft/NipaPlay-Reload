@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nipaplay/player_abstraction/player_abstraction.dart';
 import 'package:nipaplay/utils/subtitle_manager.dart';
+import 'package:nipaplay/services/subtitle_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _UnusedPlayerDelegate extends Fake implements AbstractPlayer {
@@ -38,6 +39,14 @@ class _KernelDelegate extends Fake implements AbstractPlayer {
 
   @override
   void setProperty(String name, String value) {}
+}
+
+class _RejectingDetach extends _KernelDelegate
+    implements AsyncExternalSubtitlePlayer {
+  @override
+  Future<void> setExternalSubtitleAsync(String path) async {
+    throw StateError('native detach rejected');
+  }
 }
 
 void main() {
@@ -148,7 +157,7 @@ void main() {
     }
   });
 
-  group('single subtitle at a time', () {
+  group('subtitle multi-select coexistence', () {
     late Directory dir;
     late File srt;
     // 测试替身无法冒充 Media Kit 适配器，用 .sup 代表由内核渲染、占内核字幕轨的外挂
@@ -159,7 +168,7 @@ void main() {
 
     setUp(() async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
-      dir = await Directory.systemTemp.createTemp('subtitle_single_');
+      dir = await Directory.systemTemp.createTemp('subtitle_multi_');
       srt = File('${dir.path}/movie.zh-Hans.srt');
       ass = File('${dir.path}/movie.sup');
       const content = '1\n00:00:00,000 --> 00:00:01,000\nHello\n';
@@ -174,35 +183,39 @@ void main() {
       await dir.delete(recursive: true);
     });
 
-    test('attaching an app-rendered srt turns the embedded track off', () {
+    test('attaching an app-rendered srt keeps the embedded track on', () {
       expect(delegate.activeSubtitleTracks, [0]);
       manager.setExternalSubtitle(srt.path);
       expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
-      expect(delegate.activeSubtitleTracks, isEmpty);
-    });
-
-    test('stacking an srt via the stack also turns the embedded track off',
-        () async {
-      await manager.addExternalSubtitleToStack(srt.path);
-      expect(delegate.activeSubtitleTracks, isEmpty);
-    });
-
-    test('choosing an embedded track detaches the external subtitle', () {
-      manager.setExternalSubtitle(srt.path);
-      manager.selectEmbeddedSubtitleTrack(0);
-      expect(manager.getAllActiveExternalSubtitlePaths(), isEmpty);
+      // 外挂叠层与内核内嵌轨共存，不再清 activeSubtitleTracks
       expect(delegate.activeSubtitleTracks, [0]);
     });
 
-    test('turning subtitles off clears both sides', () {
+    test('stacking an srt via the stack also keeps the embedded track on',
+        () async {
+      await manager.addExternalSubtitleToStack(srt.path);
+      expect(delegate.activeSubtitleTracks, [0]);
+    });
+
+    test('choosing an embedded track keeps the external srt attached', () {
+      manager.setExternalSubtitle(srt.path);
+      manager.selectEmbeddedSubtitleTrack(0);
+      // 内嵌轨由内核渲染、外挂 SRT 由叠层渲染，互不占用画面，选择内嵌不摘外挂
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
+      expect(delegate.activeSubtitleTracks, [0]);
+    });
+
+    test('turning subtitles off clears only the embedded side', () {
       manager.setExternalSubtitle(srt.path);
       manager.selectEmbeddedSubtitleTrack(-1);
-      expect(manager.getAllActiveExternalSubtitlePaths(), isEmpty);
+      // 关闭字幕只关内嵌轨；外挂的移除走菜单的"移除外挂"项。
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
       expect(delegate.activeSubtitleTracks, isEmpty);
 
       delegate.activeSubtitleTracks = [2];
       manager.selectEmbeddedSubtitleTrack(-1);
       expect(delegate.activeSubtitleTracks, isEmpty);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
     });
 
     test('a kernel-rendered external track keeps its existing behavior', () {
@@ -213,7 +226,88 @@ void main() {
       expect(delegate.activeSubtitleTracks, [0]);
     });
 
-    test('stacking an srt keeps a kernel-rendered external track alive', () async {
+    test('replacing a native subtitle with an SRT unloads the native file', () {
+      manager.setExternalSubtitle(ass.path);
+      manager.setExternalSubtitle(srt.path);
+      expect(delegate.mediaSet, [ass.path, '']);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
+    });
+
+    test('turning off embedded tracks leaves the active native external alone',
+        () {
+      manager.setExternalSubtitle(ass.path);
+      final initial = List.of(delegate.activeSubtitleTracks);
+      manager.selectEmbeddedSubtitleTrack(-1);
+      expect(delegate.activeSubtitleTracks, initial);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [ass.path]);
+    });
+
+    test('selecting an embedded track replaces only the native external track',
+        () async {
+      manager.setExternalSubtitle(ass.path);
+      await manager.addExternalSubtitleToStack(srt.path);
+      await manager.selectEmbeddedSubtitleTrack(1);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [srt.path]);
+      expect(delegate.activeSubtitleTracks, [1]);
+    });
+
+    test(
+        'deleting a displaced native subtitle preserves the new embedded track',
+        () async {
+      manager.setExternalSubtitle(ass.path);
+      await manager.selectEmbeddedSubtitleTrack(1);
+      await manager.removeExternalSubtitleFromStack(ass.path);
+      expect(delegate.activeSubtitleTracks, [1]);
+    });
+
+    test('a native subtitle recorded only as the current path is displaced',
+        () async {
+      manager.setCurrentExternalSubtitlePath(ass.path);
+      await manager.selectEmbeddedSubtitleTrack(1);
+      expect(manager.hasActiveNativeExternalSubtitle, isFalse);
+      expect(delegate.activeSubtitleTracks, [1]);
+    });
+
+    test('after displacement the persisted stack contains only the active SRT',
+        () async {
+      final video = '${dir.path}/movie.mkv';
+      manager.setCurrentVideoPath(video);
+      await manager.addExternalSubtitleToStack(ass.path);
+      await manager.addExternalSubtitleToStack(srt.path);
+      final service = SubtitleService();
+      final before = await service.loadExternalSubtitles(video);
+      expect(before.where((entry) => entry['isActive'] == true), hasLength(2));
+
+      await manager.selectEmbeddedSubtitleTrack(1);
+      final list = await service.loadExternalSubtitles(video);
+      expect({
+        for (final entry in list) entry['path']: entry['isActive']
+      }, {
+        ass.path: false,
+        srt.path: true,
+      });
+      final srtIndex = list.indexWhere((entry) => entry['path'] == srt.path);
+      expect(await service.removeExternalSubtitle(video, srtIndex), isTrue);
+      service.clearCache(video);
+      final remaining = (await service.loadExternalSubtitles(video)).single;
+      expect(remaining['path'], ass.path);
+      expect(remaining['isActive'], isFalse);
+    });
+
+    test(
+        'a rejected native detach keeps the external selection available for retry',
+        () async {
+      final rejecting = _RejectingDetach();
+      manager.setPlayer(Player.withDelegate(rejecting));
+      await manager.addExternalSubtitleToStack(ass.path);
+      await expectLater(
+          manager.selectEmbeddedSubtitleTrack(1), throwsStateError);
+      expect(manager.getAllActiveExternalSubtitlePaths(), [ass.path]);
+      expect(rejecting.activeSubtitleTracks, [0]);
+    });
+
+    test('stacking an srt keeps a kernel-rendered external track alive',
+        () async {
       manager.setExternalSubtitle(ass.path);
       await manager.addExternalSubtitleToStack(srt.path);
       expect(manager.getAllActiveExternalSubtitlePaths(),

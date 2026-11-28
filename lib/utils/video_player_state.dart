@@ -316,13 +316,23 @@ class _VideoDimensionSnapshot {
 class VideoPlayerState extends ChangeNotifier implements WindowListener {
   late Player _player;
   ValueListenable<bool>? _playerBuffering;
+  Listenable? _subtitleTrackChanges;
 
   Player get player => _player;
   set player(Player value) {
     _playerBuffering?.removeListener(_onPlayerBufferingChanged);
+    _subtitleTrackChanges?.removeListener(_onPlayerSubtitleTrackChanged);
     _player = value;
     _playerBuffering = value.buffering;
     _playerBuffering!.addListener(_onPlayerBufferingChanged);
+    _subtitleTrackChanges = value.subtitleTrackChanges;
+    _subtitleTrackChanges?.addListener(_onPlayerSubtitleTrackChanged);
+  }
+
+  void _onPlayerSubtitleTrackChanged() {
+    if (_isDisposed) return;
+    applyEmbeddedSubtitleOverlayKernelState();
+    _notifyListeners();
   }
 
   bool get isBuffering => player.isBuffering;
@@ -1908,6 +1918,8 @@ int _exactEndStreak = 0;
     _isDisposed = true;
     _playerBuffering?.removeListener(_onPlayerBufferingChanged);
     _playerBuffering = null;
+    _subtitleTrackChanges?.removeListener(_onPlayerSubtitleTrackChanged);
+    _subtitleTrackChanges = null;
     _cancelDfmStartupGate();
 
     if (_currentVideoPath != null) {

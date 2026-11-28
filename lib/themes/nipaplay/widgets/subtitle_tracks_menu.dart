@@ -516,6 +516,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
     BuildContext context,
     int trackIndex, {
     bool persistEmbyPreference = true,
+    bool clearExternal = false,
   }) async {
     try {
       if (!mounted) return false; // Add mounted check
@@ -536,19 +537,12 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
         MediaServerMenuSurface.nipaplaySubtitle,
         isEmby,
         () async {
-          // 同一时间只显示一条字幕：选内嵌轨或关闭字幕都会摘掉所有外挂字幕
-          for (var subtitle in _externalSubtitles) {
-            subtitle['isActive'] = false;
+          if (clearExternal) {
+            await videoState.disableAllSubtitles();
+          } else {
+            await videoState.selectEmbeddedSubtitleTrack(trackIndex);
           }
-          videoState.selectEmbeddedSubtitleTrack(trackIndex);
-
-          if (mounted) {
-            setState(
-                () {}); // UI update for external list, and potentially for embedded list selection state
-          }
-
-          // 保存设置 (主要是保存外部字幕列表的状态，例如哪个是激活的)
-          await _saveExternalSubtitles(videoState.currentVideoPath ?? '');
+          if (mounted) setState(() {});
           didApply = true;
 
           // 通知字幕轨道变化 (This might be redundant if player events drive everything)
@@ -582,8 +576,8 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
 
     // 如果当前字幕是激活的，取消挂载（只卸外部字幕，内嵌轨保持原状；
     // SRT 走叠层不动内嵌，ASS/SSA 才清内核轨）
-    if (subtitleInfo['isActive'] == true) {
-      final filePath = subtitleInfo['path'] as String;
+    final filePath = subtitleInfo['path'] as String;
+    if (videoState.activeExternalSubtitlePaths.contains(filePath)) {
       await videoState.removeExternalSubtitle(filePath);
       subtitleInfo['isActive'] = false;
     }
@@ -780,6 +774,16 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                 const SizedBox(height: 16),
               ],
 
+              if (videoState.hasActiveSubtitles)
+                BlurButton(
+                  icon: Icons.subtitles_off_outlined,
+                  text: '关闭所有字幕',
+                  onTap: () => _switchToEmbeddedSubtitle(context, -1,
+                      clearExternal: true),
+                  expandHorizontally: true,
+                  borderRadius: BorderRadius.zero,
+                ),
+
               // 外部字幕列表
               if (_externalSubtitles.isNotEmpty) ...[
                 Align(
@@ -940,18 +944,7 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                       .key; // This is the original index from player.mediaInfo.subtitle
                   final track = entry.value;
 
-                  // Determine if this track is active.
-                  // Active state is based on player's active tracks and no external subtitle being active.
-                  final bool hasActiveExternal =
-                      _externalSubtitles.any((s) => s['isActive'] == true);
-                  // SRT/VTT 走叠层渲染不占内核字幕轨，与内嵌轨可共存：
-                  // 只有 ASS/SSA 类（占内核轨的）外部字幕才阻止内嵌轨道勾选。
-                  final activeExt = videoState.getActiveExternalSubtitlePath();
-                  final blockByExternal = hasActiveExternal &&
-                      !(activeExt != null &&
-                          (p.extension(activeExt).toLowerCase() == '.srt' ||
-                              p.extension(activeExt).toLowerCase() == '.vtt'));
-                  final isActive = !blockByExternal &&
+                  final isActive = !videoState.hasActiveNativeExternalSubtitle &&
                       videoState.player.activeSubtitleTracks.contains(index);
 
                   // --- Get Title and Language from SubtitleManager ---
@@ -986,14 +979,12 @@ class _SubtitleTracksMenuState extends State<SubtitleTracksMenu> {
                     child: InkWell(
                       onTap: () async {
                         if (isActive) {
-                          // 关闭字幕
                           final switched =
                               await _switchToEmbeddedSubtitle(context, -1);
                           if (switched && context.mounted) {
-                            BlurSnackBar.show(context, '已关闭字幕');
+                            BlurSnackBar.show(context, '已关闭内嵌字幕');
                           }
                         } else {
-                          // 先确保禁用外部字幕
                           final switched =
                               await _switchToEmbeddedSubtitle(context, index);
                           if (switched && context.mounted) {

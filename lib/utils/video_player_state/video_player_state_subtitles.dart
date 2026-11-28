@@ -166,9 +166,13 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     _notifyListeners();
   }
 
-  // 选内嵌字幕轨（>= 0）或关闭字幕（< 0），同时摘掉外挂字幕
-  void selectEmbeddedSubtitleTrack(int trackIndex) {
-    _subtitleManager.selectEmbeddedSubtitleTrack(trackIndex);
+  Future<void> selectEmbeddedSubtitleTrack(int trackIndex) async {
+    await _subtitleManager.selectEmbeddedSubtitleTrack(trackIndex);
+    _notifyListeners();
+  }
+
+  Future<void> disableAllSubtitles() async {
+    await _subtitleManager.disableAllSubtitles();
     _notifyListeners();
   }
 
@@ -297,19 +301,25 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
   bool get isKernelRenderedExternalAssActive =>
       _subtitleManager.isKernelRenderedExternalAssActive();
 
-  // An app-only external stack replaces native subtitles. mpv can still
-  // auto-select a same-name sidecar after we clear sid, so keep its renderer
-  // hidden for as long as the app owns that stack. Mixed native ASS + SRT
-  // stacks retain the ASS renderer.
-  bool get _externalSubtitleOverlayIsExclusive =>
+  bool get hasActiveNativeExternalSubtitle =>
+      _subtitleManager.hasActiveNativeExternalSubtitle;
+
+  bool get hasActiveSubtitles =>
+      player.activeSubtitleTracks.isNotEmpty ||
+      activeExternalSubtitlePaths.isNotEmpty ||
+      hasActiveNativeExternalSubtitle;
+
+  // Media Kit excludes native sidecars from activeSubtitleTracks. An app
+  // stack can share the screen with a confirmed embedded track, while an
+  // auto-selected native copy of the sidecar must stay hidden.
+  bool get _hasAppOnlyExternalStack =>
       shouldRenderCurrentExternalSubtitleInApp() &&
-      !activeExternalSubtitlePaths
-          .any((path) => !externalSubtitleRenderedInApp(path));
+      !hasActiveNativeExternalSubtitle;
 
   bool get shouldRenderEmbeddedSubtitleOverlay =>
       _embeddedSubtitleOverlayMode &&
       !isKernelRenderedExternalAssActive &&
-      !_externalSubtitleOverlayIsExclusive;
+      !_hasAppOnlyExternalStack;
 
   Future<void> setEmbeddedSubtitleOverlayMode(bool enabled) async {
     if (_embeddedSubtitleOverlayMode == enabled) return;
@@ -362,8 +372,10 @@ extension VideoPlayerStateSubtitles on VideoPlayerState {
     if (kIsWeb || _isDisposed) return;
     try {
       final renderEmbedded = shouldRenderEmbeddedSubtitleOverlay;
+      final hideSidecar =
+          _hasAppOnlyExternalStack && player.activeSubtitleTracks.isEmpty;
       if (player.getPlayerKernelName() == 'Media Kit' &&
-          (renderEmbedded || _externalSubtitleOverlayIsExclusive)) {
+          (renderEmbedded || hideSidecar)) {
         player.setProperty('sub-visibility', 'no');
       } else {
         player.setProperty('sub-visibility', 'yes');
